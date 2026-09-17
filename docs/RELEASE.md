@@ -1,4 +1,19 @@
-# Developer-preview release
+# Private development and future release
+
+## Current stage
+
+The owner has chosen the existing private local Forgejo repositories for current
+development: [gcoms](http://127.0.0.1:3300/ghost-local/gcoms) and
+[gchat](http://127.0.0.1:3300/ghost-local/gchat). Public publication is deferred.
+Use the existing `forgejo` remote for commits, reviews and private source delivery.
+Continue local builds and archive-consumer validation without public registries.
+
+`release/publication.json` records these private endpoints under `development`.
+Its public URL/contact/signing fields remain unset until publication is revisited.
+`scripts/check-release.py` is a future public-release gate, not the acceptance gate
+for current private development. Run the ordinary checks in TESTING.md for this stage.
+
+## Future public release
 
 The public release unit is GComs source and Rust/npm packages plus the separate
 GChat source and qualified native artifacts. Forgejo is authoritative. A clean
@@ -31,7 +46,7 @@ The initial version is 0.1.0, explicitly labeled developer preview. Do not overw
 an existing registry version or tag. A bad package needs a new version and advisory
 or deprecation as appropriate; preserve the original artifact and evidence.
 
-## Remaining external decisions
+## Deferred publication decisions
 
 Public endpoints and contacts, publisher accounts/certificates, distribution rights,
 operator capacity and native acceptance must be supplied/confirmed by the project

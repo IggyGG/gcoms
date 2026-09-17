@@ -4,10 +4,12 @@
 messaging and typed application services. **GChat** is its separate reference
 application, with a desktop UI, terminal UI and local service.
 
-This is preparation for the **0.1.0 developer preview**. Source and package
-publication are gated by [release readiness](docs/RELEASE.md). The public upstream
-and GChat link will be recorded in [publication configuration](release/publication.json).
-No production anonymity, availability or independent security review is claimed.
+Current development uses the existing [private local Forgejo repository](http://127.0.0.1:3300/ghost-local/gcoms)
+and its [companion GChat repository](http://127.0.0.1:3300/ghost-local/gchat).
+Public publication is deferred by the project owner. Public URLs, reporting contacts
+and publisher accounts are future release decisions, not prerequisites for this
+private development stage. The intended preview version remains 0.1.0. See
+[development and future release status](docs/RELEASE.md).
 
 ## Start here
 

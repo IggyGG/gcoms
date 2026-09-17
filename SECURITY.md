@@ -7,7 +7,9 @@ resistance, production availability, or security against a compromised endpoint.
 Do not post unpatched security issues, private keys, invitations, contact cards,
 archives or user data in public issues. The private reporting address must be
 configured in release/publication.json before this repository is made public.
-Until then, this checkout is release preparation and has no public reporting SLA.
+For current private development, coordinate with the repository owner through the
+existing private project channels. Public publication and its reporting address are
+deferred; this checkout has no public reporting SLA.
 
 A useful report describes the affected version, expected boundary, observed
 behavior and a minimal disposable fixture. Maintainers triage privately, agree a

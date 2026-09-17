@@ -10,5 +10,12 @@
   "rights_review": null,
   "operator_acceptance": null,
   "native_qualification": {},
-  "publisher_identities": {}
+  "publisher_identities": {},
+  "publication_status": "deferred_by_owner",
+  "development": {
+    "visibility": "private",
+    "forgejo_url": "http://127.0.0.1:3300/ghost-local/gcoms",
+    "companion_url": "http://127.0.0.1:3300/ghost-local/gchat",
+    "git_remote": "ssh://git@ghost-forgejo/ghost-local/gcoms.git"
+  }
 }
