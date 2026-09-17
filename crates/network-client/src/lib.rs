@@ -97,7 +97,7 @@ fn private_directory(path: &Path) -> Result<()> {
             // pre-existing directory with broad access.
             let parent = path.parent().ok_or("network state parent missing")?;
             gcoms_private_fs::validate_private_dir(parent, "network state parent")?;
-            let mut builder = std::fs::DirBuilder::new();
+            let builder = &mut std::fs::DirBuilder::new();
             #[cfg(unix)]
             {
                 use std::os::unix::fs::DirBuilderExt;

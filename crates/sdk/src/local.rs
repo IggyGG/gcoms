@@ -314,7 +314,7 @@ pub(crate) fn pipe_name(path: &Path) -> String {
     }
     let label = path
         .file_name()
-        .unwrap_or_else(|| path.as_os_str())
+        .unwrap_or(path.as_os_str())
         .to_string_lossy()
         .chars()
         .map(|character| {
