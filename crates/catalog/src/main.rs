@@ -7,7 +7,7 @@ async fn main() -> Result<(), String> {
         .nth(1)
         .map(PathBuf::from)
         .or_else(|| std::env::var_os("GC_CATALOG_CONFIG").map(PathBuf::from))
-        .ok_or("usage: gc-catalog <config.json> (or set GC_CATALOG_CONFIG)")?;
+        .ok_or("usage: gcoms-catalog <config.json> (or set GC_CATALOG_CONFIG)")?;
     let bytes = std::fs::read(&config_path)
         .map_err(|error| format!("read config {}: {error}", config_path.display()))?;
     let config: Config = serde_json::from_slice(&bytes)
