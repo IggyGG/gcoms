@@ -21,6 +21,11 @@ pub const STREAM_IDLE_TIMEOUT: std::time::Duration = std::time::Duration::from_s
 /// connection in response to real traffic when its peer is already pooled.
 pub const MAX_POOLED_CONNECTIONS: usize = 8;
 const MAX_CONNECTION_ATTEMPTS: usize = 4;
+// A failed dial must not make every queued job repeat the OS's connection
+// timeout (notably Windows' delayed refusal). This is a bounded negative cache
+// of pre-TLS I/O failures, scoped exactly like authenticated connections.
+const CONNECT_FAILURE_COOLDOWN: std::time::Duration = std::time::Duration::from_secs(5);
+const MAX_FAILED_ROUTES: usize = 64;
 const SMALL_WIRE_CELL: usize = 4096;
 const LARGE_WIRE_CELL: usize = 16384;
 const MAX_STREAM_BUFFER: usize = LARGE_WIRE_CELL * 2;
@@ -90,9 +95,32 @@ struct Pool {
     entries: HashMap<PoolKey, Arc<PooledConnection>>,
     /// Least-recently-used order; front is the eviction candidate.
     order: VecDeque<PoolKey>,
+    failed: HashMap<PoolKey, tokio::time::Instant>,
 }
 
 impl Pool {
+    fn cooling_down(&mut self, key: PoolKey) -> bool {
+        let now = tokio::time::Instant::now();
+        self.failed.retain(|_, until| *until > now);
+        self.failed.contains_key(&key)
+    }
+
+    fn dial_failed(&mut self, key: PoolKey) {
+        let now = tokio::time::Instant::now();
+        self.failed.retain(|_, until| *until > now);
+        if self.failed.len() >= MAX_FAILED_ROUTES && !self.failed.contains_key(&key) {
+            if let Some(oldest) = self
+                .failed
+                .iter()
+                .min_by_key(|(_, until)| **until)
+                .map(|(key, _)| *key)
+            {
+                self.failed.remove(&oldest);
+            }
+        }
+        self.failed.insert(key, now + CONNECT_FAILURE_COOLDOWN);
+    }
+
     fn touch(&mut self, key: PoolKey) {
         if let Some(pos) = self.order.iter().position(|k| *k == key) {
             self.order.remove(pos);
@@ -114,6 +142,7 @@ impl Pool {
     }
 
     fn insert(&mut self, key: PoolKey, connection: Arc<PooledConnection>) {
+        self.failed.remove(&key);
         while self.entries.len() >= MAX_POOLED_CONNECTIONS {
             // Evict the least recently used connection that has no open
             // stream. If every pooled connection is busy, grow past the soft
@@ -376,12 +405,16 @@ impl Tp1Client {
     /// handshake happens on the lane's own schedule, never at the moment
     /// real traffic first arrives.
     pub async fn warm(&self, addr: SocketAddr, service_id: [u8; 32]) -> Result<()> {
-        self.connection(Route {
-            addr,
-            service_id,
-            excluded: &[],
-        })
+        tokio::time::timeout(
+            REQUEST_TIMEOUT,
+            self.connection(Route {
+                addr,
+                service_id,
+                excluded: &[],
+            }),
+        )
         .await
+        .map_err(|_| "transport warming timed out")?
         .map(|_| ())
     }
 
@@ -391,22 +424,52 @@ impl Tp1Client {
 
     async fn connection(&self, route: Route<'_>) -> Result<Arc<PooledConnection>> {
         let pool_key = route.key()?;
-        if let Some(connection) = self.connections.lock().await.get(pool_key) {
-            return Ok(connection);
+        {
+            let mut pool = self.connections.lock().await;
+            if let Some(connection) = pool.get(pool_key) {
+                return Ok(connection);
+            }
+            if pool.cooling_down(pool_key) {
+                return Err("connection cooling down after failed dial".into());
+            }
         }
         let _attempt = self
             .connection_attempts
             .acquire()
             .await
             .map_err(|_| "connection attempt limiter closed")?;
-        if let Some(connection) = self.connections.lock().await.get(pool_key) {
-            return Ok(connection);
+        {
+            let mut pool = self.connections.lock().await;
+            if let Some(connection) = pool.get(pool_key) {
+                return Ok(connection);
+            }
+            if pool.cooling_down(pool_key) {
+                return Err("connection cooling down after failed dial".into());
+            }
         }
 
-        let tcp = self
+        let tcp = match self
             .connector
             .connect_excluding(pool_key.0, pool_key.1, route.excluded)
-            .await?;
+            .await
+        {
+            Ok(stream) => stream,
+            Err(error) => {
+                // Only errors from obtaining the byte stream qualify. Never
+                // cache an ambiguous HTTP failure, TLS failure, or peer reply.
+                if error.downcast_ref::<std::io::Error>().is_some_and(|error| {
+                    matches!(
+                        error.kind(),
+                        std::io::ErrorKind::ConnectionRefused
+                            | std::io::ErrorKind::NetworkUnreachable
+                            | std::io::ErrorKind::HostUnreachable
+                    )
+                }) {
+                    self.connections.lock().await.dial_failed(pool_key);
+                }
+                return Err(error);
+            }
+        };
         let config = tls::client_config_pinned(pool_key.1)?;
         let tls_stream = TlsConnector::from(Arc::new(config))
             .connect(tls::server_name_ip(pool_key.0.ip()), tcp)
@@ -610,6 +673,9 @@ async fn read_body(body: &mut h2::RecvStream) -> Result<Bytes> {
     }
     Ok(Bytes::from(buf))
 }
+
+#[cfg(test)]
+mod connection_tests;
 
 #[cfg(test)]
 mod tests {

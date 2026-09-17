@@ -336,7 +336,10 @@ async fn register(
         (lose, faults.wrong_name)
     };
     if lose {
-        tokio::time::sleep(Duration::from_millis(750)).await;
+        // Model a gateway losing the successful response after the durable
+        // effect. A short client deadline can expire before the request even
+        // reaches this handler on a busy native Windows runner.
+        return StatusCode::BAD_GATEWAY.into_response();
     }
     let mut response = response;
     if wrong {
@@ -526,7 +529,7 @@ async fn dns_lost_reply_reopen_lease_renewal_optout_and_grant_isolation() {
     client.configure_opt_in(true).unwrap();
     fixture.backend.faults.lock().await.lose_register_once = true;
     assert!(client
-        .update_listener(&listener(4433), Instant::now() + Duration::from_millis(250))
+        .update_listener(&listener(4433), deadline())
         .await
         .is_err());
     assert!(client.name_status().unwrap().pending);
@@ -682,10 +685,7 @@ async fn founder_label_requires_signed_pin_and_becomes_immutable_with_credential
     let mut founder = listener(4433);
     founder.relays[0].service_id = [3; 32];
     fixture.backend.faults.lock().await.lose_register_once = true;
-    assert!(client
-        .update_listener(&founder, Instant::now() + Duration::from_millis(250))
-        .await
-        .is_err());
+    assert!(client.update_listener(&founder, deadline()).await.is_err());
     assert!(client.configure_server_label(None).is_err());
     assert!(client.configure_server_label(Some("r2")).is_err());
     client.configure_server_label(Some("r1")).unwrap();
@@ -697,6 +697,7 @@ async fn founder_label_requires_signed_pin_and_becomes_immutable_with_credential
         .iter()
         .filter(|entry| entry.path == "/v1/names")
         .collect();
+    assert_eq!(registrations.len(), 2);
     assert_eq!(registrations[0].body["server_label"], "r1");
     assert_eq!(registrations[0].body, registrations[1].body);
     drop(log);
