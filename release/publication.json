@@ -16,6 +16,7 @@
     "visibility": "private",
     "forgejo_url": "http://127.0.0.1:3300/ghost-local/gcoms",
     "companion_url": "http://127.0.0.1:3300/ghost-local/gchat",
-    "git_remote": "ssh://git@ghost-forgejo/ghost-local/gcoms.git"
+    "git_remote": "ssh://git@ghost-forgejo/ghost-local/gcoms.git",
+    "native_validation_record": "native-validation-2026-09-17.json"
   }
 }

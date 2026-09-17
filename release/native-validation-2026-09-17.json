@@ -1,0 +1,164 @@
+{
+  "date": "2026-09-17",
+  "status": "private development; public publication deferred by owner",
+  "sources": {
+    "gcoms_runtime": "7af0e4f",
+    "gcoms_head": "a5cab624c6adb23fb74ba5360b6809eccad16729",
+    "gchat_base_before_follow_up": "954c7bb",
+    "gchat_final": "48812a7d163ae4e25ca382cfa8fb48ff038e9197",
+    "gchat_original_implementation": "19ca61d",
+    "gchat_implementation": "48812a7d163ae4e25ca382cfa8fb48ff038e9197"
+  },
+  "windows_host": {
+    "name": "gcoms-gchat-validation",
+    "system": "Windows 10 x86_64 build 19045",
+    "memory_gib": 12,
+    "virtual_cpus": 6,
+    "disk_overlay_gib": 120,
+    "network": "restricted QEMU user network; SSH forwarded on Linux loopback only",
+    "compiler": "Rust 1.98, x86_64-pc-windows-gnu, cross-built on Linux",
+    "execution": "native Windows processes",
+    "ci_runner_registered": false
+  },
+  "windows": {
+    "gcoms": {
+      "cases": {
+        "passed": 584,
+        "failed": 0,
+        "ignored": 5
+      },
+      "zero_test_harnesses": [
+        "gcflow",
+        "gcfuzz",
+        "gc-network-operator",
+        "gcoms_addon_example",
+        "gcoms_renamed_dependency_check",
+        "gcoms_sim",
+        "gcoms-catalog",
+        "gcoms-conformance",
+        "gcoms-sim",
+        "gc-rpc-types",
+        "ipc_unix",
+        "tracked_send",
+        "typed-addon-server",
+        "typed-addon-types"
+      ],
+      "not_run": [
+        {
+          "name": "compile",
+          "binary": "compile-75bde7ace1629bb0",
+          "status": "not_run",
+          "reason": "Native compiler UI checks require a Windows C toolchain and dependency cache; Linux trybuild is validated separately"
+        },
+        {
+          "name": "gcoms_rpc_macros",
+          "binary": "gcoms_rpc_macros-f5e83151977c7d07",
+          "status": "not_run",
+          "reason": "Cargo built this proc-macro unit harness for the Linux build host"
+        }
+      ],
+      "incomplete_harnesses": [
+        {
+          "name": "node_bounds",
+          "status": "timeout",
+          "seconds": 903.438
+        }
+      ],
+      "scope": "Standalone Windows GNU harnesses: 584 cases pass, five ignored, one harness times out; compile UI/host proc-macro harnesses and Windows rustdoc are not run."
+    },
+    "gchat": {
+      "cases": {
+        "passed": 121,
+        "failed": 0,
+        "ignored": 0
+      },
+      "zero_test_harnesses": [
+        "chat_service",
+        "daemon_archive",
+        "daemon_pty",
+        "gchat_api",
+        "gchat-types",
+        "service_pty",
+        "standalone_daemon"
+      ],
+      "not_run": [],
+      "incomplete_harnesses": [],
+      "scope": "Original workspace run plus complete core library rerun after transcript ownership fix; individual runs and failures retained.",
+      "core_retest": {
+        "passed": 40,
+        "failed": 0,
+        "ignored": 0
+      }
+    }
+  },
+  "linux": {
+    "gcoms": {
+      "passed": 598,
+      "failed": 0,
+      "ignored": 5
+    },
+    "gchat": {
+      "passed": 142,
+      "failed": 0,
+      "ignored": 0
+    },
+    "gchat_core_retest": {
+      "passed": 42,
+      "failed": 0,
+      "ignored": 0
+    },
+    "gchat_source_note": "Full 142-case workspace run before final transcript fix, followed by all 42 core-library cases after it."
+  },
+  "fixes": [
+    "Owner-only catalog persistence with file flush and platform-appropriate directory handling",
+    "Exclusive Windows listener binding",
+    "Retain failed relays for the duration of one bounded construction attempt",
+    "GChat transcript ownership and permissions before first write"
+  ],
+  "packages": {
+    "gcoms-catalog-0.1.0.crate": "b31972e808d4d383820c561ca70f7d91defc994710338999dc591cb32e410198",
+    "gcoms-core-0.1.0.crate": "42dff00b5a8c1793443272b2ff9fa5739cf50191cbd5c4993f522827d8df056c",
+    "gcoms-crypto-0.1.0.crate": "ffd2aa8be023049cb49cd7df82de7d992d4001a822d311d109c2210d2d1e3628",
+    "gcoms-file-transfer-0.1.0.crate": "01686a8079c2668e577d64a9abf598949bffe02e20270e9a5d79c0019a25bdca",
+    "gcoms-gossip-0.1.0.crate": "7c0482c76a219b0cb991efaa2a620752bbbe5dc6a148da91c765d9a393113a12",
+    "gcoms-mls-0.1.0.crate": "c4bd33648cd4884d7694e2d24eeb6ef63bd13f2c1679fef316554ee87d5ba157",
+    "gcoms-network-0.1.0.crate": "a51d1304f0c4d4cbc2bdb20c161aa6c98ccfa9e51f2de92b6b7e940fd2e66264",
+    "gcoms-network-client-0.1.0.crate": "a2f395bea61b078f8395b348939da6561a9980cd7993d0608b00a527facb2144",
+    "gcoms-node-0.1.0.crate": "ba0aa7149018b803e32783a15adebb16b761acfea1aa1dfbca434e674357fad1",
+    "gcoms-private-fs-0.1.0.crate": "1c1e98b1fc2fcbceca0a7d260383be602c6efb57ea022a97aa914211e1f0357a",
+    "gcoms-protocol-0.1.0.crate": "12772ad50d890258f6e0239405e577664b1ff6d6ce9b18d7f2f254838aed8d66",
+    "gcoms-routing-0.1.0.crate": "5cf1440f274a72819b8f1e1f76c95df737904d837ff7a9e2f51bed3177c22df0",
+    "gcoms-rpc-0.1.0.crate": "1f479979ea1cf74959223c7f4b458dad913c693379810da7b3630bf716cce7ad",
+    "gcoms-rpc-contract-0.1.0.crate": "d1791e90843f72293de6dc6d80f5b1be914d81dc674eafa11f5f78682ffd93f6",
+    "gcoms-rpc-macros-0.1.0.crate": "713b5c2a903e0d9d938b5d1a51f2c3ee7c6f049feeba77278e905d94ff77168a",
+    "gcoms-sdk-0.1.0.crate": "65a8cd5eae323f2cdeae32fafa4b7903a91ddcaffb787017628a1934aaaa73f3",
+    "gcoms-transport-0.1.0.crate": "6c26f1cad3928327ac1f95c8695fe9617b3b4bf6570bfe3f716dd2603e10aa75"
+  },
+  "npm_packages": {
+    "gcoms-rpc-0.1.0.tgz": "240055d57b2cae59a6cb1bbd98074109a89c9ddbf97c0e5eddd245fd98ad3eab",
+    "gcoms-rpc-codegen-0.1.0.tgz": "bfc44a38517c684537f8a1d685e44e3c31b5bf8bb9cae638f24ea64ef29f855e"
+  },
+  "validation": {
+    "strict_clippy_linux_gcoms": "passed",
+    "strict_clippy_windows_gcoms": "passed",
+    "strict_clippy_windows_gchat": "passed",
+    "rust_documentation": "passed",
+    "isolated_rust_and_npm_archive_consumers": "passed",
+    "gchat_registry_desktop_metadata": "passed",
+    "public_publication": "deferred",
+    "strict_clippy_gchat_final_core": "passed on Linux and Windows target after transcript fix"
+  },
+  "limitations": [
+    "Windows executables were cross-built; native MSVC/compiler UI and Windows rustdoc are not qualified.",
+    "Unix-only harnesses with zero Windows tests are not Windows coverage.",
+    "Desktop installers, signing, installation/upgrade/uninstallation and GUI acceptance remain pending.",
+    "Full macOS GComs routing tests still require administrator-provisioned loopback aliases.",
+    "Initial preparation artifacts and macOS results refer to their original source revisions.",
+    "GComs offline-member backlog case exceeded the Windows VM test budget; release qualification remains incomplete."
+  ],
+  "backlog_diagnostic": {
+    "deadline_seconds": 90,
+    "finding": "Admission, roster convergence and member shutdown completed; offline sending did not finish before the deadline. This remains a Windows qualification gap, not a passing test."
+  },
+  "evidence_retention": "Raw logs, source/binary hash manifests, initial failures, retries and the VM overlay are retained privately by the owner. This is runtime evidence, not a release attestation."
+}
