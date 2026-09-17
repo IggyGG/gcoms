@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "contentType": "application/vnd.ghost.bootstrap.v1",
+  "requestDomain": "ghost.dropship.bootstrap.request.v1",
+  "replyDomain": "ghost.dropship.bootstrap.reply.v1",
+  "refreshDomain": "ghost.dropship.bootstrap.refresh.v1",
+  "launchDomain": "ghost.dropship.bootstrap.launch.v1",
+  "receiptDomain": "ghost.dropship.bootstrap.receipt.v1",
+  "contactDomain": "ghost.dropship.bootstrap.contact.v1",
+  "relayAdmissionDomain": "ghost.dropship.bootstrap.relay-admission.v1",
+  "relayChallengeOperation": 7,
+  "relayAdmissionOperation": 8,
+  "maxControlBytes": 32768,
+  "controlPageBytes": 8192,
+  "maxArtifactBytes": 67108864,
+  "maxProofLifetimeSeconds": 300,
+  "defaultTransferTimeoutSeconds": 18000,
+  "defaultHandoffLifetimeSeconds": 900,
+  "reportTimeoutSeconds": 120,
+  "targets": ["linux-x64", "win-x64", "mac-x64", "mac-arm64"]
+}

@@ -1,0 +1,35 @@
+[package]
+name = "gcoms-fuzz"
+readme = "README.md"
+documentation = "https://docs.rs/gcoms-fuzz"
+description = "GComs GC/1 hardening: parser fuzzing swarm, RAM-only assertion, flow-shape harness"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+version.workspace = true
+publish = false
+
+[dependencies]
+gcoms-core = { version = "0.1.0", path = "../core" }
+gcoms-crypto = { version = "0.1.0", path = "../crypto", features = ["test-vectors"] }
+gcoms-mls = { version = "0.1.0", path = "../mls" }
+gcoms-node = { version = "0.1.0", path = "../node" }
+gcoms-transport = { version = "0.1.0", path = "../transport" }
+rand = "0.8"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "time", "io-util"] }
+bytes = "1"
+
+[[bin]]
+name = "gcfuzz"
+path = "src/fuzz_main.rs"
+
+[[bin]]
+name = "gcramcheck"
+path = "src/ram_main.rs"
+
+[[bin]]
+name = "gcflow"
+path = "src/flow_main.rs"
+
+[dev-dependencies]
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "time", "io-util"] }

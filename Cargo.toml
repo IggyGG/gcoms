@@ -1,0 +1,13 @@
+[workspace]
+resolver = "2"
+members = ["crates/core", "crates/protocol", "crates/crypto", "crates/transport", "crates/routing", "crates/mls", "crates/gossip", "crates/node", "crates/sdk", "crates/file-transfer", "crates/private-fs", "crates/network", "crates/network-client", "crates/catalog", "crates/rpc", "crates/rpc-contract", "crates/rpc-macros", "crates/conformance", "crates/sim", "crates/fuzz", "examples/typed-addon", "examples/renamed-dependency"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.98"
+license = "MIT OR Apache-2.0"
+publish = true
+
+[profile.release]
+lto = true

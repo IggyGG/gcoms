@@ -1,0 +1,33 @@
+[package]
+name = "gcoms-crypto"
+readme = "README.md"
+documentation = "https://docs.rs/gcoms-crypto"
+description = "GComs GC/1 1:1 crypto: hybrid handshake, ratchet, PQ refresh, identity keys"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+version.workspace = true
+publish.workspace = true
+
+[dependencies]
+x25519-dalek = { version = "2", default-features = false, features = ["alloc", "static_secrets", "zeroize"] }
+ml-kem = { version = "0.3", default-features = false, features = ["alloc", "zeroize"] }
+ml-dsa = { version = "0.1", default-features = false, features = ["alloc", "zeroize"] }
+hkdf = { version = "0.12", default-features = false }
+sha2 = { version = "0.10", default-features = false }
+aes-gcm = { version = "0.10", default-features = false, features = ["aes", "alloc"] }
+rand = { version = "0.8", default-features = false, features = ["alloc", "std_rng"] }
+rand_core = { version = "0.6", default-features = false }
+zeroize = { version = "1", default-features = false, features = ["alloc", "derive"] }
+p256 = { version = "0.13.2", default-features = false, features = ["ecdsa", "pkcs8"], optional = true }
+x509-cert = { version = "=0.2.5", default-features = false, optional = true }
+
+[features]
+default = ["std"]
+std = ["rand/std", "rand/std_rng", "rand_core/getrandom", "sha2/std", "precomputed-tables"]
+precomputed-tables = ["x25519-dalek/precomputed-tables"]
+tls-pin = ["dep:p256", "dep:x509-cert"]
+client-persist = ["std"]
+# Deterministic RNG seeding and the unauthenticated initiator, for
+# conformance vectors and fuzz harnesses only. Never enable in a client.
+test-vectors = ["std"]

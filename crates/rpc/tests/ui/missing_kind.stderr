@@ -1,0 +1,5 @@
+error: method kind must be explicit
+ --> tests/ui/missing_kind.rs:4:5
+  |
+4 |     async fn read(&self) -> Result<String, String>;
+  |     ^^^^^

@@ -1,0 +1,13 @@
+[package]
+name = "gcoms-gossip"
+readme = "README.md"
+documentation = "https://docs.rs/gcoms-gossip"
+description = "GComs GC/1 channel overlay: partial views, PEX, dedup, epidemic fan-out"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+version.workspace = true
+publish.workspace = true
+
+[dependencies]
+rand = "0.8"

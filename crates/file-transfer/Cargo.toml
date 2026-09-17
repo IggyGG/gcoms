@@ -1,0 +1,27 @@
+[package]
+name = "gcoms-file-transfer"
+readme = "README.md"
+documentation = "https://docs.rs/gcoms-file-transfer"
+description = "Durable GC file staging and publication without a network runtime"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+version.workspace = true
+publish.workspace = true
+
+[dependencies]
+gcoms-core = { version = "0.1.0", path = "../core" }
+hex = "0.4"
+rand = "0.8"
+zeroize = "1"
+hmac = "0.12"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+thiserror = "2"
+
+[dev-dependencies]
+tempfile = "3"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_Storage_FileSystem"] }

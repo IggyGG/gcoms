@@ -1,0 +1,60 @@
+# cargo-deny policy for ghost/coms. Run: cargo deny check
+#
+# Every duplicated major version doubles the audit and patch surface of a
+# primitive we rely on. Duplicates are denied by default; the exceptions below
+# are the openmls/hpke tree, which pins a newer RustCrypto generation than
+# the rest of the workspace. Remove each skip when the workspace catches up.
+
+[graph]
+all-features = true
+
+[advisories]
+version = 2
+yanked = "deny"
+ignore = []
+
+[licenses]
+version = 2
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Unicode-3.0",
+    "Unicode-DFS-2016",
+    "Zlib",
+    "MPL-2.0",
+    "OpenSSL",
+    "CC0-1.0",
+]
+
+[bans]
+multiple-versions = "deny"
+wildcards = "deny"
+deny = [
+    # Custom or unmaintained cryptography is forbidden (SPEC §8.1).
+    { crate = "openssl", reason = "aws-lc-rs is the only TLS backend" },
+    { crate = "ring", wrappers = ["rustls-webpki", "rustls"], reason = "aws-lc-rs is the only TLS backend" },
+]
+skip = [
+    # openmls_rust_crypto 0.6 / hpke-rs 0.7 / x-wing 0.1 pin the next
+    # RustCrypto generation; the rest of the workspace is one behind.
+    { crate = "x25519-dalek", version = "=3.0.0" },
+    { crate = "curve25519-dalek", version = "=5.0.0" },
+    { crate = "sha2", version = "=0.11.0" },
+    { crate = "hkdf", version = "=0.13.0" },
+    { crate = "hmac", version = "=0.13.0" },
+    { crate = "rand", version = "=0.10.2" },
+    { crate = "rand_core", version = "=0.10.1" },
+    { crate = "getrandom", version = "=0.4.3" },
+    { crate = "digest", version = "=0.11.0" },
+    { crate = "webpki-roots", version = "=0.26.11" },
+]
+skip-tree = []
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]

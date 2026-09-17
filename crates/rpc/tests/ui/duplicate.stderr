@@ -1,0 +1,5 @@
+error: method IDs must be unique lowercase identifiers
+ --> tests/ui/duplicate.rs:5:16
+  |
+5 |     #[rpc(id = "read", kind = "query")]
+  |                ^^^^^^

@@ -1,0 +1,20 @@
+[package]
+name = "gcoms-rpc-macros"
+readme = "README.md"
+documentation = "https://docs.rs/gcoms-rpc-macros"
+description = "Service contract generation for gcoms-rpc"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+version.workspace = true
+publish.workspace = true
+
+[lib]
+proc-macro = true
+
+[dependencies]
+syn = { version = "2", features = ["full", "visit"] }
+quote = "1"
+proc-macro2 = "1"
+
+proc-macro-crate = "3.5"

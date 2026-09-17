@@ -1,0 +1,43 @@
+[package]
+name = "gcoms-sdk"
+readme = "README.md"
+documentation = "https://docs.rs/gcoms-sdk"
+description = "Typed embedded and IPC client API for GC/1 applications"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+version.workspace = true
+publish.workspace = true
+
+[features]
+default = ["embedded", "ipc", "descriptor-verification"]
+embedded = ["dep:gcoms-node", "dep:gcoms-crypto"]
+ipc = []
+client-persist = ["embedded", "gcoms-node/client-persist"]
+descriptor-verification = ["dep:gcoms-crypto"]
+
+[dependencies]
+zeroize = "1"
+async-trait = "0.1"
+gcoms-core = { version = "0.1.0", path = "../core" }
+gcoms-crypto = { version = "0.1.0", path = "../crypto", optional = true }
+gcoms-node = { version = "0.1.0", path = "../node", optional = true }
+postcard = { version = "1", features = ["alloc"] }
+serde = { version = "1", features = ["derive"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "io-util", "sync", "time"] }
+
+[target.'cfg(unix)'.dependencies]
+rustix = { version = "1", features = ["process"] }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = [
+    "Win32_Foundation",
+    "Win32_Security",
+    "Win32_Security_Authorization",
+    "Win32_System_Pipes",
+    "Win32_System_SystemServices",
+    "Win32_System_Threading",
+] }
+
+[dev-dependencies]
+tempfile = "3"

@@ -1,0 +1,14 @@
+/target/
+/dist/
+node_modules/
+**/node_modules/
+**/target/
+**/.svelte-kit/
+**/dist/
+*.tmp
+/test-evidence/
+__pycache__/
+
+/fuzz/target
+/fuzz/corpus
+/fuzz/artifacts

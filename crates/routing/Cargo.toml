@@ -1,0 +1,32 @@
+[package]
+name = "gcoms-routing"
+readme = "README.md"
+documentation = "https://docs.rs/gcoms-routing"
+description = "Private relay introductions and independently authenticated onion circuits"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+version.workspace = true
+publish.workspace = true
+
+[dependencies]
+gcoms-transport = { version = "0.1.0", path = "../transport" }
+tokio = { version = "1", features = ["rt-multi-thread", "net", "macros", "time", "io-util", "sync"] }
+tokio-rustls = "0.26"
+h2 = "0.4"
+http = "1"
+bytes = "1"
+rand = "0.8"
+sha2 = "0.10"
+hmac = "0.12"
+subtle = "2"
+zeroize = "1"
+hyper = { version = "1", features = ["client", "http1"] }
+hyper-util = { version = "0.1", features = ["tokio"] }
+http-body-util = "0.1"
+webpki-roots = "1"
+url = "2"
+
+[dev-dependencies]
+gcoms-core = { version = "0.1.0", path = "../core" }
+rcgen = "0.13"

@@ -1,0 +1,89 @@
+{
+  "service": {
+    "methods": [
+      {
+        "args_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "additionalProperties": false,
+          "properties": {
+            "name": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "name"
+          ],
+          "title": "GreetingServiceGreetArgs",
+          "type": "object"
+        },
+        "args_typescript": "{ name: string, }",
+        "error_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "title": "string",
+          "type": "string"
+        },
+        "error_typescript": "string",
+        "id": "greet",
+        "kind": "query",
+        "output_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "additionalProperties": false,
+          "properties": {
+            "text": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "text"
+          ],
+          "title": "Greeting",
+          "type": "object"
+        },
+        "output_typescript": "{ text: string, }"
+      },
+      {
+        "args_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "additionalProperties": false,
+          "properties": {
+            "text": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "text"
+          ],
+          "title": "GreetingServiceUppercaseArgs",
+          "type": "object"
+        },
+        "args_typescript": "{ text: string, }",
+        "error_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "title": "string",
+          "type": "string"
+        },
+        "error_typescript": "string",
+        "id": "uppercase",
+        "kind": "operation",
+        "output_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "additionalProperties": false,
+          "properties": {
+            "text": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "text"
+          ],
+          "title": "Greeting",
+          "type": "object"
+        },
+        "output_typescript": "{ text: string, }"
+      }
+    ],
+    "name": "example.greeting",
+    "version": 1
+  },
+  "typescript": "export type Greeting = { text: string, };\n"
+}

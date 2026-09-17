@@ -1,0 +1,37 @@
+[package]
+name = "gcoms-network-client"
+readme = "README.md"
+documentation = "https://docs.rs/gcoms-network-client"
+description = "Shared invitation-only network bootstrap for Ghost installers and clients"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+version.workspace = true
+publish.workspace = true
+
+[dependencies]
+gcoms-network = { version = "0.1.0", path = "../network" }
+gcoms-routing = { version = "0.1.0", path = "../routing" }
+gcoms-private-fs = { version = "0.1.0", path = "../private-fs" }
+base64 = "0.22"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+tokio = { version = "1", features = ["time", "sync"] }
+rand = "0.8"
+sha2 = "0.10"
+fs2 = "0.4"
+tempfile = "3"
+zeroize = "1"
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+[dev-dependencies]
+gcoms-crypto = { version = "0.1.0", path = "../crypto" }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "io-util"] }
+
+axum = { version = "0.8", features = ["http1", "json", "tokio"] }
+rcgen = "0.13"
+rustls = { version = "0.23", default-features = false, features = ["aws-lc-rs", "std"] }
+tokio-rustls = "0.26"

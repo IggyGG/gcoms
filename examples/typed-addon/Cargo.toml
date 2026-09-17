@@ -1,0 +1,35 @@
+[package]
+name = "gcoms-addon-example"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+version.workspace = true
+publish = false
+
+[lib]
+crate-type = ["rlib", "cdylib"]
+
+[features]
+default = []
+native = ["gcoms-rpc/file-store", "dep:tokio", "dep:gcoms-private-fs"]
+wasm = ["gcoms-rpc/wasm", "dep:wasm-bindgen", "dep:wasm-bindgen-futures"]
+
+[dependencies]
+gcoms-rpc = { version = "0.1.0", path = "../../crates/rpc", default-features = false }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+tokio = { version = "1", optional = true, features = ["rt-multi-thread", "macros", "signal"] }
+gcoms-private-fs = { version = "0.1.0", path = "../../crates/private-fs", optional = true }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+wasm-bindgen = { version = "0.2", optional = true }
+wasm-bindgen-futures = { version = "0.4", optional = true }
+
+[[bin]]
+name = "typed-addon-server"
+path = "src/server.rs"
+required-features = ["native"]
+
+[[bin]]
+name = "typed-addon-types"
+path = "src/types.rs"

@@ -1,0 +1,20 @@
+[package]
+name = "gcoms-protocol"
+readme = "README.md"
+documentation = "https://docs.rs/gcoms-protocol"
+description = "Runtime-free GC/1 contact, direct-message, and relay wire codecs"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+version.workspace = true
+publish.workspace = true
+
+[dependencies]
+gcoms-core = { version = "0.1.0", path = "../core", default-features = false }
+gcoms-crypto = { version = "0.1.0", path = "../crypto", default-features = false }
+hmac = { version = "0.12", default-features = false }
+sha2 = { version = "0.10", default-features = false }
+
+[features]
+default = ["std"]
+std = ["gcoms-core/std", "gcoms-crypto/std", "sha2/std"]

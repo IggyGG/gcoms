@@ -1,0 +1,21 @@
+[package]
+name = "gcoms-conformance"
+readme = "README.md"
+documentation = "https://docs.rs/gcoms-conformance"
+description = "GComs GC/1 deterministic protocol and cryptographic conformance runner"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+version.workspace = true
+publish = false
+
+[dependencies]
+gcoms-core = { version = "0.1.0", path = "../core" }
+gcoms-crypto = { version = "0.1.0", path = "../crypto", features = ["test-vectors"] }
+gcoms-mls = { version = "0.1.0", path = "../mls" }
+gcoms-transport = { version = "0.1.0", path = "../transport" }
+sha2 = "0.10"
+
+[dev-dependencies]
+serde_json = "1"
+hex = "0.4"

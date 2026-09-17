@@ -1,0 +1,15 @@
+{
+  "name": "gcoms-workspace",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "packages/gc-rpc",
+    "packages/rpc-codegen"
+  ],
+  "scripts": {
+    "check": "npm run check --workspace @gcoms/rpc",
+    "test": "npm test --workspace @gcoms/rpc",
+    "build": "npm run build --workspace @gcoms/rpc",
+    "generate": "npm run generate --workspace @gcoms/rpc"
+  }
+}

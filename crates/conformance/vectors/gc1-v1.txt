@@ -1,0 +1,32 @@
+# GC/1 deterministic conformance vectors, version 1 (frame header carries pn since 2026-09-05).
+
+# > **About this document.** Ghost is an authorized security-research laboratory
+# > that investigates new technologies for secure deployments, encrypted
+# > communication layers, and IoT. All exploit modules, lab targets, CVE
+# > references, and embedded PoC code referenced from this document exist solely
+# > to validate detection pipelines, sensor coverage, and the resilience of
+# > systems we operate or are authorized to test. No code in this repository is
+# > intended for use against systems without explicit authorization. The presence
+# > of historical exploit names or vulnerability terminology in this file is
+# > descriptive of defensive research, not an endorsement of offensive use.
+
+# Regenerate candidates with: cargo run -p gc-conformance -- --emit
+crypto.bundle.sha256=e4a99d18d79fdecba4615c245e095ee324de3da0aa645573124b70db4e246870
+crypto.first_move.sha256=fd23e226c26f85e65fef5128b8573a6de97f64f1d07f982f9d25b2fb787d729a
+crypto.frame_alice.sha256=ea40936426e23b8f87535d12c9e736ed04b86e00b3fc8dd0727c81b9884fb8cf
+crypto.frame_bob.sha256=66d3c384043d40fbc794e6e6b504d65777c118cce4ee7721597cf783ee4c7e83
+crypto.frame_pq.sha256=6199bd6107363227c8acf767c307850fecd43b463dc9ba2229650ec143b5d788
+crypto.identity_public.sha256=0575d15a041b8b573635522018f2d25d0cc1c1d6d5295da66c52e12bc29402fc
+crypto.safety_number=KMQSKW6S 6VFTJ7MF U6WPXHV3 2PYDFNMI L7QOWBMU
+crypto.signature.sha256=b80d88a39aa4f11892c336628c19bacab31e8397de3fbd08c54862719ef9f0fd
+mls.ciphersuite.id=004f
+mls.ciphersuite.profile=ML-KEM768+X25519/AES-128-GCM/SHA-256/Ed25519
+mls.invite.sha256=ed7e0335b1753228cd3436838a3a0efe5bd4aaaf81a07127d36923035e621989
+protocol.cell.length=4096
+protocol.cell.sha256=8fcf1ef29b2e2d91e9cca4b13a1aba4e2ed09f6a913c1e6992bb5dd38c4c1d49
+protocol.file.ack.sha256=5f6074f8694354fcc72a38c1b55a9595cb11b04770b0ba91437ebb3399ab5c7f
+protocol.file.chunk.sha256=c7180d6b1db6beabce42fec02f160da072507925b671d0f954cdd03f66f7e42e
+protocol.file.finish.sha256=07141b8550e1f6be17c7a1d4dbacf1a6898ce117921cf584a5dd1de802e7103d
+protocol.file.init.sha256=585d251168c6b1ad06b881f9c898c2a9aeb06000e63896f50db875d45e63e1b6
+protocol.version=1
+transport.base64url=AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8

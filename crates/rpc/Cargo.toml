@@ -1,0 +1,56 @@
+[package]
+name = "gcoms-rpc"
+readme = "README.md"
+documentation = "https://docs.rs/gcoms-rpc"
+description = "Typed, resumable services over GC, local IPC and browser HTTP"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+version.workspace = true
+publish.workspace = true
+
+[features]
+default = ["native"]
+native = ["dep:tokio", "dep:gcoms-sdk", "dep:gcoms-private-fs", "dep:rustix"]
+file-store = ["native", "dep:aes-gcm", "dep:fs2", "dep:tempfile", "dep:zeroize"]
+wasm = ["dep:gloo-net", "dep:gloo-timers", "dep:web-sys", "dep:js-sys", "dep:wasm-bindgen", "dep:wasm-bindgen-futures"]
+
+[dependencies]
+gcoms-rpc-contract = { version = "0.1.0", path = "../rpc-contract" }
+gcoms-rpc-macros = { version = "0.1.0", path = "../rpc-macros" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+schemars = "1.2"
+ts-rs = { version = "11", features = ["serde-compat", "no-serde-warnings"] }
+async-trait = "0.1"
+sha2 = "0.10"
+uuid = { version = "1", features = ["v4", "js"] }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+tokio = { version = "1", optional = true, features = ["rt", "sync", "time", "macros", "net", "io-util"] }
+gcoms-sdk = { version = "0.1.0", path = "../sdk", optional = true, default-features = false, features = ["ipc"] }
+gcoms-private-fs = { version = "0.1.0", path = "../private-fs", optional = true }
+aes-gcm = { version = "0.10", optional = true }
+fs2 = { version = "0.4", optional = true }
+tempfile = { version = "3", optional = true }
+zeroize = { version = "1", optional = true }
+
+[target.'cfg(unix)'.dependencies]
+rustix = { version = "1", optional = true, features = ["process"] }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+gloo-net = { version = "0.7", optional = true }
+gloo-timers = { version = "0.3", optional = true, features = ["futures"] }
+web-sys = { version = "0.3", optional = true, features = ["Window", "Storage", "RequestCredentials", "RequestRedirect", "ReadableStream", "ReadableStreamDefaultReader", "AbortController", "AbortSignal"] }
+js-sys = { version = "0.3", optional = true }
+wasm-bindgen = { version = "0.2", optional = true }
+wasm-bindgen-futures = { version = "0.4", optional = true }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time"] }
+tempfile = "3"
+trybuild = "1"
+
+[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
+gcoms-sdk = { version = "0.1.0", path = "../sdk", features = ["client-persist"] }
+gcoms-node = { version = "0.1.0", path = "../node", features = ["client-persist"] }

@@ -1,0 +1,5 @@
+error: service values must be owned serializable types
+ --> tests/ui/borrowed.rs:4:32
+  |
+4 |     async fn read(&self, text: &str) -> Result<String, String>;
+  |                                ^

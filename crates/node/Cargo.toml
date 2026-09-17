@@ -1,0 +1,63 @@
+[package]
+name = "gcoms-node"
+readme = "README.md"
+documentation = "https://docs.rs/gcoms-node"
+description = "GComs GC/1 PoC node: relay queues, FRWD, 1:1 over real hops, keystore, metrics"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+version.workspace = true
+publish.workspace = true
+
+[dependencies]
+gcoms-network = { version = "0.1.0", path = "../network" }
+gcoms-protocol = { version = "0.1.0", path = "../protocol" }
+gcoms-core = { version = "0.1.0", path = "../core" }
+gcoms-crypto = { version = "0.1.0", path = "../crypto" }
+gcoms-gossip = { version = "0.1.0", path = "../gossip" }
+gcoms-mls = { version = "0.1.0", path = "../mls" }
+gcoms-transport = { version = "0.1.0", path = "../transport" }
+gcoms-routing = { version = "0.1.0", path = "../routing" }
+gcoms-network-client = { version = "0.1.0", path = "../network-client" }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "time", "io-util", "sync", "signal"] }
+tokio-rustls = "0.26"
+rustls = { version = "0.23", default-features = false, features = ["aws-lc-rs", "std"] }
+rustls-pemfile = "2"
+bytes = "1"
+rand = "0.8"
+hmac = "0.12"
+sha2 = "0.10"
+hkdf = "0.12"
+aes-gcm = "0.10"
+x25519-dalek = { version = "2", features = ["static_secrets"] }
+serde_json = "1"
+serde = { version = "1", features = ["derive"] }
+argon2 = "0.5"
+subtle = "2"
+zeroize = "1"
+gcoms-private-fs = { version = "0.1.0", path = "../private-fs" }
+fs2 = "0.4"
+reqwest = { version = "0.12", default-features = false }
+url = "2"
+quick-xml = "0.38"
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Storage_FileSystem"] }
+
+[dev-dependencies]
+rcgen = "0.13"
+tempfile = "3"
+gcoms-crypto = { version = "0.1.0", path = "../crypto", features = ["test-vectors"] }
+
+[features]
+chaos-debug = []
+# Opt-in state export/import + persist-enabled crypto/mls for clients that
+# keep an encrypted-at-rest archive (SPEC §1: clients MAY archive locally).
+client-persist = ["gcoms-crypto/client-persist", "gcoms-mls/client-persist"]
+
+[[bin]]
+name = "gcnode"
+path = "src/main.rs"

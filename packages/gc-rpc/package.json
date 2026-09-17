@@ -1,0 +1,38 @@
+{
+  "name": "@gcoms/rpc",
+  "version": "0.1.0",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./wire": {
+      "types": "./dist/wire.d.ts",
+      "default": "./dist/wire.js"
+    }
+  },
+  "scripts": {
+    "generate": "node scripts/generate.mjs",
+    "check": "tsc --noEmit",
+    "test": "vitest run",
+    "build": "tsc -p tsconfig.build.json",
+    "test:browser": "node scripts/browser-test.mjs"
+  },
+  "devDependencies": {
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.8",
+    "@types/node": "^22",
+    "@playwright/test": "^1.60.0",
+    "vite": "^8.0.16",
+    "@gcoms/rpc-codegen": "0.1.0"
+  },
+  "license": "MIT OR Apache-2.0",
+  "description": "Typed resumable GComs service clients",
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE-MIT",
+    "LICENSE-APACHE"
+  ]
+}

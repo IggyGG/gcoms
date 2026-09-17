@@ -1,0 +1,31 @@
+[package]
+name = "gcoms-mls"
+readme = "README.md"
+documentation = "https://docs.rs/gcoms-mls"
+description = "GComs GC/1 group machinery: MLS groups, per-channel leaves, owner admission, invites"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+version.workspace = true
+publish.workspace = true
+
+[dependencies]
+gcoms-crypto = { version = "0.1.0", path = "../crypto" }
+openmls = { version = "0.9", features = ["draft-ietf-mls-pq-ciphersuites"] }
+openmls_basic_credential = "0.6"
+openmls_rust_crypto = { version = "0.6", features = ["draft-ietf-mls-pq-ciphersuites"] }
+openmls_traits = "0.6"
+tls_codec = { version = "0.5", features = ["derive", "mls"] }
+sha2 = "0.10"
+rand = "0.8"
+zeroize = "1"
+aes-gcm = "0.10"
+
+[features]
+# Opt-in group-state export/import for clients that persist state
+# encrypted-at-rest (SPEC §1: clients MAY archive locally).
+client-persist = ["gcoms-crypto/client-persist"]
+
+[dev-dependencies]
+gcoms-core = { version = "0.1.0", path = "../core" }
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }

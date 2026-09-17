@@ -1,0 +1,5 @@
+error: use a decimal string newtype for unrestricted wire integers
+ --> tests/ui/integer.rs:4:36
+  |
+4 |     async fn read(&self) -> Result<u64, String>;
+  |                                    ^^^

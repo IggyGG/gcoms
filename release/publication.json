@@ -1,0 +1,14 @@
+{
+  "project": "gcoms",
+  "channel": "developer-preview",
+  "version": "0.1.0",
+  "forgejo_url": null,
+  "companion_url": null,
+  "security_contact": null,
+  "conduct_contact": null,
+  "maintainers": [],
+  "rights_review": null,
+  "operator_acceptance": null,
+  "native_qualification": {},
+  "publisher_identities": {}
+}

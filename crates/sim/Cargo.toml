@@ -1,0 +1,19 @@
+[package]
+name = "gcoms-sim"
+readme = "README.md"
+documentation = "https://docs.rs/gcoms-sim"
+description = "GComs GC/1 discrete-event simulation: gossip delivery at scale, G-M5 gates"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+version.workspace = true
+publish = false
+
+[dependencies]
+gcoms-gossip = { version = "0.1.0", path = "../gossip" }
+rand = "0.8"
+
+[features]
+per-msg-debug = []
+
+[dev-dependencies]

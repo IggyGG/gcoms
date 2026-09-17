@@ -1,0 +1,45 @@
+[package]
+name = "gcoms-catalog"
+readme = "README.md"
+documentation = "https://docs.rs/gcoms-catalog"
+description = "Federated public channel catalog and automatic-join boundary"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+version.workspace = true
+publish.workspace = true
+
+[dependencies]
+axum = { version = "0.8", features = ["http1", "json", "tokio"] }
+base64 = "0.22"
+gcoms-network = { version = "0.1.0", path = "../network" }
+gcoms-crypto = { version = "0.1.0", path = "../crypto" }
+rand = "0.8"
+httpdate = "1"
+gcoms-node = { version = "0.1.0", path = "../node" }
+gcoms-routing = { version = "0.1.0", path = "../routing" }
+gcoms-sdk = { version = "0.1.0", path = "../sdk", default-features = false, features = ["ipc", "descriptor-verification"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+rustls = { version = "0.23", default-features = false, features = ["aws-lc-rs", "std"] }
+rustls-pemfile = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+tokio = { version = "1", features = ["fs", "io-util", "macros", "net", "rt-multi-thread", "signal", "sync", "time"] }
+tokio-rustls = "0.26"
+tower-http = { version = "0.6", features = ["limit", "timeout"] }
+url = "2"
+
+[dev-dependencies]
+gcoms-transport = { version = "0.1.0", path = "../transport" }
+gcoms-core = { version = "0.1.0", path = "../core" }
+rcgen = "0.13"
+tower = { version = "0.5", features = ["util"] }
+
+[[bin]]
+name = "gcoms-catalog"
+path = "src/main.rs"
+
+[[bin]]
+name = "gc-network-operator"
+path = "src/operator.rs"

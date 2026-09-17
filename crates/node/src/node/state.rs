@@ -1,0 +1,274 @@
+// Split from the former monolithic node.rs on 2026-09-05; no behaviour change.
+
+use super::*;
+use zeroize::Zeroize;
+
+#[derive(Clone)]
+pub(crate) struct DirectDelivery {
+    pub(crate) peer: NodeInfo,
+    /// The node's own relay provision: the fallback first hop when no
+    /// intermediary grant is eligible for this peer.
+    pub(crate) relay: RelayProvision,
+    pub(crate) cells: Vec<Cell>,
+}
+
+impl Zeroize for DirectDelivery {
+    fn zeroize(&mut self) {
+        for cell in &mut self.cells {
+            cell.payload.as_mut_slice().zeroize();
+        }
+        self.relay.hop_key.zeroize();
+        for alias in &mut self.relay.aliases {
+            alias.capabilities.push.zeroize();
+            alias.capabilities.sub.zeroize();
+            alias.capabilities.admin.zeroize();
+            alias.lease_create.payload.as_mut_slice().zeroize();
+        }
+    }
+}
+
+impl Drop for DirectDelivery {
+    fn drop(&mut self) {
+        self.zeroize();
+    }
+}
+
+pub(crate) struct PendingDirect {
+    pub(crate) delivery: DirectDelivery,
+    pub(crate) logical_record: Option<Vec<u8>>,
+    pub(crate) sequence: u64,
+    pub(crate) next_attempt: std::time::Instant,
+    pub(crate) expires: std::time::Instant,
+    pub(crate) application_event: bool,
+}
+
+impl Zeroize for PendingDirect {
+    fn zeroize(&mut self) {
+        if let Some(record) = &mut self.logical_record {
+            record.as_mut_slice().zeroize();
+        }
+    }
+}
+
+impl Drop for PendingDirect {
+    fn drop(&mut self) {
+        self.zeroize();
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum DirectSessionState {
+    InitiatedUnconfirmed { expires: std::time::Instant },
+    Established,
+}
+
+#[derive(Clone)]
+pub(crate) struct ProcessedDirect {
+    pub(crate) frame_hash: [u8; 32],
+    pub(crate) delivery: DirectDelivery,
+}
+
+#[derive(Clone, Copy)]
+pub(crate) struct DirectPresenceObservation {
+    pub(crate) reachability: Reachability,
+    pub(crate) expires: std::time::Instant,
+}
+
+/// Await a set of independent futures concurrently and collect their
+/// outputs in order. Small enough that pulling in `futures` is not worth it.
+pub(crate) async fn futures_join_all<F, T>(futures: impl IntoIterator<Item = F>) -> Vec<T>
+where
+    F: std::future::Future<Output = T> + Send + 'static,
+    T: Send + 'static,
+{
+    let mut set = tokio::task::JoinSet::new();
+    let mut count = 0usize;
+    for (index, future) in futures.into_iter().enumerate() {
+        set.spawn(async move { (index, future.await) });
+        count += 1;
+    }
+    let mut slots: Vec<Option<T>> = (0..count).map(|_| None).collect();
+    while let Some(joined) = set.join_next().await {
+        if let Ok((index, value)) = joined {
+            slots[index] = Some(value);
+        }
+    }
+    slots.into_iter().flatten().collect()
+}
+
+/// Size of the active intermediary set (SPEC §15 `LANE_SET`).
+pub(crate) const LANE_SET: usize = 4;
+/// One member of the active set is replaced this often (SPEC §15 `LANE_ROTATE`).
+pub(crate) const LANE_ROTATE: std::time::Duration = std::time::Duration::from_secs(15 * 60);
+/// Grants a node retains from peers.
+pub(crate) const MAX_FORWARD_GRANTS: usize = 256;
+/// Lifetime of a grant this node issues; re-issued with contact renewals.
+pub(crate) const FORWARD_GRANT_LIFETIME_SECS: u64 = 24 * 60 * 60;
+
+/// Add +/-25% uniform jitter so that a fleet started together does not
+/// renew, retry, or poll in lockstep.
+pub(crate) fn jittered(base: std::time::Duration) -> std::time::Duration {
+    use rand::Rng;
+    let quarter = base.as_millis() as u64 / 4;
+    if quarter == 0 {
+        return base;
+    }
+    let offset = rand::thread_rng().gen_range(0..=quarter * 2);
+    base - std::time::Duration::from_millis(quarter) + std::time::Duration::from_millis(offset)
+}
+
+pub(crate) fn now_unix() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
+}
+
+pub(crate) fn now_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0)
+}
+
+pub(crate) fn fresh_msg_id() -> [u8; 16] {
+    let mut id = [0u8; 16];
+    rand::thread_rng().fill_bytes(&mut id);
+    id
+}
+
+pub struct NodeState {
+    pub(crate) routing: Option<Arc<super::routing::RoutingRuntime>>,
+    pub(crate) secrets: Arc<LocalSecrets>,
+    pub(crate) identity_seed: [u8; 32],
+    #[cfg(feature = "client-persist")]
+    pub(crate) sealed_tls_identity: Vec<u8>,
+    pub(crate) info: NodeInfo,
+    pub(crate) sessions: HashMap<Vec<u8>, Session>,
+    pub(crate) session_states: HashMap<Vec<u8>, DirectSessionState>,
+    pub(crate) peer_routes: HashMap<Vec<u8>, NodeInfo>,
+    pub(crate) peer_route_generations: HashMap<Vec<u8>, u64>,
+    pub(crate) local_contact_generation: u64,
+    pub(crate) pending_1to1: HashMap<[u8; 16], PendingDirect>,
+    pub(crate) next_direct_sequence: u64,
+    pub(crate) durable_applications_enabled: bool,
+    pub(crate) application_inbox: application_inbox::ApplicationInbox,
+    pub(crate) direct_ack_outbox: VecDeque<DirectDelivery>,
+    pub(crate) processed_direct: HashMap<(Vec<u8>, u64), ProcessedDirect>,
+    pub(crate) processed_direct_order: VecDeque<(Vec<u8>, u64)>,
+    pub(crate) direct_presence: HashMap<Vec<u8>, DirectPresenceObservation>,
+    pub(crate) direct_presence_counters: HashMap<Vec<u8>, u64>,
+    pub(crate) direct_presence_opt_in: HashSet<Vec<u8>>,
+    pub(crate) channel_presence: HashMap<(String, [u8; 32]), DirectPresenceObservation>,
+    pub(crate) channel_presence_counters: HashMap<(String, [u8; 32]), u64>,
+    pub(crate) channel_presence_opt_in: HashSet<String>,
+    pub(crate) parked: Vec<(Vec<u8>, gcoms_crypto::session::Frame)>,
+    pub(crate) accepted_first_moves: VecDeque<[u8; 32]>,
+    pub(crate) channels: HashMap<String, crate::channel::ChannelState>,
+    pub(crate) prepared: HashMap<u64, PreparedChannelJoin>,
+    pub(crate) chan_parked: Vec<(String, Vec<u8>)>,
+    pub(crate) channel_fragments: crate::proto::ChannelFragmentBuffer,
+    pub(crate) last_channel_send: Option<(String, Vec<u8>)>,
+    pub(crate) pending_channel_direct: HashMap<[u8; 16], (String, [u8; 32])>,
+    pub(crate) next_prep_id: u64,
+    pub(crate) client_relay: RelayProvision,
+    /// Intermediaries this node may route through (SPEC §11.1), keyed by
+    /// the intermediary's relay service id. Fed by `ForwardGrant` records
+    /// from established peers. Private bearers; sealed on persist.
+    pub(crate) forward_grants: HashMap<[u8; 32], crate::alias::ForwardGrant>,
+    /// Service ids of the intermediaries currently pinned as lanes (`LANE_SET`).
+    pub(crate) active_intermediaries: Vec<[u8; 32]>,
+    pub(crate) last_intermediary_rotation: std::time::Instant,
+    /// Deliveries that fell back to the node's own relay because no eligible
+    /// intermediary existed. Exposed for diagnostics.
+    pub(crate) intermediary_fallbacks: u64,
+    pub(crate) staged_contact_aliases: Option<Vec<OwnedAlias>>,
+    pub(crate) unannounced_old_contact_aliases: Option<Vec<OwnedAlias>>,
+    pub(crate) unannounced_contact_deadlines: Option<(std::time::Instant, std::time::Instant)>,
+    pub(crate) alias_lifecycle_timing: AliasLifecycleConfig,
+    pub(crate) owner_transition_failed: bool,
+    #[cfg(feature = "client-persist")]
+    pub(in crate::node) owner_clock: Mutex<persist::owner_aliases::RestoreClock>,
+    #[cfg(feature = "client-persist")]
+    pub(crate) owner_alias_origins: HashMap<[u8; 32], OwnedAlias>,
+    #[cfg(feature = "client-persist")]
+    pub(crate) owner_alias_renewals: HashMap<[u8; 32], Vec<u8>>,
+    pub(crate) draining_contact_aliases: Vec<DrainingContactAliases>,
+    pub(crate) subscribed_contact_aliases: HashSet<[u8; 32]>,
+    pub(crate) contact_aliases_activated: std::time::Instant,
+    pub(crate) frwd_target_policy: FrwdTargetPolicy,
+    pub(crate) scheduler: RelayScheduler,
+    /// Owner side: invite-redeem requests received from friends over sealed
+    /// direct sessions, awaiting async processing by `invite_tick`. Bounded.
+    pub(crate) invite_redeem_inbox: VecDeque<InviteRedeemRequest>,
+    /// Friend side: redemptions this node is waiting on, keyed by the request
+    /// message id. The oneshot wakes the `join_with_invite` caller when the
+    /// owner's `InviteWelcome` arrives (or the wait times out).
+    pub(crate) pending_invite_redemptions:
+        HashMap<[u8; 16], tokio::sync::oneshot::Sender<Result<Vec<u8>, String>>>,
+    #[cfg_attr(not(feature = "client-persist"), allow(dead_code))]
+    pub(crate) durable_state_sink: Option<DurableStateSink>,
+}
+
+/// An invite-redeem request received from a friend, queued for async handling.
+pub(crate) struct InviteRedeemRequest {
+    /// The friend's identity pk, to route the `InviteWelcome` reply back.
+    pub(crate) sender_pk: Vec<u8>,
+    pub(crate) message_id: [u8; 16],
+    pub(crate) channel: String,
+    pub(crate) member_name: String,
+    pub(crate) invite_id: [u8; 16],
+    pub(crate) invite_secret: [u8; 32],
+    pub(crate) key_package: Vec<u8>,
+}
+
+impl NodeState {
+    /// A failed lifecycle checkpoint has an unknown durable outcome. Refuse new
+    /// application jobs until the last confirmed archive is reopened. The relay
+    /// transit scheduler is independent and holds no local application state.
+    pub(crate) fn pause_failed_owner_transition(&mut self) {
+        self.owner_transition_failed = true;
+        self.scheduler.shutdown();
+    }
+}
+
+#[derive(Clone)]
+pub(crate) struct DrainingContactAliases {
+    pub(crate) receive_until: std::time::Instant,
+    pub(crate) aliases: Vec<OwnedAlias>,
+    pub(crate) abandon_at: std::time::Instant,
+    pub(crate) next_revoke: std::time::Instant,
+}
+
+pub(crate) struct PreparedChannelJoin {
+    pub(crate) mls: gcoms_mls::PreparedJoin,
+    pub(crate) route: crate::channel::OwnedChannelRoute,
+    pub(crate) display: String,
+}
+
+pub(crate) fn random_nonzero<const N: usize>() -> [u8; N] {
+    loop {
+        let mut value = [0; N];
+        rand::thread_rng().fill_bytes(&mut value);
+        if value != [0; N] {
+            return value;
+        }
+    }
+}
+
+pub(crate) fn validate_application_payload(payload: &[u8]) -> Result<(), String> {
+    if gcoms_core::is_volatile_application_payload(payload) {
+        return Err("one-use contact requires volatile application transport".into());
+    }
+    validate_application_size(payload)
+}
+
+pub(crate) fn validate_application_size(payload: &[u8]) -> Result<(), String> {
+    if payload.len() > gcoms_core::APPLICATION_PAYLOAD_LIMIT {
+        return Err(format!(
+            "application payload exceeds {} byte limit",
+            gcoms_core::APPLICATION_PAYLOAD_LIMIT
+        ));
+    }
+    Ok(())
+}
