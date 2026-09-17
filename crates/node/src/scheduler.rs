@@ -1521,6 +1521,40 @@ fn now_unix() -> u64 {
 mod tests {
     use super::*;
 
+    #[tokio::test]
+    async fn shutdown_releases_receipts_while_connection_warming_is_pending() {
+        struct PendingConnector(tokio::sync::Notify);
+        impl gcoms_transport::connector::Connector for PendingConnector {
+            fn connect(
+                &self,
+                _: SocketAddr,
+                _: [u8; 32],
+            ) -> gcoms_transport::connector::ConnectFuture<'_> {
+                Box::pin(async {
+                    self.0.notify_one();
+                    std::future::pending().await
+                })
+            }
+        }
+        let connector = Arc::new(PendingConnector(tokio::sync::Notify::new()));
+        let client = Arc::new(Tp1Client::with_connector(connector.clone()).unwrap());
+        let scheduler = RelayScheduler::with_profile(client, SchedulerProfile::fixture());
+        let mut receipts = Vec::new();
+        for marker in 1..=8 {
+            receipts.push(scheduler.forward(forwarded(marker)).unwrap());
+        }
+        tokio::time::timeout(Duration::from_secs(2), connector.0.notified())
+            .await
+            .unwrap();
+        scheduler.shutdown();
+        for receipt in receipts {
+            let result = tokio::time::timeout(Duration::from_secs(1), receipt.completion())
+                .await
+                .unwrap();
+            assert_eq!(result.state(), CompletionState::Shutdown);
+        }
+    }
+
     fn forwarded(marker: u8) -> Frwd {
         let target = RelayTarget {
             address: "192.0.2.1:443".parse().unwrap(),

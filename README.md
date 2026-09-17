@@ -9,7 +9,8 @@ and its [companion GChat repository](http://127.0.0.1:3300/ghost-local/gchat).
 Public publication is deferred by the project owner. Public URLs, reporting contacts
 and publisher accounts are future release decisions, not prerequisites for this
 private development stage. The intended preview version remains 0.1.0. See
-[development and future release status](docs/RELEASE.md).
+[development and future release status](docs/RELEASE.md). The current release
+effort qualifies Linux x86_64 and Windows x86_64; macOS is unavailable and unqualified.
 
 ## Start here
 

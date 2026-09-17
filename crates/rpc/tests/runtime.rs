@@ -251,10 +251,12 @@ async fn encrypted_journal_restart_wrong_key_and_exclusive_lock() {
     let path = dir.path().join("operations");
     let value = Arc::new(AtomicU32::new(0));
     let prepared;
+    let previous_owner;
     {
         let store = Arc::new(
             file_store::FileStore::open(&path, [7; 32], "counter", StoreLimits::default()).unwrap(),
         );
+        previous_owner = Arc::downgrade(&store);
         assert!(
             file_store::FileStore::open(&path, [7; 32], "counter", StoreLimits::default()).is_err()
         );
@@ -266,6 +268,16 @@ async fn encrypted_journal_restart_wrong_key_and_exclusive_lock() {
         prepared = c.prepare_add(42).unwrap();
         assert_eq!(c.inner.start_and_wait(&prepared).await.unwrap(), 42);
     }
+    // Durable completion can be observed before the admitted worker has dropped
+    // its router/store references. A restart requires that owner to finish, not
+    // merely that the caller has received its terminal result.
+    tokio::time::timeout(std::time::Duration::from_secs(5), async {
+        while previous_owner.strong_count() != 0 {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("previous journal owner released after completion");
     assert!(!std::fs::read(&path)
         .unwrap()
         .windows(7)

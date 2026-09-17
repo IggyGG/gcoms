@@ -8,7 +8,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        runner: [gcoms-linux-x64, gcoms-macos-x64, gcoms-macos-arm64, gcoms-windows-x64]
+        runner: [gcoms-linux-x64, gcoms-windows-x64]
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: https://code.forgejo.org/actions/checkout@11d5960a326750d5838078e36cf38b85af677262

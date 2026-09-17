@@ -2,9 +2,9 @@
 
 Current work stays in the existing private local Forgejo repositories. Public
 publication is deferred by the owner. Run the build/test and local package-consumer
-checks below; `check-release.py` applies only when a public release is reconsidered.
-Native development uses the tunneled Mac's `iggy` account and a Windows x86_64 VM.
-Their availability does not imply completed native or installer qualification.
+checks below. The private candidate gate is documented in [release evidence](docs/RELEASE_EVIDENCE.md).
+Current release qualification targets Linux x86_64 and Windows x86_64 in a VM.
+macOS is unavailable and excluded from this release effort; it is not qualified.
 
 Run from the repository root with Rust 1.98, Node 22, npm 11 and Python 3.11+.
 Native builds require the standard C/C++ toolchain used by aws-lc-rs. The public
@@ -79,17 +79,16 @@ commit, including GChat when qualifying its application artifacts.
 
 ## Forgejo runners
 
-`.forgejo/workflows/check.yml` uses a pinned checkout action and the four named
+`.forgejo/workflows/check.yml` uses a pinned checkout action and the two named
 native runner labels. Provision disposable runners with Rust 1.98, Node 22, npm 11,
 Python 3.11+, the native build dependencies and cargo-deny. Untrusted pull requests
 receive no signing/registry secrets and must not execute on a developer workstation.
 Public GChat CI starts after its GComs registry dependencies are available; local
 pre-publication checks use the documented extracted-package staging.
 
-On macOS, bind-based multi-relay fixtures require administrator-provisioned loopback
-aliases for their distinct relay IPs. Tests deliberately retain independent-address
-checks; they do not weaken production routing to accommodate the runner. The current
-macOS staging host lacks these aliases, so its full routing qualification is pending.
+If macOS support is revisited, bind-based multi-relay fixtures need distinct
+loopback aliases and both Intel and ARM64 native qualification. No Mac access is
+required for the current Linux/Windows release effort.
 
 ## Private Windows VM checks
 
@@ -110,7 +109,24 @@ The [2026-09-17 runtime record](release/native-validation-2026-09-17.json) conta
 584 passing GComs Windows cases (five ignored) and 121 passing GChat Windows cases.
 GComs' offline-member backlog harness exceeded the 15-minute VM budget; a separate
 90-second diagnostic reached offline sending after successful admission and member
-shutdown. It remains an open Windows qualification issue. Unix-only harnesses with
+shutdown. That historical failure is superseded by the bounded-dial fix below. Unix-only harnesses with
 zero Windows cases and the native compiler/installer gaps above are excluded from
 these counts. Linux has 598 GComs and 142 GChat passing cases, with the final
 transcript fix additionally retested across all core-library cases on both OSes.
+
+## Current qualification follow-up
+
+The offline-member backlog test now passes unchanged on Linux and in the Windows
+GNU VM (16.24 seconds). GComs bounds repeated pre-TLS refused/unreachable dials with
+a five-second, 64-route cooldown and cancels scheduler waits during shutdown.
+TLS, HTTP and ambiguous application outcomes are not automatically retried by this
+cache. GC/1, IPC v16 and retained-state formats stay unchanged.
+
+The follow-up Linux GComs workspace run has 604 passing cases and five explicit
+ignored cases; strict Clippy passes. The full Windows run is still under review,
+including a concurrent-admission responsiveness failure. A passing diagnostic
+harness does not substitute for native MSVC and installer qualification.
+
+GChat's portable service, archive-reopen and standalone-daemon suites now run on
+Windows too. Their readiness probes use IPC connections, since named pipes have
+no socket-file entry. Unix PTY tests remain platform-specific.

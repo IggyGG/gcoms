@@ -1,60 +1,135 @@
 #!/usr/bin/env python3
-"""Build actual package archives and isolated consumers without publishing."""
-import argparse, json, os, subprocess, tarfile, tempfile, tomllib
+"""Package and check isolated consumers without modifying original checkouts."""
+import argparse
+import hashlib
+import json
+import os
 from pathlib import Path
-root = Path(__file__).resolve().parents[1]
-p = argparse.ArgumentParser()
-p.add_argument('--gchat', type=Path)
-p.add_argument('--offline', action='store_true')
-p.add_argument('--output', type=Path, default=root / 'target/package-check')
-a = p.parse_args()
-out = a.output.resolve(); out.mkdir(parents=True, exist_ok=True)
-env = dict(os.environ)
-env.setdefault('CARGO_BUILD_JOBS', '2')
+import subprocess
+import tarfile
+import tempfile
+import tomllib
+import uuid
 
-def run(args, cwd=root, **kwargs):
-    print('+ ' + ' '.join(map(str, args)), flush=True)
-    return subprocess.run(list(map(str, args)), cwd=cwd, env=env, check=True, **kwargs)
+from release_evidence import source_identity
+from source_snapshot import snapshot, unchanged
 
-metadata = json.loads(subprocess.check_output(['cargo', 'metadata', '--no-deps', '--format-version=1'], cwd=root))
-packages = [p for p in metadata['packages'] if p['id'] in metadata['workspace_members'] and p['publish'] != []]
-args = ['cargo', 'package', '--allow-dirty', '--no-verify', '--target-dir', out]
-for package in packages: args += ['-p', package['name']]
-if a.offline: args += ['--offline']
-run(args)
-with tempfile.TemporaryDirectory(prefix='gcoms-consumer-') as tmp:
-    temp = Path(tmp)
-    patch = ['[patch.crates-io]']
+ROOT = Path(__file__).resolve().parents[1]
+
+
+def qualify(root, chat, args, out, env):
+    def run(command, cwd=root):
+        print('+ ' + ' '.join(map(str, command)), flush=True)
+        subprocess.run(list(map(str, command)), cwd=cwd, env=env, check=True)
+
+    metadata = json.loads(subprocess.check_output(
+        ['cargo', 'metadata', '--locked', '--no-deps', '--format-version=1'], cwd=root, env=env))
+    packages = [p for p in metadata['packages'] if p['id'] in metadata['workspace_members'] and p['publish'] != []]
+    command = ['cargo', 'package', '--locked', '--no-verify', '--target-dir', out]
+    if not args.release:
+        command += ['--allow-dirty']
     for package in packages:
-        name, version = package['name'], package['version']
-        archive = out / 'package' / f'{name}-{version}.crate'
-        with tarfile.open(archive) as tar:
-            tar.extractall(temp, filter='data')
-        extracted = temp / f'{name}-{version}'
-        manifest = tomllib.loads((extracted / 'Cargo.toml').read_text())
-        tables = [manifest] + list(manifest.get('target', {}).values())
-        for table in tables:
-            for kind in ('dependencies', 'dev-dependencies', 'build-dependencies'):
-                assert all('path' not in v for v in table.get(kind, {}).values() if isinstance(v, dict)), f'{name}: unnormalized dependency'
-        for license in ('LICENSE-MIT', 'LICENSE-APACHE'):
-            assert (extracted / license).is_file(), f'{name}: missing {license}'
-        patch.append(f'{json.dumps(name)} = {{ path = {json.dumps(str(extracted))} }}')
-    config = temp / 'packages.toml'; config.write_text('\n'.join(patch) + '\n')
-    consumer = temp / 'consumer'; (consumer / 'src').mkdir(parents=True)
-    (consumer / 'Cargo.toml').write_text('[package]\nname="external-gcoms-consumer"\nversion="0.0.0"\nedition="2021"\n[dependencies]\ncomms={package="gcoms-rpc",version="0.1.0",features=["file-store"]}\n')
-    (consumer / 'src/lib.rs').write_text((root / 'examples/renamed-dependency/src/lib.rs').read_text())
-    base = ['cargo', '--config', config, 'check', '--target-dir', out / 'consumer-target']
-    if a.offline: base += ['--offline']
-    run(base, cwd=consumer)
-    if a.gchat:
-        run(base + ['--workspace', '--all-features'], cwd=a.gchat.resolve())
-    run(['npm', 'run', 'build'])
-    run(['npm', 'pack', '--workspace', '@gcoms/rpc', '--workspace', '@gcoms/rpc-codegen', '--pack-destination', out])
-    npm_consumer = temp / 'npm'; npm_consumer.mkdir()
-    (npm_consumer / 'package.json').write_text('{"private":true,"type":"module"}\n')
-    install = ['npm', 'install', '--ignore-scripts', '--no-audit', '--no-fund', out / 'gcoms-rpc-0.1.0.tgz', out / 'gcoms-rpc-codegen-0.1.0.tgz']
-    if a.offline: install += ['--offline']
-    run(install, cwd=npm_consumer)
-    run(['node', '--input-type=module', '-e', "import {RpcClient} from '@gcoms/rpc'; import '@gcoms/rpc/wire'; import {serviceBindings,validators} from '@gcoms/rpc-codegen'; if (![RpcClient,serviceBindings,validators].every(x=>typeof x==='function')) throw Error('exports'); console.log('npm package exports passed')"], cwd=npm_consumer)
-(out / 'summary.json').write_text(json.dumps({'rust_packages': [p['name'] for p in packages], 'rust_external_alias_consumer': 'passed', 'npm_archive_consumer': 'passed', 'gchat_rust': 'passed' if a.gchat else 'not run', 'published': False}, indent=2)+'\n')
-print('Package archives and isolated consumers passed; nothing published.')
+        command += ['-p', package['name']]
+    if args.offline:
+        command += ['--offline']
+    run(command)
+    with tempfile.TemporaryDirectory(prefix='gc-archives-') as temporary:
+        temp = Path(temporary)
+        patches = ['[patch.crates-io]']
+        for package in packages:
+            name, version = package['name'], package['version']
+            archive = out / 'package' / f'{name}-{version}.crate'
+            with tarfile.open(archive) as tar:
+                tar.extractall(temp, filter='data')
+            extracted = temp / f'{name}-{version}'
+            manifest = tomllib.loads((extracted / 'Cargo.toml').read_text())
+            for table in [manifest] + list(manifest.get('target', {}).values()):
+                for kind in ('dependencies', 'dev-dependencies', 'build-dependencies'):
+                    if any('path' in value for value in table.get(kind, {}).values() if isinstance(value, dict)):
+                        raise ValueError(f'{name}: unnormalized path dependency')
+            for license in ('LICENSE-MIT', 'LICENSE-APACHE'):
+                if not (extracted / license).is_file():
+                    raise ValueError(f'{name}: missing {license}')
+            patches.append(f'{json.dumps(name)} = {{ path = {json.dumps(str(extracted))} }}')
+        config = temp / 'packages.toml'
+        config.write_text('\n'.join(patches) + '\n')
+        consumer = temp / 'consumer'; (consumer / 'src').mkdir(parents=True)
+        deps = ['comms={package="gcoms-rpc",version="0.1.0",features=["file-store"]}']
+        for package in packages:
+            if package['name'] != 'gcoms-rpc':
+                deps.append(f'{package["name"]}={json.dumps(package["version"])}')
+        (consumer / 'Cargo.toml').write_text('[package]\nname="external-gcoms-consumer"\nversion="0.0.0"\nedition="2021"\n[dependencies]\n' + '\n'.join(deps) + '\n')
+        (consumer / 'src/lib.rs').write_text((root / 'examples/renamed-dependency/src/lib.rs').read_text())
+        base = ['cargo', 'check', '--config', config, '--target-dir', out / 'consumer-target']
+        if args.offline:
+            base += ['--offline']
+        run(base, consumer)
+        if chat:
+            run(base + ['--workspace', '--all-features'], chat)
+            run(base + ['--manifest-path', 'apps/client/src-tauri/Cargo.toml'], chat)
+        npm_ci = ['npm', 'ci', '--ignore-scripts', '--no-audit', '--no-fund']
+        if args.offline:
+            npm_ci += ['--offline']
+        run(npm_ci)
+        run(['npm', 'run', 'build'])
+        run(['npm', 'pack', '--workspace', '@gcoms/rpc', '--workspace', '@gcoms/rpc-codegen', '--pack-destination', out])
+        npm = temp / 'npm'; npm.mkdir()
+        (npm / 'package.json').write_text('{"private":true,"type":"module"}\n')
+        install = ['npm', 'install', '--ignore-scripts', '--no-audit', '--no-fund', out / 'gcoms-rpc-0.1.0.tgz', out / 'gcoms-rpc-codegen-0.1.0.tgz']
+        if args.offline:
+            install += ['--offline']
+        run(install, npm)
+        run(['node', '--input-type=module', '-e', "import {RpcClient} from '@gcoms/rpc'; import '@gcoms/rpc/wire'; import {serviceBindings,validators} from '@gcoms/rpc-codegen'; if (![RpcClient,serviceBindings,validators].every(x=>typeof x==='function')) throw Error('exports'); console.log('npm package exports passed')"], npm)
+    archives = list((out / 'package').glob('*.crate')) + list(out.glob('*.tgz'))
+    return {'rust_packages': [p['name'] for p in packages], 'rust_external_alias_consumer': 'passed',
+            'npm_archive_consumer': 'passed', 'gchat_rust': 'passed' if chat else 'not_run',
+            'gchat_desktop': 'passed' if chat else 'not_run',
+            'archive_sha256': {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in archives}}
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--gchat', type=Path)
+    parser.add_argument('--offline', action='store_true')
+    parser.add_argument('--release', action='store_true', help='require clean committed sources')
+    parser.add_argument('--output', type=Path, default=ROOT / 'target/package-check')
+    args = parser.parse_args()
+    out = args.output.resolve()
+    if args.release and out.exists() and any(out.iterdir()):
+        parser.error('--release needs a fresh output directory so archives cannot be replaced')
+    out.mkdir(parents=True, exist_ok=True)
+    run_id = uuid.uuid4().hex
+    report = {'status': 'failed', 'release': args.release, 'published': False, 'sources': {}}
+    sources = {'gcoms': ROOT}
+    if args.gchat:
+        sources['gchat'] = args.gchat.resolve()
+    hashes = {}
+    env = dict(os.environ); env.setdefault('CARGO_BUILD_JOBS', '2')
+    try:
+        with tempfile.TemporaryDirectory(prefix='gc-pack-') as temporary:
+            scratch = Path(temporary)
+            for name, source in sources.items():
+                if args.release:
+                    source_identity(source)
+                hashes[name] = snapshot(source, scratch / name, keep_vcs=True)
+                report['sources'][name] = {'commit': subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=source, text=True).strip(),
+                                           'files_sha256': hashes[name]}
+            report.update(qualify(scratch / 'gcoms', scratch / 'gchat' if args.gchat else None, args, out, env))
+            report['status'] = 'passed'
+    except Exception as error:
+        report['error'] = str(error)
+        raise
+    finally:
+        report['source_unchanged'] = bool(hashes) and all(unchanged(sources[name], value) for name, value in hashes.items())
+        if not report['source_unchanged']:
+            report['status'] = 'source_changed'
+        reports = out / 'reports'; reports.mkdir(exist_ok=True)
+        (reports / f'consumers-{run_id}.json').write_text(json.dumps(report, indent=2) + '\n')
+        (out / 'summary.json').write_text(json.dumps(report, indent=2) + '\n')
+    if report['status'] != 'passed':
+        raise SystemExit('Source changed during package qualification; inspect retained report')
+    print('Package archives and isolated consumers passed; original checkouts unchanged; nothing published.')
+
+
+if __name__ == '__main__':
+    main()

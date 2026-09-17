@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 """Resolve unpublished GComs tarballs through a loopback-only staging registry."""
-import argparse, base64, hashlib, http.server, json, subprocess, tarfile, threading, tempfile, shutil
+import argparse, base64, hashlib, http.server, json, subprocess, tarfile, threading, tempfile, uuid
+from source_snapshot import snapshot, unchanged
 from pathlib import Path
 from urllib.parse import unquote
 p=argparse.ArgumentParser()
 p.add_argument('--gchat',type=Path,required=True)
 p.add_argument('--packages',type=Path,required=True)
+p.add_argument('--output',type=Path,default=Path(__file__).resolve().parents[1]/'target/npm-stage')
 a=p.parse_args()
 archives={}
 for name in ('rpc','rpc-codegen'):
@@ -31,26 +33,50 @@ class Registry(http.server.BaseHTTPRequestHandler):
         self.send_response(200);self.send_header('Content-Type',kind);self.send_header('Content-Length',str(len(payload)));self.end_headers();self.wfile.write(payload)
 server=http.server.ThreadingHTTPServer(('127.0.0.1',0),Registry)
 threading.Thread(target=server.serve_forever,daemon=True).start()
+original=a.gchat.resolve()
+report_dir=a.output.resolve()/uuid.uuid4().hex
+if report_dir.is_relative_to(original):
+    p.error('--output must be outside the application checkout')
+report_dir.mkdir(parents=True,exist_ok=False)
+report={'status':'failed','published':False,'archives_sha256':{item[0].name:hashlib.sha256(item[2]).hexdigest() for item in archives.values()}}
+hashes={}
 try:
     with tempfile.TemporaryDirectory(prefix='gchat-npm-resolution-') as temporary:
-        workspace=Path(temporary)
-        for relative in ('package.json','ui/package.json','apps/client/package.json'):
-            target=workspace/relative;target.parent.mkdir(parents=True,exist_ok=True)
-            shutil.copyfile(a.gchat/relative,target)
-        subprocess.run(['npm','install','--ignore-scripts','--package-lock-only',f'--@gcoms:registry=http://127.0.0.1:{server.server_port}/'],cwd=workspace,check=True)
-        shutil.copyfile(workspace/'package-lock.json',a.gchat/'package-lock.json')
-finally: server.shutdown();server.server_close()
-lock_path=a.gchat/'package-lock.json'
-lock=json.loads(lock_path.read_text())
-for item in lock['packages'].values():
-    resolved=item.get('resolved','')
-    if resolved.startswith('http://127.0.0.1:'):
-        short=Path(resolved).name.removeprefix('gcoms-').removesuffix('-0.1.0.tgz')
-        assert short in ('rpc','rpc-codegen')
-        item['resolved']=f'https://registry.npmjs.org/@gcoms/{short}/-/{short}-0.1.0.tgz'
-for key,item in lock['packages'].items():
-    assert not key.startswith('../'), 'package path escapes workspace'
-    if key.startswith('node_modules/@gcoms/'):
-        assert not item.get('link') and item.get('integrity'), 'GComs must resolve to an inspected archive'
-lock_path.write_text(json.dumps(lock,indent=2)+'\n')
-print('GChat lockfile resolved from inspected tarballs; canonical public registry URLs retained.')
+        workspace=Path(temporary)/'gchat'
+        hashes=snapshot(original,workspace)
+        report['source_files_sha256']=hashes
+        lock_path=workspace/'package-lock.json'
+        lock=json.loads(lock_path.read_text())
+        for name,(path,meta,data) in archives.items():
+            item=lock['packages']['node_modules/'+name]
+            item['resolved']=f'http://127.0.0.1:{server.server_port}/archives/{path.name}'
+            item['integrity']='sha512-'+base64.b64encode(hashlib.sha512(data).digest()).decode()
+        lock_path.write_text(json.dumps(lock,indent=2)+'\n')
+        flags=['--ignore-scripts','--no-audit','--no-fund',f'--@gcoms:registry=http://127.0.0.1:{server.server_port}/']
+        subprocess.run(['npm','install','--package-lock-only',*flags],cwd=workspace,check=True)
+        subprocess.run(['npm','ci',*flags],cwd=workspace,check=True)
+        for action in ('check','test','build'):
+            subprocess.run(['npm','run',action],cwd=workspace,check=True)
+        lock=json.loads(lock_path.read_text())
+        for name,(path,meta,data) in archives.items():
+            item=lock['packages']['node_modules/'+name]
+            short=name.split('/')[1]
+            item['resolved']=f'https://registry.npmjs.org/@gcoms/{short}/-/{short}-{meta["version"]}.tgz'
+            assert not item.get('link') and item.get('integrity'), 'GComs must resolve to an inspected archive'
+        for key,item in lock['packages'].items():
+            assert not key.startswith('../'), 'package path escapes workspace'
+            assert not item.get('resolved','').startswith('http://127.0.0.1:'), 'unrecognized staging URL'
+        proposal=report_dir/'package-lock.json'
+        proposal.write_text(json.dumps(lock,indent=2)+'\n')
+        report['proposed_lockfile_sha256']=hashlib.sha256(proposal.read_bytes()).hexdigest()
+        report['status']='passed'
+except Exception as error:
+    report['error']=str(error)
+    raise
+finally:
+    server.shutdown();server.server_close()
+    report['source_unchanged']=bool(hashes) and unchanged(original,hashes)
+    if not report['source_unchanged']: report['status']='source_changed'
+    (report_dir/'summary.json').write_text(json.dumps(report,indent=2)+'\n')
+if report['status']!='passed': raise SystemExit('Source changed during npm qualification')
+print(f'GChat npm qualification passed. Review proposed lockfile at {report_dir}; original checkout unchanged.')
