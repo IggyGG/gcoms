@@ -140,10 +140,6 @@ def record(args):
     roots = {project: getattr(args, project).resolve() for project in PROJECTS}
     source_bindings = bindings(candidate)
     require({name: source_identity(path) for name, path in roots.items()} == source_bindings, "candidate differs from clean checkouts")
-    facts = read_json(args.facts) if args.facts else {}
-    require(isinstance(facts, dict) and set(facts) <= {"measurements", "scenarios", "systems", "evidence"}, "facts cannot override runner results")
-    for entry in facts.get("evidence", []):
-        file_reference(base, entry)
     run_id = args.check + "-" + uuid.uuid4().hex
     (base / "reports").mkdir(exist_ok=True); (base / "logs").mkdir(exist_ok=True)
     log = base / "logs" / (run_id + ".log")
@@ -173,6 +169,20 @@ def record(args):
         unchanged = False
     if not unchanged:
         status = "source_changed"
+    # Workloads write measured outcomes during execution. Read them only after
+    # the process exits; a pre-run prediction is not qualification evidence.
+    facts = {}
+    facts_error = None
+    if args.facts:
+        try:
+            measured = read_json(args.facts)
+            require(isinstance(measured, dict) and set(measured) <= {"measurements", "scenarios", "systems", "evidence"}, "facts cannot override runner results")
+            for entry in measured.get("evidence", []):
+                file_reference(base, entry)
+            facts = measured
+        except (EvidenceError, OSError, ValueError, TypeError) as error:
+            facts_error = str(error)
+            status = "invalid_facts"
     output = log.read_text(errors="replace")
     counts = re.findall(r"test result: \w+\. (\d+) passed; (\d+) failed; (\d+) ignored", output)
     excluded = [{"name": name, "reason": reason or EXCLUSIONS.get(name, "")}
@@ -186,6 +196,8 @@ def record(args):
               "tests": {"passed": sum(int(row[0]) for row in counts), "failed": sum(int(row[1]) for row in counts),
                         "ignored": sum(int(row[2]) for row in counts), "incomplete": [] if status == "passed" else [status], "excluded": excluded},
               **facts}
+    if facts_error:
+        report["facts_error"] = facts_error
     report_path = base / "reports" / (run_id + ".json")
     write_json(report_path, report)
     with manifest_lock(manifest):

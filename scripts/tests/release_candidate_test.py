@@ -99,6 +99,17 @@ class CandidateTests(unittest.TestCase):
         self.assertEqual(set(manifest["checks"]), set(checks))
         self.assertEqual(len(manifest["attempts"]), 2)
 
+    def test_measurements_are_read_after_the_workload_finishes(self):
+        self.initialize()
+        facts = self.base / "measured.json"
+        command = self.command("soak.application",
+                               f"from pathlib import Path; Path({str(facts)!r}).write_text('{{\"measurements\":{{\"clients\":16}}}}')")
+        position = command.index("--")
+        command[position:position] = ["--facts", str(facts)]
+        result = subprocess.run(command, capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.report("soak.application")["measurements"]["clients"], 16)
+
 
 if __name__ == "__main__":
     unittest.main()
