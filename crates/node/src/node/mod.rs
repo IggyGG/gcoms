@@ -52,8 +52,8 @@ mod state;
 mod ticks;
 
 pub use api::{
-    ChannelStatus, ChannelView, ChannelViewRole, Cmd, Ev, IntermediaryStats, NodeHandle,
-    Reachability, RecvEventError,
+    ChannelStatus, ChannelView, ChannelViewRole, Cmd, Ev, IntermediaryStats, NodeDiagnostics,
+    NodeHandle, Reachability, RecvEventError,
 };
 pub use application_inbox::ApplicationDelivery;
 pub use routing::{RoutingConfig, RoutingStateStore};

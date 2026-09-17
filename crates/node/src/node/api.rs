@@ -372,6 +372,15 @@ pub(crate) struct TransportTask {
     pub task: tokio::task::JoinHandle<()>,
 }
 
+/// Local aggregate counters only; no contacts, message IDs or payloads.
+#[derive(Debug, serde::Serialize)]
+pub struct NodeDiagnostics {
+    pub client: crate::scheduler::diagnostics::SchedulerSnapshot,
+    pub relay: crate::scheduler::diagnostics::SchedulerSnapshot,
+    pub client_resources: crate::scheduler::ResourceSnapshot,
+    pub relay_resources: crate::scheduler::ResourceSnapshot,
+}
+
 #[derive(Clone)]
 pub struct NodeHandle {
     pub(crate) listener_addr: SocketAddr,
@@ -389,6 +398,23 @@ pub struct NodeHandle {
 }
 
 impl NodeHandle {
+    /// Enable bounded local counters without changing traffic scheduling.
+    /// Startup work may already be admitted before counters are enabled.
+    pub fn enable_diagnostics(&self) {
+        self.scheduler.enable_diagnostics();
+        self.transit_scheduler.enable_diagnostics();
+    }
+
+    /// Approximate during concurrent updates; quiesce before reconciling counts.
+    pub fn diagnostics(&self) -> NodeDiagnostics {
+        NodeDiagnostics {
+            client: self.scheduler.diagnostics_snapshot(),
+            relay: self.transit_scheduler.diagnostics_snapshot(),
+            client_resources: self.scheduler.resource_snapshot(),
+            relay_resources: self.transit_scheduler.resource_snapshot(),
+        }
+    }
+
     /// The socket actually owned by this runtime, including an OS-assigned port.
     pub fn listener_addr(&self) -> SocketAddr {
         self.listener_addr

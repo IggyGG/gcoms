@@ -2,7 +2,7 @@ use gcoms_node::channel::ChannelVisibility;
 use gcoms_node::node::{start, Ev, NodeConfig, NodeProfile};
 
 async fn spawn(seed: u8) -> gcoms_node::NodeHandle {
-    start(NodeConfig {
+    let node = start(NodeConfig {
         seed: [seed; 32],
         listen: "127.0.0.1:0".parse().unwrap(),
         control: None,
@@ -12,7 +12,9 @@ async fn spawn(seed: u8) -> gcoms_node::NodeHandle {
         alias_lifecycle: Default::default(),
     })
     .await
-    .expect("node start")
+    .expect("node start");
+    node.enable_diagnostics();
+    node
 }
 
 async fn admit(
@@ -20,17 +22,15 @@ async fn admit(
     channel: &str,
     member: &gcoms_node::NodeHandle,
     name: &str,
-) {
+) -> Result<(), String> {
     let req = member.prepare_channel_join(name).await.expect("prepare");
     let kp = member.channel_key_package(req).await.expect("kp");
-    let welcome = owner
-        .admit_channel(channel, &kp, name)
-        .await
-        .expect("admit");
+    let welcome = owner.admit_channel(channel, &kp, name).await?;
     member
         .join_channel(req, channel, ChannelVisibility::Private, &welcome)
         .await
         .expect("join");
+    Ok(())
 }
 
 async fn await_chan(h: &gcoms_node::NodeHandle, channel: &str, want: &str) -> u64 {
@@ -72,11 +72,17 @@ async fn overlay_delivers_to_24_nodes() {
         .await
         .expect("create");
 
-    let mut members = Vec::new();
+    let mut members: Vec<gcoms_node::NodeHandle> = Vec::new();
     for i in 0..23u8 {
         let name = format!("m{i}");
         let m = spawn(0x10 + i).await;
-        admit(&owner, "ops", &m, &name).await;
+        if let Err(error) = admit(&owner, "ops", &m, &name).await {
+            eprintln!("owner diagnostics: {:?}", owner.diagnostics());
+            for (index, member) in members.iter().enumerate() {
+                eprintln!("member {index} diagnostics: {:?}", member.diagnostics());
+            }
+            panic!("admit {name}: {error}; metrics {}", metrics_path.display());
+        }
         members.push(m);
     }
 

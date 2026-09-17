@@ -103,6 +103,10 @@ Retain failures, source/executable/configuration/workload hashes and exact scope
   validation remains a separate gate.
 - Bounded scheduler/terminal pooling, opt-in fixture pipelining, durable session
   readiness and PQ-safe 11 KiB file framing: implemented in the task branch.
+- Independent channel data/control maintenance and local aggregate node
+  diagnostics: implemented in the task branch; congestion regression validated
+  with a real TLS/H2 data response held open through a rejected control attempt
+  and its successful retry.
 - Complete counter-window flow control, command preparation/completion split,
   authenticated class propagation, shared GCT2 carrier, protected profiles,
   SDK/GChat profile integration and application/privacy/mobile gates: pending.

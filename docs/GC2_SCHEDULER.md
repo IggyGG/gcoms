@@ -62,6 +62,18 @@ control covering ACK/control traffic, removal of command-level network waits,
 component fairness and the application-level comparison in the implementation
 ledger. The local scheduling `TrafficClass` is not yet an authenticated wire field.
 
+Channel data and control recovery now have independent maintenance loops. A data
+batch can wait for up to 120 seconds; it no longer postpones the next retry of a
+membership commit or ACK, whose convergence window is 90 seconds. Both loops still
+submit through the existing scheduled lanes. A hop acceptance clears a retained
+control record only if its full route and ciphertext still match the attempt.
+
+`NodeHandle::enable_diagnostics()` and `diagnostics()` expose bounded local
+aggregates for client and relay schedulers and their resource budgets. They contain
+no contacts, message IDs or payloads and do not change scheduling. Startup work can
+precede counter activation; these snapshots are diagnostics, not a complete
+application-delivery or interface-bandwidth accounting record.
+
 ## Larger useful file chunks
 
 The SDK recommends 11,264 useful bytes, negotiating down to the recipient's chunk

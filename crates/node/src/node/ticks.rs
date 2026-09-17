@@ -2,6 +2,10 @@
 
 use super::*;
 
+#[cfg(all(test, feature = "client-persist"))]
+#[path = "ticks_tests.rs"]
+mod tests;
+
 pub(crate) fn spawn_contact_subscription_pump(
     state: Arc<Mutex<NodeState>>,
     scheduler: RelayScheduler,
@@ -372,12 +376,24 @@ pub(crate) fn spawn_channel_maintenance_loop(
     scheduler_profile: SchedulerProfile,
     seed: [u8; 32],
 ) -> tokio::task::JoinHandle<()> {
-    let mut rng = scheduler_profile.maintenance_rng_labeled(seed, b"channel");
+    let mut data_rng = scheduler_profile.maintenance_rng_labeled(seed, b"channel");
+    let mut control_rng = scheduler_profile.maintenance_rng_labeled(seed, b"channel-control");
     tokio::spawn(async move {
-        loop {
-            tokio::time::sleep(scheduler_profile.maintenance_delay(&mut rng)).await;
-            channel_tick(&state, &scheduler, &events).await;
-        }
+        // Both loops are owned by this task, so runtime shutdown cancels both.
+        // Their jobs still leave through the existing lane slots and cover policy.
+        let data = async {
+            loop {
+                tokio::time::sleep(scheduler_profile.maintenance_delay(&mut data_rng)).await;
+                channel_tick(&state, &scheduler, &events).await;
+            }
+        };
+        let control = async {
+            loop {
+                tokio::time::sleep(scheduler_profile.maintenance_delay(&mut control_rng)).await;
+                channel_control_tick(&state, &scheduler, &events).await;
+            }
+        };
+        tokio::join!(data, control);
     })
 }
 
