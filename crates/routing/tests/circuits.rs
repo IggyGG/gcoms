@@ -415,6 +415,35 @@ async fn retained_reentry_refreshes_expired_circuit_credentials() {
 
 #[tokio::test]
 async fn failed_original_guards_recover_using_retained_volunteers() {
+    recover_failed_guards(false).await;
+}
+
+#[tokio::test]
+async fn slow_guard_failures_do_not_repeat_after_the_directory_cooldown_expires() {
+    recover_failed_guards(true).await;
+}
+
+struct SlowGuardFailure {
+    guards: Vec<[u8; 32]>,
+    attempts: Arc<Mutex<Vec<[u8; 32]>>>,
+}
+impl Connector for SlowGuardFailure {
+    fn connect(&self, addr: SocketAddr, pin: [u8; 32]) -> ConnectFuture<'_> {
+        self.attempts.lock().unwrap().push(pin);
+        Box::pin(async move {
+            if self.guards.contains(&pin) {
+                // Three failed attempts together exceed the first two-second
+                // cooldown, as ordinary refused connections can on Windows.
+                tokio::time::sleep(Duration::from_millis(1100)).await;
+                Err(std::io::Error::from(std::io::ErrorKind::ConnectionRefused).into())
+            } else {
+                DirectConnector.connect(addr, pin).await
+            }
+        })
+    }
+}
+
+async fn recover_failed_guards(slow: bool) {
     let mut net = Network::new(5).await;
     let [_, _] = net
         .directory
@@ -432,14 +461,33 @@ async fn failed_original_guards_recover_using_retained_volunteers() {
             (&mut relay.task).await.unwrap();
         }
     }
-    let connector = OnionConnector::new(Arc::new(Directory::restore_private(&archive).unwrap()))
-        .with_carrier_config(CarrierConfig::fixture())
-        .unwrap();
+    let attempts = Arc::new(Mutex::new(Vec::new()));
+    let mut connector =
+        OnionConnector::new(Arc::new(Directory::restore_private(&archive).unwrap()))
+            .with_carrier_config(CarrierConfig::fixture())
+            .unwrap();
+    if slow {
+        connector = connector.with_entry_connector(Arc::new(SlowGuardFailure {
+            guards,
+            attempts: attempts.clone(),
+        }));
+    }
     let client = Tp1Client::with_connector(Arc::new(connector)).unwrap();
     tokio::time::timeout(Duration::from_secs(10), net.echo(&client, 15104))
         .await
         .unwrap()
         .unwrap();
+    if slow {
+        let attempts = attempts.lock().unwrap();
+        assert_eq!(attempts.len(), 4);
+        assert_eq!(
+            attempts
+                .iter()
+                .collect::<std::collections::HashSet<_>>()
+                .len(),
+            4
+        );
+    }
 }
 
 #[tokio::test]

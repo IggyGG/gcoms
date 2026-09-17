@@ -33,6 +33,13 @@ Run it without arguments for its exact file-oriented syntax. Secret outputs must
 be new files in private directories; they are never printed. Back up operator keys
 and state and rehearse rotation/recovery before accepting external users.
 
+State writes and operator outputs use a same-directory temporary file whose
+ownership and permissions are restricted before sensitive bytes are written. File
+contents are flushed before publication; new operator outputs never overwrite an
+existing file. Unix also flushes the parent directory. Windows does not perform a
+POSIX directory sync, which Windows rejects; sudden power-loss durability depends
+on the filesystem and storage stack and is not established by restart tests.
+
 See the root SPEC.md, TESTING.md and SECURITY.md. GC/1 identifiers and the existing
 `GC_CATALOG_CONFIG` environment variable retain their compatibility names.
 Licensed under MIT OR Apache-2.0; this is a developer preview.

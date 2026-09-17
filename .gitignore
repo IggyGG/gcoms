@@ -12,3 +12,6 @@ __pycache__/
 /fuzz/target
 /fuzz/corpus
 /fuzz/artifacts
+
+# Contained task checkouts are local workspace state.
+/.worktrees/

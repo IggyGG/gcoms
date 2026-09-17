@@ -18,7 +18,6 @@ use sha2::{Digest, Sha256};
 use std::{
     collections::BTreeMap,
     fs::File,
-    io::Write,
     net::SocketAddr,
     path::{Path as FilePath, PathBuf},
     sync::Arc,
@@ -166,27 +165,7 @@ pub fn atomic_json(path: &FilePath, value: &impl Serialize) -> Result<(), String
     let bytes = serde_json::to_vec(value).map_err(|_| "cannot encode private state")?;
     atomic_bytes(path, &bytes)
 }
-pub fn atomic_bytes(path: &FilePath, bytes: &[u8]) -> Result<(), String> {
-    let parent = path.parent().ok_or("state file needs a parent")?;
-    let temporary = path.with_extension(format!("tmp-{}", random_handle()));
-    let mut options = std::fs::OpenOptions::new();
-    options.write(true).create_new(true);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::OpenOptionsExt;
-        options.mode(0o600);
-    }
-    let mut file = options
-        .open(&temporary)
-        .map_err(|_| "cannot create private state")?;
-    file.write_all(bytes)
-        .and_then(|_| file.sync_all())
-        .map_err(|_| "cannot persist private state")?;
-    std::fs::rename(&temporary, path).map_err(|_| "cannot replace private state")?;
-    File::open(parent)
-        .and_then(|f| f.sync_all())
-        .map_err(|_| "cannot sync private state directory".into())
-}
+pub use crate::persistence::atomic_bytes;
 fn random_handle() -> String {
     let mut bytes = [0; 16];
     rand::thread_rng().fill_bytes(&mut bytes);

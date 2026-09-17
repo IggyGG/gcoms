@@ -89,3 +89,18 @@ On macOS, bind-based multi-relay fixtures require administrator-provisioned loop
 aliases for their distinct relay IPs. Tests deliberately retain independent-address
 checks; they do not weaken production routing to accommodate the runner. The current
 macOS staging host lacks these aliases, so its full routing qualification is pending.
+
+## Private Windows VM checks
+
+The current manual test host is the isolated `gcoms-gchat-validation` x86_64 VM
+(Windows 10 build 19045). Its restricted network exposes SSH only on the Linux
+host's loopback interface. Windows GNU test executables are cross-built with Rust
+1.98 on Linux, then executed inside Windows with their source fixtures and runtime
+DLLs. Each harness retains its exit code and logs; timeouts and harnesses with no
+Windows cases must be reported separately.
+
+This checks Windows runtime behavior, including named pipes and file permissions.
+It does not establish MSVC compilation, native compiler UI tests, desktop installer
+behavior, signing or a configured Forgejo runner. Those require the corresponding
+Windows build dependencies and separate acceptance evidence when release work
+resumes. Public publication remains deferred.
