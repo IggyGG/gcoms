@@ -18,5 +18,13 @@
     "companion_url": "http://127.0.0.1:3300/ghost-local/gchat",
     "git_remote": "ssh://git@ghost-forgejo/ghost-local/gcoms.git",
     "native_validation_record": "native-validation-2026-09-17.json"
+  },
+  "qualification_targets": [
+    "linux-x86_64",
+    "windows-x86_64"
+  ],
+  "unqualified_targets": {
+    "macos-x86_64": "Mac unavailable; excluded from current release effort by owner",
+    "macos-aarch64": "Mac unavailable; excluded from current release effort by owner"
   }
 }
