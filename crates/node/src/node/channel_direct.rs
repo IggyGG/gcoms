@@ -92,21 +92,31 @@ pub(crate) async fn send_channel_direct(
     text: &[u8],
 ) -> Result<[u8; 16], String> {
     validate_application_payload(text)?;
+    let application = gcoms_core::is_piece_application_payload(text);
     let message_id = fresh_msg_id();
     let mut plaintext = Vec::with_capacity(9 + text.len());
-    plaintext.push(1);
+    plaintext.push(if application { 3 } else { 1 });
     plaintext.extend_from_slice(&now_ms().to_be_bytes());
     plaintext.extend_from_slice(text);
     let envelope_result = {
         let mut state = state
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
-        if state.pending_channel_direct.len() >= 64 {
+        if !application && state.pending_channel_direct.len() >= 64 {
             return Err("too many unacknowledged channel direct messages".into());
         }
         let channel_state = state.channels.get(channel).ok_or("no channel")?;
+        if application
+            && !channel_state
+                .role
+                .roster_members()
+                .iter()
+                .any(|m| m.pseudonym == recipient)
+        {
+            return Err("recipient is not a current channel member".into());
+        }
         let sealed = seal_channel_direct(channel, channel_state, recipient, message_id, &plaintext);
-        if sealed.is_ok() {
+        if !application && sealed.is_ok() {
             state
                 .pending_channel_direct
                 .insert(message_id, (channel.to_string(), recipient));
@@ -120,9 +130,20 @@ pub(crate) async fn send_channel_direct(
         .ok_or("channel-direct envelope too large")?;
     // The authenticated directory record uses this same FIFO control lane, so
     // a newly admitted recipient learns the sender key before direct traffic.
-    let result = push_ctrl_to_route(scheduler, &route, &Cell::new(CellType::Msg, 0, 0, payload))
-        .await
-        .map(|_| message_id);
+    let cell = Cell::new(CellType::Msg, 0, 0, payload);
+    let result = if application {
+        scheduler
+            .push(ProducerClass::ChannelData, route.control.clone(), cell)
+            .map_err(|e| e.to_string())?
+            .completion()
+            .await
+            .accepted()
+            .map(|_| message_id)
+    } else {
+        push_ctrl_to_route(scheduler, &route, &cell)
+            .await
+            .map(|_| message_id)
+    };
     if result.is_err() {
         state
             .lock()
@@ -228,6 +249,23 @@ pub(crate) fn handle_channel_direct(
                     text: plaintext[9..].to_vec(),
                 });
             }
+        }
+        Some(3)
+            if plaintext.len() >= 9
+                && gcoms_core::is_piece_application_payload(&plaintext[9..]) =>
+        {
+            // No text receipt, retained transcript, or unbounded per-message ACK
+            // map. The piece protocol re-requests missing data and confirms only
+            // verified durable pieces. Authentication and membership are above.
+            let sent_ms = u64::from_be_bytes(plaintext[1..9].try_into().expect("checked length"));
+            let _ = events.send(Ev::ChannelDirectMessage {
+                channel: envelope.channel,
+                sender_member_id: envelope.sender,
+                recipient_member_id: envelope.recipient,
+                msg_id: envelope.message_id,
+                ts_unix: sent_ms / 1000,
+                text: plaintext[9..].to_vec(),
+            });
         }
         Some(2) if plaintext.len() == 1 => {
             let matches = state

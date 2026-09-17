@@ -350,3 +350,88 @@ async fn local_client_accepts_late_relay_provisioning_and_receives_messages() {
     recipient.node().shutdown().await;
     relay.node().shutdown().await;
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn file_application_frames_do_not_exhaust_text_receipts() {
+    let _guard = NETWORK_TEST.lock().await;
+    let owner = client(0x91).await;
+    let member = client(0x92).await;
+    owner
+        .create_channel("files", "owner", 8, ChannelVisibility::Private)
+        .await
+        .unwrap();
+    let request = member.prepare_channel_join("member").await.unwrap();
+    let package = member.channel_key_package(request).await.unwrap();
+    let welcome = owner
+        .admit_channel("files", &package, "member")
+        .await
+        .unwrap();
+    member
+        .join_channel(request, "files", ChannelVisibility::Private, &welcome)
+        .await
+        .unwrap();
+    let recipient = owner
+        .channel_roster("files")
+        .await
+        .unwrap()
+        .into_iter()
+        .find(|m| !m.is_self)
+        .unwrap()
+        .member_id;
+    let mut events = member.subscribe_events();
+    owner.send_channel("files", b"bootstrap").await.unwrap();
+    let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(30);
+    loop {
+        if matches!(tokio::time::timeout_at(deadline, events.recv()).await.unwrap(),
+            Some(ClientEvent::ChannelMessage { body, .. }) if body == b"bootstrap")
+        {
+            break;
+        }
+    }
+    // More than the 64-message text receipt bound, at the piece block size.
+    for n in 0..70u8 {
+        let mut bytes = vec![n; 11 * 1024];
+        bytes[0] = n;
+        owner
+            .send_channel_application("files", recipient, gcoms_core::PIECE_CONTENT_TYPE, &bytes)
+            .await
+            .unwrap();
+        let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(30);
+        loop {
+            if let Some(ClientEvent::ChannelDirectMessage { body, .. }) =
+                tokio::time::timeout_at(deadline, events.recv())
+                    .await
+                    .unwrap()
+            {
+                assert_eq!(ApplicationMessage::decode(&body).unwrap().body, bytes);
+                break;
+            }
+        }
+    }
+    owner
+        .send_channel_direct("files", recipient, b"chat after bulk")
+        .await
+        .unwrap();
+    let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(30);
+    loop {
+        if let Some(ClientEvent::ChannelDirectMessage { body, .. }) =
+            tokio::time::timeout_at(deadline, events.recv())
+                .await
+                .unwrap()
+        {
+            assert_eq!(body, b"chat after bulk");
+            break;
+        }
+    }
+    assert!(owner
+        .send_channel_application(
+            "files",
+            [0xff; 32],
+            gcoms_core::PIECE_CONTENT_TYPE,
+            b"denied"
+        )
+        .await
+        .is_err());
+    owner.node().shutdown().await;
+    member.node().shutdown().await;
+}
