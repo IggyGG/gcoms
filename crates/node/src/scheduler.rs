@@ -15,7 +15,13 @@ use std::time::Duration;
 use tokio::sync::{oneshot, watch, Notify};
 
 mod budget;
+mod pending;
+use pending::PendingRequest;
 pub mod diagnostics;
+#[cfg(test)]
+mod pipeline_admission_tests;
+#[cfg(test)]
+mod pipeline_cover_tests;
 #[cfg(test)]
 mod pipeline_tests;
 pub use budget::{ResourceSnapshot, MAX_BYTES as MAX_QUEUED_BYTES, MAX_JOBS as MAX_QUEUED_JOBS};
@@ -315,6 +321,7 @@ impl LaneAuth {
         let pad_b3 = rng.gen_bool(COVER_B3_PROB);
         match self {
             Self::Push { contact } => {
+                ensure_live_authority(contact.expiry)?;
                 let push = RelayPush::cover(
                     contact.queue_id,
                     contact.epoch,
@@ -543,6 +550,29 @@ impl RelayScheduler {
     }
 
     pub(crate) fn with_profile(client: Arc<Tp1Client>, profile: SchedulerProfile) -> Self {
+        let budget =
+            budget::Budget::with_cover_reserve(if profile.emit_cover { MAX_LANES } else { 0 });
+        Self::with_budget(client, profile, budget)
+    }
+
+    pub(crate) fn with_transit(
+        client: Arc<Tp1Client>,
+        transit: Arc<Tp1Client>,
+        profile: SchedulerProfile,
+    ) -> (Self, Self) {
+        let (client_budget, transit_budget) =
+            budget::Budget::pair(if profile.emit_cover { MAX_LANES } else { 0 });
+        (
+            Self::with_budget(client, profile.clone(), client_budget),
+            Self::with_budget(transit, profile, transit_budget),
+        )
+    }
+
+    fn with_budget(
+        client: Arc<Tp1Client>,
+        profile: SchedulerProfile,
+        budget: budget::Budget,
+    ) -> Self {
         let (shutdown, _) = watch::channel(false);
         let scheduler = Self {
             inner: Arc::new(Inner {
@@ -556,7 +586,7 @@ impl RelayScheduler {
                 deterministic_seed: profile.deterministic_seed,
                 connect_retry_base: profile.connect_retry_base,
                 diagnostics: diagnostics::Diagnostics::default(),
-                budget: budget::Budget::default(),
+                budget,
                 max_in_flight: profile.max_in_flight,
             }),
         };
@@ -605,6 +635,10 @@ impl RelayScheduler {
 
     pub fn resource_snapshot(&self) -> ResourceSnapshot {
         self.inner.budget.snapshot()
+    }
+
+    pub(crate) fn combined_resource_snapshot(&self) -> ResourceSnapshot {
+        self.inner.budget.combined_snapshot()
     }
 
     pub fn push(
@@ -1123,6 +1157,7 @@ fn spawn_lane(
         clock.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
         let mut running = tokio::task::JoinSet::new();
         let mut bulk_running = 0;
+        let mut cover_running = false;
         loop {
             if *shutdown.borrow() || lane.closing.load(std::sync::atomic::Ordering::Acquire) {
                 break;
@@ -1134,8 +1169,10 @@ fn spawn_lane(
                 _ = shutdown.changed() => continue,
                 completed = running.join_next(), if !running.is_empty() => {
                     match completed {
-                        Some(Ok(TrafficClass::Bulk)) => bulk_running -= 1,
-                        Some(Ok(TrafficClass::Interactive)) => {},
+                        Some(Ok((traffic, cover))) => {
+                            if traffic == TrafficClass::Bulk { bulk_running -= 1; }
+                            if cover { cover_running = false; }
+                        },
                         Some(Err(_)) => break,
                         None => {},
                     }
@@ -1161,24 +1198,32 @@ fn spawn_lane(
                 }
                 inner.diagnostics.increment(&inner.diagnostics.dispatched);
                 (
-                    prepare(job.semantic, round, &mut request_rng),
+                    PendingRequest::semantic(
+                        job.semantic,
+                        round,
+                        random_nonzero_with(&mut request_rng),
+                    ),
                     job.traffic,
                     Some(job.done),
                     job._reservation,
                 )
-            } else if !key.administrative && inner.emit_cover {
+            } else if !key.administrative && inner.emit_cover && !cover_running {
                 let auth = lane.auth.lock().unwrap_or_else(|p| p.into_inner()).clone();
                 let Some(auth) = auth else {
                     continue;
                 };
-                let Ok(reservation) = inner.budget.reserve(16384, None) else {
+                let Ok(reservation) = inner.budget.reserve_cover() else {
                     continue;
                 };
                 inner
                     .diagnostics
                     .increment(&inner.diagnostics.cover_attempts);
                 (
-                    auth.cover_request(round, &mut request_rng),
+                    Ok(PendingRequest::cover(
+                        auth,
+                        round,
+                        random_nonzero_with(&mut request_rng),
+                    )),
                     TrafficClass::Interactive,
                     None,
                     Some(reservation),
@@ -1189,6 +1234,8 @@ fn spawn_lane(
             if traffic == TrafficClass::Bulk {
                 bulk_running += 1;
             }
+            let cover = done.is_none();
+            cover_running |= cover;
             let inner = inner.clone();
             running.spawn(async move {
                 let _reservation = reservation;
@@ -1209,7 +1256,7 @@ fn spawn_lane(
                 if let Some(done) = done {
                     let _ = done.send(result);
                 }
-                traffic
+                (traffic, cover)
             });
         }
         lane.queue
@@ -1246,39 +1293,60 @@ fn is_unsent_connect_error(error: &str) -> bool {
 /// before giving the job up.
 const CONNECT_RETRY_ATTEMPTS: u32 = 4;
 
-async fn retry_unsent_post(
+async fn send_request(
     client: &Tp1Client,
-    target: &RelayTarget,
-    token: &str,
-    wire: bytes::Bytes,
-    excluded: &[(SocketAddr, [u8; 32])],
+    request: PendingRequest,
     retry_base: Duration,
     traffic: TrafficClass,
 ) -> JobResult {
+    let PendingRequest {
+        target,
+        token,
+        excluded,
+        subscription,
+        make,
+    } = request;
+    let mut make = Some(make);
+    let mut wire: Option<bytes::Bytes> = None;
     let mut attempt = 0;
     loop {
-        let result = client
-            .post_cell_with_class(
-                target.address,
-                target.relay_service_id,
-                token,
-                wire.clone(),
-                excluded,
-                traffic,
-            )
-            .await;
-        match result {
-            Ok(outcome) => {
-                return match outcome.into_accepted() {
-                    Ok(Some(cell)) => JobResult::HopAccepted(
-                        cell.encode_wire()
-                            .map(bytes::Bytes::from)
-                            .unwrap_or_default(),
-                    ),
+        // Cache outside the transport call too: an internal ambiguous retry can
+        // be followed by a connect failure. No retry may regenerate that wire.
+        let prepare = || -> gcoms_transport::client::Result<bytes::Bytes> {
+            if let Some(wire) = &wire {
+                return Ok(wire.clone());
+            }
+            let bytes = make.take().ok_or("request preparation already consumed")?()?;
+            wire = Some(bytes.clone());
+            Ok(bytes)
+        };
+        let result = if subscription {
+            client
+                .open_stream_prepared(target.address, target.relay_service_id, &token, prepare)
+                .await
+                .map(JobResult::Stream)
+        } else {
+            client
+                .post_cell_prepared(
+                    target.address,
+                    target.relay_service_id,
+                    &token,
+                    &excluded,
+                    traffic,
+                    prepare,
+                )
+                .await
+                .map(|outcome| match outcome.into_accepted() {
+                    Ok(Some(cell)) => match cell.encode_wire() {
+                        Ok(wire) => JobResult::HopAccepted(bytes::Bytes::from(wire)),
+                        Err(error) => JobResult::Failed(error.to_string()),
+                    },
                     Ok(None) => JobResult::HopAccepted(bytes::Bytes::new()),
                     Err(error) => JobResult::Failed(error),
-                };
-            }
+                })
+        };
+        match result {
+            Ok(result) => return result,
             Err(error) => {
                 let text = error.to_string();
                 if attempt < CONNECT_RETRY_ATTEMPTS && is_unsent_connect_error(&text) {
@@ -1287,58 +1355,6 @@ async fn retry_unsent_post(
                     continue;
                 }
                 return JobResult::Failed(text);
-            }
-        }
-    }
-}
-
-async fn send_request(
-    client: &Tp1Client,
-    request: Request,
-    retry_base: Duration,
-    traffic: TrafficClass,
-) -> JobResult {
-    match request {
-        Request::Post {
-            target,
-            token,
-            wire,
-            excluded,
-        } => {
-            retry_unsent_post(
-                client,
-                &target,
-                &token,
-                bytes::Bytes::from(wire),
-                &excluded,
-                retry_base,
-                traffic,
-            )
-            .await
-        }
-        Request::Subscribe { alias, auth } => {
-            let mut attempt = 0;
-            loop {
-                let result = client
-                    .open_stream_body_pinned(
-                        alias.contact.target.address,
-                        alias.contact.target.relay_service_id,
-                        &gcoms_transport::encode_b64url(&alias.contact.queue_id),
-                        Some(&auth),
-                    )
-                    .await;
-                match result {
-                    Ok(stream) => break JobResult::Stream(stream),
-                    Err(error) => {
-                        let text = error.to_string();
-                        if attempt < CONNECT_RETRY_ATTEMPTS && is_unsent_connect_error(&text) {
-                            attempt += 1;
-                            tokio::time::sleep(retry_base * attempt).await;
-                            continue;
-                        }
-                        break JobResult::Failed(text);
-                    }
-                }
             }
         }
     }
@@ -1357,9 +1373,17 @@ enum Request {
     },
 }
 
+fn ensure_live_authority(expiry: u64) -> Result<(), String> {
+    if expiry <= now_unix() {
+        return Err("relay authority expired before transport admission".into());
+    }
+    Ok(())
+}
+
 fn prepare(semantic: SemanticJob, round: u16, rng: &mut StdRng) -> Result<Request, String> {
     match semantic {
         SemanticJob::Push { contact, inner } => {
+            ensure_live_authority(contact.expiry)?;
             let push = RelayPush {
                 queue_id: contact.queue_id,
                 epoch: contact.epoch,
@@ -1384,6 +1408,7 @@ fn prepare(semantic: SemanticJob, round: u16, rng: &mut StdRng) -> Result<Reques
             inner,
             policy,
         } => {
+            ensure_live_authority(destination.expiry)?;
             let intermediary = relay
                 .aliases
                 .first()
@@ -1453,6 +1478,7 @@ fn prepare(semantic: SemanticJob, round: u16, rng: &mut StdRng) -> Result<Reques
             })
         }
         SemanticJob::Subscribe(alias) => {
+            ensure_live_authority(alias.contact.expiry)?;
             let sub = crate::relay::RelaySub {
                 queue_id: alias.contact.queue_id,
                 epoch: alias.contact.epoch,
@@ -1977,12 +2003,15 @@ mod tests {
                 ".post_cell_pinned(",
                 ".post_cell_pinned_excluding(",
                 ".open_stream_body_pinned(",
+                ".open_stream_prepared(",
+                ".post_cell_prepared(",
+                ".post_cell_with_class(",
             ] {
                 assert!(!source.contains(forbidden), "{name} bypass: {forbidden}");
             }
             let production = source.split("#[cfg(test)]\nmod ").next().unwrap();
             client_constructions += production.matches("Tp1Client::new(").count();
-            scheduler_constructed |= production.contains("RelayScheduler::new(client.clone())");
+            scheduler_constructed |= production.contains("RelayScheduler::with_transit(");
         }
         assert_eq!(
             client_constructions, 2,

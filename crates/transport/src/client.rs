@@ -36,6 +36,26 @@ const H2_MAX_FRAME_SIZE: u32 = LARGE_WIRE_CELL as u32;
 const H2_INITIAL_STREAM_WINDOW: u32 = 256 * 1024;
 const H2_INITIAL_CONNECTION_WINDOW: u32 = 1024 * 1024;
 
+/// Materialize authenticated request bytes only after connection and request
+/// admission. Once prepared, retain the same bytes across a reconnect retry.
+enum RequestBody<'a> {
+    Ready(Option<Bytes>),
+    Prepare(Option<Box<dyn FnOnce() -> Result<Bytes> + Send + 'a>>),
+}
+
+impl RequestBody<'_> {
+    fn materialize(&mut self) -> Result<Option<Bytes>> {
+        if let Self::Prepare(make) = self {
+            let bytes = make.take().ok_or("request body was already prepared")?()?;
+            *self = Self::Ready(Some(bytes));
+        }
+        match self {
+            Self::Ready(bytes) => Ok(bytes.clone()),
+            Self::Prepare(_) => unreachable!("prepared above"),
+        }
+    }
+}
+
 pub struct Tp1Client {
     connector: Arc<dyn Connector>,
     connections: Mutex<Pool>,
@@ -221,7 +241,7 @@ impl Tp1Client {
             },
             Method::GET,
             path,
-            None,
+            RequestBody::Ready(None),
             TrafficClass::Interactive,
         )
         .await
@@ -244,7 +264,7 @@ impl Tp1Client {
                 },
                 Method::POST,
                 &format!("/{token}"),
-                Some(cell_buf),
+                RequestBody::Ready(Some(cell_buf)),
                 TrafficClass::Interactive,
             )
             .await?;
@@ -290,7 +310,39 @@ impl Tp1Client {
                 },
                 Method::POST,
                 &format!("/{token}"),
-                Some(cell_buf),
+                RequestBody::Ready(Some(cell_buf)),
+                class,
+            )
+            .await?;
+        parse_hop_outcome(status, &body)
+    }
+
+    /// Prepare a cell after the pinned connection, finite-request permit and
+    /// HTTP/2 stream are ready. The builder runs once; reconnect retries reuse
+    /// its exact bytes, including its nonce and committed ciphertext. The whole
+    /// operation still shares the ordinary request deadline.
+    pub async fn post_cell_prepared<F>(
+        &self,
+        addr: SocketAddr,
+        service_id: [u8; 32],
+        token: &str,
+        excluded: &[(SocketAddr, [u8; 32])],
+        class: TrafficClass,
+        make: F,
+    ) -> Result<HopOutcome>
+    where
+        F: FnOnce() -> Result<Bytes> + Send,
+    {
+        let (status, body) = self
+            .finite_request(
+                Route {
+                    addr,
+                    service_id,
+                    excluded,
+                },
+                Method::POST,
+                &format!("/{token}"),
+                RequestBody::Prepare(Some(Box::new(make))),
                 class,
             )
             .await?;
@@ -311,7 +363,41 @@ impl Tp1Client {
                 service_id,
                 Method::POST,
                 &format!("/{token}"),
-                body_bytes.or_else(|| Some(bytes::Bytes::new())),
+                RequestBody::Ready(body_bytes.or_else(|| Some(bytes::Bytes::new()))),
+            )
+            .await?;
+        if response.status() != 200 {
+            return Err(format!("stream refused: {}", response.status()).into());
+        }
+        Ok(CellStream {
+            body: response.into_body(),
+            last_frame_len: 0,
+            framing: CellFraming::new(),
+            finished: false,
+            guard: Some(connection),
+        })
+    }
+
+    /// Prepare subscription authorization after the pinned HTTP/2 stream is
+    /// ready. Reconnect retries reuse its exact authenticated bytes. The request
+    /// deadline covers connection, admission, preparation and response headers.
+    pub async fn open_stream_prepared<F>(
+        &self,
+        addr: SocketAddr,
+        service_id: [u8; 32],
+        token: &str,
+        make: F,
+    ) -> Result<CellStream>
+    where
+        F: FnOnce() -> Result<Bytes> + Send,
+    {
+        let (response, connection) = self
+            .request(
+                addr,
+                service_id,
+                Method::POST,
+                &format!("/{token}"),
+                RequestBody::Prepare(Some(Box::new(make))),
             )
             .await?;
         if response.status() != 200 {
@@ -332,7 +418,7 @@ impl Tp1Client {
         service_id: [u8; 32],
         method: Method,
         path: &str,
-        body: Option<Bytes>,
+        body: RequestBody<'_>,
     ) -> Result<(Response<h2::RecvStream>, ConnectionLease)> {
         match tokio::time::timeout(
             REQUEST_TIMEOUT,
@@ -361,7 +447,7 @@ impl Tp1Client {
         route: Route<'_>,
         method: Method,
         path: &str,
-        body: Option<Bytes>,
+        body: RequestBody<'_>,
         class: TrafficClass,
     ) -> Result<(StatusCode, Bytes)> {
         let result = tokio::time::timeout(REQUEST_TIMEOUT, async {
@@ -386,7 +472,7 @@ impl Tp1Client {
         route: Route<'_>,
         method: Method,
         path: &str,
-        body: Option<Bytes>,
+        mut body: RequestBody<'_>,
         finite: bool,
         class: TrafficClass,
     ) -> Result<(Response<h2::RecvStream>, ConnectionLease)> {
@@ -406,13 +492,14 @@ impl Tp1Client {
                 }
             };
 
+            let body_bytes = body.materialize()?;
             let uri: http::Uri = format!("http://{addr}{path}").parse()?;
             let request = Request::builder()
                 .method(method.clone())
                 .uri(uri)
                 .body(())
                 .expect("request builds");
-            let sent = client.send_request(request, body.is_none());
+            let sent = client.send_request(request, body_bytes.is_none());
             let (response, mut send) = match sent {
                 Ok(sent) => sent,
                 Err(error) => {
@@ -429,7 +516,7 @@ impl Tp1Client {
             // These finite requests carry one self-contained cell and are
             // idempotent, so evict the stale connection and retry once on a
             // fresh one rather than surface a transient transport error.
-            if let Some(b) = body.clone() {
+            if let Some(b) = body_bytes {
                 if let Err(error) = send.send_data(b, true) {
                     self.remove_connection(pool_key, &connection).await;
                     if attempt == 0 {

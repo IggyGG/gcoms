@@ -622,15 +622,11 @@ async fn start_with_tls_policy_control_sink_and_bootstrap(
         }
         .map_err(|e| e.to_string())?,
     );
-    let scheduler = if cfg.profile.is_production() {
-        RelayScheduler::new(client.clone())
-    } else {
-        RelayScheduler::with_profile(client.clone(), scheduler_profile.clone())
-    };
     // Transit carries only already authorized relay jobs. It must never invoke
     // the endpoint's onion connector and recursively build another circuit.
     let transit_client = Arc::new(Tp1Client::new().map_err(|e| e.to_string())?);
-    let transit_scheduler = RelayScheduler::with_profile(transit_client, scheduler_profile.clone());
+    let (scheduler, transit_scheduler) =
+        RelayScheduler::with_transit(client.clone(), transit_client, scheduler_profile.clone());
     let (on_cell, on_queue_cell, on_stream) = relay_service::build_handlers(
         &leases,
         &registry,

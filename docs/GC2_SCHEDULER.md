@@ -7,6 +7,14 @@ through `SchedulerProfile::with_pipelining()`; production lanes retain their
 existing single-attempt limit, slot interval, emission probability and cover.
 Slot clocks now advance independently of completion, skipping missed slots.
 
+Relay envelope preparation waits until the pinned connection and HTTP/2 request
+capacity are ready. This gives a new hop nonce and expiry their useful lifetime
+after admission, subject to the original credential expiry. Expired credentials
+fail without renewal or extended authority. Prepared bytes are cached across both
+transport reconnects and scheduler connection retries; end-to-end ciphertext and
+message identities remain unchanged. Subscription authorization follows the same
+rule. Existing request deadlines still include the admission wait.
+
 ## Requests and connection ownership
 
 A pooled terminal HTTP/2 connection admits at most four finite requests, including
@@ -33,7 +41,13 @@ A node retains at most 4,096 jobs and 8 MiB of accounted queued plus in-flight
 work. Accounting includes ciphertext, a maximum wire buffer and retained copied
 authority; existing lane bounds remain stricter where applicable. Admission uses
 reject-new semantics. Dequeue does not release credit. Shutdown and lane closure
-cancel warmup and active requests and drain queued receipts.
+cancel warmup and active requests and drain queued receipts. Cover-enabled
+endpoint and transit schedulers share this node-wide allowance. Together they
+reserve 2 MiB and 128 jobs for one maximum-size cover request per lane. Payloads
+share the remaining 6 MiB and 3,968 jobs; a standalone cover scheduler reserves
+1 MiB and 64 jobs. No-cover fixtures retain the full allowance. Each lane has at most one cover request in flight, so a slow
+cover response cannot fill its entire pipeline. Payload admission never borrows
+unused cover credit.
 
 Producer classes rotate, with byte-charged deficit round robin between destination
 queues within a class. This is destination fairness; distinct SDK components
@@ -69,7 +83,9 @@ submit through the existing scheduled lanes. A hop acceptance clears a retained
 control record only if its full route and ciphertext still match the attempt.
 
 `NodeHandle::enable_diagnostics()` and `diagnostics()` expose bounded local
-aggregates for client and relay schedulers and their resource budgets. They contain
+aggregates for client and relay schedulers, their local resource use and the
+shared node budget. Local peaks occur independently; use the combined snapshot
+instead of summing peaks to evaluate the node bound. They contain
 no contacts, message IDs or payloads and do not change scheduling. Startup work can
 precede counter activation; these snapshots are diagnostics, not a complete
 application-delivery or interface-bandwidth accounting record.

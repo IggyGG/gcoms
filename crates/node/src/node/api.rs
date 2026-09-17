@@ -375,6 +375,8 @@ pub(crate) struct TransportTask {
 /// Local aggregate counters only; no contacts, message IDs or payloads.
 #[derive(Debug, serde::Serialize)]
 pub struct NodeDiagnostics {
+    /// Shared node allowance; do not sum the independent local peak values.
+    pub resources: crate::scheduler::ResourceSnapshot,
     pub client: crate::scheduler::diagnostics::SchedulerSnapshot,
     pub relay: crate::scheduler::diagnostics::SchedulerSnapshot,
     pub client_resources: crate::scheduler::ResourceSnapshot,
@@ -408,6 +410,7 @@ impl NodeHandle {
     /// Approximate during concurrent updates; quiesce before reconciling counts.
     pub fn diagnostics(&self) -> NodeDiagnostics {
         NodeDiagnostics {
+            resources: self.scheduler.combined_resource_snapshot(),
             client: self.scheduler.diagnostics_snapshot(),
             relay: self.transit_scheduler.diagnostics_snapshot(),
             client_resources: self.scheduler.resource_snapshot(),
