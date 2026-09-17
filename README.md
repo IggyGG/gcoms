@@ -20,6 +20,9 @@ private development stage. The intended preview version remains 0.1.0. See
 - [Implemented protocol profile](SPEC.md), [architecture](docs/ARCHITECTURE.md),
   [compatibility](docs/COMPATIBILITY.md), [security](SECURITY.md).
 - [Build and test](TESTING.md), [contribute](CONTRIBUTING.md), [license](LICENSE-MIT).
+- [Repository ownership and source integration](docs/REPOSITORY_STRUCTURE.md),
+  [relay research](docs/RELAY_RESEARCH.md), and the
+  [GC/2 implementation ledger](docs/GC2_IMPLEMENTATION.md).
 
 After package publication, a native client can depend on:
 

@@ -1,0 +1,43 @@
+{
+  "schema": 1,
+  "source_repository": "original ghost/coms",
+  "source_revision": "5588d8a03e6e1f1ff446bac681cdd88dbf7502f8",
+  "purpose": "Historical research tooling and aggregate results; not GC/2 qualification.",
+  "files": [
+    {
+      "path": "scripts/relay-performance.py",
+      "source_path": "scripts/relay-performance.py",
+      "sha256": "23d59993d3c90f815fd6a7cb8de82e20e39bd92685cd897990a71aacfd41e905"
+    },
+    {
+      "path": "scripts/relay-tradeoffs.py",
+      "source_path": "scripts/relay-tradeoffs.py",
+      "sha256": "df5b636e2d61a3ef84d4ced8a9409268c43b03522fa93b7ba4d0d02b36f4d50a"
+    },
+    {
+      "path": "scripts/relay-utilization.py",
+      "source_path": "scripts/relay-utilization.py",
+      "sha256": "a11e40fc16e6c17b338f3d14819f057849aff3f0c1f8dd6d809a711a46ed0c58"
+    },
+    {
+      "path": "scripts/tests/relay_performance_test.py",
+      "source_path": "scripts/tests/relay_performance_test.py",
+      "sha256": "373e5b3f93417036dd9caa9486b6439a77801b00406bc5d1a5d55410f0301486"
+    },
+    {
+      "path": "scripts/tests/relay_tradeoffs_test.py",
+      "source_path": "scripts/tests/relay_tradeoffs_test.py",
+      "sha256": "8ddb09841428525866739277292a074734a4edda0103ee089a5c78f2904faf4a"
+    },
+    {
+      "path": "scripts/tests/relay_utilization_test.py",
+      "source_path": "scripts/tests/relay_utilization_test.py",
+      "sha256": "8daeb583c9beac3d7707c298d1ae38ed9db0ea3a192fcf930d6f00da6ce561a5"
+    },
+    {
+      "path": "docs/research/relay-utilization-20260917.json",
+      "source_path": "test-evidence/relay-utilization-repeat/full-summary.json",
+      "sha256": "56b5953853cba81e9bb0a7398a636b7f30caa7f1182fd3bd4bc39d005758112e"
+    }
+  ]
+}

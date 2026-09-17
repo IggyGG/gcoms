@@ -1,0 +1,2375 @@
+{
+  "schema": 1,
+  "kind": "loopback_utilization_summary",
+  "status": "measured",
+  "measurement_scope": "steady_credential_epoch",
+  "preflight_wait_us": 119001732,
+  "preflight_deferred_trials": 1,
+  "quick": false,
+  "privacy_verdict": "not_qualified",
+  "missing_trials": [],
+  "failures": [],
+  "control_mismatches": [],
+  "rows": [
+    {
+      "scenario": "bulk",
+      "variant": "baseline",
+      "runs": 5,
+      "metrics": {
+        "bulk_goodput_kib_s": {
+          "count": 5,
+          "median": 8.402592218197348,
+          "p95": 8.478738130275682,
+          "min": 7.647952003963425,
+          "max": 8.478738130275682
+        },
+        "request_cell_wire_bytes": {
+          "count": 5,
+          "median": 262144,
+          "p95": 262144,
+          "min": 262144,
+          "max": 262144
+        },
+        "encoded_payload_bytes": {
+          "count": 5,
+          "median": 192000,
+          "p95": 192000,
+          "min": 192000,
+          "max": 192000
+        },
+        "batches": {
+          "count": 5,
+          "median": 16,
+          "p95": 16,
+          "min": 16,
+          "max": 16
+        },
+        "process_cpu_us": {
+          "count": 5,
+          "median": 146779,
+          "p95": 166860,
+          "min": 133668,
+          "max": 166860
+        },
+        "process_lifetime_peak_rss_kib": {
+          "count": 5,
+          "median": 49888,
+          "p95": 82272,
+          "min": 14336,
+          "max": 82272
+        },
+        "queue_us_p95": {
+          "count": 5,
+          "median": 20599523,
+          "p95": 22699831,
+          "min": 20499301,
+          "max": 22699831
+        },
+        "service_us_p95": {
+          "count": 5,
+          "median": 1699850,
+          "p95": 1899650,
+          "min": 1600054,
+          "max": 1899650
+        },
+        "link_0_duplex_kib_s": {
+          "count": 5,
+          "median": 80.709150666782,
+          "p95": 80.709150666782,
+          "min": 80.2284913095929,
+          "max": 80.709150666782
+        },
+        "link_1_duplex_kib_s": {
+          "count": 5,
+          "median": 80.2284913095929,
+          "p95": 80.70487868163683,
+          "min": 80.2284913095929,
+          "max": 80.70487868163683
+        },
+        "link_2_duplex_kib_s": {
+          "count": 5,
+          "median": 25.143073713602647,
+          "p95": 28.162512814197818,
+          "min": 24.145137983694568,
+          "max": 28.162512814197818
+        }
+      },
+      "common_prefix_us": 8000891,
+      "rejected_messages": 0,
+      "dropped_observations": 0,
+      "max_buffered_payload_bytes": 191872
+    },
+    {
+      "scenario": "bulk",
+      "variant": "combined",
+      "runs": 5,
+      "metrics": {
+        "bulk_goodput_kib_s": {
+          "count": 5,
+          "median": 25.66660224047007,
+          "p95": 25.672211179232384,
+          "min": 24.985428777960177,
+          "max": 25.672211179232384
+        },
+        "request_cell_wire_bytes": {
+          "count": 5,
+          "median": 262144,
+          "p95": 262144,
+          "min": 262144,
+          "max": 262144
+        },
+        "encoded_payload_bytes": {
+          "count": 5,
+          "median": 192000,
+          "p95": 192000,
+          "min": 192000,
+          "max": 192000
+        },
+        "batches": {
+          "count": 5,
+          "median": 16,
+          "p95": 16,
+          "min": 16,
+          "max": 16
+        },
+        "process_cpu_us": {
+          "count": 5,
+          "median": 53038,
+          "p95": 59635,
+          "min": 50023,
+          "max": 59635
+        },
+        "process_lifetime_peak_rss_kib": {
+          "count": 5,
+          "median": 49888,
+          "p95": 82272,
+          "min": 14160,
+          "max": 82272
+        },
+        "queue_us_p95": {
+          "count": 5,
+          "median": 5700069,
+          "p95": 5899745,
+          "min": 5698881,
+          "max": 5899745
+        },
+        "service_us_p95": {
+          "count": 5,
+          "median": 2499171,
+          "p95": 2698880,
+          "min": 2399721,
+          "max": 2698880
+        },
+        "link_0_duplex_kib_s": {
+          "count": 5,
+          "median": 80.2284913095929,
+          "p95": 80.73380612390545,
+          "min": 80.2284913095929,
+          "max": 80.73380612390545
+        },
+        "link_1_duplex_kib_s": {
+          "count": 5,
+          "median": 80.70487868163683,
+          "p95": 80.709150666782,
+          "min": 80.2284913095929,
+          "max": 80.709150666782
+        },
+        "link_2_duplex_kib_s": {
+          "count": 5,
+          "median": 64.319984799193,
+          "p95": 64.32267004699851,
+          "min": 64.319984799193,
+          "max": 64.32267004699851
+        }
+      },
+      "common_prefix_us": 8000891,
+      "rejected_messages": 0,
+      "dropped_observations": 0,
+      "max_buffered_payload_bytes": 191872
+    },
+    {
+      "scenario": "bulk",
+      "variant": "concurrency",
+      "runs": 5,
+      "metrics": {
+        "bulk_goodput_kib_s": {
+          "count": 5,
+          "median": 25.322451605230583,
+          "p95": 25.67741438612171,
+          "min": 24.983419942522467,
+          "max": 25.67741438612171
+        },
+        "request_cell_wire_bytes": {
+          "count": 5,
+          "median": 262144,
+          "p95": 262144,
+          "min": 262144,
+          "max": 262144
+        },
+        "encoded_payload_bytes": {
+          "count": 5,
+          "median": 192000,
+          "p95": 192000,
+          "min": 192000,
+          "max": 192000
+        },
+        "batches": {
+          "count": 5,
+          "median": 16,
+          "p95": 16,
+          "min": 16,
+          "max": 16
+        },
+        "process_cpu_us": {
+          "count": 5,
+          "median": 49763,
+          "p95": 57717,
+          "min": 45448,
+          "max": 57717
+        },
+        "process_lifetime_peak_rss_kib": {
+          "count": 5,
+          "median": 48128,
+          "p95": 83504,
+          "min": 15568,
+          "max": 83504
+        },
+        "queue_us_p95": {
+          "count": 5,
+          "median": 5799808,
+          "p95": 5899629,
+          "min": 5697557,
+          "max": 5899629
+        },
+        "service_us_p95": {
+          "count": 5,
+          "median": 2599639,
+          "p95": 2699513,
+          "min": 2497062,
+          "max": 2699513
+        },
+        "link_0_duplex_kib_s": {
+          "count": 5,
+          "median": 80.70060669649168,
+          "p95": 80.73649137171097,
+          "min": 80.2284913095929,
+          "max": 80.73649137171097
+        },
+        "link_1_duplex_kib_s": {
+          "count": 5,
+          "median": 80.70060669649168,
+          "p95": 80.73649137171097,
+          "min": 80.2284913095929,
+          "max": 80.73649137171097
+        },
+        "link_2_duplex_kib_s": {
+          "count": 5,
+          "median": 64.319984799193,
+          "p95": 64.32267004699851,
+          "min": 64.319984799193,
+          "max": 64.32267004699851
+        }
+      },
+      "common_prefix_us": 8000891,
+      "rejected_messages": 0,
+      "dropped_observations": 0,
+      "max_buffered_payload_bytes": 191872
+    },
+    {
+      "scenario": "bulk",
+      "variant": "packing",
+      "runs": 5,
+      "metrics": {
+        "bulk_goodput_kib_s": {
+          "count": 5,
+          "median": 8.440297066024362,
+          "p95": 8.556200963664537,
+          "min": 7.64792765548191,
+          "max": 8.556200963664537
+        },
+        "request_cell_wire_bytes": {
+          "count": 5,
+          "median": 262144,
+          "p95": 262144,
+          "min": 262144,
+          "max": 262144
+        },
+        "encoded_payload_bytes": {
+          "count": 5,
+          "median": 192000,
+          "p95": 192000,
+          "min": 192000,
+          "max": 192000
+        },
+        "batches": {
+          "count": 5,
+          "median": 16,
+          "p95": 16,
+          "min": 16,
+          "max": 16
+        },
+        "process_cpu_us": {
+          "count": 5,
+          "median": 139318,
+          "p95": 144820,
+          "min": 134448,
+          "max": 144820
+        },
+        "process_lifetime_peak_rss_kib": {
+          "count": 5,
+          "median": 48480,
+          "p95": 83680,
+          "min": 15568,
+          "max": 83680
+        },
+        "queue_us_p95": {
+          "count": 5,
+          "median": 20599928,
+          "p95": 22699726,
+          "min": 20299833,
+          "max": 22699726
+        },
+        "service_us_p95": {
+          "count": 5,
+          "median": 1600587,
+          "p95": 1800213,
+          "min": 1600378,
+          "max": 1800213
+        },
+        "link_0_duplex_kib_s": {
+          "count": 5,
+          "median": 80.70060669649168,
+          "p95": 80.70487868163683,
+          "min": 80.2284913095929,
+          "max": 80.70487868163683
+        },
+        "link_1_duplex_kib_s": {
+          "count": 5,
+          "median": 80.2284913095929,
+          "p95": 80.709150666782,
+          "min": 80.2284913095929,
+          "max": 80.709150666782
+        },
+        "link_2_duplex_kib_s": {
+          "count": 5,
+          "median": 26.14100944351073,
+          "p95": 28.162512814197818,
+          "min": 24.145137983694568,
+          "max": 28.162512814197818
+        }
+      },
+      "common_prefix_us": 8000891,
+      "rejected_messages": 0,
+      "dropped_observations": 0,
+      "max_buffered_payload_bytes": 191872
+    },
+    {
+      "scenario": "burst_chat",
+      "variant": "baseline",
+      "runs": 5,
+      "metrics": {
+        "chat_p95_ms": {
+          "count": 5,
+          "median": 21699.576,
+          "p95": 22498.728,
+          "min": 21299.186,
+          "max": 22498.728
+        },
+        "chat_p50_ms": {
+          "count": 5,
+          "median": 9599.2,
+          "p95": 10048.5845,
+          "min": 9499.486,
+          "max": 10048.5845
+        },
+        "worst_producer_chat_p95_ms": {
+          "count": 5,
+          "median": 21699.576,
+          "p95": 22498.728,
+          "min": 21299.186,
+          "max": 22498.728
+        },
+        "request_cell_wire_bytes": {
+          "count": 5,
+          "median": 131072,
+          "p95": 131072,
+          "min": 131072,
+          "max": 131072
+        },
+        "encoded_payload_bytes": {
+          "count": 5,
+          "median": 4352,
+          "p95": 4352,
+          "min": 4352,
+          "max": 4352
+        },
+        "batches": {
+          "count": 5,
+          "median": 32,
+          "p95": 32,
+          "min": 32,
+          "max": 32
+        },
+        "process_cpu_us": {
+          "count": 5,
+          "median": 167685,
+          "p95": 174848,
+          "min": 157806,
+          "max": 174848
+        },
+        "process_lifetime_peak_rss_kib": {
+          "count": 5,
+          "median": 46368,
+          "p95": 80336,
+          "min": 12400,
+          "max": 80336
+        },
+        "queue_us_p95": {
+          "count": 5,
+          "median": 20699723,
+          "p95": 21299091,
+          "min": 20299413,
+          "max": 21299091
+        },
+        "service_us_p95": {
+          "count": 5,
+          "median": 1099974,
+          "p95": 1199508,
+          "min": 1099490,
+          "max": 1199508
+        },
+        "link_0_duplex_kib_s": {
+          "count": 5,
+          "median": 80.7117384153993,
+          "p95": 80.71601076365361,
+          "min": 80.23531055149671,
+          "max": 80.71601076365361
+        },
+        "link_1_duplex_kib_s": {
+          "count": 5,
+          "median": 80.23531055149671,
+          "p95": 80.71601076365361,
+          "min": 80.23531055149671,
+          "max": 80.71601076365361
+        },
+        "link_2_duplex_kib_s": {
+          "count": 5,
+          "median": 13.202410575483572,
+          "p95": 13.202410575483572,
+          "min": 12.189986106303946,
+          "max": 13.202410575483572
+        }
+      },
+      "common_prefix_us": 8000211,
+      "rejected_messages": 0,
+      "dropped_observations": 0,
+      "max_buffered_payload_bytes": 3584
+    },
+    {
+      "scenario": "burst_chat",
+      "variant": "combined",
+      "runs": 5,
+      "metrics": {
+        "chat_p95_ms": {
+          "count": 5,
+          "median": 799.26,
+          "p95": 799.887,
+          "min": 699.152,
+          "max": 799.887
+        },
+        "chat_p50_ms": {
+          "count": 5,
+          "median": 699.929,
+          "p95": 799.218,
+          "min": 698.7345,
+          "max": 799.218
+        },
+        "worst_producer_chat_p95_ms": {
+          "count": 5,
+          "median": 799.26,
+          "p95": 799.887,
+          "min": 699.152,
+          "max": 799.887
+        },
+        "request_cell_wire_bytes": {
+          "count": 5,
+          "median": 16384,
+          "p95": 16384,
+          "min": 16384,
+          "max": 16384
+        },
+        "encoded_payload_bytes": {
+          "count": 5,
+          "median": 4352,
+          "p95": 4352,
+          "min": 4352,
+          "max": 4352
+        },
+        "batches": {
+          "count": 5,
+          "median": 4,
+          "p95": 4,
+          "min": 4,
+          "max": 4
+        },
+        "process_cpu_us": {
+          "count": 5,
+          "median": 50202,
+          "p95": 53441,
+          "min": 46680,
+          "max": 53441
+        },
+        "process_lifetime_peak_rss_kib": {
+          "count": 5,
+          "median": 47600,
+          "p95": 79984,
+          "min": 12400,
+          "max": 79984
+        },
+        "queue_us_p95": {
+          "count": 5,
+          "median": 1109,
+          "p95": 1616,
+          "min": 758,
+          "max": 1616
+        },
+        "service_us_p95": {
+          "count": 5,
+          "median": 797892,
+          "p95": 799096,
+          "min": 698910,
+          "max": 799096
+        },
+        "link_0_duplex_kib_s": {
+          "count": 5,
+          "median": 80.7117384153993,
+          "p95": 80.7117384153993,
+          "min": 80.23531055149671,
+          "max": 80.7117384153993
+        },
+        "link_1_duplex_kib_s": {
+          "count": 5,
+          "median": 80.23531055149671,
+          "p95": 80.71601076365361,
+          "min": 80.23531055149671,
+          "max": 80.71601076365361
+        },
+        "link_2_duplex_kib_s": {
+          "count": 5,
+          "median": 4.090590352866943,
+          "p95": 4.093275828912512,
+          "min": 4.090590352866943,
+          "max": 4.093275828912512
+        }
+      },
+      "common_prefix_us": 8000211,
+      "rejected_messages": 0,
+      "dropped_observations": 0,
+      "max_buffered_payload_bytes": 1024
+    },
+    {
+      "scenario": "burst_chat",
+      "variant": "concurrency",
+      "runs": 5,
+      "metrics": {
+        "chat_p95_ms": {
+          "count": 5,
+          "median": 2598.92,
+          "p95": 2899.747,
+          "min": 1999.083,
+          "max": 2899.747
+        },
+        "chat_p50_ms": {
+          "count": 5,
+          "median": 1698.955,
+          "p95": 1899.444,
+          "min": 1349.2285000000002,
+          "max": 1899.444
+        },
+        "worst_producer_chat_p95_ms": {
+          "count": 5,
+          "median": 2598.92,
+          "p95": 2899.747,
+          "min": 1999.083,
+          "max": 2899.747
+        },
+        "request_cell_wire_bytes": {
+          "count": 5,
+          "median": 131072,
+          "p95": 131072,
+          "min": 131072,
+          "max": 131072
+        },
+        "encoded_payload_bytes": {
+          "count": 5,
+          "median": 4352,
+          "p95": 4352,
+          "min": 4352,
+          "max": 4352
+        },
+        "batches": {
+          "count": 5,
+          "median": 32,
+          "p95": 32,
+          "min": 32,
+          "max": 32
+        },
+        "process_cpu_us": {
+          "count": 5,
+          "median": 56720,
+          "p95": 60945,
+          "min": 51319,
+          "max": 60945
+        },
+        "process_lifetime_peak_rss_kib": {
+          "count": 5,
+          "median": 47600,
+          "p95": 81920,
+          "min": 13984,
+          "max": 81920
+        },
+        "queue_us_p95": {
+          "count": 5,
+          "median": 1999341,
+          "p95": 2299603,
+          "min": 1399109,
+          "max": 2299603
+        },
+        "service_us_p95": {
+          "count": 5,
+          "median": 899390,
+          "p95": 899721,
+          "min": 798465,
+          "max": 899721
+        },
+        "link_0_duplex_kib_s": {
+          "count": 5,
+          "median": 80.23531055149671,
+          "p95": 80.23531055149671,
+          "min": 80.23531055149671,
+          "max": 80.23531055149671
+        },
+        "link_1_duplex_kib_s": {
+          "count": 5,
+          "median": 80.7117384153993,
+          "p95": 80.71601076365361,
+          "min": 80.7117384153993,
+          "max": 80.71601076365361
+        },
+        "link_2_duplex_kib_s": {
+          "count": 5,
+          "median": 32.438475489896454,
+          "p95": 32.441160965942025,
+          "min": 32.438475489896454,
+          "max": 32.441160965942025
+        }
+      },
+      "common_prefix_us": 8000211,
+      "rejected_messages": 0,
+      "dropped_observations": 0,
+      "max_buffered_payload_bytes": 2304
+    },
+    {
+      "scenario": "burst_chat",
+      "variant": "packing",
+      "runs": 5,
+      "metrics": {
+        "chat_p95_ms": {
+          "count": 5,
+          "median": 798.869,
+          "p95": 799.889,
+          "min": 698.639,
+          "max": 799.889
+        },
+        "chat_p50_ms": {
+          "count": 5,
+          "median": 699.663,
+          "p95": 798.7805,
+          "min": 698.4535000000001,
+          "max": 798.7805
+        },
+        "worst_producer_chat_p95_ms": {
+          "count": 5,
+          "median": 798.869,
+          "p95": 799.889,
+          "min": 698.639,
+          "max": 799.889
+        },
+        "request_cell_wire_bytes": {
+          "count": 5,
+          "median": 16384,
+          "p95": 16384,
+          "min": 16384,
+          "max": 16384
+        },
+        "encoded_payload_bytes": {
+          "count": 5,
+          "median": 4352,
+          "p95": 4352,
+          "min": 4352,
+          "max": 4352
+        },
+        "batches": {
+          "count": 5,
+          "median": 4,
+          "p95": 4,
+          "min": 4,
+          "max": 4
+        },
+        "process_cpu_us": {
+          "count": 5,
+          "median": 50137,
+          "p95": 53125,
+          "min": 48542,
+          "max": 53125
+        },
+        "process_lifetime_peak_rss_kib": {
+          "count": 5,
+          "median": 47600,
+          "p95": 79984,
+          "min": 12400,
+          "max": 79984
+        },
+        "queue_us_p95": {
+          "count": 5,
+          "median": 1545,
+          "p95": 1760,
+          "min": 1065,
+          "max": 1760
+        },
+        "service_us_p95": {
+          "count": 5,
+          "median": 797815,
+          "p95": 798289,
+          "min": 698341,
+          "max": 798289
+        },
+        "link_0_duplex_kib_s": {
+          "count": 5,
+          "median": 80.23531055149671,
+          "p95": 80.71601076365361,
+          "min": 80.23531055149671,
+          "max": 80.71601076365361
+        },
+        "link_1_duplex_kib_s": {
+          "count": 5,
+          "median": 80.7117384153993,
+          "p95": 80.71601076365361,
+          "min": 80.23531055149671,
+          "max": 80.71601076365361
+        },
+        "link_2_duplex_kib_s": {
+          "count": 5,
+          "median": 4.090590352866943,
+          "p95": 4.090590352866943,
+          "min": 4.090590352866943,
+          "max": 4.090590352866943
+        }
+      },
+      "common_prefix_us": 8000211,
+      "rejected_messages": 0,
+      "dropped_observations": 0,
+      "max_buffered_payload_bytes": 1024
+    },
+    {
+      "scenario": "chat_bulk",
+      "variant": "baseline",
+      "runs": 5,
+      "metrics": {
+        "chat_p95_ms": {
+          "count": 5,
+          "median": 41599.134,
+          "p95": 45299.823,
+          "min": 39099.009,
+          "max": 45299.823
+        },
+        "chat_p50_ms": {
+          "count": 5,
+          "median": 20174.307,
+          "p95": 22174.6235,
+          "min": 18624.141499999998,
+          "max": 22174.6235
+        },
+        "worst_producer_chat_p95_ms": {
+          "count": 5,
+          "median": 41599.134,
+          "p95": 45299.823,
+          "min": 39099.009,
+          "max": 45299.823
+        },
+        "bulk_goodput_kib_s": {
+          "count": 5,
+          "median": 4.515101040069639,
+          "p95": 4.780138989987181,
+          "min": 4.1272837342971584,
+          "max": 4.780138989987181
+        },
+        "request_cell_wire_bytes": {
+          "count": 5,
+          "median": 344064,
+          "p95": 344064,
+          "min": 344064,
+          "max": 344064
+        },
+        "encoded_payload_bytes": {
+          "count": 5,
+          "median": 194720,
+          "p95": 194720,
+          "min": 194720,
+          "max": 194720
+        },
+        "batches": {
+          "count": 5,
+          "median": 36,
+          "p95": 36,
+          "min": 36,
+          "max": 36
+        },
+        "process_cpu_us": {
+          "count": 5,
+          "median": 298908,
+          "p95": 308748,
+          "min": 288121,
+          "max": 308748
+        },
+        "process_lifetime_peak_rss_kib": {
+          "count": 5,
+          "median": 52176,
+          "p95": 84912,
+          "min": 16976,
+          "max": 84912
+        },
+        "queue_us_p95": {
+          "count": 5,
+          "median": 39898988,
+          "p95": 43799011,
+          "min": 37598728,
+          "max": 43799011
+        },
+        "service_us_p95": {
+          "count": 5,
+          "median": 1998907,
+          "p95": 2199347,
+          "min": 1900366,
+          "max": 2199347
+        },
+        "link_0_duplex_kib_s": {
+          "count": 5,
+          "median": 80.24791400852516,
+          "p95": 80.71471280273317,
+          "min": 79.7993306820742,
+          "max": 80.71471280273317
+        },
+        "link_1_duplex_kib_s": {
+          "count": 5,
+          "median": 80.7108721920615,
+          "p95": 80.71471280273317,
+          "min": 80.24791400852516,
+          "max": 80.71471280273317
+        },
+        "link_2_duplex_kib_s": {
+          "count": 5,
+          "median": 19.485173645113317,
+          "p95": 22.648300594300046,
+          "min": 18.124061223073763,
+          "max": 22.648300594300046
+        }
+      },
+      "common_prefix_us": 8899545,
+      "rejected_messages": 0,
+      "dropped_observations": 0,
+      "max_buffered_payload_bytes": 193024
+    },
+    {
+      "scenario": "chat_bulk",
+      "variant": "combined",
+      "runs": 5,
+      "metrics": {
+        "chat_p95_ms": {
+          "count": 5,
+          "median": 1949.136,
+          "p95": 2199.793,
+          "min": 1848.977,
+          "max": 2199.793
+        },
+        "chat_p50_ms": {
+          "count": 5,
+          "median": 1549.4185,
+          "p95": 1799.524,
+          "min": 1474.527,
+          "max": 1799.524
+        },
+        "worst_producer_chat_p95_ms": {
+          "count": 5,
+          "median": 1949.136,
+          "p95": 2199.793,
+          "min": 1848.977,
+          "max": 2199.793
+        },
+        "bulk_goodput_kib_s": {
+          "count": 5,
+          "median": 20.81930796231447,
+          "p95": 21.05475235678386,
+          "min": 18.926176950638613,
+          "max": 21.05475235678386
+        },
+        "request_cell_wire_bytes": {
+          "count": 5,
+          "median": 294912,
+          "p95": 299008,
+          "min": 294912,
+          "max": 299008
+        },
+        "encoded_payload_bytes": {
+          "count": 5,
+          "median": 194720,
+          "p95": 194720,
+          "min": 194720,
+          "max": 194720
+        },
+        "batches": {
+          "count": 5,
+          "median": 24,
+          "p95": 25,
+          "min": 24,
+          "max": 25
+        },
+        "process_cpu_us": {
+          "count": 5,
+          "median": 68708,
+          "p95": 79679,
+          "min": 64898,
+          "max": 79679
+        },
+        "process_lifetime_peak_rss_kib": {
+          "count": 5,
+          "median": 52176,
+          "p95": 88256,
+          "min": 20320,
+          "max": 88256
+        },
+        "queue_us_p95": {
+          "count": 5,
+          "median": 7000152,
+          "p95": 7699142,
+          "min": 6900873,
+          "max": 7699142
+        },
+        "service_us_p95": {
+          "count": 5,
+          "median": 1799810,
+          "p95": 1999098,
+          "min": 1799397,
+          "max": 1999098
+        },
+        "link_0_duplex_kib_s": {
+          "count": 5,
+          "median": 80.24791400852516,
+          "p95": 80.71471280273317,
+          "min": 79.34646781801766,
+          "max": 80.71471280273317
+        },
+        "link_1_duplex_kib_s": {
+          "count": 5,
+          "median": 80.26184993867665,
+          "p95": 80.71855341340485,
+          "min": 79.80514646394843,
+          "max": 80.71855341340485
+        },
+        "link_2_duplex_kib_s": {
+          "count": 5,
+          "median": 65.10504452053448,
+          "p95": 66.01515951798659,
+          "min": 62.7640277185519,
+          "max": 66.01515951798659
+        }
+      },
+      "common_prefix_us": 8899545,
+      "rejected_messages": 0,
+      "dropped_observations": 0,
+      "max_buffered_payload_bytes": 192640
+    },
+    {
+      "scenario": "chat_bulk",
+      "variant": "concurrency",
+      "runs": 5,
+      "metrics": {
+        "chat_p95_ms": {
+          "count": 5,
+          "median": 7299.654,
+          "p95": 7549.766,
+          "min": 6899.225,
+          "max": 7549.766
+        },
+        "chat_p50_ms": {
+          "count": 5,
+          "median": 5274.2885,
+          "p95": 5574.064,
+          "min": 4974.9755000000005,
+          "max": 5574.064
+        },
+        "worst_producer_chat_p95_ms": {
+          "count": 5,
+          "median": 7299.654,
+          "p95": 7549.766,
+          "min": 6899.225,
+          "max": 7549.766
+        },
+        "bulk_goodput_kib_s": {
+          "count": 5,
+          "median": 17.51197192701225,
+          "p95": 18.192805581606155,
+          "min": 17.03579758626728,
+          "max": 18.192805581606155
+        },
+        "request_cell_wire_bytes": {
+          "count": 5,
+          "median": 344064,
+          "p95": 344064,
+          "min": 344064,
+          "max": 344064
+        },
+        "encoded_payload_bytes": {
+          "count": 5,
+          "median": 194720,
+          "p95": 194720,
+          "min": 194720,
+          "max": 194720
+        },
+        "batches": {
+          "count": 5,
+          "median": 36,
+          "p95": 36,
+          "min": 36,
+          "max": 36
+        },
+        "process_cpu_us": {
+          "count": 5,
+          "median": 86550,
+          "p95": 88932,
+          "min": 83597,
+          "max": 88932
+        },
+        "process_lifetime_peak_rss_kib": {
+          "count": 5,
+          "median": 54992,
+          "p95": 87728,
+          "min": 19616,
+          "max": 87728
+        },
+        "queue_us_p95": {
+          "count": 5,
+          "median": 8499341,
+          "p95": 8999353,
+          "min": 8100520,
+          "max": 8999353
+        },
+        "service_us_p95": {
+          "count": 5,
+          "median": 1798996,
+          "p95": 1899180,
+          "min": 1700207,
+          "max": 1899180
+        },
+        "link_0_duplex_kib_s": {
+          "count": 5,
+          "median": 80.24791400852516,
+          "p95": 80.71471280273317,
+          "min": 80.24549991038867,
+          "max": 80.71471280273317
+        },
+        "link_1_duplex_kib_s": {
+          "count": 5,
+          "median": 80.71471280273317,
+          "p95": 80.71471280273317,
+          "min": 80.24791400852516,
+          "max": 80.71471280273317
+        },
+        "link_2_duplex_kib_s": {
+          "count": 5,
+          "median": 63.331779707558084,
+          "p95": 66.46001196549936,
+          "min": 61.93818669240956,
+          "max": 66.46001196549936
+        }
+      },
+      "common_prefix_us": 8899545,
+      "rejected_messages": 0,
+      "dropped_observations": 0,
+      "max_buffered_payload_bytes": 192640
+    },
+    {
+      "scenario": "chat_bulk",
+      "variant": "packing",
+      "runs": 5,
+      "metrics": {
+        "chat_p95_ms": {
+          "count": 5,
+          "median": 2349.84,
+          "p95": 2400.534,
+          "min": 2299.349,
+          "max": 2400.534
+        },
+        "chat_p50_ms": {
+          "count": 5,
+          "median": 1674.519,
+          "p95": 1700.0700000000002,
+          "min": 1624.1385,
+          "max": 1700.0700000000002
+        },
+        "worst_producer_chat_p95_ms": {
+          "count": 5,
+          "median": 2349.84,
+          "p95": 2400.534,
+          "min": 2299.349,
+          "max": 2400.534
+        },
+        "bulk_goodput_kib_s": {
+          "count": 5,
+          "median": 7.377069866038711,
+          "p95": 7.4063785332773575,
+          "min": 7.234689505080441,
+          "max": 7.4063785332773575
+        },
+        "request_cell_wire_bytes": {
+          "count": 5,
+          "median": 278528,
+          "p95": 278528,
+          "min": 278528,
+          "max": 278528
+        },
+        "encoded_payload_bytes": {
+          "count": 5,
+          "median": 194720,
+          "p95": 194720,
+          "min": 194720,
+          "max": 194720
+        },
+        "batches": {
+          "count": 5,
+          "median": 20,
+          "p95": 20,
+          "min": 20,
+          "max": 20
+        },
+        "process_cpu_us": {
+          "count": 5,
+          "median": 170872,
+          "p95": 179600,
+          "min": 157267,
+          "max": 179600
+        },
+        "process_lifetime_peak_rss_kib": {
+          "count": 5,
+          "median": 51120,
+          "p95": 87728,
+          "min": 19616,
+          "max": 87728
+        },
+        "queue_us_p95": {
+          "count": 5,
+          "median": 22199377,
+          "p95": 22599563,
+          "min": 21999202,
+          "max": 22599563
+        },
+        "service_us_p95": {
+          "count": 5,
+          "median": 1699615,
+          "p95": 1699901,
+          "min": 1600235,
+          "max": 1699901
+        },
+        "link_0_duplex_kib_s": {
+          "count": 5,
+          "median": 80.71471280273317,
+          "p95": 80.71855341340485,
+          "min": 80.24791400852516,
+          "max": 80.71855341340485
+        },
+        "link_1_duplex_kib_s": {
+          "count": 5,
+          "median": 80.24791400852516,
+          "p95": 80.7108721920615,
+          "min": 80.24791400852516,
+          "max": 80.7108721920615
+        },
+        "link_2_duplex_kib_s": {
+          "count": 5,
+          "median": 21.73577149871145,
+          "p95": 22.18435482516241,
+          "min": 21.73577149871145,
+          "max": 22.18435482516241
+        }
+      },
+      "common_prefix_us": 8899545,
+      "rejected_messages": 0,
+      "dropped_observations": 0,
+      "max_buffered_payload_bytes": 192768
+    },
+    {
+      "scenario": "four_producers",
+      "variant": "baseline",
+      "runs": 5,
+      "metrics": {
+        "chat_p95_ms": {
+          "count": 5,
+          "median": 60349.546,
+          "p95": 64749.025,
+          "min": 58449.121,
+          "max": 64749.025
+        },
+        "chat_p50_ms": {
+          "count": 5,
+          "median": 35124.342,
+          "p95": 38124.582500000004,
+          "min": 33223.975,
+          "max": 38124.582500000004
+        },
+        "worst_producer_chat_p95_ms": {
+          "count": 5,
+          "median": 62049.36,
+          "p95": 66349.686,
+          "min": 60248.524,
+          "max": 66349.686
+        },
+        "bulk_goodput_kib_s": {
+          "count": 5,
+          "median": 4.80450294811224,
+          "p95": 5.050715654399023,
+          "min": 4.42957761179066,
+          "max": 5.050715654399023
+        },
+        "request_cell_wire_bytes": {
+          "count": 5,
+          "median": 393216,
+          "p95": 393216,
+          "min": 393216,
+          "max": 393216
+        },
+        "encoded_payload_bytes": {
+          "count": 5,
+          "median": 196352,
+          "p95": 196352,
+          "min": 196352,
+          "max": 196352
+        },
+        "batches": {
+          "count": 5,
+          "median": 48,
+          "p95": 48,
+          "min": 48,
+          "max": 48
+        },
+        "process_cpu_us": {
+          "count": 5,
+          "median": 401746,
+          "p95": 412110,
+          "min": 385550,
+          "max": 412110
+        },
+        "process_lifetime_peak_rss_kib": {
+          "count": 5,
+          "median": 54992,
+          "p95": 91072,
+          "min": 22784,
+          "max": 91072
+        },
+        "queue_us_p95": {
+          "count": 5,
+          "median": 57149071,
+          "p95": 61449180,
+          "min": 54948559,
+          "max": 61449180
+        },
+        "service_us_p95": {
+          "count": 5,
+          "median": 1800607,
+          "p95": 1999934,
+          "min": 1799666,
+          "max": 1999934
+        },
+        "link_0_duplex_kib_s": {
+          "count": 5,
+          "median": 80.26482620236729,
+          "p95": 80.7138651063605,
+          "min": 80.25088975544472,
+          "max": 80.7138651063605
+        },
+        "link_1_duplex_kib_s": {
+          "count": 5,
+          "median": 80.25088975544472,
+          "p95": 80.72154661253829,
+          "min": 80.25088975544472,
+          "max": 80.72154661253829
+        },
+        "link_2_duplex_kib_s": {
+          "count": 5,
+          "median": 19.94503079063715,
+          "p95": 20.855179536902973,
+          "min": 19.03488204437133,
+          "max": 20.855179536902973
+        }
+      },
+      "common_prefix_us": 8899215,
+      "rejected_messages": 0,
+      "dropped_observations": 0,
+      "max_buffered_payload_bytes": 195712
+    },
+    {
+      "scenario": "four_producers",
+      "variant": "combined",
+      "runs": 5,
+      "metrics": {
+        "chat_p95_ms": {
+          "count": 5,
+          "median": 3399.083,
+          "p95": 3599.673,
+          "min": 3298.963,
+          "max": 3599.673
+        },
+        "chat_p50_ms": {
+          "count": 5,
+          "median": 2399.1305,
+          "p95": 2599.4785,
+          "min": 2299.989,
+          "max": 2599.4785
+        },
+        "worst_producer_chat_p95_ms": {
+          "count": 5,
+          "median": 3649.083,
+          "p95": 3849.673,
+          "min": 3548.963,
+          "max": 3849.673
+        },
+        "bulk_goodput_kib_s": {
+          "count": 5,
+          "median": 20.82255857376003,
+          "p95": 21.0555993679331,
+          "min": 20.1476024917544,
+          "max": 21.0555993679331
+        },
+        "request_cell_wire_bytes": {
+          "count": 5,
+          "median": 294912,
+          "p95": 294912,
+          "min": 294912,
+          "max": 294912
+        },
+        "encoded_payload_bytes": {
+          "count": 5,
+          "median": 196352,
+          "p95": 196352,
+          "min": 196352,
+          "max": 196352
+        },
+        "batches": {
+          "count": 5,
+          "median": 24,
+          "p95": 24,
+          "min": 24,
+          "max": 24
+        },
+        "process_cpu_us": {
+          "count": 5,
+          "median": 68096,
+          "p95": 70773,
+          "min": 63195,
+          "max": 70773
+        },
+        "process_lifetime_peak_rss_kib": {
+          "count": 5,
+          "median": 54992,
+          "p95": 91072,
+          "min": 22784,
+          "max": 91072
+        },
+        "queue_us_p95": {
+          "count": 5,
+          "median": 6500224,
+          "p95": 6799498,
+          "min": 6498812,
+          "max": 6799498
+        },
+        "service_us_p95": {
+          "count": 5,
+          "median": 1799889,
+          "p95": 1900247,
+          "min": 1799369,
+          "max": 1900247
+        },
+        "link_0_duplex_kib_s": {
+          "count": 5,
+          "median": 80.7177058594494,
+          "p95": 80.72154661253829,
+          "min": 80.25088975544472,
+          "max": 80.72154661253829
+        },
+        "link_1_duplex_kib_s": {
+          "count": 5,
+          "median": 80.25088975544472,
+          "p95": 80.26482620236729,
+          "min": 80.25088975544472,
+          "max": 80.26482620236729
+        },
+        "link_2_duplex_kib_s": {
+          "count": 5,
+          "median": 65.10745874074286,
+          "p95": 65.11228711605462,
+          "min": 65.10745874074286,
+          "max": 65.11228711605462
+        }
+      },
+      "common_prefix_us": 8899215,
+      "rejected_messages": 0,
+      "dropped_observations": 0,
+      "max_buffered_payload_bytes": 195456
+    },
+    {
+      "scenario": "four_producers",
+      "variant": "concurrency",
+      "runs": 5,
+      "metrics": {
+        "chat_p95_ms": {
+          "count": 5,
+          "median": 12349.423,
+          "p95": 13249.795,
+          "min": 11749.162,
+          "max": 13249.795
+        },
+        "chat_p50_ms": {
+          "count": 5,
+          "median": 9223.85,
+          "p95": 9824.323,
+          "min": 8824.696,
+          "max": 9824.323
+        },
+        "worst_producer_chat_p95_ms": {
+          "count": 5,
+          "median": 12748.629,
+          "p95": 13649.095,
+          "min": 12149.41,
+          "max": 13649.095
+        },
+        "bulk_goodput_kib_s": {
+          "count": 5,
+          "median": 16.882578971501125,
+          "p95": 17.512366370947948,
+          "min": 16.154343011598883,
+          "max": 17.512366370947948
+        },
+        "request_cell_wire_bytes": {
+          "count": 5,
+          "median": 393216,
+          "p95": 393216,
+          "min": 393216,
+          "max": 393216
+        },
+        "encoded_payload_bytes": {
+          "count": 5,
+          "median": 196352,
+          "p95": 196352,
+          "min": 196352,
+          "max": 196352
+        },
+        "batches": {
+          "count": 5,
+          "median": 48,
+          "p95": 48,
+          "min": 48,
+          "max": 48
+        },
+        "process_cpu_us": {
+          "count": 5,
+          "median": 106789,
+          "p95": 110389,
+          "min": 95228,
+          "max": 110389
+        },
+        "process_lifetime_peak_rss_kib": {
+          "count": 5,
+          "median": 59040,
+          "p95": 88256,
+          "min": 20496,
+          "max": 88256
+        },
+        "queue_us_p95": {
+          "count": 5,
+          "median": 11348546,
+          "p95": 11949322,
+          "min": 10799584,
+          "max": 11949322
+        },
+        "service_us_p95": {
+          "count": 5,
+          "median": 2000066,
+          "p95": 2099941,
+          "min": 1999583,
+          "max": 2099941
+        },
+        "link_0_duplex_kib_s": {
+          "count": 5,
+          "median": 80.26482620236729,
+          "p95": 80.72154661253829,
+          "min": 80.25088975544472,
+          "max": 80.72154661253829
+        },
+        "link_1_duplex_kib_s": {
+          "count": 5,
+          "median": 80.25088975544472,
+          "p95": 80.26482620236729,
+          "min": 80.25088975544472,
+          "max": 80.26482620236729
+        },
+        "link_2_duplex_kib_s": {
+          "count": 5,
+          "median": 59.27960973945455,
+          "p95": 62.430344101979784,
+          "min": 57.03353733306814,
+          "max": 62.430344101979784
+        }
+      },
+      "common_prefix_us": 8899215,
+      "rejected_messages": 0,
+      "dropped_observations": 0,
+      "max_buffered_payload_bytes": 195456
+    },
+    {
+      "scenario": "four_producers",
+      "variant": "packing",
+      "runs": 5,
+      "metrics": {
+        "chat_p95_ms": {
+          "count": 5,
+          "median": 8149.386,
+          "p95": 8548.872,
+          "min": 7948.904,
+          "max": 8548.872
+        },
+        "chat_p50_ms": {
+          "count": 5,
+          "median": 2224.836,
+          "p95": 2323.28,
+          "min": 2148.4295,
+          "max": 2323.28
+        },
+        "worst_producer_chat_p95_ms": {
+          "count": 5,
+          "median": 8298.715,
+          "p95": 8798.872,
+          "min": 8100.02,
+          "max": 8798.872
+        },
+        "bulk_goodput_kib_s": {
+          "count": 5,
+          "median": 6.483740129273408,
+          "p95": 6.6213176639475355,
+          "min": 6.18412544980746,
+          "max": 6.6213176639475355
+        },
+        "request_cell_wire_bytes": {
+          "count": 5,
+          "median": 290816,
+          "p95": 290816,
+          "min": 290816,
+          "max": 290816
+        },
+        "encoded_payload_bytes": {
+          "count": 5,
+          "median": 196352,
+          "p95": 196352,
+          "min": 196352,
+          "max": 196352
+        },
+        "batches": {
+          "count": 5,
+          "median": 23,
+          "p95": 23,
+          "min": 23,
+          "max": 23
+        },
+        "process_cpu_us": {
+          "count": 5,
+          "median": 191361,
+          "p95": 242096,
+          "min": 176837,
+          "max": 242096
+        },
+        "process_lifetime_peak_rss_kib": {
+          "count": 5,
+          "median": 59040,
+          "p95": 89488,
+          "min": 21200,
+          "max": 89488
+        },
+        "queue_us_p95": {
+          "count": 5,
+          "median": 23798454,
+          "p95": 24699235,
+          "min": 23198376,
+          "max": 24699235
+        },
+        "service_us_p95": {
+          "count": 5,
+          "median": 1699989,
+          "p95": 1800015,
+          "min": 1600374,
+          "max": 1800015
+        },
+        "link_0_duplex_kib_s": {
+          "count": 5,
+          "median": 80.25088975544472,
+          "p95": 80.26482620236729,
+          "min": 80.25088975544472,
+          "max": 80.26482620236729
+        },
+        "link_1_duplex_kib_s": {
+          "count": 5,
+          "median": 80.7177058594494,
+          "p95": 80.7177058594494,
+          "min": 80.25088975544472,
+          "max": 80.7177058594494
+        },
+        "link_2_duplex_kib_s": {
+          "count": 5,
+          "median": 19.94503079063715,
+          "p95": 19.947444978293028,
+          "min": 19.03488204437133,
+          "max": 19.947444978293028
+        }
+      },
+      "common_prefix_us": 8899215,
+      "rejected_messages": 0,
+      "dropped_observations": 0,
+      "max_buffered_payload_bytes": 195456
+    },
+    {
+      "scenario": "idle",
+      "variant": "baseline",
+      "runs": 5,
+      "metrics": {
+        "request_cell_wire_bytes": {
+          "count": 5,
+          "median": 0,
+          "p95": 0,
+          "min": 0,
+          "max": 0
+        },
+        "encoded_payload_bytes": {
+          "count": 5,
+          "median": 0,
+          "p95": 0,
+          "min": 0,
+          "max": 0
+        },
+        "batches": {
+          "count": 5,
+          "median": 0,
+          "p95": 0,
+          "min": 0,
+          "max": 0
+        },
+        "process_cpu_us": {
+          "count": 5,
+          "median": 50252,
+          "p95": 53154,
+          "min": 47997,
+          "max": 53154
+        },
+        "process_lifetime_peak_rss_kib": {
+          "count": 5,
+          "median": 43376,
+          "p95": 76112,
+          "min": 7472,
+          "max": 76112
+        },
+        "link_0_duplex_kib_s": {
+          "count": 5,
+          "median": 80.23526040578155,
+          "p95": 80.71596031750893,
+          "min": 80.23526040578155,
+          "max": 80.71596031750893
+        },
+        "link_1_duplex_kib_s": {
+          "count": 5,
+          "median": 80.71168797192476,
+          "p95": 80.71596031750893,
+          "min": 80.23526040578155,
+          "max": 80.71596031750893
+        },
+        "link_2_duplex_kib_s": {
+          "count": 5,
+          "median": 0.0373525071073081,
+          "p95": 0.0373525071073081,
+          "min": 0.0373525071073081,
+          "max": 0.0373525071073081
+        }
+      },
+      "common_prefix_us": 8000216,
+      "rejected_messages": 0,
+      "dropped_observations": 0,
+      "max_buffered_payload_bytes": 0
+    },
+    {
+      "scenario": "idle",
+      "variant": "combined",
+      "runs": 5,
+      "metrics": {
+        "request_cell_wire_bytes": {
+          "count": 5,
+          "median": 0,
+          "p95": 0,
+          "min": 0,
+          "max": 0
+        },
+        "encoded_payload_bytes": {
+          "count": 5,
+          "median": 0,
+          "p95": 0,
+          "min": 0,
+          "max": 0
+        },
+        "batches": {
+          "count": 5,
+          "median": 0,
+          "p95": 0,
+          "min": 0,
+          "max": 0
+        },
+        "process_cpu_us": {
+          "count": 5,
+          "median": 48140,
+          "p95": 60317,
+          "min": 44727,
+          "max": 60317
+        },
+        "process_lifetime_peak_rss_kib": {
+          "count": 5,
+          "median": 43376,
+          "p95": 76464,
+          "min": 8352,
+          "max": 76464
+        },
+        "link_0_duplex_kib_s": {
+          "count": 5,
+          "median": 80.70741562634059,
+          "p95": 80.71168797192476,
+          "min": 80.23526040578155,
+          "max": 80.71168797192476
+        },
+        "link_1_duplex_kib_s": {
+          "count": 5,
+          "median": 80.23526040578155,
+          "p95": 80.73903098366344,
+          "min": 80.20791739404287,
+          "max": 80.73903098366344
+        },
+        "link_2_duplex_kib_s": {
+          "count": 5,
+          "median": 0.0373525071073081,
+          "p95": 0.0373525071073081,
+          "min": 0.0373525071073081,
+          "max": 0.0373525071073081
+        }
+      },
+      "common_prefix_us": 8000216,
+      "rejected_messages": 0,
+      "dropped_observations": 0,
+      "max_buffered_payload_bytes": 0
+    },
+    {
+      "scenario": "idle",
+      "variant": "concurrency",
+      "runs": 5,
+      "metrics": {
+        "request_cell_wire_bytes": {
+          "count": 5,
+          "median": 0,
+          "p95": 0,
+          "min": 0,
+          "max": 0
+        },
+        "encoded_payload_bytes": {
+          "count": 5,
+          "median": 0,
+          "p95": 0,
+          "min": 0,
+          "max": 0
+        },
+        "batches": {
+          "count": 5,
+          "median": 0,
+          "p95": 0,
+          "min": 0,
+          "max": 0
+        },
+        "process_cpu_us": {
+          "count": 5,
+          "median": 48373,
+          "p95": 51181,
+          "min": 47731,
+          "max": 51181
+        },
+        "process_lifetime_peak_rss_kib": {
+          "count": 5,
+          "median": 43376,
+          "p95": 76112,
+          "min": 8000,
+          "max": 76112
+        },
+        "link_0_duplex_kib_s": {
+          "count": 5,
+          "median": 80.23526040578155,
+          "p95": 80.71168797192476,
+          "min": 80.23526040578155,
+          "max": 80.71168797192476
+        },
+        "link_1_duplex_kib_s": {
+          "count": 5,
+          "median": 80.70741562634059,
+          "p95": 80.71168797192476,
+          "min": 80.23526040578155,
+          "max": 80.71168797192476
+        },
+        "link_2_duplex_kib_s": {
+          "count": 5,
+          "median": 0.0373525071073081,
+          "p95": 0.04003798147450019,
+          "min": 0.0373525071073081,
+          "max": 0.04003798147450019
+        }
+      },
+      "common_prefix_us": 8000216,
+      "rejected_messages": 0,
+      "dropped_observations": 0,
+      "max_buffered_payload_bytes": 0
+    },
+    {
+      "scenario": "idle",
+      "variant": "packing",
+      "runs": 5,
+      "metrics": {
+        "request_cell_wire_bytes": {
+          "count": 5,
+          "median": 0,
+          "p95": 0,
+          "min": 0,
+          "max": 0
+        },
+        "encoded_payload_bytes": {
+          "count": 5,
+          "median": 0,
+          "p95": 0,
+          "min": 0,
+          "max": 0
+        },
+        "batches": {
+          "count": 5,
+          "median": 0,
+          "p95": 0,
+          "min": 0,
+          "max": 0
+        },
+        "process_cpu_us": {
+          "count": 5,
+          "median": 49208,
+          "p95": 55986,
+          "min": 43382,
+          "max": 55986
+        },
+        "process_lifetime_peak_rss_kib": {
+          "count": 5,
+          "median": 43376,
+          "p95": 76112,
+          "min": 8176,
+          "max": 76112
+        },
+        "link_0_duplex_kib_s": {
+          "count": 5,
+          "median": 80.23526040578155,
+          "p95": 80.71596031750893,
+          "min": 80.23526040578155,
+          "max": 80.71596031750893
+        },
+        "link_1_duplex_kib_s": {
+          "count": 5,
+          "median": 80.70741562634059,
+          "p95": 80.71596031750893,
+          "min": 80.23526040578155,
+          "max": 80.71596031750893
+        },
+        "link_2_duplex_kib_s": {
+          "count": 5,
+          "median": 0.0373525071073081,
+          "p95": 0.0373525071073081,
+          "min": 0.0373525071073081,
+          "max": 0.0373525071073081
+        }
+      },
+      "common_prefix_us": 8000216,
+      "rejected_messages": 0,
+      "dropped_observations": 0,
+      "max_buffered_payload_bytes": 0
+    },
+    {
+      "scenario": "sparse_chat",
+      "variant": "baseline",
+      "runs": 5,
+      "metrics": {
+        "chat_p95_ms": {
+          "count": 5,
+          "median": 999.62,
+          "p95": 1099.437,
+          "min": 999.279,
+          "max": 1099.437
+        },
+        "chat_p50_ms": {
+          "count": 5,
+          "median": 899.1695,
+          "p95": 899.784,
+          "min": 800.16,
+          "max": 899.784
+        },
+        "worst_producer_chat_p95_ms": {
+          "count": 5,
+          "median": 999.62,
+          "p95": 1099.437,
+          "min": 999.279,
+          "max": 1099.437
+        },
+        "request_cell_wire_bytes": {
+          "count": 5,
+          "median": 81920,
+          "p95": 81920,
+          "min": 81920,
+          "max": 81920
+        },
+        "encoded_payload_bytes": {
+          "count": 5,
+          "median": 2720,
+          "p95": 2720,
+          "min": 2720,
+          "max": 2720
+        },
+        "batches": {
+          "count": 5,
+          "median": 20,
+          "p95": 20,
+          "min": 20,
+          "max": 20
+        },
+        "process_cpu_us": {
+          "count": 5,
+          "median": 127658,
+          "p95": 130363,
+          "min": 126938,
+          "max": 130363
+        },
+        "process_lifetime_peak_rss_kib": {
+          "count": 5,
+          "median": 44080,
+          "p95": 79456,
+          "min": 11696,
+          "max": 79456
+        },
+        "queue_us_p95": {
+          "count": 5,
+          "median": 1569,
+          "p95": 1870,
+          "min": 1312,
+          "max": 1870
+        },
+        "service_us_p95": {
+          "count": 5,
+          "median": 998544,
+          "p95": 1097683,
+          "min": 998286,
+          "max": 1097683
+        },
+        "link_0_duplex_kib_s": {
+          "count": 5,
+          "median": 80.2398736366913,
+          "p95": 80.7063569943494,
+          "min": 80.2398736366913,
+          "max": 80.7063569943494
+        },
+        "link_1_duplex_kib_s": {
+          "count": 5,
+          "median": 80.70806590344695,
+          "p95": 80.70806590344695,
+          "min": 80.2398736366913,
+          "max": 80.70806590344695
+        },
+        "link_2_duplex_kib_s": {
+          "count": 5,
+          "median": 8.115609304285146,
+          "p95": 8.115609304285146,
+          "min": 8.115609304285146,
+          "max": 8.115609304285146
+        }
+      },
+      "common_prefix_us": 20000881,
+      "rejected_messages": 0,
+      "dropped_observations": 0,
+      "max_buffered_payload_bytes": 256
+    },
+    {
+      "scenario": "sparse_chat",
+      "variant": "combined",
+      "runs": 5,
+      "metrics": {
+        "chat_p95_ms": {
+          "count": 5,
+          "median": 999.944,
+          "p95": 1098.789,
+          "min": 999.649,
+          "max": 1098.789
+        },
+        "chat_p50_ms": {
+          "count": 5,
+          "median": 899.231,
+          "p95": 998.692,
+          "min": 898.7945,
+          "max": 998.692
+        },
+        "worst_producer_chat_p95_ms": {
+          "count": 5,
+          "median": 999.944,
+          "p95": 1098.789,
+          "min": 999.649,
+          "max": 1098.789
+        },
+        "request_cell_wire_bytes": {
+          "count": 5,
+          "median": 81920,
+          "p95": 81920,
+          "min": 81920,
+          "max": 81920
+        },
+        "encoded_payload_bytes": {
+          "count": 5,
+          "median": 2720,
+          "p95": 2720,
+          "min": 2720,
+          "max": 2720
+        },
+        "batches": {
+          "count": 5,
+          "median": 20,
+          "p95": 20,
+          "min": 20,
+          "max": 20
+        },
+        "process_cpu_us": {
+          "count": 5,
+          "median": 126379,
+          "p95": 131139,
+          "min": 101093,
+          "max": 131139
+        },
+        "process_lifetime_peak_rss_kib": {
+          "count": 5,
+          "median": 43376,
+          "p95": 78752,
+          "min": 10816,
+          "max": 78752
+        },
+        "queue_us_p95": {
+          "count": 5,
+          "median": 1589,
+          "p95": 1805,
+          "min": 1477,
+          "max": 1805
+        },
+        "service_us_p95": {
+          "count": 5,
+          "median": 998579,
+          "p95": 1097719,
+          "min": 998142,
+          "max": 1097719
+        },
+        "link_0_duplex_kib_s": {
+          "count": 5,
+          "median": 80.7063569943494,
+          "p95": 80.70806590344695,
+          "min": 80.2398736366913,
+          "max": 80.70806590344695
+        },
+        "link_1_duplex_kib_s": {
+          "count": 5,
+          "median": 80.2398736366913,
+          "p95": 80.70806590344695,
+          "min": 80.2398736366913,
+          "max": 80.70806590344695
+        },
+        "link_2_duplex_kib_s": {
+          "count": 5,
+          "median": 8.115609304285146,
+          "p95": 8.115609304285146,
+          "min": 8.115609304285146,
+          "max": 8.115609304285146
+        }
+      },
+      "common_prefix_us": 20000881,
+      "rejected_messages": 0,
+      "dropped_observations": 0,
+      "max_buffered_payload_bytes": 256
+    },
+    {
+      "scenario": "sparse_chat",
+      "variant": "concurrency",
+      "runs": 5,
+      "metrics": {
+        "chat_p95_ms": {
+          "count": 5,
+          "median": 999.921,
+          "p95": 1099.694,
+          "min": 999.328,
+          "max": 1099.694
+        },
+        "chat_p50_ms": {
+          "count": 5,
+          "median": 899.0905,
+          "p95": 899.4285,
+          "min": 800.2394999999999,
+          "max": 899.4285
+        },
+        "worst_producer_chat_p95_ms": {
+          "count": 5,
+          "median": 999.921,
+          "p95": 1099.694,
+          "min": 999.328,
+          "max": 1099.694
+        },
+        "request_cell_wire_bytes": {
+          "count": 5,
+          "median": 81920,
+          "p95": 81920,
+          "min": 81920,
+          "max": 81920
+        },
+        "encoded_payload_bytes": {
+          "count": 5,
+          "median": 2720,
+          "p95": 2720,
+          "min": 2720,
+          "max": 2720
+        },
+        "batches": {
+          "count": 5,
+          "median": 20,
+          "p95": 20,
+          "min": 20,
+          "max": 20
+        },
+        "process_cpu_us": {
+          "count": 5,
+          "median": 128814,
+          "p95": 135180,
+          "min": 125142,
+          "max": 135180
+        },
+        "process_lifetime_peak_rss_kib": {
+          "count": 5,
+          "median": 44784,
+          "p95": 76992,
+          "min": 8528,
+          "max": 76992
+        },
+        "queue_us_p95": {
+          "count": 5,
+          "median": 1657,
+          "p95": 1833,
+          "min": 1405,
+          "max": 1833
+        },
+        "service_us_p95": {
+          "count": 5,
+          "median": 998653,
+          "p95": 1098181,
+          "min": 998044,
+          "max": 1098181
+        },
+        "link_0_duplex_kib_s": {
+          "count": 5,
+          "median": 80.7063569943494,
+          "p95": 80.70806590344695,
+          "min": 80.2398736366913,
+          "max": 80.70806590344695
+        },
+        "link_1_duplex_kib_s": {
+          "count": 5,
+          "median": 80.2398736366913,
+          "p95": 80.7063569943494,
+          "min": 80.2398736366913,
+          "max": 80.7063569943494
+        },
+        "link_2_duplex_kib_s": {
+          "count": 5,
+          "median": 8.115609304285146,
+          "p95": 8.115609304285146,
+          "min": 8.115609304285146,
+          "max": 8.115609304285146
+        }
+      },
+      "common_prefix_us": 20000881,
+      "rejected_messages": 0,
+      "dropped_observations": 0,
+      "max_buffered_payload_bytes": 256
+    },
+    {
+      "scenario": "sparse_chat",
+      "variant": "packing",
+      "runs": 5,
+      "metrics": {
+        "chat_p95_ms": {
+          "count": 5,
+          "median": 999.999,
+          "p95": 1099.47,
+          "min": 998.953,
+          "max": 1099.47
+        },
+        "chat_p50_ms": {
+          "count": 5,
+          "median": 899.289,
+          "p95": 899.351,
+          "min": 898.2825,
+          "max": 899.351
+        },
+        "worst_producer_chat_p95_ms": {
+          "count": 5,
+          "median": 999.999,
+          "p95": 1099.47,
+          "min": 998.953,
+          "max": 1099.47
+        },
+        "request_cell_wire_bytes": {
+          "count": 5,
+          "median": 81920,
+          "p95": 81920,
+          "min": 81920,
+          "max": 81920
+        },
+        "encoded_payload_bytes": {
+          "count": 5,
+          "median": 2720,
+          "p95": 2720,
+          "min": 2720,
+          "max": 2720
+        },
+        "batches": {
+          "count": 5,
+          "median": 20,
+          "p95": 20,
+          "min": 20,
+          "max": 20
+        },
+        "process_cpu_us": {
+          "count": 5,
+          "median": 128918,
+          "p95": 141158,
+          "min": 126393,
+          "max": 141158
+        },
+        "process_lifetime_peak_rss_kib": {
+          "count": 5,
+          "median": 45664,
+          "p95": 78048,
+          "min": 9936,
+          "max": 78048
+        },
+        "queue_us_p95": {
+          "count": 5,
+          "median": 1684,
+          "p95": 2003,
+          "min": 1295,
+          "max": 2003
+        },
+        "service_us_p95": {
+          "count": 5,
+          "median": 998498,
+          "p95": 1000707,
+          "min": 997969,
+          "max": 1000707
+        },
+        "link_0_duplex_kib_s": {
+          "count": 5,
+          "median": 80.7063569943494,
+          "p95": 80.7063569943494,
+          "min": 80.2398736366913,
+          "max": 80.7063569943494
+        },
+        "link_1_duplex_kib_s": {
+          "count": 5,
+          "median": 80.2398736366913,
+          "p95": 80.70806590344695,
+          "min": 80.2398736366913,
+          "max": 80.70806590344695
+        },
+        "link_2_duplex_kib_s": {
+          "count": 5,
+          "median": 8.115609304285146,
+          "p95": 8.116683475717895,
+          "min": 8.115609304285146,
+          "max": 8.116683475717895
+        }
+      },
+      "common_prefix_us": 20000881,
+      "rejected_messages": 0,
+      "dropped_observations": 0,
+      "max_buffered_payload_bytes": 256
+    }
+  ],
+  "candidates": [
+    {
+      "variant": "concurrency",
+      "meets_performance_gate": true,
+      "reasons": [],
+      "bulk_goodput_ratio_to_baseline": {
+        "bulk": 3.0136475682337873,
+        "chat_bulk": 3.8785337850915855
+      }
+    },
+    {
+      "variant": "packing",
+      "meets_performance_gate": false,
+      "reasons": [
+        "bulk:bulk_gain_below_20_percent"
+      ],
+      "bulk_goodput_ratio_to_baseline": {
+        "bulk": 1.004487287595054,
+        "chat_bulk": 1.633865953512511
+      }
+    },
+    {
+      "variant": "combined",
+      "meets_performance_gate": true,
+      "reasons": [],
+      "bulk_goodput_ratio_to_baseline": {
+        "bulk": 3.054605242520797,
+        "chat_bulk": 4.611039216520692
+      }
+    }
+  ],
+  "performance_ranking": [
+    "combined",
+    "concurrency"
+  ],
+  "production_recommendation": null,
+  "acceptance": {
+    "bulk_gain_minimum": 1.2,
+    "chat_p95_tolerance": "max(5% of baseline, 20 ms); also checks worst producer"
+  },
+  "limitations": [
+    "Generated transport echoes, not application acknowledgements or durable delivery.",
+    "Logical producers share one client; this is not a multi-client anonymity population.",
+    "Application scheduling and admission wait are not measured by this transport comparison.",
+    "Packing has no intentional timer; queue/backpressure wait remains part of completion latency.",
+    "Cell bytes include ordinary framing and padding; they are not an isolated privacy-overhead measurement.",
+    "Fixed carrier traffic is paid while idle; packing savings in cells do not imply the same interface-byte savings.",
+    "TCP read chunks are not packets; byte rates are descriptive and not unlinkability evidence.",
+    "RSS is process-lifetime peak, not per-case allocation. Buffered payload excludes copies and crypto state.",
+    "Five repeats give descriptive ranges, not a statistical anonymity bound or an Internet performance guarantee."
+  ],
+  "input_sha256": "f589406eb050b4099efcde60b77873f0d5597a4706eda69e1f6c3369adf59bb4"
+}

@@ -33,6 +33,21 @@ a temporary project. It keeps package metadata free of private sibling paths. Us
 `--gchat /path/to/gchat` to qualify GChat against those same extracted Rust packages.
 This staging check does not publish anything or require registry credentials.
 
+## Current-source GChat integration and relay research
+
+Use `python3 scripts/check-gchat.py --gchat /path/to/gchat --offline` to test the
+standalone application against this exact GComs worktree. `--action check` and
+`--action clippy` provide build/lint variants. The runner snapshots both sources and uses
+temporary Cargo source overrides, preserving the application's registry manifests
+and lockfiles. Retain the summary under `target/gchat-source-check`.
+
+Run `python3 scripts/check-research-import.py` and
+`python3 -m unittest discover -s scripts/tests -p '*_test.py'` for imported research
+and its analyzers. The Rust harness gate is
+`cargo test --offline --locked -p gcoms-node --example relay_performance`.
+The [research guide](docs/RELAY_RESEARCH.md) distinguishes historical performance
+results, quick harness checks and pending GC/2 application/privacy qualification.
+
 ## Browser and transport
 
 `crates/rpc/tests/gc_peers.rs` uses two real disposable persistent peers, with

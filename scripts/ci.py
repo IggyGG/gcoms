@@ -6,6 +6,8 @@ root=Path(__file__).resolve().parents[1]
 def run(args):
     subprocess.run(args,cwd=root,check=True)
 run([sys.executable,'scripts/check-source.py'])
+run([sys.executable,'scripts/check-research-import.py'])
+run([sys.executable,'-m','unittest','discover','-s','scripts/tests','-p','*_test.py'])
 run(['cargo','fmt','--all','--','--check'])
 run(['cargo','test','--workspace','--all-features','--locked','--','--test-threads=1'])
 run(['cargo','doc','--workspace','--all-features','--no-deps','--locked'])
