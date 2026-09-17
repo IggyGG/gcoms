@@ -34,6 +34,7 @@ fn operator_preserves_keys_signs_and_revokes_without_exposing_secret_output() {
     assert!(output.status.success());
     assert!(output.stdout.is_empty());
     assert!(output.stderr.is_empty());
+    gcoms_private_fs::validate_private_file(std::path::Path::new(&seed), "signing seed").unwrap();
     let original = std::fs::read(&seed).unwrap();
     assert_eq!(original.len(), 32);
     assert!(!run(&["keygen", &seed, &public]).status.success());

@@ -251,7 +251,31 @@ impl Tp1Server {
         } else {
             TcpSocket::new_v6()?
         };
+        // Windows SO_REUSEADDR permits multiple live owners of the same port.
+        #[cfg(unix)]
         socket.set_reuseaddr(true)?;
+        #[cfg(windows)]
+        {
+            use std::os::windows::io::AsRawSocket;
+            use windows_sys::Win32::Networking::WinSock::{
+                setsockopt, WSAGetLastError, SOCKET_ERROR, SOL_SOCKET, SO_EXCLUSIVEADDRUSE,
+            };
+            let exclusive = 1i32;
+            // SAFETY: the socket is live and unbound; the option points to an
+            // initialized integer of the exact size required by Winsock.
+            if unsafe {
+                setsockopt(
+                    socket.as_raw_socket() as _,
+                    SOL_SOCKET,
+                    SO_EXCLUSIVEADDRUSE,
+                    (&exclusive as *const i32).cast(),
+                    std::mem::size_of::<i32>() as i32,
+                )
+            } == SOCKET_ERROR
+            {
+                return Err(io::Error::from_raw_os_error(unsafe { WSAGetLastError() }));
+            }
+        }
         socket.bind(addr)?;
         socket.listen(1024)
     }

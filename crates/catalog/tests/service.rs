@@ -513,6 +513,9 @@ async fn idempotent_join_response_survives_restart_in_owner_only_state() {
     assert_eq!(replay, first);
     assert_eq!(calls.load(Ordering::SeqCst), 1);
 
+    gcoms_private_fs::validate_private_dir(&state_dir, "catalog state").unwrap();
+    gcoms_private_fs::validate_private_file(&state_dir.join("state.json"), "catalog snapshot")
+        .unwrap();
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;

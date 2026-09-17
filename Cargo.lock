@@ -915,6 +915,7 @@ dependencies = [
  "gcoms-crypto",
  "gcoms-network",
  "gcoms-node",
+ "gcoms-private-fs",
  "gcoms-routing",
  "gcoms-sdk",
  "gcoms-transport",
@@ -926,6 +927,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2 0.10.9",
+ "tempfile",
  "tokio",
  "tokio-rustls",
  "tower",
@@ -1247,6 +1249,7 @@ dependencies = [
  "sha2 0.10.9",
  "tokio",
  "tokio-rustls",
+ "windows-sys 0.61.2",
  "x509-parser",
  "zeroize",
 ]

@@ -1,4 +1,5 @@
 pub mod network;
+pub mod persistence;
 use axum::extract::{ConnectInfo, Path as AxumPath, Query, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
@@ -950,26 +951,9 @@ fn prepare_state(state_dir: Option<&Path>, ephemeral: bool) -> Result<Option<Pat
     };
     std::fs::create_dir_all(directory)
         .map_err(|error| format!("create state directory {}: {error}", directory.display()))?;
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::{MetadataExt, PermissionsExt};
-        std::fs::set_permissions(directory, std::fs::Permissions::from_mode(0o700))
-            .map_err(|error| format!("secure state directory {}: {error}", directory.display()))?;
-        let metadata = std::fs::metadata(directory)
-            .map_err(|error| format!("inspect state directory {}: {error}", directory.display()))?;
-        if metadata.uid() != unsafe { libc_geteuid() } || metadata.mode() & 0o077 != 0 {
-            return Err("state_dir must be owner-only and owned by the catalog user".into());
-        }
-    }
+    gcoms_private_fs::make_private(directory, true)?;
+    gcoms_private_fs::validate_private_dir(directory, "state directory")?;
     Ok(Some(directory.join("state.json")))
-}
-
-#[cfg(unix)]
-unsafe fn libc_geteuid() -> u32 {
-    unsafe extern "C" {
-        fn geteuid() -> u32;
-    }
-    unsafe { geteuid() }
 }
 
 fn persist(config: &RuntimeConfig, inner: &Inner) -> Result<(), String> {
@@ -991,29 +975,7 @@ fn persist(config: &RuntimeConfig, inner: &Inner) -> Result<(), String> {
             .collect(),
     };
     let bytes = serde_json::to_vec(&snapshot).map_err(|error| format!("encode state: {error}"))?;
-    let temporary = path.with_extension(format!("tmp-{}", std::process::id()));
-    let mut options = std::fs::OpenOptions::new();
-    options.write(true).create(true).truncate(true);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::OpenOptionsExt;
-        options.mode(0o600);
-    }
-    let mut file = options
-        .open(&temporary)
-        .map_err(|error| format!("create state file: {error}"))?;
-    use std::io::Write;
-    file.write_all(&bytes)
-        .map_err(|error| format!("write state: {error}"))?;
-    file.sync_all()
-        .map_err(|error| format!("sync state: {error}"))?;
-    std::fs::rename(&temporary, path).map_err(|error| format!("replace state: {error}"))?;
-    if let Some(parent) = path.parent() {
-        std::fs::File::open(parent)
-            .and_then(|directory| directory.sync_all())
-            .map_err(|error| format!("sync state directory: {error}"))?;
-    }
-    Ok(())
+    persistence::atomic_bytes(path, &bytes)
 }
 
 impl OwnerClient {

@@ -33,26 +33,7 @@ fn signer(path: &str) -> Result<IdentityKeypair, String> {
     Ok(IdentityKeypair::from_seed(seed))
 }
 fn new_file(path: &str, bytes: &[u8]) -> Result<(), String> {
-    use std::io::Write;
-    let mut options = std::fs::OpenOptions::new();
-    options.write(true).create_new(true);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::OpenOptionsExt;
-        options.mode(0o600);
-    }
-    let mut file = options
-        .open(path)
-        .map_err(|_| "output must be a new file in an existing private directory")?;
-    file.write_all(bytes)
-        .and_then(|_| file.sync_all())
-        .map_err(|_| "cannot write output")
-        .and_then(|_| {
-            File::open(Path::new(path).parent().ok_or("output needs a parent")?)
-                .and_then(|f| f.sync_all())
-                .map_err(|_| "cannot sync output directory")
-        })
-        .map_err(String::from)
+    gcoms_catalog::persistence::create_new(Path::new(path), bytes)
 }
 fn lock(path: &str) -> Result<File, String> {
     let file = std::fs::OpenOptions::new()

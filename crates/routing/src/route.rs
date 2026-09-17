@@ -94,12 +94,17 @@ impl OnionConnector {
     ) -> Result<BoxStream> {
         // Bounded reconstruction only. A terminal stream is never returned until
         // both intermediaries have independently authenticated and extended.
+        // Keep this round's failures excluded even when slow OS connection
+        // attempts outlive the directory's cooldown. Otherwise a dead preferred
+        // entry can consume the bounded retries before volunteers are tried.
+        let mut unavailable = excluded.to_vec();
         for _ in 0..4 {
-            let [entry, middle] = self.directory.path(excluded, now_unix())?;
+            let [entry, middle] = self.directory.path(&unavailable, now_unix())?;
             let raw = match self.first_hop.connect(entry.addr, entry.service_id).await {
                 Ok(raw) => raw,
                 Err(_) => {
                     self.directory.failed(entry.service_id);
+                    unavailable.push((entry.addr, entry.service_id));
                     continue;
                 }
             };
@@ -113,6 +118,7 @@ impl OnionConnector {
                 // ambiguous extension failure into permanent middle eviction.
                 Err(_) => {
                     self.directory.failed(entry.service_id);
+                    unavailable.push((entry.addr, entry.service_id));
                     continue;
                 }
             };
@@ -120,6 +126,7 @@ impl OnionConnector {
                 Ok(stream) => stream,
                 Err(_) => {
                     self.directory.failed(middle.service_id);
+                    unavailable.push((middle.addr, middle.service_id));
                     continue;
                 }
             };
