@@ -8,9 +8,39 @@ fn arguments(values: &[&str]) -> Vec<String> {
     values.iter().map(|value| (*value).into()).collect()
 }
 
+// Configuration is explicitly supplied; these tests never use GChat's network.
+fn network_config(directory: &Path) -> PathBuf {
+    let signer = gcoms_crypto::IdentityKeypair::from_seed([7; 32]);
+    let now = gcoms_network_client::now_unix();
+    let defaults = gcoms_network::NetworkDefaults {
+        version: 1,
+        network_id: "example.test".into(),
+        sequence: 1,
+        issued_at: now - 10,
+        expires_at: now + 3600,
+        provider_urls: vec!["https://bootstrap.example/".into()],
+        founders: vec![gcoms_network::Founder {
+            name: "r1.relays.example.test".into(),
+            service_id: [3; 32],
+            address_hints: vec!["8.8.8.8:443".parse().unwrap()],
+        }],
+        dns_domain: "example.test".into(),
+    };
+    let installed = gcoms_network_client::InstalledNetwork {
+        trusted_key_b64: gcoms_transport::encode_b64url(&signer.public_bytes()),
+        signed_defaults: gcoms_network::SignedNetworkDefaults::sign(defaults, &signer, vec![])
+            .unwrap(),
+    };
+    let path = directory.join("installed.json");
+    std::fs::write(&path, serde_json::to_vec(&installed).unwrap()).unwrap();
+    path
+}
+
 #[test]
 fn flags_validate_before_network_state_changes() {
     for values in [
+        vec!["--network-config"],
+        vec!["--network-config", "a", "--network-config", "b"],
         vec!["--dns-opt-in", "--dns-opt-out"],
         vec!["--dns-opt-in", "--dns-opt-in"],
         vec!["--dns-server-label", "r9"],
@@ -36,28 +66,27 @@ fn consent_and_server_selection_survive_restart_and_explicit_opt_out() {
     let directory = tempfile::tempdir().unwrap();
     gcoms_private_fs::make_private(directory.path(), true).unwrap();
     let profile = directory.path().join("identity");
-    let network = Selection::default().open(&profile).unwrap();
+    let config = network_config(directory.path());
+    let default = || Selection {
+        network_config: Some(config.clone()),
+        ..Default::default()
+    };
+    let network = default().open(&profile).unwrap();
     let initial = network.name_status().unwrap();
     assert!(!initial.opted_in);
     assert!(initial.server_label.is_none());
     drop(network);
 
-    let selection =
+    let mut selection =
         Selection::parse(&arguments(&["--dns-server-label", "r1", "--dns-opt-in"])).unwrap();
+    selection.network_config = Some(config.clone());
     selection.open(&profile).unwrap();
-    let retained = Selection::default()
-        .open(&profile)
-        .unwrap()
-        .name_status()
-        .unwrap();
+    let retained = default().open(&profile).unwrap().name_status().unwrap();
     assert!(retained.opted_in);
     assert_eq!(retained.server_label.as_deref(), Some("r1"));
-    let withdrawn = Selection::parse(&arguments(&["--dns-opt-out"]))
-        .unwrap()
-        .open(&profile)
-        .unwrap()
-        .name_status()
-        .unwrap();
+    let mut withdrawal = Selection::parse(&arguments(&["--dns-opt-out"])).unwrap();
+    withdrawal.network_config = Some(config.clone());
+    let withdrawn = withdrawal.open(&profile).unwrap().name_status().unwrap();
     assert!(!withdrawn.opted_in);
     assert_eq!(withdrawn.server_label, retained.server_label);
 }
@@ -67,10 +96,16 @@ fn consent_withdrawal_survives_unreadable_invitation() {
     let directory = tempfile::tempdir().unwrap();
     gcoms_private_fs::make_private(directory.path(), true).unwrap();
     let profile = directory.path().join("identity");
-    let network = Selection::default().open(&profile).unwrap();
+    let config = network_config(directory.path());
+    let default = || Selection {
+        network_config: Some(config.clone()),
+        ..Default::default()
+    };
+    let network = default().open(&profile).unwrap();
     network.configure_opt_in(true).unwrap();
     let selection = Selection {
         invitation: Some(directory.path().join("missing")),
+        network_config: Some(config),
         opted_in: Some(false),
         ..Default::default()
     };

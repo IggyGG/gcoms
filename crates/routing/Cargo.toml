@@ -29,4 +29,4 @@ url = "2"
 
 [dev-dependencies]
 gcoms-core = { version = "0.1.0", path = "../core" }
-rcgen = "0.13"
+rcgen = { version = "0.13", default-features = false, features = ["aws_lc_rs", "pem"] }

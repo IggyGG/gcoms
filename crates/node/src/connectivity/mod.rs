@@ -169,7 +169,7 @@ mod tests {
     #[tokio::test]
     async fn occupied_candidates_fall_through_to_a_held_os_port() {
         let mut occupied = Vec::new();
-        let ip = "127.238.23.81".parse().unwrap();
+        let ip = "127.0.0.1".parse().unwrap();
         for port in [443, 8443, 4433] {
             match Tp1Server::bind_listener(SocketAddr::new(ip, port)) {
                 Ok(socket) => occupied.push(socket),
@@ -197,7 +197,7 @@ mod tests {
     }
     #[tokio::test]
     async fn prior_os_selected_port_is_reused_and_exclusively_retained() {
-        let ip = "127.238.23.82".parse().unwrap();
+        let ip = "127.0.0.1".parse().unwrap();
         let initial = Tp1Server::bind_listener(SocketAddr::new(ip, 0)).unwrap();
         let address = initial.local_addr().unwrap();
         drop(initial);

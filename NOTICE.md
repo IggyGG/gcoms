@@ -13,3 +13,7 @@ licenses remain their own; Cargo.lock and package-lock.json record the resolved
 versions. Preserve the notices included in distributed dependencies. In GChat,
 Fixedsys Excelsior is a separately licensed asset; see its bundled font README
 and LICENSE-CC0. Neither project license relicenses that asset.
+
+`webpki-roots` supplies trust-root data under CDLA-Permissive-2.0. Its license
+is preserved in `third-party/LICENSE-webpki-roots` and must accompany artifacts
+that distribute this data. The project's MIT/Apache choice does not relicense it.

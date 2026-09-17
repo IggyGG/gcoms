@@ -13,6 +13,7 @@ use gcoms_sdk::{
     PublicChannelDescriptor,
 };
 use rcgen::{BasicConstraints, CertificateParams, ExtendedKeyUsagePurpose, IsCa, KeyPair};
+use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer};
 use serde_json::{json, Value};
 use std::path::{Path, PathBuf};
@@ -112,7 +113,7 @@ fn now() -> u64 {
 
 fn read_certs(path: &Path) -> Vec<CertificateDer<'static>> {
     let bytes = std::fs::read(path).unwrap();
-    rustls_pemfile::certs(&mut bytes.as_slice())
+    rustls::pki_types::CertificateDer::pem_slice_iter(&bytes)
         .collect::<Result<Vec<_>, _>>()
         .unwrap()
 }
@@ -130,7 +131,9 @@ async fn fake_owner(pki: &TestPki) -> (String, Arc<AtomicUsize>) {
     .build()
     .unwrap();
     let key_bytes = std::fs::read(&pki.server_key).unwrap();
-    let key: PrivateKeyDer<'static> = rustls_pemfile::private_key(&mut key_bytes.as_slice())
+    let key: PrivateKeyDer<'static> = rustls::pki_types::PrivateKeyDer::pem_slice_iter(&key_bytes)
+        .next()
+        .transpose()
         .unwrap()
         .unwrap();
     let config = rustls::ServerConfig::builder_with_provider(provider)
@@ -587,7 +590,9 @@ async fn fake_relay(pki: &TestPki, card: RelayCard) -> (String, Arc<AtomicUsize>
     .build()
     .unwrap();
     let key_bytes = std::fs::read(&pki.server_key).unwrap();
-    let key: PrivateKeyDer<'static> = rustls_pemfile::private_key(&mut key_bytes.as_slice())
+    let key: PrivateKeyDer<'static> = rustls::pki_types::PrivateKeyDer::pem_slice_iter(&key_bytes)
+        .next()
+        .transpose()
         .unwrap()
         .unwrap();
     let config = rustls::ServerConfig::builder_with_provider(provider)

@@ -967,12 +967,14 @@ fn igd_service(body: &[u8], location: &Url, gateway: Ipv4Addr) -> Result<(String
         match reader.read_event().map_err(|e| e.to_string())? {
             Event::Start(e) if e.local_name().as_ref() == b"URLBase" => {
                 let text = reader.read_text(e.name()).map_err(|e| e.to_string())?;
+                let text = text.decode().map_err(|e| e.to_string())?;
                 if !text.trim().is_empty() {
                     base = pinned_url(text.trim(), Some(location), gateway)?;
                 }
             }
             Event::Start(e) if e.local_name().as_ref() == b"service" => {
                 let raw = reader.read_text(e.name()).map_err(|e| e.to_string())?;
+                let raw = raw.decode().map_err(|e| e.to_string())?;
                 let fields = xml_fields(format!("<service>{raw}</service>").as_bytes())?;
                 if let (Some(service), Some(control)) =
                     (fields.get("serviceType"), fields.get("controlURL"))

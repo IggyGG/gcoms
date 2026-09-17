@@ -8,6 +8,7 @@ use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine;
 use gcoms_sdk::{CatalogResponse, ChannelId, ChannelVisibility, PublicChannelDescriptor};
 use reqwest::Url;
+use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::ServerName;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -1027,7 +1028,9 @@ impl OwnerClient {
         let certificates = read_certificates(&config.client_cert_file, "owner client certificate")?;
         let key_bytes = std::fs::read(&config.client_key_file)
             .map_err(|error| format!("read owner client key: {error}"))?;
-        let key = rustls_pemfile::private_key(&mut key_bytes.as_slice())
+        let key = rustls::pki_types::PrivateKeyDer::pem_slice_iter(&key_bytes)
+            .next()
+            .transpose()
             .map_err(|error| format!("parse owner client key: {error}"))?
             .ok_or("owner client key file contains no key")?;
         let mut root_store = rustls::RootCertStore::empty();
@@ -1146,7 +1149,7 @@ fn read_certificates(
     description: &str,
 ) -> Result<Vec<rustls::pki_types::CertificateDer<'static>>, String> {
     let bytes = std::fs::read(path).map_err(|error| format!("read {description}: {error}"))?;
-    let certificates = rustls_pemfile::certs(&mut bytes.as_slice())
+    let certificates = rustls::pki_types::CertificateDer::pem_slice_iter(&bytes)
         .collect::<Result<Vec<_>, _>>()
         .map_err(|error| format!("parse {description}: {error}"))?;
     if certificates.is_empty() {

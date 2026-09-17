@@ -38,3 +38,9 @@ operator capacity and native acceptance must be supplied/confirmed by the projec
 owner. This repository intentionally contains no fabricated publishing identity.
 Tests cannot establish those decisions. Independent crypto/privacy review and
 mobile support remain outside the preview's qualified claims.
+
+Pre-publication application lockfiles can be qualified using
+`scripts/check-registry-consumer.py`. It serves inspected `.crate` archives and
+Cargo-cached third-party packages through a loopback sparse registry, while retaining
+canonical crates.io identities and checksums in the application lockfile. Re-run it
+after changing any package archive; do not publish stale application checksums.

@@ -22,7 +22,7 @@ async-trait = "0.1"
 gcoms-core = { version = "0.1.0", path = "../core" }
 gcoms-crypto = { version = "0.1.0", path = "../crypto", optional = true }
 gcoms-node = { version = "0.1.0", path = "../node", optional = true }
-postcard = { version = "1", features = ["alloc"] }
+postcard = { version = "1", default-features = false, features = ["alloc"] }
 serde = { version = "1", features = ["derive"] }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "io-util", "sync", "time"] }
 

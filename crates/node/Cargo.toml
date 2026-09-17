@@ -21,8 +21,7 @@ gcoms-routing = { version = "0.1.0", path = "../routing" }
 gcoms-network-client = { version = "0.1.0", path = "../network-client" }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "time", "io-util", "sync", "signal"] }
 tokio-rustls = "0.26"
-rustls = { version = "0.23", default-features = false, features = ["aws-lc-rs", "std"] }
-rustls-pemfile = "2"
+rustls = { version = "0.23.45", default-features = false, features = ["aws-lc-rs", "std"] }
 bytes = "1"
 rand = "0.8"
 hmac = "0.12"
@@ -39,7 +38,7 @@ gcoms-private-fs = { version = "0.1.0", path = "../private-fs" }
 fs2 = "0.4"
 reqwest = { version = "0.12", default-features = false }
 url = "2"
-quick-xml = "0.38"
+quick-xml = "0.41"
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
@@ -48,7 +47,7 @@ libc = "0.2"
 windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Storage_FileSystem"] }
 
 [dev-dependencies]
-rcgen = "0.13"
+rcgen = { version = "0.13", default-features = false, features = ["aws_lc_rs", "pem"] }
 tempfile = "3"
 gcoms-crypto = { version = "0.1.0", path = "../crypto", features = ["test-vectors"] }
 

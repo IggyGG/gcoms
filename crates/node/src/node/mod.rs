@@ -264,7 +264,7 @@ pub async fn start_persistent(
 /// Like [`start_persistent`], but with an operator-supplied FRWD target
 /// policy (for example one that allows a private CIDR). The profile still
 /// decides everything else; the policy only relaxes the FRWD target check
-/// (see [`NodeProfile::frwd_target_policy`]).
+/// (derived from the explicitly selected node profile).
 pub async fn start_persistent_with_policy(
     cfg: NodeConfig,
     frwd_target_policy: FrwdTargetPolicy,

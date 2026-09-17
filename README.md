@@ -70,3 +70,8 @@ JavaScript runtime has no runtime npm dependencies.
 
 Dual licensed under **MIT OR Apache-2.0**. Attribution and dependency terms are in
 [NOTICE.md](NOTICE.md). Naming changes do not change GC/1 wire bytes.
+
+The preview pins rustls >=0.23.45 and quick-xml >=0.41 for current advisory fixes,
+uses rustls-pki-types' PEM parser, and disables unused postcard heapless defaults.
+`deny.toml` records exact transitive-version exceptions and one reviewed build-time
+unmaintained hax/libcrux macro dependency; it does not waive runtime vulnerabilities.

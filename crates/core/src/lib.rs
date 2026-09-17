@@ -68,6 +68,15 @@ pub fn is_volatile_application_payload(mut bytes: &[u8]) -> bool {
     }
 }
 
+/// Historical GC identity-binding signing domain. This does not grant authority.
+/// The role byte and domain are retained for wire compatibility.
+pub fn principal_binding_signature_payload(hash: &[u8; 32]) -> alloc::vec::Vec<u8> {
+    let mut payload = alloc::vec::Vec::from(&b"ghost.principal-binding.signature.v1\0"[..]);
+    payload.push(3);
+    payload.extend_from_slice(hash);
+    payload
+}
+
 #[cfg(test)]
 mod managed_volatile_tests {
     #[test]
@@ -101,13 +110,4 @@ mod managed_volatile_tests {
         bytes.extend_from_slice(&[0]);
         bytes
     }
-}
-
-/// Historical GC identity-binding signing domain. This does not grant authority.
-/// The role byte and domain are retained for wire compatibility.
-pub fn principal_binding_signature_payload(hash: &[u8; 32]) -> alloc::vec::Vec<u8> {
-    let mut payload = alloc::vec::Vec::from(&b"ghost.principal-binding.signature.v1\0"[..]);
-    payload.push(3);
-    payload.extend_from_slice(hash);
-    payload
 }

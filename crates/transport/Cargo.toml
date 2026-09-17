@@ -13,11 +13,11 @@ publish.workspace = true
 gcoms-core = { version = "0.1.0", path = "../core" }
 tokio = { version = "1", features = ["rt-multi-thread", "net", "macros", "time", "io-util"] }
 tokio-rustls = "0.26"
-rustls = { version = "0.23", default-features = false, features = ["aws-lc-rs", "std"] }
+rustls = { version = "0.23.45", default-features = false, features = ["aws-lc-rs", "std"] }
 h2 = "0.4"
 http = "1"
 bytes = "1"
-rcgen = "0.13"
+rcgen = { version = "0.13", default-features = false, features = ["aws_lc_rs", "pem"] }
 rand = "0.8"
 sha2 = "0.10"
 x509-parser = "0.18"

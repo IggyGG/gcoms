@@ -54,3 +54,17 @@ pass the source inventory gate; automated scanning does not replace rights revie
 Run the same native test/lint/build gates on each supported platform. Linux results
 do not establish macOS/Windows behavior. Record results against the exact source
 commit, including GChat when qualifying its application artifacts.
+
+## Forgejo runners
+
+`.forgejo/workflows/check.yml` uses a pinned checkout action and the four named
+native runner labels. Provision disposable runners with Rust 1.98, Node 22, npm 11,
+Python 3.11+, the native build dependencies and cargo-deny. Untrusted pull requests
+receive no signing/registry secrets and must not execute on a developer workstation.
+Public GChat CI starts after its GComs registry dependencies are available; local
+pre-publication checks use the documented extracted-package staging.
+
+On macOS, bind-based multi-relay fixtures require administrator-provisioned loopback
+aliases for their distinct relay IPs. Tests deliberately retain independent-address
+checks; they do not weaken production routing to accommodate the runner. The current
+macOS staging host lacks these aliases, so its full routing qualification is pending.

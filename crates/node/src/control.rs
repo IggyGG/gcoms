@@ -2,6 +2,7 @@ use crate::metrics;
 use crate::node::{Cmd, Ev, NodeState};
 use crate::proto::{b64_info, b64_private_info, info_from_b64};
 use gcoms_transport::encode_b64url;
+use rustls::pki_types::pem::PemObject;
 use serde_json::{json, Value};
 use std::io::{Error, ErrorKind};
 use std::net::SocketAddr;
@@ -42,7 +43,9 @@ impl RemoteControlConfig {
                 private_key.display()
             )
         })?;
-        let key = rustls_pemfile::private_key(&mut key_bytes.as_slice())
+        let key = rustls::pki_types::PrivateKeyDer::pem_slice_iter(&key_bytes)
+            .next()
+            .transpose()
             .map_err(|error| {
                 format!(
                     "parse control server private key {}: {error}",
@@ -94,7 +97,7 @@ fn read_certificates(
 ) -> Result<Vec<rustls::pki_types::CertificateDer<'static>>, String> {
     let bytes = std::fs::read(path)
         .map_err(|error| format!("read {description} {}: {error}", path.display()))?;
-    let certificates = rustls_pemfile::certs(&mut bytes.as_slice())
+    let certificates = rustls::pki_types::CertificateDer::pem_slice_iter(&bytes)
         .collect::<Result<Vec<_>, _>>()
         .map_err(|error| format!("parse {description} {}: {error}", path.display()))?;
     if certificates.is_empty() {

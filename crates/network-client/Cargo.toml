@@ -32,6 +32,6 @@ gcoms-crypto = { version = "0.1.0", path = "../crypto" }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "io-util"] }
 
 axum = { version = "0.8", features = ["http1", "json", "tokio"] }
-rcgen = "0.13"
-rustls = { version = "0.23", default-features = false, features = ["aws-lc-rs", "std"] }
+rcgen = { version = "0.13", default-features = false, features = ["aws_lc_rs", "pem"] }
+rustls = { version = "0.23.45", default-features = false, features = ["aws-lc-rs", "std"] }
 tokio-rustls = "0.26"

@@ -1,4 +1,4 @@
-# cargo-deny policy for ghost/coms. Run: cargo deny check
+# cargo-deny policy for the GComs developer preview. Run: cargo deny check
 #
 # Every duplicated major version doubles the audit and patch surface of a
 # primitive we rely on. Duplicates are denied by default; the exceptions below
@@ -11,7 +11,9 @@ all-features = true
 [advisories]
 version = 2
 yanked = "deny"
-ignore = []
+ignore = [
+    { id = "RUSTSEC-2026-0173", reason = "proc-macro-error2 2.0.1 is build-time-only through hax-lib-macros 0.3.7 in OpenMLS/libcrux. Upstream has no replacement release; reviewed 2026-09-17, revisit before the next preview. No runtime vulnerability is waived." },
+]
 
 [licenses]
 version = 2
@@ -28,6 +30,7 @@ allow = [
     "MPL-2.0",
     "OpenSSL",
     "CC0-1.0",
+    "CDLA-Permissive-2.0", # webpki-roots trust data; license bundled under third-party/
 ]
 
 [bans]
@@ -35,22 +38,34 @@ multiple-versions = "deny"
 wildcards = "deny"
 deny = [
     # Custom or unmaintained cryptography is forbidden (SPEC §8.1).
-    { crate = "openssl", reason = "aws-lc-rs is the only TLS backend" },
-    { crate = "ring", wrappers = ["rustls-webpki", "rustls"], reason = "aws-lc-rs is the only TLS backend" },
+    { crate = "openssl", reason = "Native node TLS selects aws-lc; no OpenSSL backend" },
+    { crate = "ring", wrappers = ["rustls-webpki", "rustls"], reason = "Ring is confined to the reviewed rustls/reqwest TLS dependency path" },
 ]
 skip = [
-    # openmls_rust_crypto 0.6 / hpke-rs 0.7 / x-wing 0.1 pin the next
-    # RustCrypto generation; the rest of the workspace is one behind.
-    { crate = "x25519-dalek", version = "=3.0.0" },
-    { crate = "curve25519-dalek", version = "=5.0.0" },
-    { crate = "sha2", version = "=0.11.0" },
-    { crate = "hkdf", version = "=0.13.0" },
-    { crate = "hmac", version = "=0.13.0" },
-    { crate = "rand", version = "=0.10.2" },
-    { crate = "rand_core", version = "=0.10.1" },
-    { crate = "getrandom", version = "=0.4.3" },
-    { crate = "digest", version = "=0.11.0" },
-    { crate = "webpki-roots", version = "=0.26.11" },
+    { crate = "block-buffer@0.12.1", reason = "RustCrypto and OpenMLS HPKE require parallel audited API generations; revisit with their next compatible upgrades" },
+    { crate = "chacha20@0.10.2", reason = "RustCrypto and OpenMLS HPKE require parallel audited API generations; revisit with their next compatible upgrades" },
+    { crate = "const-oid@0.10.2", reason = "RustCrypto and OpenMLS HPKE require parallel audited API generations; revisit with their next compatible upgrades" },
+    { crate = "cpufeatures@0.3.1", reason = "RustCrypto and OpenMLS HPKE require parallel audited API generations; revisit with their next compatible upgrades" },
+    { crate = "crypto-common@0.2.2", reason = "RustCrypto and OpenMLS HPKE require parallel audited API generations; revisit with their next compatible upgrades" },
+    { crate = "curve25519-dalek@5.0.0", reason = "RustCrypto and OpenMLS HPKE require parallel audited API generations; revisit with their next compatible upgrades" },
+    { crate = "der@0.8.1", reason = "RustCrypto and OpenMLS HPKE require parallel audited API generations; revisit with their next compatible upgrades" },
+    { crate = "digest@0.11.3", reason = "RustCrypto and OpenMLS HPKE require parallel audited API generations; revisit with their next compatible upgrades" },
+    { crate = "fiat-crypto@0.3.0", reason = "RustCrypto and OpenMLS HPKE require parallel audited API generations; revisit with their next compatible upgrades" },
+    { crate = "getrandom@0.4.3", reason = "RustCrypto and OpenMLS HPKE require parallel audited API generations; revisit with their next compatible upgrades" },
+    { crate = "hkdf@0.13.0", reason = "RustCrypto and OpenMLS HPKE require parallel audited API generations; revisit with their next compatible upgrades" },
+    { crate = "hmac@0.13.0", reason = "RustCrypto and OpenMLS HPKE require parallel audited API generations; revisit with their next compatible upgrades" },
+    { crate = "pkcs8@0.11.0", reason = "RustCrypto and OpenMLS HPKE require parallel audited API generations; revisit with their next compatible upgrades" },
+    { crate = "rand@0.10.2", reason = "RustCrypto and OpenMLS HPKE require parallel audited API generations; revisit with their next compatible upgrades" },
+    { crate = "rand_chacha@0.10.0", reason = "RustCrypto and OpenMLS HPKE require parallel audited API generations; revisit with their next compatible upgrades" },
+    { crate = "rand_core@0.10.1", reason = "RustCrypto and OpenMLS HPKE require parallel audited API generations; revisit with their next compatible upgrades" },
+    { crate = "sha2@0.11.0", reason = "RustCrypto and OpenMLS HPKE require parallel audited API generations; revisit with their next compatible upgrades" },
+    { crate = "sha3@0.12.0", reason = "RustCrypto and OpenMLS HPKE require parallel audited API generations; revisit with their next compatible upgrades" },
+    { crate = "shlex@2.0.1", reason = "cc and bindgen use different parser major versions" },
+    { crate = "signature@3.0.0", reason = "RustCrypto and OpenMLS HPKE require parallel audited API generations; revisit with their next compatible upgrades" },
+    { crate = "spki@0.8.0", reason = "RustCrypto and OpenMLS HPKE require parallel audited API generations; revisit with their next compatible upgrades" },
+    { crate = "syn@3.0.4", reason = "derive dependencies use syn 3 while remaining proc macros use syn 2" },
+    { crate = "windows-sys@0.52.0", reason = "ring retains windows-sys 0.52; current runtime crates use 0.61" },
+    { crate = "x25519-dalek@3.0.0", reason = "RustCrypto and OpenMLS HPKE require parallel audited API generations; revisit with their next compatible upgrades" },
 ]
 skip-tree = []
 
