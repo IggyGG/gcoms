@@ -1,6 +1,6 @@
 # GC/2 implementation ledger
 
-Status: repository consolidation and research-tool migration. GC/1 remains the
+Status: repository consolidation and research-tool migration complete. GC/1 remains the
 implemented runtime profile. No GC/2 compatibility, performance, privacy or mobile
 qualification is claimed by this ledger.
 
@@ -100,3 +100,24 @@ Retain failures, source/executable/configuration/workload hashes and exact scope
 - Two-repository source validation: `scripts/check-gchat.py`; package-archive
   validation remains a separate gate.
 - Runtime GC/2 changes and their application/privacy/mobile gates: pending.
+
+## Consolidation validation — Linux, 2026-09-17
+
+- GComs Rust workspace at `9c0eb27`: 598 passed, 5 ignored. Its Rust sources and
+  dependency lock are unchanged by the subsequent consolidation-tool fixes.
+  Strict Clippy, documentation, formatting, minimal-feature builds, wire vectors
+  and generated-contract checks passed.
+- GChat workspace at `e5148b6`, using the GComs source snapshot: 142 passed.
+  The subsequently merged `48812a7` transcript-permission and preview-lock changes
+  passed current-source strict Clippy and both affected transcript tests.
+- Python tooling: 46 passed, including a real offline Clippy regression against
+  an unpublished fixture package and checks that originals remain unchanged.
+- Relay harness: 7 passed, 1 ignored. JavaScript: 8 passed, typecheck/build passed.
+- Seventeen Rust package archives passed the isolated aliased-consumer check;
+  both npm archives passed their isolated consumer check. GChat used source
+  snapshots here; this does not claim GChat archive/registry qualification.
+
+Full logs, failure attempts and source-check reports remain in the retained task
+worktree's ignored `target/` directory. These checks establish a development
+baseline. They do not qualify new privacy profiles, production throughput, mobile
+power use or native platforms other than Linux.
