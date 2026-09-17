@@ -34,7 +34,8 @@ python3 scripts/check-gchat.py --gchat /path/to/gchat --offline --action clippy
 The runner snapshots both repositories and builds GChat with temporary GComs
 package overrides. It preserves registry manifests and lockfiles and reports a
 source change during validation instead of overwriting concurrent work. Build
-results are retained under `target/gchat-source-check`. Actual package-archive
+results and per-file source hashes are retained under
+`target/gchat-source-check/reports`, including failed attempts. Actual package-archive
 qualification remains `scripts/check-consumers.py --gchat /path/to/gchat`.
 
 The [GC/2 implementation ledger](GC2_IMPLEMENTATION.md) owns the next protocol

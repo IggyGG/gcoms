@@ -39,7 +39,8 @@ Use `python3 scripts/check-gchat.py --gchat /path/to/gchat --offline` to test th
 standalone application against this exact GComs worktree. `--action check` and
 `--action clippy` provide build/lint variants. The runner snapshots both sources and uses
 temporary Cargo source overrides, preserving the application's registry manifests
-and lockfiles. Retain the summary under `target/gchat-source-check`.
+and lockfiles. Each result and its source hashes remain under
+`target/gchat-source-check/reports`; the top-level summary records the latest run.
 
 Run `python3 scripts/check-research-import.py` and
 `python3 -m unittest discover -s scripts/tests -p '*_test.py'` for imported research

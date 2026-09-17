@@ -80,6 +80,17 @@ def patches(root):
     return "\n".join(lines) + "\n", sorted(packages)
 
 
+def write_report(target, action, run_id, report):
+    directory = target / "reports"
+    directory.mkdir(parents=True, exist_ok=True)
+    path = directory / f"{action}-{run_id}.json"
+    encoded = json.dumps(report, indent=2) + "\n"
+    with path.open("x") as output:
+        output.write(encoded)
+    (target / f"{action}-summary.json").write_text(encoded)
+    return path
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--gchat", type=Path, required=True)
@@ -118,11 +129,14 @@ def main():
                 "snapshot_sha256": hashlib.sha256(
                     json.dumps(snapshots[name], sort_keys=True).encode()
                 ).hexdigest(),
+                "files_sha256": snapshots[name],
             }
         config, packages = patches(scratch / "gcoms")
         patch = scratch / "source.toml"
         patch.write_text(config)
-        command = ["cargo", "--config", str(patch), args.action,
+        # External Cargo subcommands (including Clippy) need these options after
+        # the subcommand so they reach its own Cargo invocation.
+        command = ["cargo", args.action, "--config", str(patch),
                    "--workspace", "--all-features"]
         if args.offline:
             command.append("--offline")
@@ -136,8 +150,11 @@ def main():
             evidence[name]["unchanged_during_check"] = unchanged(directory, snapshots[name])
         report = {"schema": 1, "action": args.action, "exit_code": result.returncode,
                   "sources": evidence, "packages": packages,
+                  "passed": result.returncode == 0 and all(
+                      item["unchanged_during_check"] for item in evidence.values()),
                   "scope": "local source integration; no deployment or privacy qualification"}
-        (target / f"{args.action}-summary.json").write_text(json.dumps(report, indent=2) + "\n")
+        report_path = write_report(target, args.action, scratch.name, report)
+        print(f"Integration report: {report_path}", flush=True)
         if not all(item["unchanged_during_check"] for item in evidence.values()):
             raise SystemExit("Source changed during validation; retain this result and validate the current source again")
         raise SystemExit(result.returncode)

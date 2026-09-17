@@ -1,9 +1,11 @@
 import importlib.util
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import tempfile
 import unittest
+from unittest.mock import patch
 
 
 SPEC = importlib.util.spec_from_file_location(
@@ -83,6 +85,61 @@ class SourceCheckTest(unittest.TestCase):
             self.assertEqual(names, ['gcoms-node', 'gcoms-rpc', 'gcoms-sdk'])
             self.assertEqual(sorted(parsed), names)
             self.assertTrue(all(Path(item['path']).is_relative_to(root) for item in parsed.values()))
+
+    def test_later_success_retains_the_previous_failure_report(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            failure = check.write_report(root, 'test', 'first', {'exit_code': 1})
+            success = check.write_report(root, 'test', 'second', {'exit_code': 0})
+            self.assertEqual(check.json.loads(failure.read_text()), {'exit_code': 1})
+            self.assertEqual((root / 'test-summary.json').read_bytes(), success.read_bytes())
+            with self.assertRaises(FileExistsError):
+                check.write_report(root, 'test', 'first', {'exit_code': 0})
+
+    @unittest.skipUnless(shutil.which('cargo'), 'Rust toolchain is unavailable')
+    def test_clippy_resolves_an_unpublished_package_without_touching_originals(self):
+        # Exercise the external Cargo subcommand, not just its assembled argv.
+        if subprocess.run(['cargo', 'clippy', '--version'], stdout=subprocess.DEVNULL,
+                          stderr=subprocess.DEVNULL).returncode:
+            self.skipTest('Clippy is unavailable')
+        with tempfile.TemporaryDirectory() as temp:
+            protocol = self.repository(Path(temp) / 'gcoms')
+            chat = self.repository(Path(temp) / 'gchat')
+            (protocol / 'Cargo.toml').write_text(
+                '[workspace]\nresolver="2"\nmembers=["crates/*"]\n')
+            for name in ['node', 'sdk', 'rpc']:
+                directory = protocol / 'crates' / name
+                (directory / 'src').mkdir(parents=True)
+                (directory / 'Cargo.toml').write_text(
+                    f'[package]\nname="gcoms-{name}"\nversion="0.0.0-source-check"\nedition="2021"\n')
+                (directory / 'src/lib.rs').write_text('pub fn value() -> u32 { 42 }\n')
+            (chat / 'Cargo.toml').write_text(
+                '[workspace]\nresolver="2"\nmembers=["crates/chat-api"]\n')
+            api = chat / 'crates/chat-api'
+            (api / 'src').mkdir(parents=True)
+            (api / 'Cargo.toml').write_text(
+                '[package]\nname="gchat-api"\nversion="0.0.0"\nedition="2021"\n'
+                '[dependencies]\ngcoms-rpc="=0.0.0-source-check"\n')
+            (api / 'src/lib.rs').write_text('pub fn value() -> u32 { gcoms_rpc::value() }\n')
+            # Uncommitted fixture repos need no user identity or commit hooks.
+            original_output = subprocess.check_output
+            def output(args, **kwargs):
+                if args == ['git', 'rev-parse', 'HEAD']:
+                    return 'fixture-revision\n'
+                return original_output(args, **kwargs)
+            target = Path(temp) / 'results'
+            argv = ['check-gchat.py', '--gchat', str(chat), '--action', 'clippy',
+                    '--offline', '--target-dir', str(target)]
+            with patch.object(check, 'ROOT', protocol), patch('sys.argv', argv), \
+                    patch.object(check.subprocess, 'check_output', side_effect=output), \
+                    self.assertRaises(SystemExit) as result:
+                check.main()
+            self.assertEqual(result.exception.code, 0)
+            report = check.json.loads((target / 'clippy-summary.json').read_text())
+            self.assertTrue(report['passed'])
+            self.assertTrue(all(item['unchanged_during_check'] for item in report['sources'].values()))
+            for root in [protocol, chat]:
+                self.assertEqual((root / 'Cargo.lock').read_text(), '# retained registry lock\n')
 
 
 if __name__ == '__main__':
