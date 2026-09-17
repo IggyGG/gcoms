@@ -39,6 +39,9 @@ const MAGIC_V16: &[u8; 6] = b"GCNSTG";
 const MAGIC_V17: &[u8; 6] = b"GCNSTH";
 /// Unified machine scope, routing recovery and named current/previous grants.
 const MAGIC_V18: &[u8; 6] = b"GCNSTI";
+/// v19 permits durable logical records to wait behind a known session's
+/// readiness/flow barrier, including when no routing-recovery directory exists.
+const MAGIC_V19: &[u8; 6] = b"GCNSTJ";
 const ROLE_OWNER: u8 = 1;
 const ROLE_MEMBER: u8 = 2;
 const MAX_ARCHIVE_BYTES: usize = 256 * 1024 * 1024;
@@ -717,7 +720,7 @@ fn encode_state_inner(
         return Err("owner lifecycle persistence outcome is unconfirmed".into());
     }
     let mut v = SecretBuffer(Vec::with_capacity(8192));
-    v.extend_from_slice(MAGIC_V18);
+    v.extend_from_slice(MAGIC_V19);
     v.extend_from_slice(&now_ms().to_be_bytes());
     v.extend_from_slice(&st.next_direct_sequence.to_be_bytes());
     v.extend_from_slice(&st.local_contact_generation.to_be_bytes());
@@ -1097,19 +1100,19 @@ fn encode_state_inner(
 fn decode_v2(buf: &[u8], identity_seed: &[u8; 32]) -> Result<Archive, String> {
     let archive_key = channel_archive_key(identity_seed);
     if buf.len() > MAX_ARCHIVE_BYTES
-        || !matches!(buf.get(..6), Some(magic) if magic == MAGIC_V2 || magic == MAGIC_V3 || magic == MAGIC_V4 || magic == MAGIC_V5 || magic == MAGIC_V6 || magic == MAGIC_V7 || magic == MAGIC_V8 || magic == MAGIC_V9 || magic == MAGIC_V10 || magic == MAGIC_V11 || magic == MAGIC_V12 || magic == MAGIC_V13 || magic == MAGIC_V14 || magic == MAGIC_V15 || magic == MAGIC_V16 || magic == MAGIC_V17 || magic == MAGIC_V18)
+        || !matches!(buf.get(..6), Some(magic) if magic == MAGIC_V2 || magic == MAGIC_V3 || magic == MAGIC_V4 || magic == MAGIC_V5 || magic == MAGIC_V6 || magic == MAGIC_V7 || magic == MAGIC_V8 || magic == MAGIC_V9 || magic == MAGIC_V10 || magic == MAGIC_V11 || magic == MAGIC_V12 || magic == MAGIC_V13 || magic == MAGIC_V14 || magic == MAGIC_V15 || magic == MAGIC_V16 || magic == MAGIC_V17 || magic == MAGIC_V18 || magic == MAGIC_V19)
     {
         return Err("not a gc node state export".into());
     }
-    let has_channel_metadata = matches!(buf.get(..6), Some(magic) if magic == MAGIC_V3 || magic == MAGIC_V4 || magic == MAGIC_V5 || magic == MAGIC_V6 || magic == MAGIC_V7 || magic == MAGIC_V8 || magic == MAGIC_V9 || magic == MAGIC_V10 || magic == MAGIC_V11 || magic == MAGIC_V12 || magic == MAGIC_V13 || magic == MAGIC_V14 || magic == MAGIC_V15 || magic == MAGIC_V16 || magic == MAGIC_V17 || magic == MAGIC_V18);
-    let sessions_are_sealed = matches!(buf.get(..6), Some(magic) if magic == MAGIC_V4 || magic == MAGIC_V5 || magic == MAGIC_V6 || magic == MAGIC_V7 || magic == MAGIC_V8 || magic == MAGIC_V9 || magic == MAGIC_V10 || magic == MAGIC_V11 || magic == MAGIC_V12 || magic == MAGIC_V13 || magic == MAGIC_V14 || magic == MAGIC_V15 || magic == MAGIC_V16 || magic == MAGIC_V17 || magic == MAGIC_V18);
-    let has_collision_state = matches!(buf.get(..6), Some(magic) if magic == MAGIC_V5 || magic == MAGIC_V6 || magic == MAGIC_V7 || magic == MAGIC_V8 || magic == MAGIC_V9 || magic == MAGIC_V10 || magic == MAGIC_V11 || magic == MAGIC_V12 || magic == MAGIC_V13 || magic == MAGIC_V14 || magic == MAGIC_V15 || magic == MAGIC_V16 || magic == MAGIC_V17 || magic == MAGIC_V18);
-    let has_contact_updates = matches!(buf.get(..6), Some(magic) if magic == MAGIC_V6 || magic == MAGIC_V7 || magic == MAGIC_V8 || magic == MAGIC_V9 || magic == MAGIC_V10 || magic == MAGIC_V11 || magic == MAGIC_V12 || magic == MAGIC_V13 || magic == MAGIC_V14 || magic == MAGIC_V15 || magic == MAGIC_V16 || magic == MAGIC_V17 || magic == MAGIC_V18);
-    let has_presence_policy = matches!(buf.get(..6), Some(magic) if magic == MAGIC_V7 || magic == MAGIC_V8 || magic == MAGIC_V9 || magic == MAGIC_V10 || magic == MAGIC_V11 || magic == MAGIC_V12 || magic == MAGIC_V13 || magic == MAGIC_V14 || magic == MAGIC_V15 || magic == MAGIC_V16 || magic == MAGIC_V17 || magic == MAGIC_V18);
-    let has_typed_removals = matches!(buf.get(..6), Some(magic) if magic == MAGIC_V8 || magic == MAGIC_V9 || magic == MAGIC_V10 || magic == MAGIC_V11 || magic == MAGIC_V12 || magic == MAGIC_V13 || magic == MAGIC_V14 || magic == MAGIC_V15 || magic == MAGIC_V16 || magic == MAGIC_V17 || magic == MAGIC_V18);
-    let has_forward_grants = matches!(buf.get(..6), Some(magic) if magic == MAGIC_V9 || magic == MAGIC_V10 || magic == MAGIC_V11 || magic == MAGIC_V12 || magic == MAGIC_V13 || magic == MAGIC_V14 || magic == MAGIC_V15 || magic == MAGIC_V16 || magic == MAGIC_V17 || magic == MAGIC_V18);
-    let has_invites = matches!(buf.get(..6), Some(magic) if magic == MAGIC_V10 || magic == MAGIC_V11 || magic == MAGIC_V12 || magic == MAGIC_V13 || magic == MAGIC_V14 || magic == MAGIC_V15 || magic == MAGIC_V16 || magic == MAGIC_V17 || magic == MAGIC_V18);
-    let has_application_inbox = matches!(buf.get(..6), Some(magic) if magic == MAGIC_V11 || magic == MAGIC_V12 || magic == MAGIC_V13 || magic == MAGIC_V14 || magic == MAGIC_V15 || magic == MAGIC_V16 || magic == MAGIC_V17 || magic == MAGIC_V18);
+    let has_channel_metadata = matches!(buf.get(..6), Some(magic) if magic == MAGIC_V3 || magic == MAGIC_V4 || magic == MAGIC_V5 || magic == MAGIC_V6 || magic == MAGIC_V7 || magic == MAGIC_V8 || magic == MAGIC_V9 || magic == MAGIC_V10 || magic == MAGIC_V11 || magic == MAGIC_V12 || magic == MAGIC_V13 || magic == MAGIC_V14 || magic == MAGIC_V15 || magic == MAGIC_V16 || magic == MAGIC_V17 || magic == MAGIC_V18 || magic == MAGIC_V19);
+    let sessions_are_sealed = matches!(buf.get(..6), Some(magic) if magic == MAGIC_V4 || magic == MAGIC_V5 || magic == MAGIC_V6 || magic == MAGIC_V7 || magic == MAGIC_V8 || magic == MAGIC_V9 || magic == MAGIC_V10 || magic == MAGIC_V11 || magic == MAGIC_V12 || magic == MAGIC_V13 || magic == MAGIC_V14 || magic == MAGIC_V15 || magic == MAGIC_V16 || magic == MAGIC_V17 || magic == MAGIC_V18 || magic == MAGIC_V19);
+    let has_collision_state = matches!(buf.get(..6), Some(magic) if magic == MAGIC_V5 || magic == MAGIC_V6 || magic == MAGIC_V7 || magic == MAGIC_V8 || magic == MAGIC_V9 || magic == MAGIC_V10 || magic == MAGIC_V11 || magic == MAGIC_V12 || magic == MAGIC_V13 || magic == MAGIC_V14 || magic == MAGIC_V15 || magic == MAGIC_V16 || magic == MAGIC_V17 || magic == MAGIC_V18 || magic == MAGIC_V19);
+    let has_contact_updates = matches!(buf.get(..6), Some(magic) if magic == MAGIC_V6 || magic == MAGIC_V7 || magic == MAGIC_V8 || magic == MAGIC_V9 || magic == MAGIC_V10 || magic == MAGIC_V11 || magic == MAGIC_V12 || magic == MAGIC_V13 || magic == MAGIC_V14 || magic == MAGIC_V15 || magic == MAGIC_V16 || magic == MAGIC_V17 || magic == MAGIC_V18 || magic == MAGIC_V19);
+    let has_presence_policy = matches!(buf.get(..6), Some(magic) if magic == MAGIC_V7 || magic == MAGIC_V8 || magic == MAGIC_V9 || magic == MAGIC_V10 || magic == MAGIC_V11 || magic == MAGIC_V12 || magic == MAGIC_V13 || magic == MAGIC_V14 || magic == MAGIC_V15 || magic == MAGIC_V16 || magic == MAGIC_V17 || magic == MAGIC_V18 || magic == MAGIC_V19);
+    let has_typed_removals = matches!(buf.get(..6), Some(magic) if magic == MAGIC_V8 || magic == MAGIC_V9 || magic == MAGIC_V10 || magic == MAGIC_V11 || magic == MAGIC_V12 || magic == MAGIC_V13 || magic == MAGIC_V14 || magic == MAGIC_V15 || magic == MAGIC_V16 || magic == MAGIC_V17 || magic == MAGIC_V18 || magic == MAGIC_V19);
+    let has_forward_grants = matches!(buf.get(..6), Some(magic) if magic == MAGIC_V9 || magic == MAGIC_V10 || magic == MAGIC_V11 || magic == MAGIC_V12 || magic == MAGIC_V13 || magic == MAGIC_V14 || magic == MAGIC_V15 || magic == MAGIC_V16 || magic == MAGIC_V17 || magic == MAGIC_V18 || magic == MAGIC_V19);
+    let has_invites = matches!(buf.get(..6), Some(magic) if magic == MAGIC_V10 || magic == MAGIC_V11 || magic == MAGIC_V12 || magic == MAGIC_V13 || magic == MAGIC_V14 || magic == MAGIC_V15 || magic == MAGIC_V16 || magic == MAGIC_V17 || magic == MAGIC_V18 || magic == MAGIC_V19);
+    let has_application_inbox = matches!(buf.get(..6), Some(magic) if magic == MAGIC_V11 || magic == MAGIC_V12 || magic == MAGIC_V13 || magic == MAGIC_V14 || magic == MAGIC_V15 || magic == MAGIC_V16 || magic == MAGIC_V17 || magic == MAGIC_V18 || magic == MAGIC_V19);
     let mut position = 6;
     let exported_ms = take_u64(buf, &mut position)?;
     let mut next_direct_sequence = if has_collision_state {
@@ -1226,7 +1229,7 @@ fn decode_v2(buf: &[u8], identity_seed: &[u8; 32]) -> Result<Archive, String> {
                 buf,
                 &mut position,
                 !has_contact_updates,
-                matches!(buf.get(..6), Some(magic) if magic == MAGIC_V16 || magic == MAGIC_V18),
+                matches!(buf.get(..6), Some(magic) if magic == MAGIC_V16 || magic == MAGIC_V18 || magic == MAGIC_V19),
             )?,
             logical_record,
             sequence,
@@ -1577,7 +1580,7 @@ fn decode_v2(buf: &[u8], identity_seed: &[u8; 32]) -> Result<Archive, String> {
         application_inbox::ApplicationInbox::default()
     };
     let mut prepared = Vec::new();
-    let next_prep_id = if matches!(buf.get(..6), Some(magic) if magic == MAGIC_V12 || magic == MAGIC_V13 || magic == MAGIC_V14 || magic == MAGIC_V15 || magic == MAGIC_V16 || magic == MAGIC_V17 || magic == MAGIC_V18)
+    let next_prep_id = if matches!(buf.get(..6), Some(magic) if magic == MAGIC_V12 || magic == MAGIC_V13 || magic == MAGIC_V14 || magic == MAGIC_V15 || magic == MAGIC_V16 || magic == MAGIC_V17 || magic == MAGIC_V18 || magic == MAGIC_V19)
     {
         let next = take_u64(buf, &mut position)?;
         let count = take_count(buf, &mut position, 64)?;
@@ -1606,7 +1609,7 @@ fn decode_v2(buf: &[u8], identity_seed: &[u8; 32]) -> Result<Archive, String> {
     } else {
         1
     };
-    let tls_identity = if matches!(buf.get(..6), Some(magic) if magic == MAGIC_V13 || magic == MAGIC_V14 || magic == MAGIC_V15 || magic == MAGIC_V16 || magic == MAGIC_V17 || magic == MAGIC_V18)
+    let tls_identity = if matches!(buf.get(..6), Some(magic) if magic == MAGIC_V13 || magic == MAGIC_V14 || magic == MAGIC_V15 || magic == MAGIC_V16 || magic == MAGIC_V17 || magic == MAGIC_V18 || magic == MAGIC_V19)
     {
         let sealed = take32(buf, &mut position)?;
         if sealed.is_empty() {
@@ -1625,7 +1628,7 @@ fn decode_v2(buf: &[u8], identity_seed: &[u8; 32]) -> Result<Archive, String> {
     } else {
         None
     };
-    if matches!(buf.get(..6), Some(magic) if magic == MAGIC_V14 || magic == MAGIC_V15 || magic == MAGIC_V16 || magic == MAGIC_V17 || magic == MAGIC_V18)
+    if matches!(buf.get(..6), Some(magic) if magic == MAGIC_V14 || magic == MAGIC_V15 || magic == MAGIC_V16 || magic == MAGIC_V17 || magic == MAGIC_V18 || magic == MAGIC_V19)
     {
         application_inbox.central_ownership =
             open_central_ownership(take32(buf, &mut position)?, identity_seed)?;
@@ -1697,16 +1700,16 @@ fn decode_v2(buf: &[u8], identity_seed: &[u8; 32]) -> Result<Archive, String> {
         channel_routes = routes;
         position = buf.len();
         owner
-    } else if magic == Some(MAGIC_V17) || magic == Some(MAGIC_V18) {
+    } else if magic == Some(MAGIC_V17) || (magic == Some(MAGIC_V18) || magic == Some(MAGIC_V19)) {
         application_inbox.machine_owned =
             open_machine_ownership(take32(buf, &mut position)?, identity_seed)?;
         let sealed = take32(buf, &mut position)?;
-        let owner = if sealed.is_empty() && magic == Some(MAGIC_V18) {
+        let owner = if sealed.is_empty() && (magic == Some(MAGIC_V18) || magic == Some(MAGIC_V19)) {
             None
         } else {
             Some(owner_aliases::open_unbound(sealed, identity_seed)?)
         };
-        if magic == Some(MAGIC_V18) {
+        if magic == Some(MAGIC_V18) || magic == Some(MAGIC_V19) {
             let sealed = take32(buf, &mut position)?;
             if !sealed.is_empty() {
                 routing_directory = Some(open_routing_directory(sealed, identity_seed)?);
@@ -1765,7 +1768,9 @@ fn decode_v2(buf: &[u8], identity_seed: &[u8; 32]) -> Result<Archive, String> {
     }
     for (_, delivery, logical, _, _, _, _) in &pending_direct {
         if delivery.cells.is_empty()
-            && (routing_directory.is_none()
+            && ((routing_directory.is_none()
+                && !(magic == Some(MAGIC_V19)
+                    && session_keys.contains(&delivery.peer.identity_pk)))
                 || !logical
                     .as_deref()
                     .is_some_and(crate::proto::is_durable_direct_data))
@@ -2152,7 +2157,7 @@ pub async fn decode_state(
             return Err("cannot replace initialized central ownership".into());
         }
     }
-    if matches!(buf.get(..6), Some(magic) if magic == MAGIC_V15 || magic == MAGIC_V16 || magic == MAGIC_V17 || magic == MAGIC_V18)
+    if matches!(buf.get(..6), Some(magic) if magic == MAGIC_V15 || magic == MAGIC_V16 || magic == MAGIC_V17 || magic == MAGIC_V18 || magic == MAGIC_V19)
     {
         return Err("owner alias archives require constructor restoration".into());
     }
@@ -2512,7 +2517,7 @@ fn replace_v18_owned_route(
     name: &str,
     route: &crate::channel::OwnedChannelRoute,
 ) -> Result<Vec<u8>, String> {
-    if bytes.get(..6) != Some(MAGIC_V18) {
+    if !matches!(bytes.get(..6), Some(magic) if magic == MAGIC_V18 || magic == MAGIC_V19) {
         return Err(malformed());
     }
     let archive = decode_v2(bytes, seed)?;
@@ -2871,7 +2876,7 @@ pub(in crate::node) mod tests {
         node.durable_state_sink = Some(Arc::new(|_| Ok(())));
         configure(&mut node, policy.clone(), vec![[2; 16]]).unwrap();
         let encoded = encode_state(&node).unwrap();
-        assert_eq!(&encoded[..6], MAGIC_V18);
+        assert_eq!(&encoded[..6], MAGIC_V19);
         let archive = decode_v2(&encoded, &TEST_SEED).unwrap();
         assert_eq!(
             archive.application_inbox.central_ownership,
@@ -3436,7 +3441,7 @@ pub(in crate::node) mod tests {
         let first = node.application_inbox.entries.front().unwrap().digest();
         node.application_inbox.consume(1, first).unwrap();
         let mut encoded = encode_state(&node).unwrap();
-        assert_eq!(&encoded[..6], MAGIC_V18);
+        assert_eq!(&encoded[..6], MAGIC_V19);
         assert!(!encoded.windows(body.len()).any(|window| window == body));
         let decoded = decode_v2(&encoded, &TEST_SEED).unwrap();
         assert_eq!(decoded.application_inbox.next_sequence, 3);
@@ -3937,6 +3942,19 @@ pub(in crate::node) mod tests {
                 .await
                 .is_err()
         );
+        // This passes the general application ceiling but cannot fit a direct
+        // ML-KEM rekey frame once the full ML-DSA identity is included.
+        let pq_oversized = vec![0x5A; gcoms_core::APPLICATION_PAYLOAD_LIMIT];
+        let error = send_1to1(
+            &direct_state,
+            &direct_scheduler,
+            &peer(9),
+            &pq_oversized,
+            None,
+        )
+        .await
+        .unwrap_err();
+        assert!(error.contains("PQ-safe limit"));
         {
             let direct = direct_state.lock().unwrap();
             assert!(direct.sessions.is_empty());
@@ -4049,7 +4067,7 @@ pub(in crate::node) mod tests {
                 .unwrap(),
             );
             let bytes = encode_state(&node).unwrap();
-            assert_eq!(&bytes[..6], MAGIC_V18);
+            assert_eq!(&bytes[..6], MAGIC_V19);
             let archive = decode_v2(&bytes, &TEST_SEED).unwrap();
             let restored = &archive.channel_routes[name];
             assert_eq!(restored.public, public);
@@ -4570,7 +4588,7 @@ pub(in crate::node) mod tests {
         state.channel_presence_opt_in.insert("journal".into());
 
         let encoded = encode_state(&state).unwrap();
-        assert_eq!(&encoded[..6], MAGIC_V18);
+        assert_eq!(&encoded[..6], MAGIC_V19);
         let archive = decode_v2(&encoded, &TEST_SEED).unwrap();
         assert_eq!(archive.peer_routes[0].1, pending.peer);
         assert_eq!(archive.peer_routes[0].2, 11);
@@ -5450,6 +5468,93 @@ pub(in crate::node) mod tests {
             panic!("prepared frame")
         };
         assert_eq!(session.receive(&frame).unwrap(), record);
+    }
+
+    #[tokio::test]
+    async fn pipelined_session_barrier_retains_logical_records_across_restart() {
+        let mut node = state();
+        node.scheduler.shutdown();
+        node.scheduler = RelayScheduler::with_profile(
+            Arc::new(gcoms_transport::Tp1Client::new().unwrap()),
+            crate::scheduler::SchedulerProfile::fixture().with_pipelining(),
+        );
+        let recipient = IdentityKeypair::from_seed([0xB6; 32]);
+        let (bundle, secrets) = recipient.issue_bundle();
+        let mut peer = peer(60);
+        peer.identity_pk = recipient.public_bytes();
+        peer.bundle = bundle.encode();
+        let now = std::time::Instant::now();
+        let expires = now + std::time::Duration::from_secs(123);
+        for sequence in 1..=3 {
+            let id = [sequence as u8; 16];
+            node.pending_1to1.insert(
+                id,
+                PendingDirect {
+                    delivery: DirectDelivery {
+                        peer: peer.clone(),
+                        relay: node.client_relay.clone(),
+                        cells: Vec::new(),
+                    },
+                    logical_record: Some(crate::proto::encode_direct_durable_data(
+                        id,
+                        1,
+                        b"queued data",
+                    )),
+                    sequence,
+                    next_attempt: now,
+                    expires,
+                    application_event: false,
+                },
+            );
+        }
+        node.next_direct_sequence = 4;
+        super::super::direct::materialize_deferred(&mut node).unwrap();
+        assert_eq!(node.pending_1to1[&[1; 16]].delivery.cells.len(), 2);
+        assert!(node.pending_1to1[&[2; 16]].delivery.cells.is_empty());
+        assert!(node.pending_1to1[&[3; 16]].delivery.cells.is_empty());
+        let counter = node.sessions[&peer.identity_pk].send_ctr();
+        for _ in 0..3 {
+            super::super::direct::materialize_deferred(&mut node).unwrap();
+        }
+        assert_eq!(node.sessions[&peer.identity_pk].send_ctr(), counter);
+        assert_eq!(node.pending_1to1[&[2; 16]].expires, expires);
+        let archived = encode_state(&node).unwrap();
+        let mut old_tag = archived.clone();
+        old_tag[..6].copy_from_slice(MAGIC_V18);
+        assert!(
+            decode_v2(&old_tag, &TEST_SEED).is_err(),
+            "v18 cannot represent this readiness wait"
+        );
+        let mut restored = state();
+        restored.scheduler.shutdown();
+        restored.scheduler = node.scheduler.clone();
+        let restored = Arc::new(Mutex::new(restored));
+        decode_state_at_startup(&restored, &node.scheduler, &archived)
+            .await
+            .unwrap();
+        let mut restored = restored.lock().unwrap();
+        super::super::direct::materialize_deferred(&mut restored).unwrap();
+        assert!(restored.pending_1to1[&[2; 16]].delivery.cells.is_empty());
+        assert_eq!(restored.sessions[&peer.identity_pk].send_ctr(), counter);
+        let cells = &node.pending_1to1[&[1; 16]].delivery.cells;
+        let first = gcoms_crypto::FirstMove::decode(&cells[0].payload[1..]).unwrap();
+        let (_, mut remote) = secrets.accept(&first).unwrap();
+        let Some(crate::proto::NodePayload::Frame(_, frame)) =
+            crate::proto::decode_payload(&cells[1])
+        else {
+            panic!("frame");
+        };
+        remote.receive(&frame).unwrap();
+        let ack = remote
+            .send(&crate::proto::encode_direct_ack([1; 16], false))
+            .unwrap();
+        let (events, _) = broadcast::channel(8);
+        process_frame(&mut restored, peer.identity_pk.clone(), ack, &events);
+        super::super::direct::materialize_deferred(&mut restored).unwrap();
+        assert_eq!(restored.pending_1to1[&[2; 16]].delivery.cells.len(), 1);
+        assert_eq!(restored.pending_1to1[&[3; 16]].delivery.cells.len(), 1);
+        assert_eq!(restored.sessions[&peer.identity_pk].send_ctr(), counter + 2);
+        node.scheduler.shutdown();
     }
 
     #[tokio::test]

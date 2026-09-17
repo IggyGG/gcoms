@@ -46,6 +46,9 @@ pub(crate) fn rand32(rng: &mut StdRng) -> [u8; 32] {
 /// arrive after a gap are decrypted from a retained message key as long as
 /// the gap is no wider than this; beyond it the session must be reset.
 pub const MAX_SKIP: usize = 64;
+/// Largest encoded Frame overhead: counters, both ratchet keys, optional-field
+/// tags/length, ML-KEM-768 ciphertext and the AES-GCM authentication tag.
+pub const MAX_FRAME_OVERHEAD: usize = 8 + 8 + 32 + 1 + 32 + 1 + 2 + 1088 + 16;
 /// Skipped message keys are retained for at most this long.
 pub const SKIP_KEY_TTL: Duration = Duration::from_secs(24 * 60 * 60);
 

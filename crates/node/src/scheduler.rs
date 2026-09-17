@@ -1,8 +1,8 @@
 use crate::alias::{AliasContact, OwnedAlias, RelayProvision};
 use crate::relay::{Frwd, FrwdTargetPolicy, RelayPush, RelayTarget, UnauthenticatedRelayPush};
-use gcoms_core::Cell;
 #[cfg(test)]
 use gcoms_core::CellType;
+use gcoms_core::{Cell, TrafficClass};
 use gcoms_transport::{CellStream, Tp1Client};
 use rand::rngs::StdRng;
 use rand::{Rng, RngCore, SeedableRng};
@@ -14,7 +14,11 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tokio::sync::{oneshot, watch, Notify};
 
+mod budget;
 pub mod diagnostics;
+#[cfg(test)]
+mod pipeline_tests;
+pub use budget::{ResourceSnapshot, MAX_BYTES as MAX_QUEUED_BYTES, MAX_JOBS as MAX_QUEUED_JOBS};
 
 pub const SLOT_INTERVAL: Duration = Duration::from_secs(3);
 pub const EMISSION_PROBABILITY: f64 = 0.5;
@@ -70,6 +74,7 @@ pub enum CompletionState {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum EnqueueError {
     Full,
+    Pending,
     Shutdown,
 }
 
@@ -83,6 +88,7 @@ pub struct SchedulerProfile {
     maintenance_max_ms: u64,
     deterministic_seed: Option<u64>,
     connect_retry_base: Duration,
+    max_in_flight: usize,
 }
 
 impl SchedulerProfile {
@@ -96,6 +102,7 @@ impl SchedulerProfile {
             maintenance_max_ms: MAINTENANCE_MAX_MS,
             deterministic_seed: None,
             connect_retry_base: Duration::from_millis(500),
+            max_in_flight: 1,
         }
     }
 
@@ -109,6 +116,7 @@ impl SchedulerProfile {
             maintenance_max_ms: MAINTENANCE_MAX_MS,
             deterministic_seed: None,
             connect_retry_base: Duration::from_millis(1),
+            max_in_flight: 1,
         }
     }
 
@@ -123,11 +131,18 @@ impl SchedulerProfile {
             maintenance_max_ms: 40,
             deterministic_seed: Some(seed),
             connect_retry_base: Duration::from_millis(5),
+            max_in_flight: 1,
         }
     }
 
     pub(crate) fn maintenance_delay(&self, rng: &mut StdRng) -> Duration {
         Duration::from_millis(rng.gen_range(self.maintenance_min_ms..self.maintenance_max_ms))
+    }
+
+    /// Bounded pipelining control; retains this profile's existing slot cadence.
+    pub fn with_pipelining(mut self) -> Self {
+        self.max_in_flight = 4;
+        self
     }
 
     /// Distinct deterministic streams for independent maintenance loops.
@@ -150,6 +165,7 @@ impl fmt::Display for EnqueueError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Full => write!(f, "relay lane queue is full"),
+            Self::Pending => write!(f, "the same ciphertext already has an active relay attempt"),
             Self::Shutdown => write!(f, "relay scheduler is shut down"),
         }
     }
@@ -367,10 +383,21 @@ struct QueuedJob {
     semantic: SemanticJob,
     done: oneshot::Sender<JobResult>,
     queued_at: Option<std::time::Instant>,
+    traffic: TrafficClass,
+    producer: [u8; 32],
+    _reservation: Option<budget::Reservation>,
+}
+
+struct ProducerQueue {
+    producer: [u8; 32],
+    traffic: TrafficClass,
+    jobs: VecDeque<QueuedJob>,
+    deficit: usize,
+    credit_due: bool,
 }
 
 struct FairQueue {
-    classes: [VecDeque<QueuedJob>; CLASS_COUNT],
+    classes: [VecDeque<ProducerQueue>; CLASS_COUNT],
     len: usize,
     next: usize,
     capacity: usize,
@@ -390,27 +417,85 @@ impl FairQueue {
         if self.len >= self.capacity {
             return false;
         }
-        self.classes[class.index()].push_back(job);
+        let queues = &mut self.classes[class.index()];
+        if let Some(queue) = queues
+            .iter_mut()
+            .find(|queue| queue.producer == job.producer && queue.traffic == job.traffic)
+        {
+            queue.jobs.push_back(job);
+        } else {
+            queues.push_back(ProducerQueue {
+                producer: job.producer,
+                traffic: job.traffic,
+                jobs: VecDeque::from([job]),
+                deficit: 0,
+                credit_due: true,
+            });
+        }
         self.len += 1;
         true
     }
 
+    #[cfg(test)]
     fn pop(&mut self) -> Option<QueuedJob> {
-        for offset in 0..CLASS_COUNT {
-            let index = (self.next + offset) % CLASS_COUNT;
-            if let Some(job) = self.classes[index].pop_front() {
-                self.len -= 1;
-                self.next = (index + 1) % CLASS_COUNT;
-                return Some(job);
+        self.pop_eligible(true)
+    }
+
+    fn pop_eligible(&mut self, bulk_allowed: bool) -> Option<QueuedJob> {
+        // Deficit round robin preserves FIFO within each producer/class, and
+        // charges bytes rather than letting 16 KiB cells dominate 4 KiB cells.
+        // A maximum cell needs four quanta; this loop is bounded by lane capacity.
+        for _ in 0..4 {
+            for offset in 0..CLASS_COUNT {
+                let index = (self.next + offset) % CLASS_COUNT;
+                let queues = &mut self.classes[index];
+                for _ in 0..queues.len() {
+                    let mut queue = queues.pop_front().expect("bounded iteration");
+                    if queue.traffic == TrafficClass::Bulk && !bulk_allowed {
+                        queues.push_back(queue);
+                        continue;
+                    }
+                    if queue.credit_due {
+                        queue.deficit = queue.deficit.saturating_add(4096).min(32768);
+                        queue.credit_due = false;
+                    }
+                    let cost = queue
+                        .jobs
+                        .front()
+                        .expect("nonempty producer")
+                        .semantic
+                        .service_bytes();
+                    if cost > queue.deficit {
+                        queue.credit_due = true;
+                        queues.push_back(queue);
+                        continue;
+                    }
+                    let job = queue.jobs.pop_front().expect("nonempty producer");
+                    queue.deficit -= cost;
+                    if let Some(next) = queue.jobs.front() {
+                        if next.semantic.service_bytes() <= queue.deficit {
+                            // Spend leftover credit without granting another quantum.
+                            queues.push_front(queue);
+                        } else {
+                            queue.credit_due = true;
+                            queues.push_back(queue);
+                        }
+                    }
+                    self.len -= 1;
+                    self.next = (index + 1) % CLASS_COUNT;
+                    return Some(job);
+                }
             }
         }
         None
     }
 
     fn shutdown(&mut self) {
-        for queue in &mut self.classes {
-            for job in queue.drain(..) {
-                let _ = job.done.send(JobResult::Shutdown);
+        for queues in &mut self.classes {
+            for queue in queues.drain(..) {
+                for job in queue.jobs {
+                    let _ = job.done.send(JobResult::Shutdown);
+                }
             }
         }
         self.len = 0;
@@ -443,6 +528,8 @@ struct Inner {
     deterministic_seed: Option<u64>,
     connect_retry_base: Duration,
     diagnostics: diagnostics::Diagnostics,
+    budget: budget::Budget,
+    max_in_flight: usize,
 }
 
 #[derive(Clone)]
@@ -469,6 +556,8 @@ impl RelayScheduler {
                 deterministic_seed: profile.deterministic_seed,
                 connect_retry_base: profile.connect_retry_base,
                 diagnostics: diagnostics::Diagnostics::default(),
+                budget: budget::Budget::default(),
+                max_in_flight: profile.max_in_flight,
             }),
         };
         // The idle-lane sweeper needs a runtime; a scheduler built outside
@@ -510,6 +599,14 @@ impl RelayScheduler {
         self.inner.diagnostics.snapshot()
     }
 
+    pub(crate) fn pipelined(&self) -> bool {
+        self.inner.max_in_flight > 1
+    }
+
+    pub fn resource_snapshot(&self) -> ResourceSnapshot {
+        self.inner.budget.snapshot()
+    }
+
     pub fn push(
         &self,
         class: ProducerClass,
@@ -533,6 +630,25 @@ impl RelayScheduler {
         inner: Cell,
         policy: FrwdTargetPolicy,
     ) -> Result<Receipt, EnqueueError> {
+        self.frwd_with_class(
+            class,
+            relay,
+            destination,
+            inner,
+            policy,
+            TrafficClass::Interactive,
+        )
+    }
+
+    pub fn frwd_with_class(
+        &self,
+        class: ProducerClass,
+        relay: RelayProvision,
+        destination: AliasContact,
+        inner: Cell,
+        policy: FrwdTargetPolicy,
+        traffic: TrafficClass,
+    ) -> Result<Receipt, EnqueueError> {
         let target = relay
             .aliases
             .first()
@@ -546,7 +662,7 @@ impl RelayScheduler {
             token: relay.frwd_path.clone(),
             administrative: false,
         };
-        self.enqueue(
+        self.enqueue_with_class(
             key,
             class,
             SemanticJob::Frwd {
@@ -555,6 +671,7 @@ impl RelayScheduler {
                 inner,
                 policy,
             },
+            traffic,
         )
     }
 
@@ -695,11 +812,22 @@ impl RelayScheduler {
         class: ProducerClass,
         semantic: SemanticJob,
     ) -> Result<Receipt, EnqueueError> {
+        self.enqueue_with_class(key, class, semantic, TrafficClass::Interactive)
+    }
+
+    fn enqueue_with_class(
+        &self,
+        key: LaneKey,
+        class: ProducerClass,
+        semantic: SemanticJob,
+        traffic: TrafficClass,
+    ) -> Result<Receipt, EnqueueError> {
         let auth = semantic.lane_auth();
         let lane = self.lane_for(&key, auth).inspect_err(|error| {
             let d = &self.inner.diagnostics;
             d.increment(match error {
                 EnqueueError::Full => &d.rejected_full,
+                EnqueueError::Pending => &d.rejected_pending,
                 EnqueueError::Shutdown => &d.rejected_shutdown,
             });
         })?;
@@ -714,12 +842,29 @@ impl RelayScheduler {
             return Err(EnqueueError::Shutdown);
         }
         let (done, completion) = oneshot::channel();
+        let producer = semantic.producer();
+        let attempt = (self.inner.max_in_flight > 1).then(|| semantic.attempt(producer));
+        let reservation = self
+            .inner
+            .budget
+            .reserve(semantic.accounted_bytes(), attempt)
+            .inspect_err(|error| {
+                let d = &self.inner.diagnostics;
+                d.increment(match error {
+                    EnqueueError::Full => &d.rejected_full,
+                    EnqueueError::Pending => &d.rejected_pending,
+                    EnqueueError::Shutdown => &d.rejected_shutdown,
+                });
+            })?;
         let queued = queue.push(
             class,
             QueuedJob {
                 semantic,
                 done,
                 queued_at: self.inner.diagnostics.start(),
+                traffic,
+                producer,
+                _reservation: Some(reservation),
             },
         );
         if !queued {
@@ -771,6 +916,123 @@ impl RelayScheduler {
 }
 
 impl SemanticJob {
+    fn producer(&self) -> [u8; 32] {
+        let mut hash = Sha256::new();
+        hash.update(b"gcoms.scheduler.producer.v2\0");
+        match self {
+            Self::Push { contact, .. } => {
+                hash.update(contact.target.relay_service_id);
+                hash.update(contact.queue_id);
+            }
+            Self::Frwd { destination, .. } => {
+                hash.update(destination.target.relay_service_id);
+                hash.update(destination.queue_id);
+            }
+            Self::Forward { target, push } => {
+                hash.update(target.relay_service_id);
+                hash.update(push.queue_id());
+            }
+            Self::AdminPost { target, token, .. } => {
+                hash.update(target.relay_service_id);
+                hash.update(token.as_bytes());
+            }
+            Self::Subscribe(alias) => {
+                hash.update(alias.contact.target.relay_service_id);
+                hash.update(alias.contact.queue_id);
+            }
+        }
+        hash.finalize().into()
+    }
+
+    fn payload(&self) -> &[u8] {
+        match self {
+            Self::Push { inner, .. } | Self::Frwd { inner, .. } => &inner.payload,
+            Self::Forward { push, .. } => &push.as_cell().payload,
+            Self::AdminPost { cell, .. } => &cell.payload,
+            Self::Subscribe(alias) => &alias.capabilities.sub,
+        }
+    }
+
+    fn attempt(&self, producer: [u8; 32]) -> [u8; 32] {
+        let mut hash = Sha256::new();
+        hash.update(b"gcoms.scheduler.attempt.v2\0");
+        hash.update(producer);
+        hash.update([match self {
+            Self::Push { .. } => 0,
+            Self::Frwd { .. } => 1,
+            Self::Forward { .. } => 2,
+            Self::AdminPost { .. } => 3,
+            Self::Subscribe(_) => 4,
+        }]);
+        let cell = match self {
+            Self::Push { inner, .. } | Self::Frwd { inner, .. } => Some(inner),
+            Self::Forward { push, .. } => Some(push.as_cell()),
+            Self::AdminPost { cell, .. } => Some(cell),
+            Self::Subscribe(_) => None,
+        };
+        if let Some(cell) = cell {
+            hash.update([cell.version, cell.raw_type, cell.flags]);
+            hash.update(cell.round_ctr.to_be_bytes());
+        }
+        match self {
+            Self::Push { contact, .. }
+            | Self::Frwd {
+                destination: contact,
+                ..
+            } => {
+                hash.update(contact.epoch.to_be_bytes());
+                hash.update(contact.push_cap);
+            }
+            Self::Subscribe(alias) => hash.update(alias.contact.epoch.to_be_bytes()),
+            _ => {}
+        }
+        hash.update(self.payload());
+        hash.finalize().into()
+    }
+
+    fn service_bytes(&self) -> usize {
+        // Account for the largest relay wrapper before wire bucketing.
+        gcoms_core::Bucket::smallest_for(self.payload().len().saturating_add(256))
+            .unwrap_or(gcoms_core::Bucket::B3)
+            .wire()
+            .size()
+    }
+
+    fn accounted_bytes(&self) -> usize {
+        let alias_bytes = |alias: &OwnedAlias| {
+            std::mem::size_of::<OwnedAlias>()
+                .saturating_add(alias.create_path.capacity())
+                .saturating_add(alias.lease_create.payload.capacity())
+        };
+        let metadata = match self {
+            Self::Frwd { relay, .. } => relay.aliases.iter().fold(
+                relay.frwd_path.capacity().saturating_add(
+                    relay
+                        .aliases
+                        .capacity()
+                        .saturating_sub(relay.aliases.len())
+                        .saturating_mul(std::mem::size_of::<OwnedAlias>()),
+                ),
+                |sum, alias| sum.saturating_add(alias_bytes(alias)),
+            ),
+            Self::Subscribe(alias) => alias_bytes(alias),
+            Self::AdminPost { token, .. } => token.capacity(),
+            _ => 0,
+        };
+        let payload_capacity = match self {
+            Self::Push { inner, .. } | Self::Frwd { inner, .. } => inner.payload.capacity(),
+            Self::Forward { push, .. } => push.as_cell().payload.capacity(),
+            Self::AdminPost { cell, .. } => cell.payload.capacity(),
+            Self::Subscribe(_) => 32,
+        };
+        // Retain credit for the encoded wire buffer as well as queued payload
+        // and copied authority. Credit is held through the response.
+        std::mem::size_of::<QueuedJob>()
+            .saturating_add(16384)
+            .saturating_add(payload_capacity)
+            .saturating_add(metadata)
+    }
+
     /// The cover authority implied by a real job on this lane, if any.
     fn lane_auth(&self) -> Option<LaneAuth> {
         match self {
@@ -828,77 +1090,134 @@ fn spawn_lane(
         } else {
             inner.slot_interval
         };
-        // Warm the TLS connection on the lane's own clock, never at the
-        // instant real traffic first arrives.
+        // Connection setup is independent of dispatch and can be canceled by
+        // shutdown. A stalled warmup must not pin queued work forever.
         let warming = inner.diagnostics.start();
-        let _ = inner.client.warm(key.address, key.service_id).await;
+        let excluded = match lane.auth.lock().unwrap_or_else(|p| p.into_inner()).as_ref() {
+            Some(LaneAuth::Frwd { decoy_target, .. }) => {
+                vec![(decoy_target.address, decoy_target.relay_service_id)]
+            }
+            _ => Vec::new(),
+        };
+        let warm = tokio::time::timeout(
+            Duration::from_secs(60),
+            inner
+                .client
+                .warm_excluding(key.address, key.service_id, &excluded),
+        );
+        tokio::pin!(warm);
+        loop {
+            if *shutdown.borrow() || lane.closing.load(std::sync::atomic::Ordering::Acquire) {
+                break;
+            }
+            tokio::select! {
+                _ = shutdown.changed() => break,
+                _ = lane.notify.notified() => {},
+                _ = &mut warm => break,
+            }
+        }
         if let Some(started) = warming {
             inner.diagnostics.warm.observe(started.elapsed());
         }
+        let mut clock = tokio::time::interval_at(tokio::time::Instant::now() + interval, interval);
+        clock.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+        let mut running = tokio::task::JoinSet::new();
+        let mut bulk_running = 0;
         loop {
-            tokio::select! {
-                biased;
-                changed = shutdown.changed() => {
-                    if changed.is_err() || *shutdown.borrow() {
-                        lane.queue.lock().unwrap_or_else(|p| p.into_inner()).shutdown();
-                        break;
-                    }
-                    continue;
-                }
-                _ = tokio::time::sleep(interval) => {}
-            }
-            if lane.closing.load(std::sync::atomic::Ordering::Acquire) {
-                lane.queue
-                    .lock()
-                    .unwrap_or_else(|p| p.into_inner())
-                    .shutdown();
+            if *shutdown.borrow() || lane.closing.load(std::sync::atomic::Ordering::Acquire) {
                 break;
             }
-            round = round.wrapping_add(1);
-            if !key.administrative {
-                inner.diagnostics.increment(&inner.diagnostics.data_ticks);
+            let mut opportunity = false;
+            let mut job = None;
+            tokio::select! {
+                biased;
+                _ = shutdown.changed() => continue,
+                completed = running.join_next(), if !running.is_empty() => {
+                    match completed {
+                        Some(Ok(TrafficClass::Bulk)) => bulk_running -= 1,
+                        Some(Ok(TrafficClass::Interactive)) => {},
+                        Some(Err(_)) => break,
+                        None => {},
+                    }
+                },
+                _ = lane.notify.notified() => {},
+                _ = clock.tick() => {
+                    round = round.wrapping_add(1);
+                    if !key.administrative { inner.diagnostics.increment(&inner.diagnostics.data_ticks); }
+                    if !key.administrative && !schedule_rng.gen_bool(inner.emission_probability) {
+                        inner.diagnostics.increment(&inner.diagnostics.data_skipped_ticks);
+                    } else if running.len() < inner.max_in_flight {
+                        opportunity = true;
+                        job = lane.queue.lock().unwrap_or_else(|p| p.into_inner()).pop_eligible(bulk_running < 3);
+                    }
+                },
             }
-            if !key.administrative && !schedule_rng.gen_bool(inner.emission_probability) {
-                inner
-                    .diagnostics
-                    .increment(&inner.diagnostics.data_skipped_ticks);
+            if !opportunity {
                 continue;
             }
-            let job = lane.queue.lock().unwrap_or_else(|p| p.into_inner()).pop();
-            if let Some(job) = job {
-                if let Some(queued_at) = job.queued_at {
-                    inner.diagnostics.queue_wait.observe(queued_at.elapsed());
+            let (request, traffic, done, reservation) = if let Some(job) = job {
+                if let Some(at) = job.queued_at {
+                    inner.diagnostics.queue_wait.observe(at.elapsed());
                 }
                 inner.diagnostics.increment(&inner.diagnostics.dispatched);
+                (
+                    prepare(job.semantic, round, &mut request_rng),
+                    job.traffic,
+                    Some(job.done),
+                    job._reservation,
+                )
+            } else if !key.administrative && inner.emit_cover {
+                let auth = lane.auth.lock().unwrap_or_else(|p| p.into_inner()).clone();
+                let Some(auth) = auth else {
+                    continue;
+                };
+                let Ok(reservation) = inner.budget.reserve(16384, None) else {
+                    continue;
+                };
+                inner
+                    .diagnostics
+                    .increment(&inner.diagnostics.cover_attempts);
+                (
+                    auth.cover_request(round, &mut request_rng),
+                    TrafficClass::Interactive,
+                    None,
+                    Some(reservation),
+                )
+            } else {
+                continue;
+            };
+            if traffic == TrafficClass::Bulk {
+                bulk_running += 1;
+            }
+            let inner = inner.clone();
+            running.spawn(async move {
+                let _reservation = reservation;
                 let started = inner.diagnostics.start();
-                let result = match prepare(job.semantic, round, &mut request_rng) {
+                let result = match request {
                     Ok(request) => {
-                        send_request(&inner.client, request, inner.connect_retry_base).await
+                        send_request(&inner.client, request, inner.connect_retry_base, traffic)
+                            .await
                     }
                     Err(error) => JobResult::Failed(error),
                 };
                 if let Some(started) = started {
                     inner.diagnostics.service.observe(started.elapsed());
                 }
-                if matches!(result, JobResult::Failed(_) | JobResult::Shutdown) {
+                if done.is_some() && matches!(result, JobResult::Failed(_) | JobResult::Shutdown) {
                     inner.diagnostics.increment(&inner.diagnostics.failed);
                 }
-                let _ = job.done.send(result);
-            } else if !key.administrative && inner.emit_cover {
-                // Idle slot: emit a fresh authenticated cover deposit so the
-                // lane's wire rate does not depend on whether it has traffic.
-                let auth = lane.auth.lock().unwrap_or_else(|p| p.into_inner()).clone();
-                if let Some(auth) = auth {
-                    if let Ok(request) = auth.cover_request(round, &mut request_rng) {
-                        inner
-                            .diagnostics
-                            .increment(&inner.diagnostics.cover_attempts);
-                        let _ =
-                            send_request(&inner.client, request, inner.connect_retry_base).await;
-                    }
+                if let Some(done) = done {
+                    let _ = done.send(result);
                 }
-            }
+                traffic
+            });
         }
+        lane.queue
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .shutdown();
+        running.abort_all();
+        while running.join_next().await.is_some() {}
     });
 }
 
@@ -934,16 +1253,18 @@ async fn retry_unsent_post(
     wire: bytes::Bytes,
     excluded: &[(SocketAddr, [u8; 32])],
     retry_base: Duration,
+    traffic: TrafficClass,
 ) -> JobResult {
     let mut attempt = 0;
     loop {
         let result = client
-            .post_cell_pinned_excluding(
+            .post_cell_with_class(
                 target.address,
                 target.relay_service_id,
                 token,
                 wire.clone(),
                 excluded,
+                traffic,
             )
             .await;
         match result {
@@ -971,7 +1292,12 @@ async fn retry_unsent_post(
     }
 }
 
-async fn send_request(client: &Tp1Client, request: Request, retry_base: Duration) -> JobResult {
+async fn send_request(
+    client: &Tp1Client,
+    request: Request,
+    retry_base: Duration,
+    traffic: TrafficClass,
+) -> JobResult {
     match request {
         Request::Post {
             target,
@@ -986,6 +1312,7 @@ async fn send_request(client: &Tp1Client, request: Request, retry_base: Duration
                 bytes::Bytes::from(wire),
                 &excluded,
                 retry_base,
+                traffic,
             )
             .await
         }
@@ -1279,12 +1606,15 @@ mod tests {
         assert_eq!(snapshot.service.count, 0);
     }
 
-    fn queued(marker: u8, class: ProducerClass) -> (ProducerClass, QueuedJob) {
+    pub(super) fn queued(marker: u8, class: ProducerClass) -> (ProducerClass, QueuedJob) {
         let (done, _) = oneshot::channel();
         (
             class,
             QueuedJob {
                 queued_at: None,
+                traffic: TrafficClass::Interactive,
+                producer: [0; 32],
+                _reservation: None,
                 semantic: SemanticJob::Forward {
                     target: RelayTarget {
                         address: "192.0.2.1:443".parse().unwrap(),
@@ -1308,7 +1638,7 @@ mod tests {
         )
     }
 
-    fn marker(job: &QueuedJob) -> u8 {
+    pub(super) fn marker(job: &QueuedJob) -> u8 {
         match &job.semantic {
             SemanticJob::Forward { push, .. } => push.as_cell().payload[42],
             _ => unreachable!(),

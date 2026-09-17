@@ -109,7 +109,7 @@ async fn offline_durable_acceptance_survives_restart_then_delivers_over_relays()
     .unwrap()
     .unwrap();
     let saved = archive.lock().unwrap().clone();
-    assert_eq!(&saved[..6], b"GCNSTI");
+    assert_eq!(&saved[..6], b"GCNSTJ");
     sender.shutdown().await;
     let sink = archive.clone();
     let sender = tokio::time::timeout(
@@ -191,7 +191,7 @@ async fn retained_owner_and_channel_load_offline_without_replacing_receive_conta
         .unwrap();
     let roster = legacy.channel_roster("retained").await.unwrap();
     let saved = legacy.export_state().await.unwrap();
-    assert_eq!(&saved[..6], b"GCNSTI");
+    assert_eq!(&saved[..6], b"GCNSTJ");
     legacy.shutdown().await;
     let restored = tokio::time::timeout(
         Duration::from_secs(2),
@@ -215,7 +215,7 @@ async fn retained_owner_and_channel_load_offline_without_replacing_receive_conta
     // is offline. Historical15's missing-grant/pending case is covered by the
     // synthetic archive compatibility tests in the native persistence module.
     let offline = restored.export_state().await.unwrap();
-    assert_eq!(&offline[..6], b"GCNSTI");
+    assert_eq!(&offline[..6], b"GCNSTJ");
     restored.shutdown().await;
     let restored = start_persistent_restored_with_routing(
         config(30, 30),

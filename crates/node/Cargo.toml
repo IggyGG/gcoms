@@ -47,6 +47,8 @@ libc = "0.2"
 windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Storage_FileSystem"] }
 
 [dev-dependencies]
+h2 = "0.4"
+http = "1"
 rcgen = { version = "0.13", default-features = false, features = ["aws_lc_rs", "pem"] }
 tempfile = "3"
 gcoms-crypto = { version = "0.1.0", path = "../crypto", features = ["test-vectors"] }

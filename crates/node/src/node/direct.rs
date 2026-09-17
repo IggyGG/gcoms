@@ -1352,6 +1352,17 @@ where
             .checked_add(1)
             .ok_or("direct message sequence exhausted")?;
         let mut direct = zeroize::Zeroizing::new(encode_record(message_id, sequence)?);
+        // Validate the worst sending epoch, not just the frame produced today:
+        // a durable record may need re-encryption after simultaneous initiation.
+        let overhead = gcoms_crypto::session::MAX_FRAME_OVERHEAD
+            .saturating_add(3)
+            .saturating_add(st.info.identity_pk.len());
+        if direct.len().saturating_add(overhead) > gcoms_core::MAX_MESSAGE {
+            return Err(format!(
+                "direct record exceeds {} byte PQ-safe limit",
+                gcoms_core::MAX_MESSAGE.saturating_sub(overhead)
+            ));
+        }
         let durable = crate::proto::is_durable_direct_data(&direct);
         if crate::proto::is_volatile_application(&direct)
             && (!st.sessions.contains_key(&peer.identity_pk)
@@ -1433,9 +1444,20 @@ where
             }
         }
 
-        if st.routing.is_some() && st.info.primary().is_none() {
+        let awaiting_confirmation = st.scheduler.pipelined()
+            && matches!(
+                st.session_states.get(&peer.identity_pk),
+                Some(DirectSessionState::InitiatedUnconfirmed { .. })
+            );
+        let routing_recovering = st.routing.is_some() && st.info.primary().is_none();
+        if routing_recovering || awaiting_confirmation {
             if !durable {
-                return Err("inbox routing is recovering".into());
+                return Err(if awaiting_confirmation {
+                    "direct session confirmation is pending"
+                } else {
+                    "inbox routing is recovering"
+                }
+                .into());
             }
             let now = std::time::Instant::now();
             st.next_direct_sequence = next_direct_sequence;
@@ -1508,10 +1530,12 @@ where
                 DirectSessionState::InitiatedUnconfirmed { expires },
             );
             first_move = Some(fm);
-        } else if matches!(
-            old_session_state,
-            Some(DirectSessionState::InitiatedUnconfirmed { .. })
-        ) {
+        } else if !st.scheduler.pipelined()
+            && matches!(
+                old_session_state,
+                Some(DirectSessionState::InitiatedUnconfirmed { .. })
+            )
+        {
             st.session_states.insert(
                 peer.identity_pk.clone(),
                 DirectSessionState::InitiatedUnconfirmed { expires },
@@ -1634,6 +1658,16 @@ pub(super) fn materialize_deferred(st: &mut NodeState) -> Result<(), String> {
     for (id, _) in ids {
         let pending = &st.pending_1to1[&id];
         let peer = select_peer_route(st, &pending.delivery.peer)?;
+        if st.scheduler.pipelined()
+            && matches!(
+                st.session_states.get(&peer.identity_pk),
+                Some(DirectSessionState::InitiatedUnconfirmed { .. })
+            )
+        {
+            // The first reliable record owns session setup. Later logical
+            // records retain their IDs/deadlines without consuming ratchet slots.
+            continue;
+        }
         let expires = pending.expires;
         let body = zeroize::Zeroizing::new(
             pending

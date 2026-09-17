@@ -11,8 +11,9 @@ pub const F_LAST: u8 = 0x02;
 pub const MAX_MESSAGE: usize = 15 * 1024;
 /// Maximum application body accepted by message send APIs.
 ///
-/// The 3 KiB reserve covers the largest current direct-session rekey frame,
-/// channel/MLS framing, and relay encapsulation below [`MAX_MESSAGE`].
+/// General application ceiling. Direct sends additionally check their complete
+/// record and sender identity against the maximum PQ frame overhead before
+/// consuming a ratchet counter; some direct records have a smaller body limit.
 pub const APPLICATION_PAYLOAD_LIMIT: usize = MAX_MESSAGE - 3 * 1024;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

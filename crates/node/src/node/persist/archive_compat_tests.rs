@@ -6,6 +6,7 @@ enum HistoricalArchive {
     Machine16,
     Routed16 { empty_owner: bool },
     Owned17,
+    Unified18,
 }
 
 fn historical_archive(node: &NodeState, format: HistoricalArchive) -> Result<Vec<u8>, String> {
@@ -19,6 +20,11 @@ fn historical_archive_from_unified(
     format: HistoricalArchive,
 ) -> Result<Vec<u8>, String> {
     let archive = decode_v2(bytes, seed)?;
+    if matches!(format, HistoricalArchive::Unified18) {
+        let mut historical = bytes.to_vec();
+        historical[..6].copy_from_slice(MAGIC_V18);
+        return Ok(historical);
+    }
     let mut output = bytes[..archive.layout.trailer_start].to_vec();
     if matches!(format, HistoricalArchive::Owned17) {
         // The retained writer inserted grants directly after each sealed MLS role.
@@ -88,6 +94,7 @@ fn historical_archive_from_unified(
     output[..6].copy_from_slice(match format {
         HistoricalArchive::Owner15 => MAGIC_V15,
         HistoricalArchive::Owned17 => MAGIC_V17,
+        HistoricalArchive::Unified18 => unreachable!("handled above"),
         HistoricalArchive::Machine16 | HistoricalArchive::Routed16 { .. } => MAGIC_V16,
     });
     Ok(output)
@@ -116,6 +123,7 @@ async fn archive_compat_old_v16_both_grammars_and_v17_upgrade_offline_without_re
         HistoricalArchive::Routed16 { empty_owner: false },
         HistoricalArchive::Routed16 { empty_owner: true },
         HistoricalArchive::Owned17,
+        HistoricalArchive::Unified18,
     ] {
         let mut node = compatibility_state();
         let machine = matches!(
@@ -166,7 +174,7 @@ async fn archive_compat_old_v16_both_grammars_and_v17_upgrade_offline_without_re
         assert_eq!(state.application_inbox.next_sequence, 23);
         assert_eq!(state.application_inbox.machine_owned, machine);
         let upgraded = encode_state(&state).unwrap();
-        assert_eq!(&upgraded[..6], MAGIC_V18);
+        assert_eq!(&upgraded[..6], MAGIC_V19);
         let after = decode_v2(&upgraded, &TEST_SEED).unwrap();
         assert_eq!(after.application_inbox.machine_owned, machine);
         if !matches!(

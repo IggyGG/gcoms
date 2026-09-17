@@ -10,6 +10,8 @@ pub mod file_stream;
 pub mod fragment;
 pub mod hop;
 pub mod lease;
+pub mod traffic;
+pub use traffic::TrafficClass;
 
 pub use cell::{
     decode, Bucket, Cell, CellClass, CellError, CellType, APPLICATION_PAYLOAD_LIMIT, F_LAST,

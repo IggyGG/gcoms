@@ -865,3 +865,120 @@ async fn owned_server_stop_releases_live_connection_handlers_before_return() {
     assert!(matches!(read, Ok(0) | Err(_)));
     drop(client);
 }
+
+#[tokio::test]
+async fn finite_bulk_is_bounded_reserves_interactive_and_reuses_one_connection() {
+    use gcoms_core::TrafficClass;
+    use std::time::Duration;
+    let identity = TlsIdentity::generate().unwrap();
+    let pin = identity.service_id();
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    let acceptor = TlsAcceptor::from(Arc::new(identity.server_config().unwrap()));
+    let connections = Arc::new(AtomicUsize::new(0));
+    let counted = connections.clone();
+    let (arrivals, mut arrived) = mpsc::channel(16);
+    let server = tokio::spawn(async move {
+        while let Ok((tcp, _)) = listener.accept().await {
+            counted.fetch_add(1, Ordering::SeqCst);
+            let acceptor = acceptor.clone();
+            let arrivals = arrivals.clone();
+            tokio::spawn(async move {
+                let tls = acceptor.accept(tcp).await.unwrap();
+                let mut connection = h2::server::handshake(tls).await.unwrap();
+                while let Some(Ok((request, mut reply))) = connection.accept().await {
+                    let arrivals = arrivals.clone();
+                    tokio::spawn(async move {
+                        let name = request.uri().path().to_owned();
+                        let mut body = request.into_body();
+                        while let Some(Ok(bytes)) = body.data().await {
+                            body.flow_control().release_capacity(bytes.len()).unwrap();
+                        }
+                        let send = reply.send_response(Response::new(()), false).unwrap();
+                        let _ = arrivals.send((name, send)).await;
+                    });
+                }
+            });
+        }
+    });
+    let client = Arc::new(Tp1Client::new().unwrap());
+    let mut bulk = Vec::new();
+    for index in 0..8 {
+        let client = client.clone();
+        bulk.push(tokio::spawn(async move {
+            client
+                .post_cell_with_class(
+                    addr,
+                    pin,
+                    &format!("bulk{index}"),
+                    Bytes::from(sample_cell()),
+                    &[],
+                    TrafficClass::Bulk,
+                )
+                .await
+        }));
+    }
+    let mut held = Vec::new();
+    for _ in 0..3 {
+        held.push(
+            tokio::time::timeout(Duration::from_secs(5), arrived.recv())
+                .await
+                .unwrap()
+                .unwrap(),
+        );
+    }
+    assert!(
+        tokio::time::timeout(Duration::from_millis(50), arrived.recv())
+            .await
+            .is_err()
+    );
+    let interactive_client = client.clone();
+    let interactive = tokio::spawn(async move {
+        interactive_client
+            .post_cell_with_class(
+                addr,
+                pin,
+                "interactive",
+                Bytes::from(sample_cell()),
+                &[],
+                TrafficClass::Interactive,
+            )
+            .await
+    });
+    let (name, mut reply) = tokio::time::timeout(Duration::from_secs(2), arrived.recv())
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(name, "/interactive");
+    reply.send_data(Bytes::from(sample_cell()), true).unwrap();
+    assert!(interactive.await.unwrap().unwrap().is_accepted());
+    assert!(
+        tokio::time::timeout(Duration::from_millis(50), arrived.recv())
+            .await
+            .is_err()
+    );
+    // Cancellation releases the bulk slot, including after response headers.
+    let canceled = held[0]
+        .0
+        .trim_start_matches("/bulk")
+        .parse::<usize>()
+        .unwrap();
+    bulk[canceled].abort();
+    let next = tokio::time::timeout(Duration::from_secs(2), arrived.recv())
+        .await
+        .unwrap()
+        .unwrap();
+    held.push(next);
+    // The active finite responses must survive LRU pressure.
+    for _ in 0..gcoms_transport::client::MAX_POOLED_CONNECTIONS {
+        let other = spawn_post_server(echo_handler()).await;
+        client.warm(other.0, other.1).await.unwrap();
+    }
+    client.warm(addr, pin).await.unwrap();
+    assert_eq!(connections.load(Ordering::SeqCst), 1);
+    for task in bulk {
+        task.abort();
+    }
+    drop(held);
+    server.abort();
+}

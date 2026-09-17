@@ -1,8 +1,10 @@
 # GC/2 implementation ledger
 
-Status: repository consolidation and research-tool migration complete. GC/1 remains the
-implemented runtime profile. No GC/2 compatibility, performance, privacy or mobile
-qualification is claimed by this ledger.
+Status: repository consolidation and research-tool migration complete. Bounded
+scheduling, session readiness and larger file-chunk work is in progress; see
+[the runtime increment](GC2_SCHEDULER.md). GC/1 remains the production wire and
+cover profile. No GC/2 compatibility, performance, privacy or mobile qualification
+is claimed by this ledger.
 
 ## Accepted contract
 
@@ -99,7 +101,11 @@ Retain failures, source/executable/configuration/workload hashes and exact scope
 - Research scripts, tests and aggregate result: migrated with per-file hashes.
 - Two-repository source validation: `scripts/check-gchat.py`; package-archive
   validation remains a separate gate.
-- Runtime GC/2 changes and their application/privacy/mobile gates: pending.
+- Bounded scheduler/terminal pooling, opt-in fixture pipelining, durable session
+  readiness and PQ-safe 11 KiB file framing: implemented in the task branch.
+- Complete counter-window flow control, command preparation/completion split,
+  authenticated class propagation, shared GCT2 carrier, protected profiles,
+  SDK/GChat profile integration and application/privacy/mobile gates: pending.
 
 ## Consolidation validation — Linux, 2026-09-17
 
