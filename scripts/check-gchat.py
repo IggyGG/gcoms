@@ -14,50 +14,10 @@ import subprocess
 import tempfile
 import tomllib
 
+from source_snapshot import source_files, snapshot, unchanged
+
 
 ROOT = Path(__file__).resolve().parents[1]
-
-
-def source_files(root):
-    raw = subprocess.check_output(
-        ["git", "ls-files", "-z", "--cached", "--others", "--exclude-standard"],
-        cwd=root,
-    )
-    files = []
-    for name in sorted(set(os.fsdecode(raw).split("\0")) - {""}):
-        path = root / name
-        if not path.exists() and not path.is_symlink():
-            continue  # Preserve intentional worktree deletions in the snapshot.
-        if not path.resolve().is_relative_to(root):
-            raise ValueError(f"source escapes repository: {name}")
-        if not path.is_file():
-            raise ValueError(f"unsupported source entry: {name}")
-        files.append(name)
-    if "Cargo.toml" not in files or "Cargo.lock" not in files:
-        raise ValueError("source requires Cargo.toml and Cargo.lock")
-    return files
-
-
-def snapshot(source, destination):
-    hashes = {}
-    for name in source_files(source):
-        data = (source / name).read_bytes()
-        target = destination / name
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_bytes(data)
-        shutil.copymode(source / name, target)
-        hashes[name] = hashlib.sha256(data).hexdigest()
-    return hashes
-
-
-def unchanged(source, hashes):
-    try:
-        return source_files(source) == list(hashes) and all(
-            hashlib.sha256((source / name).read_bytes()).hexdigest() == digest
-            for name, digest in hashes.items()
-        )
-    except (OSError, ValueError):
-        return False
 
 
 def patches(root):

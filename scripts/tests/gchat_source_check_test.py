@@ -4,9 +4,12 @@ from pathlib import Path
 import shutil
 import subprocess
 import tempfile
+import sys
 import unittest
 from unittest.mock import patch
 
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 SPEC = importlib.util.spec_from_file_location(
     "gchat_source_check", Path(__file__).resolve().parents[1] / "check-gchat.py"
