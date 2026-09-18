@@ -79,6 +79,46 @@ async fn gc2_durable_file_records_reserve_the_bulk_counter_window() {
 }
 
 #[tokio::test]
+async fn gc2_explicit_bulk_class_reserves_the_bulk_window_for_opaque_records() {
+    let alice = Arc::new(Mutex::new(gc2_node(89)));
+    let bob = gc2_node(90);
+    let scheduler = alice.lock().unwrap().scheduler.clone();
+    // The body is not a file kind, so only the explicit class can select bulk.
+    send_durable_1to1_class(
+        &alice,
+        &scheduler,
+        &bob.info,
+        b"declared bulk",
+        None,
+        gcoms_core::TrafficClass::Bulk,
+    )
+    .await
+    .unwrap();
+    let peer = bob.info.identity_pk.clone();
+    alice
+        .lock()
+        .unwrap()
+        .session_states
+        .insert(peer.clone(), DirectSessionState::Established);
+    send_durable_1to1(&alice, &scheduler, &bob.info, b"inferred interactive", None)
+        .await
+        .unwrap();
+    let a = alice.lock().unwrap();
+    let PeerSession::Credited(session) = &a.sessions[&peer] else {
+        panic!("GC2 session expected");
+    };
+    let purposes: Vec<_> = session
+        .window()
+        .retries()
+        .map(|(_, purpose, _)| purpose)
+        .collect();
+    assert!(purposes.contains(&gcoms_protocol::flow::Purpose::Bulk));
+    assert!(purposes.contains(&gcoms_protocol::flow::Purpose::Interactive));
+    a.scheduler.shutdown();
+    bob.scheduler.shutdown();
+}
+
+#[tokio::test]
 async fn gc2_runtime_durable_delivery_credit_and_ack_survive_restart() {
     let alice=Arc::new(Mutex::new(gc2_node(21)));
     let mut bob=gc2_node(22);

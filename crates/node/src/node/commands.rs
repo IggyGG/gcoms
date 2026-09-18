@@ -357,6 +357,7 @@ pub(crate) fn spawn_command_loop(ctx: CommandLoopContext) -> tokio::task::JoinHa
                     peer,
                     text,
                     via,
+                    class,
                     done,
                 } => {
                     let key = CmdKey::Peer(peer.identity_pk.clone());
@@ -369,9 +370,9 @@ pub(crate) fn spawn_command_loop(ctx: CommandLoopContext) -> tokio::task::JoinHa
                         prepare,
                         complete | {
                             let prepared = if durable {
-                                prepare_durable_1to1(&state, &peer, &text, *via)?
+                                prepare_durable_1to1_class(&state, &peer, &text, *via, class)?
                             } else {
-                                prepare_1to1(&state, &peer, &text, *via)?
+                                prepare_1to1_class(&state, &peer, &text, *via, class)?
                             };
                             let ticket = complete.register();
                             drop(prepare);

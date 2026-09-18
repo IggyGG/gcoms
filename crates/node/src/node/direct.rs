@@ -1699,13 +1699,23 @@ pub(crate) fn prepare_1to1(
     text: &[u8],
     via: Option<NodeInfo>,
 ) -> Result<PreparedDirect, String> {
+    prepare_1to1_class(state, peer, text, via, None)
+}
+
+pub(crate) fn prepare_1to1_class(
+    state: &Arc<Mutex<NodeState>>,
+    peer: &NodeInfo,
+    text: &[u8],
+    via: Option<NodeInfo>,
+    class: Option<gcoms_core::TrafficClass>,
+) -> Result<PreparedDirect, String> {
     validate_application_payload(text)?;
     let share_presence = state
         .lock()
         .unwrap_or_else(|p| p.into_inner())
         .direct_presence_opt_in
         .contains(&peer.identity_pk);
-    prepare_direct_record(state, peer, via, true, |message_id, _| {
+    prepare_direct_record(state, peer, via, true, class, |message_id, _| {
         Ok(encode_direct_data(
             message_id,
             now_ms(),
@@ -1752,7 +1762,7 @@ pub(crate) fn prepare_volatile_application(
     body: &[u8],
 ) -> Result<PreparedDirect, String> {
     validate_application_size(body)?;
-    prepare_direct_record(state, peer, None, false, |message_id, _| {
+    prepare_direct_record(state, peer, None, false, None, |message_id, _| {
         Ok(crate::proto::encode_volatile_application(
             message_id,
             now_ms(),
@@ -1775,11 +1785,22 @@ pub(crate) async fn send_volatile_application(
         .map(|_| ())
 }
 
+#[cfg(test)]
 pub(crate) fn prepare_durable_1to1(
     state: &Arc<Mutex<NodeState>>,
     peer: &NodeInfo,
     body: &[u8],
     via: Option<NodeInfo>,
+) -> Result<PreparedDirect, String> {
+    prepare_durable_1to1_class(state, peer, body, via, None)
+}
+
+pub(crate) fn prepare_durable_1to1_class(
+    state: &Arc<Mutex<NodeState>>,
+    peer: &NodeInfo,
+    body: &[u8],
+    via: Option<NodeInfo>,
+    class: Option<gcoms_core::TrafficClass>,
 ) -> Result<PreparedDirect, String> {
     validate_application_payload(body)?;
     if body.is_empty()
@@ -1802,7 +1823,7 @@ pub(crate) fn prepare_durable_1to1(
     {
         return Err("durable applications are not enabled for this profile".into());
     }
-    prepare_direct_record(state, peer, via, true, |message_id, _| {
+    prepare_direct_record(state, peer, via, true, class, |message_id, _| {
         Ok(crate::proto::encode_direct_durable_data(
             message_id,
             now_ms(),
@@ -1826,6 +1847,22 @@ pub(crate) async fn send_durable_1to1(
         .map(|_| ())
 }
 
+#[cfg(test)]
+#[allow(dead_code)]
+pub(crate) async fn send_durable_1to1_class(
+    state: &Arc<Mutex<NodeState>>,
+    scheduler: &RelayScheduler,
+    peer: &NodeInfo,
+    body: &[u8],
+    via: Option<NodeInfo>,
+    class: gcoms_core::TrafficClass,
+) -> Result<(), String> {
+    let prepared = prepare_durable_1to1_class(state, peer, body, via, Some(class))?;
+    complete_direct_record(scheduler, prepared)
+        .await
+        .map(|_| ())
+}
+
 pub(crate) async fn send_direct_record<F>(
     state: &Arc<Mutex<NodeState>>,
     scheduler: &RelayScheduler,
@@ -1837,7 +1874,7 @@ pub(crate) async fn send_direct_record<F>(
 where
     F: FnOnce([u8; 16], u64) -> Result<Vec<u8>, String>,
 {
-    let prepared = prepare_direct_record(state, peer, via, application_event, encode_record)?;
+    let prepared = prepare_direct_record(state, peer, via, application_event, None, encode_record)?;
     complete_direct_record(scheduler, prepared).await
 }
 
@@ -1861,6 +1898,7 @@ pub(crate) fn prepare_direct_record<F>(
     peer: &NodeInfo,
     via: Option<NodeInfo>,
     application_event: bool,
+    class: Option<gcoms_core::TrafficClass>,
     encode_record: F,
 ) -> Result<PreparedDirect, String>
 where
@@ -1909,7 +1947,9 @@ where
         }
         let durable = crate::proto::is_durable_direct_data(&direct);
         let control = direct_control_record(&direct);
-        let traffic = direct_traffic_class(&direct);
+        // An explicit caller class overrides the record-derived reservation for
+        // this preparation; deferred copies re-derive from the record.
+        let traffic = class.unwrap_or_else(|| direct_traffic_class(&direct));
         if crate::proto::is_volatile_application(&direct)
             && (!st.sessions.contains_key(&peer.identity_pk)
                 || !matches!(
@@ -2103,7 +2143,7 @@ where
         let mut wrapping_key = direct_session_wrapping_key(&st.identity_seed);
         let context = direct_session_context(&st, &peer.identity_pk)?;
         let prepared = st.sessions[&peer.identity_pk]
-            .prepare_send(&direct, &wrapping_key, &context)
+            .prepare_send_class(&direct, class, &wrapping_key, &context)
             .map_err(|error| error.to_string())?;
         wrapping_key.fill(0);
         let mut cells = Vec::with_capacity(if first_move.is_some() { 2 } else { 1 });

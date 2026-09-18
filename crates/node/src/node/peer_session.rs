@@ -213,6 +213,17 @@ impl PeerSession {
         key: &[u8; 32],
         context: &SessionContext,
     ) -> Result<PreparedSend, Error> {
+        self.prepare_send_class(bytes, None, key, context)
+    }
+
+    /// Same as [`Self::prepare_send`] with an optional explicit traffic class.
+    pub fn prepare_send_class(
+        &self,
+        bytes: &[u8],
+        class: Option<gcoms_core::TrafficClass>,
+        key: &[u8; 32],
+        context: &SessionContext,
+    ) -> Result<PreparedSend, Error> {
         let deadline = if matches!(
             decode_direct_record(bytes),
             Some(DirectRecord::Data { .. } | DirectRecord::VolatileApplication { .. })
@@ -221,7 +232,7 @@ impl PeerSession {
         } else {
             0
         };
-        self.prepare_send_until(bytes, deadline, key, context)
+        self.prepare_send_until_class(bytes, deadline, class, key, context)
     }
     pub fn prepare_send_until(
         &self,
@@ -230,8 +241,22 @@ impl PeerSession {
         key: &[u8; 32],
         context: &SessionContext,
     ) -> Result<PreparedSend, Error> {
+        self.prepare_send_until_class(bytes, deadline, None, key, context)
+    }
+
+    /// Same as [`Self::prepare_send_until`] with an optional explicit traffic
+    /// class. `None` keeps the class derived from the authenticated record;
+    /// an explicit class only affects ratchet reservation, never the wire.
+    pub fn prepare_send_until_class(
+        &self,
+        bytes: &[u8],
+        deadline: u64,
+        class: Option<gcoms_core::TrafficClass>,
+        key: &[u8; 32],
+        context: &SessionContext,
+    ) -> Result<PreparedSend, Error> {
         #[cfg(not(feature = "experimental-gc2"))]
-        let _ = deadline;
+        let _ = (deadline, class);
         match self {
             Self::Legacy(s) => {
                 let prepared = s.prepare_send(bytes, key, context)?;
@@ -245,7 +270,7 @@ impl PeerSession {
             Self::Credited(s) => {
                 let (purpose, volatile, deadline) = match decode_direct_record(bytes) {
                     Some(DirectRecord::Data { sent_ms, .. }) => (
-                        data_purpose(bytes),
+                        class_purpose(bytes, class),
                         false,
                         deadline.min(gc2_receipts::horizon(sent_ms)),
                     ),
@@ -465,6 +490,17 @@ fn data_purpose(bytes: &[u8]) -> flow::Purpose {
         flow::Purpose::Bulk
     } else {
         flow::Purpose::Interactive
+    }
+}
+
+/// An explicit caller class overrides the record-derived reservation; control
+/// records never take an application class.
+#[cfg(feature = "experimental-gc2")]
+fn class_purpose(bytes: &[u8], class: Option<gcoms_core::TrafficClass>) -> flow::Purpose {
+    match class {
+        Some(gcoms_core::TrafficClass::Bulk) => flow::Purpose::Bulk,
+        Some(_) => flow::Purpose::Interactive,
+        None => data_purpose(bytes),
     }
 }
 

@@ -568,6 +568,20 @@ pub trait GcClient: Send + Sync {
         Err(SdkError::PermissionDenied)
     }
 
+    /// Durable opaque application send with an explicit scheduling class.
+    /// Deferred copies re-derive the class from the record, so the hint only
+    /// affects the immediate reservation. The default ignores it.
+    async fn submit_durable_opaque_class(
+        &self,
+        recipient: &ContactCard,
+        content_type: &str,
+        body: &[u8],
+        _class: gcoms_core::TrafficClass,
+    ) -> Result<(), SdkError> {
+        self.submit_durable_opaque(recipient, content_type, body)
+            .await
+    }
+
     /// Trusted host seam used only after authenticated component dispatch.
     /// No IPC request exposes this operation directly; unsupported hosts deny it.
     async fn submit_local_component(&self, _wire: &[u8]) -> Result<(), SdkError> {

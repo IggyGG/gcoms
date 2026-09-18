@@ -103,6 +103,8 @@ pub enum Cmd {
         peer: Box<NodeInfo>,
         text: Vec<u8>,
         via: Box<Option<NodeInfo>>,
+        /// Explicit scheduling intent; `None` derives it from the record.
+        class: Option<gcoms_core::TrafficClass>,
         done: tokio::sync::oneshot::Sender<Result<(), String>>,
     },
     Send1to1Tracked {
@@ -735,6 +737,7 @@ impl NodeHandle {
                 peer: Box::new(peer.clone()),
                 text: text.to_vec(),
                 via: Box::new(via),
+                class: None,
                 done,
             })
             .await
@@ -1237,6 +1240,19 @@ impl NodeHandle {
         body: &[u8],
         via: Option<NodeInfo>,
     ) -> Result<(), String> {
+        self.send_durable_1to1_class(peer, body, via, None).await
+    }
+
+    /// Durable send with an explicit scheduling class. The class only selects
+    /// the ratchet reservation and scheduler admission; it changes no wire
+    /// bytes. Deferred copies re-derive the class from the record.
+    pub async fn send_durable_1to1_class(
+        &self,
+        peer: &NodeInfo,
+        body: &[u8],
+        via: Option<NodeInfo>,
+        class: Option<gcoms_core::TrafficClass>,
+    ) -> Result<(), String> {
         let (done, receive) = tokio::sync::oneshot::channel();
         self.cmd_tx
             .send(Cmd::Send1to1 {
@@ -1244,6 +1260,7 @@ impl NodeHandle {
                 peer: Box::new(peer.clone()),
                 text: body.to_vec(),
                 via: Box::new(via),
+                class,
                 done,
             })
             .await

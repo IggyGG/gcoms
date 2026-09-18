@@ -189,7 +189,11 @@ Retain failures, source/executable/configuration/workload hashes and exact scope
   component kind for both the GC/2 counter reservation and scheduler admission;
   chat, acknowledgements, presence and contact updates keep the interactive and
   control reservations. Concurrent file transfers therefore share the bounded
-  bulk slots instead of the interactive capacity. Direct and channel application
+  bulk slots instead of the interactive capacity. A durable send may also carry
+  an explicit scheduling class (`send_durable_1to1_class`; SDK
+  `submit_durable_opaque_class`); deferred copies re-derive the class from the
+  record, so the hint only affects the immediate reservation and never the
+  wire. Direct and channel application
   sends now prepare under the per-peer/channel preparation lock and complete
   after releasing it, with a FIFO completion chain preserving wire/result order
   and cancellation release; invite, membership, replay and recovery commands

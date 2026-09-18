@@ -389,6 +389,7 @@ pub(crate) fn prepare_direct_presence(
         // Report only the authenticated matching ACK after receive persistence.
         // This is transport reachability, not an application execution receipt.
         true,
+        None,
         move |message_id, sequence| {
             encode_direct_presence(message_id, sequence, mode, lease_secs)
                 .ok_or_else(|| "invalid direct presence lease".to_string())
