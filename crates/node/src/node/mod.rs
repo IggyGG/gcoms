@@ -45,6 +45,8 @@ mod gc2_acks;
 #[cfg(feature = "experimental-gc2")]
 mod gc2_direct;
 #[cfg(feature = "experimental-gc2")]
+mod gc2_gate;
+#[cfg(feature = "experimental-gc2")]
 mod gc2_receipts;
 mod peer_session;
 #[cfg(feature = "experimental-gc2")]
@@ -101,6 +103,11 @@ pub struct FixtureProfile {
     /// or privacy profile and is never selected by a production node.
     #[cfg(feature = "experimental-gc2")]
     pub gc2_sessions: bool,
+    /// Install the late-bound GC/2 role gate on the listener. It becomes active
+    /// only after this node provisions a relay service, so fixtures that do not
+    /// act as relays pass every path through unchanged.
+    #[cfg(feature = "experimental-gc2")]
+    pub gc2_gate: bool,
     /// Relay lane and maintenance scheduling.
     pub scheduler: SchedulerProfile,
     /// Permit loopback/private FRWD targets (all fixtures need this).
@@ -117,6 +124,8 @@ impl NodeProfile {
         Self::Fixture(FixtureProfile {
             #[cfg(feature = "experimental-gc2")]
             gc2_sessions: false,
+            #[cfg(feature = "experimental-gc2")]
+            gc2_gate: false,
             scheduler: SchedulerProfile::fixture(),
             allow_local_targets: true,
             stream_slot_interval: std::time::Duration::from_millis(10),
@@ -130,6 +139,8 @@ impl NodeProfile {
         Self::Fixture(FixtureProfile {
             #[cfg(feature = "experimental-gc2")]
             gc2_sessions: false,
+            #[cfg(feature = "experimental-gc2")]
+            gc2_gate: false,
             scheduler: SchedulerProfile::compressed_production(seed),
             allow_local_targets: true,
             stream_slot_interval: std::time::Duration::from_millis(10),
@@ -150,9 +161,25 @@ impl NodeProfile {
         Self::Fixture(fixture)
     }
 
+    /// Fixture that installs the experimental GC/2 role gate on its listener.
+    /// The gate activates only after this node provisions a relay service.
+    #[cfg(feature = "experimental-gc2")]
+    pub fn gc2_gate_fixture() -> Self {
+        let Self::Fixture(mut fixture) = Self::fixture() else {
+            unreachable!()
+        };
+        fixture.gc2_gate = true;
+        Self::Fixture(fixture)
+    }
+
     #[cfg(feature = "experimental-gc2")]
     fn gc2_sessions(&self) -> bool {
         matches!(self,Self::Fixture(f) if f.gc2_sessions)
+    }
+
+    #[cfg(feature = "experimental-gc2")]
+    fn gc2_gate(&self) -> bool {
+        matches!(self,Self::Fixture(f) if f.gc2_gate)
     }
 
     pub(crate) fn scheduler_profile(&self) -> SchedulerProfile {
@@ -684,6 +711,12 @@ async fn start_with_tls_policy_control_sink_and_bootstrap(
     )
     .map_err(|e| e.to_string())?
     .with_limits(cfg.profile.server_limits());
+    #[cfg(feature = "experimental-gc2")]
+    let server = if cfg.profile.gc2_gate() {
+        server.with_dispatch_factory(gc2_gate::dispatch_factory(routing.clone(), None))
+    } else {
+        server
+    };
     let local_addr = server.local_addr().map_err(|e| e.to_string())?;
     let relay_target = RelayTarget {
         address: cfg.advertise.unwrap_or(local_addr),

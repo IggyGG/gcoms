@@ -150,8 +150,13 @@ TLS entry/middle/terminal reuse. These are component tests, including a fixture
 with legacy cells inside an explicit GC/2 circuit. They are not application
 goodput, packet-classifier, mobile-power or operated-network qualification.
 
-Runtime adoption still needs installation of this combined-listener gate,
-connection of the durable directory to profile startup and explicit bootstrap
-migration, private provisioning/advertisement integration,
-counter-window recovery, Node/SDK/GChat class and profile propagation, and the
-application/privacy/device gates in [the implementation ledger](GC2_IMPLEMENTATION.md).
+The combined-listener gate is now installed for an explicit fixture profile
+(`NodeProfile::gc2_gate_fixture`): the listener attaches a late-bound dispatch
+factory that passes every path through until this node provisions a relay
+service, then fixes entry/transit/control roles and rejects unknown paths
+without any GC/1 fallback within the connection. Runtime adoption still needs
+the terminal queue service composition, connection of the durable directory to
+profile startup, explicit bootstrap migration, private
+provisioning/advertisement integration, production profile selection,
+Node/SDK/GChat class and profile propagation, and the application/privacy/device
+gates in [the implementation ledger](GC2_IMPLEMENTATION.md).

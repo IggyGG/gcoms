@@ -193,10 +193,16 @@ Retain failures, source/executable/configuration/workload hashes and exact scope
   sends now prepare under the per-peer/channel preparation lock and complete
   after releasing it, with a FIFO completion chain preserving wire/result order
   and cancellation release; invite, membership, replay and recovery commands
-  still serialize their network waits.
-- Complete counter-window flow control, command preparation/completion split,
-  authenticated class propagation, complete GC/2 routing, protected profiles,
-  SDK/GChat profile integration and application/privacy/mobile gates: pending.
+  still serialize their network waits. The experimental combined-listener GC/2
+  role gate is attachable through an explicit fixture profile; it is late-bound
+  to owner provisioning and never falls back to GC/1 within a connection.
+  Terminal queue composition and production profile selection remain.
+- Complete GC/2 routing, protected profiles, SDK/GChat profile integration and
+  application/privacy/mobile gates: pending. Counter-window flow control, the
+  application-send preparation/completion split and authenticated class
+  propagation are implemented; the remaining control-plane command waits are
+  listed above, and the experimental combined-listener gate is attachable
+  through an explicit fixture profile.
 
 ## Consolidation validation — Linux, 2026-09-17
 
