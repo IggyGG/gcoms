@@ -176,6 +176,8 @@ pub(crate) struct DirectMaintenance {
     repair_due: HashMap<[u8; 32], std::time::Instant>,
     #[cfg(feature = "experimental-gc2")]
     recovery_due: HashMap<Vec<u8>, std::time::Instant>,
+    #[cfg(feature = "experimental-gc2")]
+    last_ack_peer: Option<[u8; 32]>,
     completions: futures_util::stream::FuturesUnordered<
         futures_util::future::BoxFuture<'static, DirectAttempt>,
     >,
@@ -257,6 +259,13 @@ impl DirectMaintenance {
                     return;
                 }
             }
+        }
+        #[cfg(feature = "experimental-gc2")]
+        if let Err(error) = gc2_acks::materialize(&mut st, &mut self.last_ack_peer) {
+            metrics::log_event("gc2_deferred_ack_prepare_error", &[("e", error)]);
+        }
+        if st.owner_transition_failed {
+            return;
         }
         if let Err(error) = materialize_deferred(&mut st) {
             metrics::log_event("deferred_application_prepare_error", &[("e", error)]);
@@ -600,12 +609,45 @@ pub(crate) fn accept_reliable_direct(
                 .map_err(|e| e.to_string())?;
         }
     }
+    let ack_record = encode_direct_ack(message_id, st.direct_presence_opt_in.contains(sender_pk));
+    #[cfg(feature = "experimental-gc2")]
+    if staged.tag().is_some() && !staged.can_send(&ack_record) {
+        let application = match decode_direct_record(received.plaintext()) {
+            Some(
+                DirectRecord::Data { sent_ms, .. }
+                | DirectRecord::VolatileApplication { sent_ms, .. },
+            ) => Some((
+                Sha256::digest(received.plaintext()).into(),
+                gc2_receipts::horizon(sent_ms),
+            )),
+            _ => None,
+        };
+        let snapshot = staged
+            .seal_state(wrapping_key, context)
+            .map_err(|e| e.to_string())?;
+        let undo = st.gc2_receipts.stage_deferred_ack(
+            sender_pk,
+            message_id,
+            application,
+            st.direct_presence_opt_in.contains(sender_pk),
+            now_unix(),
+        )?;
+        if let Err(error) =
+            persist_received_direct_transaction(st, sender_pk, &snapshot, received.credit())
+        {
+            st.gc2_receipts.rollback(undo);
+            return Err(error);
+        }
+        st.sessions.insert(sender_pk.to_vec(), staged);
+        wrapping_key.fill(0);
+        return Ok(DirectDelivery {
+            peer,
+            relay: st.client_relay.clone(),
+            cells: Vec::new(),
+        });
+    }
     let ack = staged
-        .prepare_send(
-            &encode_direct_ack(message_id, st.direct_presence_opt_in.contains(sender_pk)),
-            wrapping_key,
-            context,
-        )
+        .prepare_send(&ack_record, wrapping_key, context)
         .map_err(|error| error.to_string())?;
     #[cfg(feature = "experimental-gc2")]
     let receipt = if let (
@@ -657,7 +699,18 @@ pub(crate) fn accept_reliable_direct(
                     .stage_data(sender_pk, id, hash, horizon, ack, now_unix())?,
             )
         }
-        None => None,
+        None => staged.tag().map(|tag| {
+            st.gc2_receipts.stage_prepared_ack(
+                (gc2_receipts::peer_key(sender_pk), message_id),
+                (
+                    *tag,
+                    gcoms_crypto::Frame::decode(ack.wire())
+                        .expect("prepared ACK")
+                        .ctr,
+                ),
+                now_unix(),
+            )
+        }),
     };
     st.direct_ack_outbox.push_back(delivery.clone());
     let legacy_replay_cache = staged.tag().is_none();
@@ -1478,9 +1531,9 @@ pub(crate) fn queue_forward_grant(
     if st.pending_1to1.len() >= 1024 {
         return Ok(None);
     }
-    let Some(route) = st.peer_routes.get(peer).cloned() else {
+    if !st.peer_routes.contains_key(peer) {
         return Ok(None);
-    };
+    }
     let expires_at = now_unix().saturating_add(FORWARD_GRANT_LIFETIME_SECS);
     let Some(grant) = st
         .client_relay
@@ -1493,50 +1546,94 @@ pub(crate) fn queue_forward_grant(
         return Ok(None);
     }
     let record = encode_forward_grant(message_id, &grant).ok_or("grant exceeds record limit")?;
+    queue_session_control(
+        st,
+        peer,
+        message_id,
+        record,
+        std::time::Duration::from_secs(FORWARD_GRANT_LIFETIME_SECS),
+        jittered(std::time::Duration::from_secs(60)),
+    )
+}
+
+/// Journal a reliable control record even when its GC/2 counter is unavailable.
+/// No encryption occurs until the window can admit it. Empty deliveries stay
+/// local and are materialized by the existing maintenance owner.
+pub(crate) fn queue_session_control(
+    st: &mut NodeState,
+    peer: &[u8],
+    message_id: [u8; 16],
+    record: Vec<u8>,
+    lifetime: std::time::Duration,
+    retry_delay: std::time::Duration,
+) -> Result<Option<DirectDelivery>, String> {
+    if st.pending_1to1.len() >= 1024 || st.pending_1to1.contains_key(&message_id) {
+        return Ok(None);
+    }
+    let route = st
+        .peer_routes
+        .get(peer)
+        .cloned()
+        .ok_or("missing control route")?;
+    let session = st.sessions.get(peer).ok_or("missing control session")?;
+    let wrapping = zeroize::Zeroizing::new(direct_session_wrapping_key(&st.identity_seed));
+    let context = direct_session_context(st, peer)?;
+    let prepared = if session.can_send(&record) {
+        Some(
+            session
+                .prepare_send(&record, &wrapping, &context)
+                .map_err(|e| e.to_string())?,
+        )
+    } else {
+        None
+    };
+    let cells = match &prepared {
+        Some(prepared) => vec![peer_session::cell(
+            prepared.packet(&st.info.identity_pk)?,
+            3,
+        )],
+        None => Vec::new(),
+    };
+    let delivery = DirectDelivery {
+        peer: route,
+        relay: st.client_relay.clone(),
+        cells,
+    };
+    let now = std::time::Instant::now();
     let sequence = st.next_direct_sequence;
     st.next_direct_sequence = sequence
         .checked_add(1)
         .ok_or("direct message sequence exhausted")?;
-    let mut wrapping_key = direct_session_wrapping_key(&st.identity_seed);
-    let context = direct_session_context(st, peer)?;
-    let prepared = st
-        .sessions
-        .get(peer)
-        .ok_or("no session for grant")?
-        .prepare_send(&record, &wrapping_key, &context)
-        .map_err(|error| error.to_string())?;
-    wrapping_key.fill(0);
-    let delivery = DirectDelivery {
-        peer: route,
-        relay: st.client_relay.clone(),
-        cells: vec![peer_session::cell(
-            prepared.packet(&st.info.identity_pk)?,
-            3,
-        )],
-    };
-    let now = std::time::Instant::now();
     st.pending_1to1.insert(
         message_id,
         PendingDirect {
             delivery: delivery.clone(),
             logical_record: Some(record),
             sequence,
-            next_attempt: now + jittered(std::time::Duration::from_secs(60)),
-            expires: now + std::time::Duration::from_secs(FORWARD_GRANT_LIFETIME_SECS),
+            next_attempt: now + retry_delay,
+            expires: now + lifetime,
             application_event: false,
         },
     );
-    if let Err(error) = persist_direct_state(st, Some((peer, prepared.sealed_state())), true) {
+    if let Err(error) = persist_direct_state(
+        st,
+        prepared.as_ref().map(|p| (peer, p.sealed_state())),
+        true,
+    ) {
         st.pending_1to1.remove(&message_id);
         st.next_direct_sequence = sequence;
         return Err(error);
     }
-    st.sessions
-        .get_mut(peer)
-        .expect("session prepared above")
-        .commit_send(prepared)
-        .map_err(|error| error.to_string())?;
-    Ok(Some(delivery))
+    if let Some(prepared) = prepared {
+        st.sessions
+            .get_mut(peer)
+            .unwrap()
+            .commit_send(prepared)
+            .map_err(|e| e.to_string())?;
+        Ok(Some(delivery))
+    } else {
+        Ok(None)
+    }
 }
 
 fn forward_grant_message_id(identity: &[u8], peer: &[u8], expires_at: u64) -> [u8; 16] {
@@ -1809,7 +1906,13 @@ where
             .get(&peer.identity_pk)
             .is_some_and(|s| !s.can_send(&direct));
         if routing_recovering || awaiting_confirmation || window_full {
-            if !durable {
+            if !(durable
+                || (control
+                    && st
+                        .sessions
+                        .get(&peer.identity_pk)
+                        .is_some_and(|s| s.tag().is_some())))
+            {
                 return Err(if awaiting_confirmation {
                     "direct session confirmation is pending"
                 } else if window_full {

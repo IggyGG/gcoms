@@ -193,7 +193,7 @@ impl PeerSession {
             Self::Credited(s) => Some(s.window().session()),
         }
     }
-    #[cfg(feature = "client-persist")]
+    #[cfg(any(feature = "client-persist", feature = "experimental-gc2"))]
     pub fn seal_state(&self, key: &[u8; 32], context: &SessionContext) -> Result<Snapshot, Error> {
         match self {
             Self::Legacy(s) => Ok(Snapshot::Legacy(s.seal_state(key, context)?)),

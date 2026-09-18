@@ -156,6 +156,22 @@ Durable sends defer behind confirmation/counter credit; simultaneous initiation
 keeps logical IDs, order and deadlines. Contact-key updates are staged with the
 post-receive candidate rather than changing live state before persistence.
 
+When a receive commits but no ratchet counter is free for the logical application
+ACK, the node persists the ACK obligation (peer-keyed message ID, share-presence
+flag and, for application records, the logical receipt) in the same encrypted
+ledger instead of failing the receive or consuming an unratcheted copy. Receive
+credit and the application effect commit without the ACK, so two peers with full
+transmit windows cannot deadlock each other. Maintenance prepares at most 16
+obligations per tick, at most four per peer, rotating peers; preparation persists
+the exact ciphertext and receipt reference atomically before committing the
+counter. Admission failure leaves the obligation pending; an uncertain durable
+write pauses publication. The obligation table is bounded to 1,024 entries,
+128 per peer, and expires with the application horizon (ten minutes for
+non-application obligations). Receipt encoding version `GC2R2` adds the table;
+`GC2R1` remains readable from older v21 archives. Transport credit retires a
+receipt only after a `GC2R2` ACK was prepared; a migrated legacy archive still
+requires its outstanding ACK credit before authenticated recovery.
+
 ## Shared retention admission
 
 GC/2 retained direct payloads use at most 4 MiB and 2,048 payload records across
@@ -181,6 +197,10 @@ for available budget without consuming counters, changing IDs/deadlines or
 marking the node's durable state uncertain. A failed durable write still pauses
 publication for restart recovery. GC/2 logical ACKs use the ratchet window for
 repair, eliminating the legacy replay cache's additional ciphertext copy.
+Reliable control records whose ratchet counter is unavailable (forward grants,
+contact updates, presence leases) are journalled with empty cells and keep their
+ids, order and deadlines; the same maintenance owner encrypts them once a counter
+or session becomes available.
 
 ## Authenticated session recovery
 

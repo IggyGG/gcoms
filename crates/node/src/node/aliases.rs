@@ -960,57 +960,26 @@ pub(crate) fn queue_contact_updates(st: &mut NodeState) -> Result<Vec<DirectDeli
         if st.pending_1to1.len() >= 1024 {
             break;
         }
-        let Some(route) = st.peer_routes.get(&peer).cloned() else {
+        if !st.peer_routes.contains_key(&peer) {
             continue;
-        };
+        }
         let message_id = contact_update_message_id(&st.info.identity_pk, &peer, update.generation);
         if st.pending_1to1.contains_key(&message_id) {
             continue;
         }
         let record = encode_contact_update(message_id, &update)
             .ok_or("contact update exceeds direct record limit")?;
-        let sequence = st.next_direct_sequence;
-        st.next_direct_sequence = sequence
-            .checked_add(1)
-            .ok_or("direct message sequence exhausted")?;
-        let mut wrapping_key = direct_session_wrapping_key(&st.identity_seed);
-        let context = direct_session_context(st, &peer)?;
-        let prepared = st.sessions[&peer]
-            .prepare_send(&record, &wrapping_key, &context)
-            .map_err(|error| error.to_string())?;
-        wrapping_key.fill(0);
-        let delivery = DirectDelivery {
-            peer: route,
-            relay: st.client_relay.clone(),
-            cells: vec![peer_session::cell(
-                prepared.packet(&st.info.identity_pk)?,
-                3,
-            )],
-        };
-        let now = std::time::Instant::now();
-        let lifetime = expires_at.saturating_sub(issued_at).max(1);
-        st.pending_1to1.insert(
+        let lifetime = std::time::Duration::from_secs(expires_at.saturating_sub(issued_at).max(1));
+        if let Some(delivery) = queue_session_control(
+            st,
+            &peer,
             message_id,
-            PendingDirect {
-                delivery: delivery.clone(),
-                logical_record: Some(record),
-                sequence,
-                next_attempt: now + std::time::Duration::from_secs(60),
-                expires: now + std::time::Duration::from_secs(lifetime),
-                application_event: false,
-            },
-        );
-        if let Err(error) = persist_direct_state(st, Some((&peer, prepared.sealed_state())), true) {
-            st.pending_1to1.remove(&message_id);
-            st.next_direct_sequence = sequence;
-            return Err(error);
+            record,
+            lifetime,
+            std::time::Duration::from_secs(60),
+        )? {
+            deliveries.push(delivery);
         }
-        st.sessions
-            .get_mut(&peer)
-            .expect("session prepared above")
-            .commit_send(prepared)
-            .map_err(|error| error.to_string())?;
-        deliveries.push(delivery);
         // Renewals also refresh the peer's authority to route through us.
         if let Ok(Some(grant_delivery)) = queue_forward_grant(st, &peer) {
             deliveries.push(grant_delivery);

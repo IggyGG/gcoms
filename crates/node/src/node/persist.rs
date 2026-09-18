@@ -2755,6 +2755,8 @@ pub(in crate::node) mod tests {
     include!("persist/gc2_recovery_tests.rs");
     #[cfg(feature = "experimental-gc2")]
     include!("persist/gc2_volatile_tests.rs");
+    #[cfg(feature = "experimental-gc2")]
+    include!("persist/gc2_control_tests.rs");
     include!("persist/channel_directory_tests.rs");
 
     fn contact(byte: u8) -> AliasContact {

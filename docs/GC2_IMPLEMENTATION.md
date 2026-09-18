@@ -179,7 +179,12 @@ Retain failures, source/executable/configuration/workload hashes and exact scope
   routing and final qualification remain pending. Volatile media now has RAM-only
   exact retries, metadata-only persistence, missing-counter recovery after restart
   and duplicate-event suppression. Protocol, node transaction and TLS tests cover
-  this path; no media body or ciphertext is restored from an archive.
+  this path; no media body or ciphertext is restored from an archive. Full-duplex
+  control-window pressure no longer stalls application ACKs: obligations persist
+  in the encrypted receipt ledger (`GC2R2`) and materialize through the bounded
+  maintenance owner (16 per tick, four per peer), and reliable control records
+  journal without consuming a counter. Tests cover full bidirectional windows,
+  restart with lost credit, uncertain writes and the legacy archive barrier.
 - Complete counter-window flow control, command preparation/completion split,
   authenticated class propagation, complete GC/2 routing, protected profiles,
   SDK/GChat profile integration and application/privacy/mobile gates: pending.

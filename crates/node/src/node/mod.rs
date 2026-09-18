@@ -41,6 +41,8 @@ mod channels;
 mod commands;
 mod direct;
 #[cfg(feature = "experimental-gc2")]
+mod gc2_acks;
+#[cfg(feature = "experimental-gc2")]
 mod gc2_direct;
 #[cfg(feature = "experimental-gc2")]
 mod gc2_receipts;
