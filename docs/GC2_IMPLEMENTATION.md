@@ -166,7 +166,12 @@ Retain failures, source/executable/configuration/workload hashes and exact scope
   and uses non-ratcheted authenticated credit to avoid mutual ACK deadlock.
   The session wrapper stages crypto and flow state together and rejects stale
   or cross-session commits. See [the transaction and adoption contract](GC2_FLOW.md).
-  Node archive/resource integration and explicit session recovery remain pending.
+  Authenticated compact session envelopes and node archive v20 are now integrated
+  in an explicit local session fixture. Real node transaction tests exercise
+  durable application acceptance, independent counter credit, lost setup receipts,
+  restart, write failures, duplicate delivery and simultaneous initiation. The
+  fixture still uses the existing relay carrier; production routing, aggregate
+  retained-ciphertext accounting and explicit session recovery remain pending.
 - Complete counter-window flow control, command preparation/completion split,
   authenticated class propagation, complete GC/2 routing, protected profiles,
   SDK/GChat profile integration and application/privacy/mobile gates: pending.

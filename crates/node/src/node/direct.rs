@@ -144,6 +144,8 @@ struct DirectAttempt {
 #[derive(Default)]
 pub(crate) struct DirectMaintenance {
     active: HashMap<[u8; 32], bool>,
+    #[cfg(feature = "experimental-gc2")]
+    repair_due: HashMap<[u8; 32], std::time::Instant>,
     completions: futures_util::stream::FuturesUnordered<
         futures_util::future::BoxFuture<'static, DirectAttempt>,
     >,
@@ -215,6 +217,45 @@ impl DirectMaintenance {
             .collect();
         for ack in acks {
             self.start(&mut st, scheduler, ack, true);
+        }
+
+        #[cfg(feature = "experimental-gc2")]
+        {
+            self.repair_due.retain(|_, deadline| *deadline > now);
+            let available = (MAX_DIRECT_RETRY_ATTEMPTS
+                - self.active.values().filter(|&&ack| !ack).count())
+            .min(24);
+            let mut repairs = Vec::new();
+            'sessions: for (peer, session) in &st.sessions {
+                let PeerSession::Credited(session) = session else {
+                    continue;
+                };
+                if session.window().repair_expired(now_unix()) {
+                    continue;
+                }
+                let Some(route) = st.peer_routes.get(peer) else {
+                    continue;
+                };
+                for (_, _, packet) in session.window().retries() {
+                    if repairs.len() >= available {
+                        break 'sessions;
+                    }
+                    let delivery = DirectDelivery {
+                        peer: route.clone(),
+                        relay: st.client_relay.clone(),
+                        cells: vec![peer_session::cell(packet.to_vec(), 0)],
+                    };
+                    let key = direct_attempt_key(&delivery);
+                    if !self.active.contains_key(&key) && !self.repair_due.contains_key(&key) {
+                        repairs.push((key, delivery));
+                    }
+                }
+            }
+            for (key, delivery) in repairs {
+                self.repair_due
+                    .insert(key, now + jittered(std::time::Duration::from_secs(60)));
+                self.start(&mut st, scheduler, delivery, false);
+            }
         }
 
         // Oldest due work first, so the finite window cannot keep selecting an
@@ -374,6 +415,17 @@ pub(crate) fn handle_incoming(
         handle_channel_direct(state, &cell.payload, events);
         return;
     }
+    #[cfg(feature = "experimental-gc2")]
+    if cell.payload.starts_with(b"GCH2")
+        || cell.payload.starts_with(b"GCM2")
+        || cell.payload.starts_with(b"GCA2")
+    {
+        let mut st = state.lock().unwrap_or_else(|p| p.into_inner());
+        if let Err(error) = super::gc2_direct::incoming(&mut st, &cell.payload, events) {
+            metrics::log_event("gc2_session_error", &[("e", error)]);
+        }
+        return;
+    }
     match decode_payload(&cell) {
         Some(NodePayload::FirstMove(fm)) => {
             let mut st = state.lock().unwrap_or_else(|p| p.into_inner());
@@ -416,6 +468,17 @@ pub(crate) fn handle_incoming(
         }
         Some(NodePayload::Frame(sender_pk, frame)) => {
             let mut st = state.lock().unwrap_or_else(|p| p.into_inner());
+            #[cfg(feature = "experimental-gc2")]
+            if st.gc2_sessions {
+                return;
+            }
+            if st
+                .sessions
+                .get(&sender_pk)
+                .is_some_and(|s| s.tag().is_some())
+            {
+                return;
+            }
             if !st.sessions.contains_key(&sender_pk) {
                 if st.parked.len() < 64 {
                     st.parked.push((sender_pk, frame));
@@ -434,7 +497,7 @@ pub(crate) fn accept_reliable_direct(
     sender_pk: &[u8],
     processed_frame: ((Vec<u8>, u64), [u8; 32]),
     message_id: [u8; 16],
-    received: gcoms_crypto::session::PreparedReceive,
+    received: peer_session::PreparedReceive,
     wrapping_key: &mut [u8; 32],
     context: &SessionContext,
 ) -> Result<DirectDelivery, String> {
@@ -444,8 +507,19 @@ pub(crate) fn accept_reliable_direct(
         .get(sender_pk)
         .cloned()
         .ok_or_else(|| "authenticated peer route is missing".to_string())?;
-    let staged = Session::open_state(received.sealed_state(), wrapping_key, context)
+    let mut staged = st
+        .sessions
+        .get(sender_pk)
+        .ok_or("missing direct session")?
+        .stage_received(&received, wrapping_key, context)
         .map_err(|error| error.to_string())?;
+    if let Some(bundle) = Bundle::decode(&peer.bundle) {
+        if bundle.verify_fresh(sender_pk, now_unix()) {
+            staged
+                .provide_peer_kem(bundle.kem_pub)
+                .map_err(|e| e.to_string())?;
+        }
+    }
     let ack = staged
         .prepare_send(
             &encode_direct_ack(message_id, st.direct_presence_opt_in.contains(sender_pk)),
@@ -453,7 +527,6 @@ pub(crate) fn accept_reliable_direct(
             context,
         )
         .map_err(|error| error.to_string())?;
-    let ack_frame = gcoms_crypto::Frame::decode(ack.wire()).ok_or("prepared invalid ACK frame")?;
     if st.direct_ack_outbox.len() >= 1024 {
         return Err("direct ACK outbox is full".into());
     }
@@ -464,7 +537,7 @@ pub(crate) fn accept_reliable_direct(
             CellType::Msg,
             0,
             0,
-            encode_frame(&st.info.identity_pk, &ack_frame),
+            ack.packet(&st.info.identity_pk)?,
         )],
     };
     st.direct_ack_outbox.push_back(delivery.clone());
@@ -476,23 +549,18 @@ pub(crate) fn accept_reliable_direct(
         },
     );
     st.processed_direct_order.push_back(frame_key.clone());
-    if let Err(error) = persist_received_direct_transaction(st, sender_pk, ack.sealed_state()) {
+    if let Err(error) =
+        persist_received_direct_transaction(st, sender_pk, ack.sealed_state(), received.credit())
+    {
         st.direct_ack_outbox.pop_back();
         st.processed_direct.remove(&frame_key);
         st.processed_direct_order.pop_back();
         return Err(error);
     }
-    st.sessions
-        .get_mut(sender_pk)
-        .expect("session prepared above")
-        .commit_receive(received)
-        .and_then(|()| {
-            st.sessions
-                .get_mut(sender_pk)
-                .expect("session committed above")
-                .commit_send(ack)
-        })
-        .map_err(|error| error.to_string())?;
+    // The state lock spans preparation, durable storage and publication. The
+    // candidate includes both the authenticated receive and any KEM update.
+    staged.commit_send(ack).map_err(|error| error.to_string())?;
+    st.sessions.insert(sender_pk.to_vec(), staged);
     wrapping_key.fill(0);
     while st.processed_direct_order.len() > 8192 {
         if let Some(oldest) = st.processed_direct_order.pop_front() {
@@ -526,6 +594,27 @@ pub(crate) fn process_frame(
     };
     let received = session.prepare_receive(&frame, &wrapping_key, &context);
     match received {
+        Ok(received) if received.duplicate() => {
+            if persist_received_direct_transaction(
+                st,
+                &sender_pk,
+                received.sealed_state(),
+                received.credit(),
+            )
+            .is_ok()
+            {
+                let _ = st
+                    .sessions
+                    .get_mut(&sender_pk)
+                    .expect("session prepared above")
+                    .commit_receive(received);
+                if let Some(processed) = st.processed_direct.get(&frame_key) {
+                    if processed.frame_hash == frame_hash && st.direct_ack_outbox.len() < 1024 {
+                        st.direct_ack_outbox.push_back(processed.delivery.clone());
+                    }
+                }
+            }
+        }
         Ok(received) => match decode_direct_record(received.plaintext()) {
             Some(DirectRecord::VolatileApplication {
                 message_id, body, ..
@@ -641,8 +730,13 @@ pub(crate) fn process_frame(
                     .unwrap_or(0);
                 if update.generation <= current_generation || !update.verify(&sender_pk, now_unix())
                 {
-                    if persist_received_direct_transaction(st, &sender_pk, received.sealed_state())
-                        .is_ok()
+                    if persist_received_direct_transaction(
+                        st,
+                        &sender_pk,
+                        received.sealed_state(),
+                        received.credit(),
+                    )
+                    .is_ok()
                     {
                         let _ = st
                             .sessions
@@ -659,12 +753,6 @@ pub(crate) fn process_frame(
                 let old_generation = st
                     .peer_route_generations
                     .insert(sender_pk.clone(), update.generation);
-                if let (Some(bundle), Some(session)) = (
-                    Bundle::decode(&update.info.bundle),
-                    st.sessions.get_mut(&sender_pk),
-                ) {
-                    let _ = session.provide_peer_kem(bundle.kem_pub);
-                }
                 if let Err(error) = accept_reliable_direct(
                     st,
                     &sender_pk,
@@ -766,9 +854,12 @@ pub(crate) fn process_frame(
                 let application_event = pending
                     .as_ref()
                     .is_some_and(|pending| pending.application_event);
-                if let Err(error) =
-                    persist_received_direct_transaction(st, &sender_pk, received.sealed_state())
-                {
+                if let Err(error) = persist_received_direct_transaction(
+                    st,
+                    &sender_pk,
+                    received.sealed_state(),
+                    received.credit(),
+                ) {
                     if let Some(pending) = pending {
                         st.pending_1to1.insert(message_id, pending);
                     }
@@ -870,8 +961,13 @@ pub(crate) fn process_frame(
                 }
             }
             None => {
-                if persist_received_direct_transaction(st, &sender_pk, received.sealed_state())
-                    .is_ok()
+                if persist_received_direct_transaction(
+                    st,
+                    &sender_pk,
+                    received.sealed_state(),
+                    received.credit(),
+                )
+                .is_ok()
                 {
                     let _ = st
                         .sessions
@@ -882,7 +978,7 @@ pub(crate) fn process_frame(
                 metrics::log_event("frame_error", &[("e", "bad direct record".to_string())]);
             }
         },
-        Err(gcoms_crypto::CryptoError::Replay) => {
+        Err(peer_session::Error::Crypto(gcoms_crypto::CryptoError::Replay)) => {
             if let Some(processed) = st.processed_direct.get(&frame_key) {
                 if processed.frame_hash == frame_hash && st.direct_ack_outbox.len() < 1024 {
                     st.direct_ack_outbox.push_back(processed.delivery.clone());
@@ -911,6 +1007,10 @@ pub(crate) fn accept_first_move(
     st: &mut NodeState,
     fm: &FirstMove,
 ) -> Result<AcceptedFirstMove, String> {
+    #[cfg(feature = "experimental-gc2")]
+    if st.gc2_sessions {
+        return Err("GC/2 session handshake required".into());
+    }
     let first_move_id: [u8; 32] = Sha256::digest(fm.encode()).into();
     if st.accepted_first_moves.contains(&first_move_id) {
         return Err(gcoms_crypto::CryptoError::Replay.to_string());
@@ -1027,7 +1127,7 @@ pub(crate) fn accept_first_move(
     let old_route = st
         .peer_routes
         .insert(peer.identity_pk.clone(), peer.clone());
-    let old_session = st.sessions.insert(peer.identity_pk.clone(), session);
+    let old_session = st.sessions.insert(peer.identity_pk.clone(), session.into());
     let old_session_state = st
         .session_states
         .insert(peer.identity_pk.clone(), DirectSessionState::Established);
@@ -1259,15 +1359,12 @@ pub(crate) fn queue_forward_grant(
         .prepare_send(&record, &wrapping_key, &context)
         .map_err(|error| error.to_string())?;
     wrapping_key.fill(0);
-    let frame = gcoms_crypto::Frame::decode(prepared.wire()).ok_or("prepared invalid frame")?;
     let delivery = DirectDelivery {
         peer: route,
         relay: st.client_relay.clone(),
-        cells: vec![Cell::new(
-            CellType::Msg,
-            0,
+        cells: vec![peer_session::cell(
+            prepared.packet(&st.info.identity_pk)?,
             3,
-            encode_frame(&st.info.identity_pk, &frame),
         )],
     };
     let now = std::time::Instant::now();
@@ -1549,16 +1646,26 @@ where
             }
         }
 
-        let awaiting_confirmation = st.scheduler.pipelined()
+        let awaiting_confirmation = (st.scheduler.pipelined()
+            || st
+                .sessions
+                .get(&peer.identity_pk)
+                .is_some_and(|s| s.tag().is_some()))
             && matches!(
                 st.session_states.get(&peer.identity_pk),
                 Some(DirectSessionState::InitiatedUnconfirmed { .. })
             );
         let routing_recovering = st.routing.is_some() && st.info.primary().is_none();
-        if routing_recovering || awaiting_confirmation {
+        let window_full = st
+            .sessions
+            .get(&peer.identity_pk)
+            .is_some_and(|s| !s.can_send(&direct));
+        if routing_recovering || awaiting_confirmation || window_full {
             if !durable {
                 return Err(if awaiting_confirmation {
                     "direct session confirmation is pending"
+                } else if window_full {
+                    "direct session counter window is full"
                 } else {
                     "inbox routing is recovering"
                 }
@@ -1615,20 +1722,7 @@ where
         let expires = now + std::time::Duration::from_secs(600);
         let old_session_state = st.session_states.get(&peer.identity_pk).copied();
         if new_session {
-            let bundle = Bundle::decode(&peer.bundle).ok_or("bad peer bundle")?;
-            if !bundle.is_fresh(now_unix()) {
-                return Err("peer bundle is outside its rotation window".into());
-            }
-            let own_info = st.info.encode();
-            let identity = IdentityKeypair::from_seed(st.identity_seed);
-            let (fm, mut session) = gcoms_crypto::initiate_authenticated(
-                &identity,
-                &peer.identity_pk,
-                &bundle,
-                &own_info,
-            )
-            .map_err(|e| e.to_string())?;
-            session.provide_local_kem(st.secrets.kem_decapsulation_key());
+            let (fm, session) = peer_session::initiate(&st, &peer)?;
             st.sessions.insert(peer.identity_pk.clone(), session);
             st.session_states.insert(
                 peer.identity_pk.clone(),
@@ -1652,21 +1746,13 @@ where
             .prepare_send(&direct, &wrapping_key, &context)
             .map_err(|error| error.to_string())?;
         wrapping_key.fill(0);
-        let frame = gcoms_crypto::Frame::decode(prepared.wire()).ok_or("prepared invalid frame")?;
         let mut cells = Vec::with_capacity(if first_move.is_some() { 2 } else { 1 });
         if let Some(first_move) = &first_move {
-            cells.push(Cell::new(
-                CellType::Msg,
-                0,
-                1,
-                encode_first_move(first_move),
-            ));
+            cells.push(peer_session::cell(first_move.clone(), 1));
         }
-        cells.push(Cell::new(
-            CellType::Msg,
-            0,
+        cells.push(peer_session::cell(
+            prepared.packet(&st.info.identity_pk)?,
             if first_move.is_some() { 2 } else { 3 },
-            encode_frame(&st.info.identity_pk, &frame),
         ));
         let delivery = DirectDelivery {
             peer: peer.clone(),
@@ -1763,7 +1849,11 @@ pub(super) fn materialize_deferred(st: &mut NodeState) -> Result<(), String> {
     for (id, _) in ids {
         let pending = &st.pending_1to1[&id];
         let peer = select_peer_route(st, &pending.delivery.peer)?;
-        if st.scheduler.pipelined()
+        if (st.scheduler.pipelined()
+            || st
+                .sessions
+                .get(&peer.identity_pk)
+                .is_some_and(|s| s.tag().is_some()))
             && matches!(
                 st.session_states.get(&peer.identity_pk),
                 Some(DirectSessionState::InitiatedUnconfirmed { .. })
@@ -1784,41 +1874,38 @@ pub(super) fn materialize_deferred(st: &mut NodeState) -> Result<(), String> {
         let mut first_move = None;
         let mut staged_session = None;
         if new_session {
-            let bundle = Bundle::decode(&peer.bundle).ok_or("invalid deferred peer bundle")?;
-            if !bundle.is_fresh(now_unix()) {
-                continue;
-            }
-            let identity = IdentityKeypair::from_seed(st.identity_seed);
-            let (fm, mut session) = gcoms_crypto::initiate_authenticated(
-                &identity,
-                &peer.identity_pk,
-                &bundle,
-                &st.info.encode(),
-            )
-            .map_err(|e| e.to_string())?;
-            session.provide_local_kem(st.secrets.kem_decapsulation_key());
+            let (fm, session) = peer_session::initiate(st, &peer)?;
             staged_session = Some(session);
             first_move = Some(fm);
         }
-        let wrapping = zeroize::Zeroizing::new(direct_session_wrapping_key(&st.identity_seed));
-        let context = direct_session_context(st, &peer.identity_pk)?;
-        let prepared = staged_session
+        let session = staged_session
             .as_ref()
             .or_else(|| st.sessions.get(&peer.identity_pk))
-            .expect("new or existing session")
-            .prepare_send(&body, &wrapping, &context)
+            .expect("new or existing session");
+        if !session.can_send(&body) {
+            continue;
+        }
+        let wrapping = zeroize::Zeroizing::new(direct_session_wrapping_key(&st.identity_seed));
+        let context = direct_session_context_for_tag(st, &peer.identity_pk, session.tag())?;
+        let prepared = session
+            .prepare_send_until(
+                &body,
+                now_unix().saturating_add(
+                    expires
+                        .saturating_duration_since(std::time::Instant::now())
+                        .as_secs(),
+                ),
+                &wrapping,
+                &context,
+            )
             .map_err(|e| e.to_string())?;
-        let frame = gcoms_crypto::Frame::decode(prepared.wire())
-            .ok_or("invalid prepared application frame")?;
         let mut cells = Vec::new();
         if let Some(fm) = first_move {
-            cells.push(Cell::new(CellType::Msg, 0, 1, encode_first_move(&fm)));
+            cells.push(peer_session::cell(fm, 1));
         }
-        cells.push(Cell::new(
-            CellType::Msg,
-            0,
+        cells.push(peer_session::cell(
+            prepared.packet(&st.info.identity_pk)?,
             if cells.is_empty() { 3 } else { 2 },
-            encode_frame(&st.info.identity_pk, &frame),
         ));
         for cell in &cells {
             cell.encode_wire().map_err(|e| e.to_string())?;
@@ -1901,10 +1988,21 @@ pub(crate) fn direct_session_context(
     st: &NodeState,
     peer: &[u8],
 ) -> Result<SessionContext, String> {
+    direct_session_context_for_tag(st, peer, st.sessions.get(peer).and_then(PeerSession::tag))
+}
+
+pub(crate) fn direct_session_context_for_tag(
+    st: &NodeState,
+    peer: &[u8],
+    tag: Option<&[u8; 16]>,
+) -> Result<SessionContext, String> {
     let machine: [u8; 32] = Sha256::digest(&st.info.identity_pk).into();
     let peer: [u8; 32] = Sha256::digest(peer).into();
-    SessionContext::new(machine, b"gc-node/direct-session/v1", peer, b"direct")
-        .map_err(|error| error.to_string())
+    let (domain, conversation): (&[u8], &[u8]) = match tag {
+        Some(tag) => (b"gc-node/direct-session/v2", tag),
+        None => (b"gc-node/direct-session/v1", b"direct"),
+    };
+    SessionContext::new(machine, domain, peer, conversation).map_err(|error| error.to_string())
 }
 
 fn direct_component_source(record: &[u8]) -> Option<gcoms_core::component::ComponentId> {

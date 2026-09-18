@@ -40,6 +40,10 @@ mod channel_recovery;
 mod channels;
 mod commands;
 mod direct;
+#[cfg(feature = "experimental-gc2")]
+mod gc2_direct;
+mod peer_session;
+use peer_session::PeerSession;
 #[cfg(feature = "client-persist")]
 mod persist;
 #[cfg(feature = "client-persist")]
@@ -87,6 +91,10 @@ pub enum NodeProfile {
 
 #[derive(Clone, Debug)]
 pub struct FixtureProfile {
+    /// Experimental peer sessions only. This does not qualify the GC/2 carrier
+    /// or privacy profile and is never selected by a production node.
+    #[cfg(feature = "experimental-gc2")]
+    pub gc2_sessions: bool,
     /// Relay lane and maintenance scheduling.
     pub scheduler: SchedulerProfile,
     /// Permit loopback/private FRWD targets (all fixtures need this).
@@ -101,6 +109,8 @@ impl NodeProfile {
     /// Fast, deterministic fixture with cover disabled.
     pub fn fixture() -> Self {
         Self::Fixture(FixtureProfile {
+            #[cfg(feature = "experimental-gc2")]
+            gc2_sessions: false,
             scheduler: SchedulerProfile::fixture(),
             allow_local_targets: true,
             stream_slot_interval: std::time::Duration::from_millis(10),
@@ -112,6 +122,8 @@ impl NodeProfile {
     /// qualification runs on one host.
     pub fn compressed_production(seed: u64) -> Self {
         Self::Fixture(FixtureProfile {
+            #[cfg(feature = "experimental-gc2")]
+            gc2_sessions: false,
             scheduler: SchedulerProfile::compressed_production(seed),
             allow_local_targets: true,
             stream_slot_interval: std::time::Duration::from_millis(10),
@@ -121,6 +133,20 @@ impl NodeProfile {
 
     pub fn is_production(&self) -> bool {
         matches!(self, Self::Production)
+    }
+
+    #[cfg(feature = "experimental-gc2")]
+    pub fn gc2_session_fixture() -> Self {
+        let Self::Fixture(mut fixture) = Self::fixture() else {
+            unreachable!()
+        };
+        fixture.gc2_sessions = true;
+        Self::Fixture(fixture)
+    }
+
+    #[cfg(feature = "experimental-gc2")]
+    fn gc2_sessions(&self) -> bool {
+        matches!(self,Self::Fixture(f) if f.gc2_sessions)
     }
 
     pub(crate) fn scheduler_profile(&self) -> SchedulerProfile {
@@ -790,6 +816,8 @@ async fn start_with_tls_policy_control_sink_and_bootstrap(
         let safety_number = identity.safety_number();
 
         let state = Arc::new(Mutex::new(NodeState {
+            #[cfg(feature = "experimental-gc2")]
+            gc2_sessions: cfg.profile.gc2_sessions(),
             routing: routing.clone(),
             secrets,
             identity_seed: cfg.seed,
@@ -1051,12 +1079,30 @@ async fn start_with_tls_policy_control_sink_and_bootstrap(
 fn persist_received_direct_transaction(
     st: &mut NodeState,
     peer: &[u8],
-    sealed: &SealedSession,
+    sealed: &peer_session::Snapshot,
+    credit: Option<&[u8]>,
 ) -> Result<(), String> {
+    let previous_outbox_len = st.direct_ack_outbox.len();
+    if let Some(credit) = credit {
+        if previous_outbox_len >= 1024 {
+            return Err("direct credit outbox is full".into());
+        }
+        let route = st
+            .peer_routes
+            .get(peer)
+            .cloned()
+            .ok_or("missing credit route")?;
+        st.direct_ack_outbox.push_back(DirectDelivery {
+            peer: route,
+            relay: st.client_relay.clone(),
+            cells: vec![Cell::new(CellType::Msg, 0, 0, credit.to_vec())],
+        });
+    }
     let previous = st
         .session_states
         .insert(peer.to_vec(), DirectSessionState::Established);
     if let Err(error) = persist_direct_transaction(st, peer, sealed) {
+        st.direct_ack_outbox.truncate(previous_outbox_len);
         match previous {
             Some(state) => {
                 st.session_states.insert(peer.to_vec(), state);
@@ -1074,7 +1120,7 @@ fn persist_received_direct_transaction(
 fn persist_direct_transaction(
     st: &NodeState,
     peer: &[u8],
-    sealed: &SealedSession,
+    sealed: &peer_session::Snapshot,
 ) -> Result<(), String> {
     let Some(sink) = &st.durable_state_sink else {
         return Ok(());
@@ -1094,7 +1140,7 @@ fn persist_current_direct_state(st: &NodeState) -> Result<(), String> {
 fn persist_direct_transaction(
     _st: &NodeState,
     _peer: &[u8],
-    _sealed: &SealedSession,
+    _sealed: &peer_session::Snapshot,
 ) -> Result<(), String> {
     Ok(())
 }

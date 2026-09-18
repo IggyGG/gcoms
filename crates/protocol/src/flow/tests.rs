@@ -412,7 +412,11 @@ fn prepared_session_transactions_reject_stale_and_cross_session_commits() {
     receiver.commit_receive(received).unwrap();
     // Reopen the paired persisted snapshots, preserving the exact retry bytes.
     one = CreditedSession::restore(&sealed, &private, &[7; 32], &context).unwrap();
-    assert_eq!(one.window().retries().next().unwrap().2, packet);
+    assert_eq!(
+        one.window().retries().next().unwrap().2,
+        crate::gc2_session::encode_frame(one.window().session(), &Frame::decode(&packet).unwrap())
+            .unwrap()
+    );
     let send_before_credit = one.prepare_send(&record, 101, &[7; 32], &context).unwrap();
     let prepared_credit = one.prepare_credit(&credit).unwrap().unwrap();
     assert_eq!(prepared_credit.cached_payload_bytes(), 0);

@@ -1485,7 +1485,7 @@ fn stage_admission_locked(
     }))
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "client-persist"))]
 pub(crate) fn stage_recovery_admission_fixture(
     cs: &mut crate::channel::ChannelState,
     channel: &str,

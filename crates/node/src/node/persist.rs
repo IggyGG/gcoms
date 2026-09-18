@@ -42,6 +42,9 @@ const MAGIC_V18: &[u8; 6] = b"GCNSTI";
 /// v19 permits durable logical records to wait behind a known session's
 /// readiness/flow barrier, including when no routing-recovery directory exists.
 const MAGIC_V19: &[u8; 6] = b"GCNSTJ";
+/// v20 carries explicitly selected GC/2 sessions, including encrypted counter
+/// credit and deferred logical records from simultaneous initiation.
+const MAGIC_V20: &[u8; 6] = b"GCNSTK";
 const ROLE_OWNER: u8 = 1;
 const ROLE_MEMBER: u8 = 2;
 const MAX_ARCHIVE_BYTES: usize = 256 * 1024 * 1024;
@@ -120,6 +123,8 @@ struct Archive {
 enum ArchivedSession {
     Legacy(Box<Session>),
     Sealed(SealedSession),
+    #[cfg(feature = "experimental-gc2")]
+    Credited(gcoms_protocol::gc2_session::SealedState),
 }
 
 enum ArchivedSessionState {
@@ -707,20 +712,24 @@ pub fn encode_state(st: &NodeState) -> Result<Vec<u8>, String> {
 pub fn encode_state_with_session(
     st: &NodeState,
     override_peer: &[u8],
-    override_state: &SealedSession,
+    override_state: &peer_session::Snapshot,
 ) -> Result<Vec<u8>, String> {
     encode_state_inner(st, Some((override_peer, override_state)))
 }
 
 fn encode_state_inner(
     st: &NodeState,
-    session_override: Option<(&[u8], &SealedSession)>,
+    session_override: Option<(&[u8], &peer_session::Snapshot)>,
 ) -> Result<Vec<u8>, String> {
     if st.owner_transition_failed {
         return Err("owner lifecycle persistence outcome is unconfirmed".into());
     }
     let mut v = SecretBuffer(Vec::with_capacity(8192));
-    v.extend_from_slice(MAGIC_V19);
+    let credited = st.sessions.values().any(|s| s.tag().is_some())
+        || session_override.is_some_and(|(_, s)| s.tag().is_some());
+    #[cfg(feature = "experimental-gc2")]
+    let credited = credited || st.gc2_sessions;
+    v.extend_from_slice(if credited { MAGIC_V20 } else { MAGIC_V19 });
     v.extend_from_slice(&now_ms().to_be_bytes());
     v.extend_from_slice(&st.next_direct_sequence.to_be_bytes());
     v.extend_from_slice(&st.local_contact_generation.to_be_bytes());
@@ -1100,19 +1109,19 @@ fn encode_state_inner(
 fn decode_v2(buf: &[u8], identity_seed: &[u8; 32]) -> Result<Archive, String> {
     let archive_key = channel_archive_key(identity_seed);
     if buf.len() > MAX_ARCHIVE_BYTES
-        || !matches!(buf.get(..6), Some(magic) if magic == MAGIC_V2 || magic == MAGIC_V3 || magic == MAGIC_V4 || magic == MAGIC_V5 || magic == MAGIC_V6 || magic == MAGIC_V7 || magic == MAGIC_V8 || magic == MAGIC_V9 || magic == MAGIC_V10 || magic == MAGIC_V11 || magic == MAGIC_V12 || magic == MAGIC_V13 || magic == MAGIC_V14 || magic == MAGIC_V15 || magic == MAGIC_V16 || magic == MAGIC_V17 || magic == MAGIC_V18 || magic == MAGIC_V19)
+        || !matches!(buf.get(..6), Some(magic) if magic == MAGIC_V2 || magic == MAGIC_V3 || magic == MAGIC_V4 || magic == MAGIC_V5 || magic == MAGIC_V6 || magic == MAGIC_V7 || magic == MAGIC_V8 || magic == MAGIC_V9 || magic == MAGIC_V10 || magic == MAGIC_V11 || magic == MAGIC_V12 || magic == MAGIC_V13 || magic == MAGIC_V14 || magic == MAGIC_V15 || magic == MAGIC_V16 || magic == MAGIC_V17 || magic == MAGIC_V18 || magic == MAGIC_V19 || magic == MAGIC_V20)
     {
         return Err("not a gc node state export".into());
     }
-    let has_channel_metadata = matches!(buf.get(..6), Some(magic) if magic == MAGIC_V3 || magic == MAGIC_V4 || magic == MAGIC_V5 || magic == MAGIC_V6 || magic == MAGIC_V7 || magic == MAGIC_V8 || magic == MAGIC_V9 || magic == MAGIC_V10 || magic == MAGIC_V11 || magic == MAGIC_V12 || magic == MAGIC_V13 || magic == MAGIC_V14 || magic == MAGIC_V15 || magic == MAGIC_V16 || magic == MAGIC_V17 || magic == MAGIC_V18 || magic == MAGIC_V19);
-    let sessions_are_sealed = matches!(buf.get(..6), Some(magic) if magic == MAGIC_V4 || magic == MAGIC_V5 || magic == MAGIC_V6 || magic == MAGIC_V7 || magic == MAGIC_V8 || magic == MAGIC_V9 || magic == MAGIC_V10 || magic == MAGIC_V11 || magic == MAGIC_V12 || magic == MAGIC_V13 || magic == MAGIC_V14 || magic == MAGIC_V15 || magic == MAGIC_V16 || magic == MAGIC_V17 || magic == MAGIC_V18 || magic == MAGIC_V19);
-    let has_collision_state = matches!(buf.get(..6), Some(magic) if magic == MAGIC_V5 || magic == MAGIC_V6 || magic == MAGIC_V7 || magic == MAGIC_V8 || magic == MAGIC_V9 || magic == MAGIC_V10 || magic == MAGIC_V11 || magic == MAGIC_V12 || magic == MAGIC_V13 || magic == MAGIC_V14 || magic == MAGIC_V15 || magic == MAGIC_V16 || magic == MAGIC_V17 || magic == MAGIC_V18 || magic == MAGIC_V19);
-    let has_contact_updates = matches!(buf.get(..6), Some(magic) if magic == MAGIC_V6 || magic == MAGIC_V7 || magic == MAGIC_V8 || magic == MAGIC_V9 || magic == MAGIC_V10 || magic == MAGIC_V11 || magic == MAGIC_V12 || magic == MAGIC_V13 || magic == MAGIC_V14 || magic == MAGIC_V15 || magic == MAGIC_V16 || magic == MAGIC_V17 || magic == MAGIC_V18 || magic == MAGIC_V19);
-    let has_presence_policy = matches!(buf.get(..6), Some(magic) if magic == MAGIC_V7 || magic == MAGIC_V8 || magic == MAGIC_V9 || magic == MAGIC_V10 || magic == MAGIC_V11 || magic == MAGIC_V12 || magic == MAGIC_V13 || magic == MAGIC_V14 || magic == MAGIC_V15 || magic == MAGIC_V16 || magic == MAGIC_V17 || magic == MAGIC_V18 || magic == MAGIC_V19);
-    let has_typed_removals = matches!(buf.get(..6), Some(magic) if magic == MAGIC_V8 || magic == MAGIC_V9 || magic == MAGIC_V10 || magic == MAGIC_V11 || magic == MAGIC_V12 || magic == MAGIC_V13 || magic == MAGIC_V14 || magic == MAGIC_V15 || magic == MAGIC_V16 || magic == MAGIC_V17 || magic == MAGIC_V18 || magic == MAGIC_V19);
-    let has_forward_grants = matches!(buf.get(..6), Some(magic) if magic == MAGIC_V9 || magic == MAGIC_V10 || magic == MAGIC_V11 || magic == MAGIC_V12 || magic == MAGIC_V13 || magic == MAGIC_V14 || magic == MAGIC_V15 || magic == MAGIC_V16 || magic == MAGIC_V17 || magic == MAGIC_V18 || magic == MAGIC_V19);
-    let has_invites = matches!(buf.get(..6), Some(magic) if magic == MAGIC_V10 || magic == MAGIC_V11 || magic == MAGIC_V12 || magic == MAGIC_V13 || magic == MAGIC_V14 || magic == MAGIC_V15 || magic == MAGIC_V16 || magic == MAGIC_V17 || magic == MAGIC_V18 || magic == MAGIC_V19);
-    let has_application_inbox = matches!(buf.get(..6), Some(magic) if magic == MAGIC_V11 || magic == MAGIC_V12 || magic == MAGIC_V13 || magic == MAGIC_V14 || magic == MAGIC_V15 || magic == MAGIC_V16 || magic == MAGIC_V17 || magic == MAGIC_V18 || magic == MAGIC_V19);
+    let has_channel_metadata = matches!(buf.get(..6), Some(magic) if magic == MAGIC_V3 || magic == MAGIC_V4 || magic == MAGIC_V5 || magic == MAGIC_V6 || magic == MAGIC_V7 || magic == MAGIC_V8 || magic == MAGIC_V9 || magic == MAGIC_V10 || magic == MAGIC_V11 || magic == MAGIC_V12 || magic == MAGIC_V13 || magic == MAGIC_V14 || magic == MAGIC_V15 || magic == MAGIC_V16 || magic == MAGIC_V17 || magic == MAGIC_V18 || magic == MAGIC_V19 || magic == MAGIC_V20);
+    let sessions_are_sealed = matches!(buf.get(..6), Some(magic) if magic == MAGIC_V4 || magic == MAGIC_V5 || magic == MAGIC_V6 || magic == MAGIC_V7 || magic == MAGIC_V8 || magic == MAGIC_V9 || magic == MAGIC_V10 || magic == MAGIC_V11 || magic == MAGIC_V12 || magic == MAGIC_V13 || magic == MAGIC_V14 || magic == MAGIC_V15 || magic == MAGIC_V16 || magic == MAGIC_V17 || magic == MAGIC_V18 || magic == MAGIC_V19 || magic == MAGIC_V20);
+    let has_collision_state = matches!(buf.get(..6), Some(magic) if magic == MAGIC_V5 || magic == MAGIC_V6 || magic == MAGIC_V7 || magic == MAGIC_V8 || magic == MAGIC_V9 || magic == MAGIC_V10 || magic == MAGIC_V11 || magic == MAGIC_V12 || magic == MAGIC_V13 || magic == MAGIC_V14 || magic == MAGIC_V15 || magic == MAGIC_V16 || magic == MAGIC_V17 || magic == MAGIC_V18 || magic == MAGIC_V19 || magic == MAGIC_V20);
+    let has_contact_updates = matches!(buf.get(..6), Some(magic) if magic == MAGIC_V6 || magic == MAGIC_V7 || magic == MAGIC_V8 || magic == MAGIC_V9 || magic == MAGIC_V10 || magic == MAGIC_V11 || magic == MAGIC_V12 || magic == MAGIC_V13 || magic == MAGIC_V14 || magic == MAGIC_V15 || magic == MAGIC_V16 || magic == MAGIC_V17 || magic == MAGIC_V18 || magic == MAGIC_V19 || magic == MAGIC_V20);
+    let has_presence_policy = matches!(buf.get(..6), Some(magic) if magic == MAGIC_V7 || magic == MAGIC_V8 || magic == MAGIC_V9 || magic == MAGIC_V10 || magic == MAGIC_V11 || magic == MAGIC_V12 || magic == MAGIC_V13 || magic == MAGIC_V14 || magic == MAGIC_V15 || magic == MAGIC_V16 || magic == MAGIC_V17 || magic == MAGIC_V18 || magic == MAGIC_V19 || magic == MAGIC_V20);
+    let has_typed_removals = matches!(buf.get(..6), Some(magic) if magic == MAGIC_V8 || magic == MAGIC_V9 || magic == MAGIC_V10 || magic == MAGIC_V11 || magic == MAGIC_V12 || magic == MAGIC_V13 || magic == MAGIC_V14 || magic == MAGIC_V15 || magic == MAGIC_V16 || magic == MAGIC_V17 || magic == MAGIC_V18 || magic == MAGIC_V19 || magic == MAGIC_V20);
+    let has_forward_grants = matches!(buf.get(..6), Some(magic) if magic == MAGIC_V9 || magic == MAGIC_V10 || magic == MAGIC_V11 || magic == MAGIC_V12 || magic == MAGIC_V13 || magic == MAGIC_V14 || magic == MAGIC_V15 || magic == MAGIC_V16 || magic == MAGIC_V17 || magic == MAGIC_V18 || magic == MAGIC_V19 || magic == MAGIC_V20);
+    let has_invites = matches!(buf.get(..6), Some(magic) if magic == MAGIC_V10 || magic == MAGIC_V11 || magic == MAGIC_V12 || magic == MAGIC_V13 || magic == MAGIC_V14 || magic == MAGIC_V15 || magic == MAGIC_V16 || magic == MAGIC_V17 || magic == MAGIC_V18 || magic == MAGIC_V19 || magic == MAGIC_V20);
+    let has_application_inbox = matches!(buf.get(..6), Some(magic) if magic == MAGIC_V11 || magic == MAGIC_V12 || magic == MAGIC_V13 || magic == MAGIC_V14 || magic == MAGIC_V15 || magic == MAGIC_V16 || magic == MAGIC_V17 || magic == MAGIC_V18 || magic == MAGIC_V19 || magic == MAGIC_V20);
     let mut position = 6;
     let exported_ms = take_u64(buf, &mut position)?;
     let mut next_direct_sequence = if has_collision_state {
@@ -1149,9 +1158,15 @@ fn decode_v2(buf: &[u8], identity_seed: &[u8; 32]) -> Result<Archive, String> {
         };
         let encoded = take32(buf, &mut position)?;
         let session = if sessions_are_sealed {
-            ArchivedSession::Sealed(
-                SealedSession::from_bytes(encoded.to_vec()).map_err(|_| malformed())?,
-            )
+            match peer_session::Snapshot::from_bytes(encoded.to_vec()).map_err(|_| malformed())? {
+                peer_session::Snapshot::Legacy(sealed) => ArchivedSession::Sealed(sealed),
+                #[cfg(feature = "experimental-gc2")]
+                peer_session::Snapshot::Credited(sealed) if buf.get(..6) == Some(MAGIC_V20) => {
+                    ArchivedSession::Credited(sealed)
+                }
+                #[cfg(feature = "experimental-gc2")]
+                _ => return Err(malformed()),
+            }
         } else {
             ArchivedSession::Legacy(Box::new(Session::decode(encoded).ok_or_else(malformed)?))
         };
@@ -1229,7 +1244,7 @@ fn decode_v2(buf: &[u8], identity_seed: &[u8; 32]) -> Result<Archive, String> {
                 buf,
                 &mut position,
                 !has_contact_updates,
-                matches!(buf.get(..6), Some(magic) if magic == MAGIC_V16 || magic == MAGIC_V18 || magic == MAGIC_V19),
+                matches!(buf.get(..6), Some(magic) if magic == MAGIC_V16 || magic == MAGIC_V18 || magic == MAGIC_V19 || magic == MAGIC_V20),
             )?,
             logical_record,
             sequence,
@@ -1580,7 +1595,7 @@ fn decode_v2(buf: &[u8], identity_seed: &[u8; 32]) -> Result<Archive, String> {
         application_inbox::ApplicationInbox::default()
     };
     let mut prepared = Vec::new();
-    let next_prep_id = if matches!(buf.get(..6), Some(magic) if magic == MAGIC_V12 || magic == MAGIC_V13 || magic == MAGIC_V14 || magic == MAGIC_V15 || magic == MAGIC_V16 || magic == MAGIC_V17 || magic == MAGIC_V18 || magic == MAGIC_V19)
+    let next_prep_id = if matches!(buf.get(..6), Some(magic) if magic == MAGIC_V12 || magic == MAGIC_V13 || magic == MAGIC_V14 || magic == MAGIC_V15 || magic == MAGIC_V16 || magic == MAGIC_V17 || magic == MAGIC_V18 || magic == MAGIC_V19 || magic == MAGIC_V20)
     {
         let next = take_u64(buf, &mut position)?;
         let count = take_count(buf, &mut position, 64)?;
@@ -1609,7 +1624,7 @@ fn decode_v2(buf: &[u8], identity_seed: &[u8; 32]) -> Result<Archive, String> {
     } else {
         1
     };
-    let tls_identity = if matches!(buf.get(..6), Some(magic) if magic == MAGIC_V13 || magic == MAGIC_V14 || magic == MAGIC_V15 || magic == MAGIC_V16 || magic == MAGIC_V17 || magic == MAGIC_V18 || magic == MAGIC_V19)
+    let tls_identity = if matches!(buf.get(..6), Some(magic) if magic == MAGIC_V13 || magic == MAGIC_V14 || magic == MAGIC_V15 || magic == MAGIC_V16 || magic == MAGIC_V17 || magic == MAGIC_V18 || magic == MAGIC_V19 || magic == MAGIC_V20)
     {
         let sealed = take32(buf, &mut position)?;
         if sealed.is_empty() {
@@ -1628,7 +1643,7 @@ fn decode_v2(buf: &[u8], identity_seed: &[u8; 32]) -> Result<Archive, String> {
     } else {
         None
     };
-    if matches!(buf.get(..6), Some(magic) if magic == MAGIC_V14 || magic == MAGIC_V15 || magic == MAGIC_V16 || magic == MAGIC_V17 || magic == MAGIC_V18 || magic == MAGIC_V19)
+    if matches!(buf.get(..6), Some(magic) if magic == MAGIC_V14 || magic == MAGIC_V15 || magic == MAGIC_V16 || magic == MAGIC_V17 || magic == MAGIC_V18 || magic == MAGIC_V19 || magic == MAGIC_V20)
     {
         application_inbox.central_ownership =
             open_central_ownership(take32(buf, &mut position)?, identity_seed)?;
@@ -1700,16 +1715,20 @@ fn decode_v2(buf: &[u8], identity_seed: &[u8; 32]) -> Result<Archive, String> {
         channel_routes = routes;
         position = buf.len();
         owner
-    } else if magic == Some(MAGIC_V17) || (magic == Some(MAGIC_V18) || magic == Some(MAGIC_V19)) {
+    } else if magic == Some(MAGIC_V17)
+        || (magic == Some(MAGIC_V18) || (magic == Some(MAGIC_V19) || magic == Some(MAGIC_V20)))
+    {
         application_inbox.machine_owned =
             open_machine_ownership(take32(buf, &mut position)?, identity_seed)?;
         let sealed = take32(buf, &mut position)?;
-        let owner = if sealed.is_empty() && (magic == Some(MAGIC_V18) || magic == Some(MAGIC_V19)) {
+        let owner = if sealed.is_empty()
+            && (magic == Some(MAGIC_V18) || (magic == Some(MAGIC_V19) || magic == Some(MAGIC_V20)))
+        {
             None
         } else {
             Some(owner_aliases::open_unbound(sealed, identity_seed)?)
         };
-        if magic == Some(MAGIC_V18) || magic == Some(MAGIC_V19) {
+        if magic == Some(MAGIC_V18) || (magic == Some(MAGIC_V19) || magic == Some(MAGIC_V20)) {
             let sealed = take32(buf, &mut position)?;
             if !sealed.is_empty() {
                 routing_directory = Some(open_routing_directory(sealed, identity_seed)?);
@@ -1767,9 +1786,20 @@ fn decode_v2(buf: &[u8], identity_seed: &[u8; 32]) -> Result<Archive, String> {
         return Err(malformed());
     }
     for (_, delivery, logical, _, _, _, _) in &pending_direct {
+        #[cfg(feature = "experimental-gc2")]
+        if magic == Some(MAGIC_V20)
+            && sessions.iter().any(|(peer, s, _)| {
+                *peer == delivery.peer.identity_pk && matches!(s, ArchivedSession::Credited(_))
+            })
+            && logical
+                .as_deref()
+                .is_some_and(|record| decode_direct_record(record).is_some())
+        {
+            continue;
+        }
         if delivery.cells.is_empty()
             && ((routing_directory.is_none()
-                && !(magic == Some(MAGIC_V19)
+                && !((magic == Some(MAGIC_V19) || magic == Some(MAGIC_V20))
                     && session_keys.contains(&delivery.peer.identity_pk)))
                 || !logical
                     .as_deref()
@@ -2157,7 +2187,7 @@ pub async fn decode_state(
             return Err("cannot replace initialized central ownership".into());
         }
     }
-    if matches!(buf.get(..6), Some(magic) if magic == MAGIC_V15 || magic == MAGIC_V16 || magic == MAGIC_V17 || magic == MAGIC_V18 || magic == MAGIC_V19)
+    if matches!(buf.get(..6), Some(magic) if magic == MAGIC_V15 || magic == MAGIC_V16 || magic == MAGIC_V17 || magic == MAGIC_V18 || magic == MAGIC_V19 || magic == MAGIC_V20)
     {
         return Err("owner alias archives require constructor restoration".into());
     }
@@ -2171,6 +2201,14 @@ pub(super) async fn decode_state_at_startup(
 ) -> Result<(), String> {
     if buf.len() > MAX_ARCHIVE_BYTES {
         return Err("node state export too large".into());
+    }
+    if buf.get(..6) == Some(MAGIC_V20) {
+        #[cfg(feature = "experimental-gc2")]
+        if !state.lock().unwrap_or_else(|p| p.into_inner()).gc2_sessions {
+            return Err("GC/2 archive requires explicit GC/2 session selection".into());
+        }
+        #[cfg(not(feature = "experimental-gc2"))]
+        return Err("GC/2 archive is not supported by this build".into());
     }
     {
         let st = state.lock().unwrap_or_else(|p| p.into_inner());
@@ -2195,6 +2233,18 @@ pub(super) async fn decode_state_at_startup(
         )
     };
     let mut archive = decode_v2(buf, &identity_seed)?;
+    #[cfg(feature = "experimental-gc2")]
+    if state.lock().unwrap_or_else(|p| p.into_inner()).gc2_sessions
+        && archive
+            .sessions
+            .iter()
+            .any(|(_, s, _)| !matches!(s, ArchivedSession::Credited(_)))
+    {
+        return Err(
+            "GC/1 sessions require explicit authenticated migration before GC/2 selection".into(),
+        );
+    }
+
     let mut restored_prepared = Vec::new();
     for (id, display, mls, mut route) in archive.prepared {
         if route
@@ -2401,19 +2451,33 @@ pub(super) async fn decode_state_at_startup(
     {
         return Err("cannot replace a live durable application inbox".into());
     }
+    let mut restored_sessions = Vec::new();
+    let mut restored_tags = HashSet::new();
     for (peer, archived, archived_state) in archive.sessions {
         if expired_unconfirmed.contains(&peer) {
             continue;
         }
         let session = match archived {
-            ArchivedSession::Legacy(session) => *session,
+            ArchivedSession::Legacy(session) => PeerSession::from(*session),
             ArchivedSession::Sealed(sealed) => {
                 let mut wrapping_key = direct_session_wrapping_key(&st.identity_seed);
                 let context = direct_session_context(&st, &peer)?;
-                let session = Session::open_state(&sealed, &wrapping_key, &context)
+                let session = peer_session::Snapshot::Legacy(sealed)
+                    .open(&wrapping_key, &context)
                     .map_err(|error| error.to_string())?;
                 wrapping_key.fill(0);
                 session
+            }
+            #[cfg(feature = "experimental-gc2")]
+            ArchivedSession::Credited(sealed) => {
+                let wrapping_key =
+                    zeroize::Zeroizing::new(direct_session_wrapping_key(&st.identity_seed));
+                let context = direct_session_context_for_tag(&st, &peer, Some(sealed.tag()))?;
+                PeerSession::Credited(
+                    sealed
+                        .open(&wrapping_key, &context)
+                        .map_err(|e| e.to_string())?,
+                )
             }
         };
         let session_state = match archived_state {
@@ -2425,6 +2489,12 @@ pub(super) async fn decode_state_at_startup(
             }
             ArchivedSessionState::Established => DirectSessionState::Established,
         };
+        if session.tag().is_some_and(|tag| !restored_tags.insert(*tag)) {
+            return Err("duplicate archived GC/2 session tag".into());
+        }
+        restored_sessions.push((peer, session, session_state));
+    }
+    for (peer, session, session_state) in restored_sessions {
         st.sessions.insert(peer.clone(), session);
         st.session_states.insert(peer, session_state);
     }
@@ -2517,7 +2587,8 @@ fn replace_v18_owned_route(
     name: &str,
     route: &crate::channel::OwnedChannelRoute,
 ) -> Result<Vec<u8>, String> {
-    if !matches!(bytes.get(..6), Some(magic) if magic == MAGIC_V18 || magic == MAGIC_V19) {
+    if !matches!(bytes.get(..6), Some(magic) if magic == MAGIC_V18 || magic == MAGIC_V19 || magic == MAGIC_V20)
+    {
         return Err(malformed());
     }
     let archive = decode_v2(bytes, seed)?;
@@ -2563,6 +2634,8 @@ pub(in crate::node) mod tests {
     include!("persist/tracked_send_tests.rs");
     include!("persist/machine_scope_tests.rs");
     include!("persist/archive_compat_tests.rs");
+    #[cfg(feature = "experimental-gc2")]
+    include!("persist/gc2_session_tests.rs");
     include!("persist/channel_directory_tests.rs");
 
     fn contact(byte: u8) -> AliasContact {
@@ -2781,6 +2854,8 @@ pub(in crate::node) mod tests {
             provisioning: None,
         };
         NodeState {
+            #[cfg(feature = "experimental-gc2")]
+            gc2_sessions: false,
             routing: None,
             secrets: Arc::new(secrets),
             identity_seed: [0xA5; 32],
@@ -3006,7 +3081,8 @@ pub(in crate::node) mod tests {
         let (_, bob_session) = node.secrets.accept(&first_move).unwrap();
         node.peer_routes
             .insert(alice.identity_pk.clone(), alice.clone());
-        node.sessions.insert(alice.identity_pk.clone(), bob_session);
+        node.sessions
+            .insert(alice.identity_pk.clone(), bob_session.into());
         node.session_states
             .insert(alice.identity_pk.clone(), DirectSessionState::Established);
         (node, alice.identity_pk, alice_session)
@@ -3270,7 +3346,7 @@ pub(in crate::node) mod tests {
         )
         .unwrap();
         node.sessions
-            .insert(remote.identity_pk.clone(), losing_session);
+            .insert(remote.identity_pk.clone(), losing_session.into());
         node.session_states.insert(
             remote.identity_pk.clone(),
             DirectSessionState::InitiatedUnconfirmed {

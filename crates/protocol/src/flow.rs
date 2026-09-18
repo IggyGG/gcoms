@@ -31,8 +31,10 @@ pub const COUNTER_WINDOW: u64 = gcoms_crypto::session::MAX_SKIP as u64 - 1;
 pub const INTERACTIVE_WINDOW: u64 = COUNTER_WINDOW - 8;
 pub const BULK_WINDOW: u64 = INTERACTIVE_WINDOW - 8;
 pub const RECORD_HEADER: usize = 4 + 1 + 8 + 32 + 2;
-pub const MAX_RECORD_BODY: usize =
-    MAX_MESSAGE - gcoms_crypto::session::MAX_FRAME_OVERHEAD - RECORD_HEADER;
+pub const MAX_RECORD_BODY: usize = MAX_MESSAGE
+    - crate::gc2_session::SESSION_HEADER
+    - gcoms_crypto::session::MAX_FRAME_OVERHEAD
+    - RECORD_HEADER;
 pub const CREDIT_BYTES: usize = 4 + 16 + 16 + 12 + 16 + 16;
 const RECORD_MAGIC: &[u8; 4] = b"GCF2";
 const CREDIT_MAGIC: &[u8; 4] = b"GCA2";
@@ -132,6 +134,9 @@ impl Record {
     }
     pub fn body(&self) -> &[u8] {
         &self.body
+    }
+    pub fn not_after(&self) -> u64 {
+        self.not_after
     }
     /// Expiry suppresses application effects, not counter repair. Even an
     /// expired authenticated frame must advance and persist the receive window.

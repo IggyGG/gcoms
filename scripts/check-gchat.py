@@ -66,7 +66,7 @@ def main():
     target.mkdir(parents=True, exist_ok=True)
     environment = dict(os.environ)
     environment.setdefault("CARGO_BUILD_JOBS", "2")
-    environment["CARGO_TARGET_DIR"] = str(target / "build")
+    environment["CARGO_TARGET_DIR"] = str((target / "build").resolve())
     # Keep socket-test paths short, independently of deeply nested worktrees.
     with tempfile.TemporaryDirectory(prefix="gc-chat-", dir=target) as scratch, \
             tempfile.TemporaryDirectory(prefix="gc2-", dir="/tmp" if os.name != "nt" else None) as test_tmp:

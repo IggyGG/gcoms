@@ -181,13 +181,15 @@ pub(crate) fn fresh_msg_id() -> [u8; 16] {
 }
 
 pub struct NodeState {
+    #[cfg(feature = "experimental-gc2")]
+    pub(crate) gc2_sessions: bool,
     pub(crate) routing: Option<Arc<super::routing::RoutingRuntime>>,
     pub(crate) secrets: Arc<LocalSecrets>,
     pub(crate) identity_seed: [u8; 32],
     #[cfg(feature = "client-persist")]
     pub(crate) sealed_tls_identity: Vec<u8>,
     pub(crate) info: NodeInfo,
-    pub(crate) sessions: HashMap<Vec<u8>, Session>,
+    pub(crate) sessions: HashMap<Vec<u8>, PeerSession>,
     pub(crate) session_states: HashMap<Vec<u8>, DirectSessionState>,
     pub(crate) peer_routes: HashMap<Vec<u8>, NodeInfo>,
     pub(crate) peer_route_generations: HashMap<Vec<u8>, u64>,

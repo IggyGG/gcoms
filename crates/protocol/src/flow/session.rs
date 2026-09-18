@@ -79,6 +79,18 @@ impl CreditedSession {
         &self.window
     }
 
+    pub fn provide_local_secrets(&mut self, secrets: &gcoms_crypto::LocalSecrets) {
+        self.ratchet
+            .provide_local_kem(secrets.kem_decapsulation_key());
+        self.revision = Arc::new(());
+    }
+
+    pub fn provide_peer_kem(&mut self, key: Vec<u8>) -> Result<(), SessionError> {
+        self.ratchet.provide_peer_kem(key)?;
+        self.revision = Arc::new(());
+        Ok(())
+    }
+
     pub fn seal_ratchet(
         &self,
         wrapping_key: &[u8; 32],
@@ -102,7 +114,8 @@ impl CreditedSession {
             .ratchet
             .prepare_send(&record.encode(), wrapping_key, context)?;
         let mut window = self.window.clone();
-        window.record_sent(counter, prepared.wire(), record, now_unix)?;
+        let packet = crate::gc2_session::encode_frame_bytes(window.session(), prepared.wire())?;
+        window.record_sent(counter, &packet, record, now_unix)?;
         Ok(PreparedSend {
             revision: self.revision.clone(),
             ratchet: prepared,
@@ -124,10 +137,8 @@ impl CreditedSession {
         wrapping_key: &[u8; 32],
         context: &SessionContext,
     ) -> Result<PreparedReceive, SessionError> {
-        if frame.ct.len() > gcoms_core::MAX_MESSAGE {
-            return Err(Error::Length.into());
-        }
-        let packet = frame.encode();
+        crate::gc2_session::validate_frame(frame)?;
+        let packet = crate::gc2_session::encode_frame(self.window.session(), frame)?;
         let mut window = self.window.clone();
         let (ratchet, record) = if window.received.contains(frame.ctr) {
             (None, None)
@@ -141,6 +152,7 @@ impl CreditedSession {
         let credit = window.credit_for_duplicate(frame.ctr, &packet)?;
         Ok(PreparedReceive {
             revision: self.revision.clone(),
+            next_revision: Arc::new(()),
             ratchet,
             record,
             window,
@@ -154,8 +166,58 @@ impl CreditedSession {
             self.ratchet.commit_receive(ratchet)?;
         }
         self.window = prepared.window;
-        self.revision = Arc::new(());
+        self.revision = prepared.next_revision;
         Ok(())
+    }
+
+    /// Stage a post-receive session for an application ACK in the same archive
+    /// transaction. Committing this receive installs the exact revision used by
+    /// that ACK. A restored or unrelated session cannot reuse either operation.
+    pub fn stage_received(
+        &self,
+        prepared: &PreparedReceive,
+        wrapping_key: &[u8; 32],
+        context: &SessionContext,
+    ) -> Result<Self, SessionError> {
+        self.check_revision(&prepared.revision)?;
+        let current;
+        let sealed = match prepared.sealed_ratchet() {
+            Some(sealed) => sealed,
+            None => {
+                current = self.seal_ratchet(wrapping_key, context)?;
+                &current
+            }
+        };
+        let ratchet = Session::open_state(sealed, wrapping_key, context)?;
+        Ok(Self {
+            ratchet,
+            window: prepared.window.clone(),
+            revision: prepared.next_revision.clone(),
+        })
+    }
+
+    /// Recover a lost setup receipt using the exact previously authenticated
+    /// first move. Never decrypt again, create another session or reapply its
+    /// contact information. Persist the candidate before sending its credit.
+    pub fn prepare_first_move_retry(
+        &self,
+        packet: &crate::gc2_session::Packet<'_>,
+    ) -> Result<PreparedReceive, SessionError> {
+        if packet.kind() != crate::gc2_session::Kind::FirstMove
+            || packet.tag() != self.window.session()
+        {
+            return Err(Error::Authentication.into());
+        }
+        let mut window = self.window.clone();
+        let credit = window.credit_for_duplicate(1, packet.bytes())?;
+        Ok(PreparedReceive {
+            revision: self.revision.clone(),
+            next_revision: Arc::new(()),
+            ratchet: None,
+            record: None,
+            window,
+            credit,
+        })
     }
 
     /// Credit only retires transport counter state. It neither accepts an
@@ -208,6 +270,7 @@ impl PreparedSend {
 
 pub struct PreparedReceive {
     revision: Arc<()>,
+    next_revision: Arc<()>,
     ratchet: Option<gcoms_crypto::PreparedReceive>,
     record: Option<Record>,
     window: Window,

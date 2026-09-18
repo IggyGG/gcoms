@@ -929,7 +929,7 @@ pub(crate) fn queue_contact_updates(st: &mut NodeState) -> Result<Vec<DirectDeli
         st.info.bundle = bundle.encode();
         st.secrets = Arc::new(secrets);
         for session in st.sessions.values_mut() {
-            session.provide_local_kem(st.secrets.kem_decapsulation_key());
+            session.provide_local_secrets(&st.secrets);
         }
     }
     let expires_at = st
@@ -979,15 +979,12 @@ pub(crate) fn queue_contact_updates(st: &mut NodeState) -> Result<Vec<DirectDeli
             .prepare_send(&record, &wrapping_key, &context)
             .map_err(|error| error.to_string())?;
         wrapping_key.fill(0);
-        let frame = gcoms_crypto::Frame::decode(prepared.wire()).ok_or("prepared invalid frame")?;
         let delivery = DirectDelivery {
             peer: route,
             relay: st.client_relay.clone(),
-            cells: vec![Cell::new(
-                CellType::Msg,
-                0,
+            cells: vec![peer_session::cell(
+                prepared.packet(&st.info.identity_pk)?,
                 3,
-                encode_frame(&st.info.identity_pk, &frame),
             )],
         };
         let now = std::time::Instant::now();

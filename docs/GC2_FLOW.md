@@ -79,8 +79,11 @@ receive commits invalidate older candidates, and candidates cannot be committed
 to a different session instance or to a restored instance. Exact duplicate
 receives have no application record and cannot repeat application effects.
 
-The caller must authenticate the explicit GC/2 handshake, including the session
-tag, record the first move, and bind sealed-state context to that tag and peer.
+The GC/2 handshake factory authenticates the session tag inside the existing
+hybrid first-move signature and binds it to canonical public contact information.
+It checks both identity bundles, freshness and local key correspondence before
+returning a candidate. Owner provisioning is excluded. The caller binds sealed
+state to the tag and peer and resolves simultaneous initiation before publication.
 The crypto snapshot, private flow snapshot, outgoing packet and application state
 must be persisted atomically before anything is emitted. Only then commit and
 send the bytes. A failed persist discards candidates. Restoring an older emitted
@@ -102,6 +105,42 @@ room for repair/control dispatch. Incoming flow state retains hashes and receipt
 secrets, not application plaintext or incoming ciphertext. Outgoing volatile
 traffic needs a separate persistence policy before this path can carry it.
 
+## Compact peer packets and node adoption
+
+`GCH2` (first move) and `GCM2` (established frame) prepend a 16-byte session tag
+to the existing encrypted structures. Both have a 20-byte total header. The
+established envelope replaces GC/1's kind, length and 1,952-byte identity key,
+saving 1,935 bytes per frame before adding the 47-byte credit record inside the
+ciphertext. This is a framing calculation, not measured interface goodput.
+Credit packets retain their complete 80-byte `GCA2` format. All three are bounded
+by the existing 15 KiB MSG limit, including the maximum PQ epoch header. Unknown
+versions, noncanonical option flags, oversized KEM fields and zero tags fail.
+
+The node's direct-session transactions now carry either an explicit legacy
+session or GC/2 session. `NodeProfile::gc2_session_fixture()` selects GC/2 **peer
+sessions only** in the local fixture. It does not select the natural-cell carrier
+or a protected production profile. The normal production selection stays GC/1.
+GC/2 incoming packets cannot silently establish a legacy session or be restored
+under an unselected profile.
+
+The GC/2 archive value (`GCPS`, version 2) encrypts the sealed ratchet and private
+flow state together with a random GCM nonce and a separate HKDF key domain. Its
+authenticated header binds the session tag; the enclosed ratchet also binds the
+machine and peer. Node archive v20 carries this value and retains explicit GC/2
+selection even before any session is created. GC/1 exports keep v19, and existing
+session archives retain their GC/1 interpretation. Switching a live GC/1 session
+archive to the GC/2 fixture is rejected pending authenticated migration. Decoding all
+session candidates and checking duplicate GC/2 tags precede their publication.
+
+Live receive transactions persist credit alongside the application inbox and
+logical ACK. The independent credit dispatcher never reports recipient delivery.
+Exact duplicate setup/data packets can reproduce credit after restart without
+repeating application effects. The maintenance owner retries retained ciphertext,
+including logical ACKs, within its existing bounded set of active attempts.
+Durable sends defer behind confirmation/counter credit; simultaneous initiation
+keeps logical IDs, order and deadlines. Contact-key updates are staged with the
+post-receive candidate rather than changing live state before persistence.
+
 ## Evidence and remaining adoption
 
 The protocol tests exercise authenticated hybrid first moves, a missing counter
@@ -110,7 +149,20 @@ restart, simultaneous saturation in both directions, class reservations, lost an
 reordered receipts, every-byte receipt tampering, private-state corruption,
 stale/cross-session transactions, application expiry and skipped-key aging.
 
-Node-wide resource accounting, archive integration, authenticated GC/2 handshake
-selection, logical ACK deferral and explicit new-session recovery still need
-runtime integration. Higher-level application delivery, real-network goodput
-and the packet-observation privacy gate remain separate qualification work.
+Node integration tests exercise durable inbox acceptance, restart after lost
+setup credit, exact duplicate handling, failed receive persistence, strict archive
+selection, archive tampering and simultaneous initiation. These use real protocol
+cryptography and the node's transaction paths; they do not qualify a deployed
+carrier or production performance.
+
+The TLS integration fixture sends eight 11 KiB durable application bodies,
+waits for application acknowledgment, restarts the receiver from archive v20,
+checks the retained inbox IDs, and resumes bidirectional delivery using the
+sender's old contact card. The fixture uses the existing relay carrier and
+compressed local cadence; it is not a GC/2 carrier or performance qualification.
+
+Node-wide accounting of retained ciphertext with queued/in-flight copies,
+volatile outgoing media policy, complete control deferral, authenticated session
+recovery after skipped-key expiry, and class/profile propagation remain required.
+The full natural-cell routing path, SDK/GChat selection, real-network goodput and
+packet-observation privacy gates remain separate integration/qualification work.
