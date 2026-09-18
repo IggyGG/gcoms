@@ -1661,6 +1661,8 @@ fn forward_grant_message_id(identity: &[u8], peer: &[u8], expires_at: u64) -> [u
     digest.finalize()[..16].try_into().expect("SHA-256 prefix")
 }
 
+#[cfg(test)]
+#[allow(dead_code)]
 pub(crate) async fn send_1to1(
     state: &Arc<Mutex<NodeState>>,
     scheduler: &RelayScheduler,
@@ -1673,13 +1675,34 @@ pub(crate) async fn send_1to1(
         .map(|_| ())
 }
 
-pub(crate) async fn send_1to1_tracked(
+pub(crate) fn prepare_1to1(
     state: &Arc<Mutex<NodeState>>,
-    scheduler: &RelayScheduler,
     peer: &NodeInfo,
     text: &[u8],
     via: Option<NodeInfo>,
-) -> Result<[u8; 16], String> {
+) -> Result<PreparedDirect, String> {
+    validate_application_payload(text)?;
+    let share_presence = state
+        .lock()
+        .unwrap_or_else(|p| p.into_inner())
+        .direct_presence_opt_in
+        .contains(&peer.identity_pk);
+    prepare_direct_record(state, peer, via, true, |message_id, _| {
+        Ok(encode_direct_data(
+            message_id,
+            now_ms(),
+            share_presence,
+            text,
+        ))
+    })
+}
+
+pub(crate) fn prepare_tracked_1to1(
+    state: &Arc<Mutex<NodeState>>,
+    peer: &NodeInfo,
+    text: &[u8],
+    via: Option<NodeInfo>,
+) -> Result<PreparedDirect, String> {
     if !cfg!(feature = "client-persist")
         || state
             .lock()
@@ -1689,9 +1712,11 @@ pub(crate) async fn send_1to1_tracked(
     {
         return Err("tracked send requires persistent client state".into());
     }
-    send_1to1_id(state, scheduler, peer, text, via).await
+    prepare_1to1(state, peer, text, via)
 }
 
+#[cfg(test)]
+#[allow(dead_code)]
 pub(crate) async fn send_1to1_id(
     state: &Arc<Mutex<NodeState>>,
     scheduler: &RelayScheduler,
@@ -1699,48 +1724,45 @@ pub(crate) async fn send_1to1_id(
     text: &[u8],
     via: Option<NodeInfo>,
 ) -> Result<[u8; 16], String> {
-    validate_application_payload(text)?;
-    let share_presence = state
-        .lock()
-        .unwrap_or_else(|p| p.into_inner())
-        .direct_presence_opt_in
-        .contains(&peer.identity_pk);
-    send_direct_record(state, scheduler, peer, via, true, |message_id, _| {
-        Ok(encode_direct_data(
-            message_id,
-            now_ms(),
-            share_presence,
-            text,
-        ))
-    })
-    .await
+    let prepared = prepare_1to1(state, peer, text, via)?;
+    complete_direct_record(scheduler, prepared).await
 }
 
-pub(crate) async fn send_volatile_application(
+pub(crate) fn prepare_volatile_application(
     state: &Arc<Mutex<NodeState>>,
-    scheduler: &RelayScheduler,
     peer: &NodeInfo,
     body: &[u8],
-) -> Result<(), String> {
+) -> Result<PreparedDirect, String> {
     validate_application_size(body)?;
-    send_direct_record(state, scheduler, peer, None, false, |message_id, _| {
+    prepare_direct_record(state, peer, None, false, |message_id, _| {
         Ok(crate::proto::encode_volatile_application(
             message_id,
             now_ms(),
             body,
         ))
     })
-    .await
-    .map(|_| ())
 }
 
-pub(crate) async fn send_durable_1to1(
+#[cfg(test)]
+#[allow(dead_code)]
+pub(crate) async fn send_volatile_application(
     state: &Arc<Mutex<NodeState>>,
     scheduler: &RelayScheduler,
     peer: &NodeInfo,
     body: &[u8],
-    via: Option<NodeInfo>,
 ) -> Result<(), String> {
+    let prepared = prepare_volatile_application(state, peer, body)?;
+    complete_direct_record(scheduler, prepared)
+        .await
+        .map(|_| ())
+}
+
+pub(crate) fn prepare_durable_1to1(
+    state: &Arc<Mutex<NodeState>>,
+    peer: &NodeInfo,
+    body: &[u8],
+    via: Option<NodeInfo>,
+) -> Result<PreparedDirect, String> {
     validate_application_payload(body)?;
     if body.is_empty()
         || !cfg!(feature = "client-persist")
@@ -1762,15 +1784,28 @@ pub(crate) async fn send_durable_1to1(
     {
         return Err("durable applications are not enabled for this profile".into());
     }
-    send_direct_record(state, scheduler, peer, via, true, |message_id, _| {
+    prepare_direct_record(state, peer, via, true, |message_id, _| {
         Ok(crate::proto::encode_direct_durable_data(
             message_id,
             now_ms(),
             body,
         ))
     })
-    .await
-    .map(|_| ())
+}
+
+#[cfg(test)]
+#[allow(dead_code)]
+pub(crate) async fn send_durable_1to1(
+    state: &Arc<Mutex<NodeState>>,
+    scheduler: &RelayScheduler,
+    peer: &NodeInfo,
+    body: &[u8],
+    via: Option<NodeInfo>,
+) -> Result<(), String> {
+    let prepared = prepare_durable_1to1(state, peer, body, via)?;
+    complete_direct_record(scheduler, prepared)
+        .await
+        .map(|_| ())
 }
 
 pub(crate) async fn send_direct_record<F>(
@@ -1781,6 +1816,31 @@ pub(crate) async fn send_direct_record<F>(
     application_event: bool,
     encode_record: F,
 ) -> Result<[u8; 16], String>
+where
+    F: FnOnce([u8; 16], u64) -> Result<Vec<u8>, String>,
+{
+    let prepared = prepare_direct_record(state, peer, via, application_event, encode_record)?;
+    complete_direct_record(scheduler, prepared).await
+}
+
+/// Prepared direct record: every local mutation, persistence and sequence
+/// allocation is complete. Completion (scheduler admission and any network
+/// wait) happens after the command's preparation lock is released.
+pub(crate) struct PreparedDirect {
+    pub(crate) message_id: [u8; 16],
+    delivery: DirectDelivery,
+    policy: FrwdTargetPolicy,
+    durable: bool,
+    traffic: gcoms_core::TrafficClass,
+}
+
+pub(crate) fn prepare_direct_record<F>(
+    state: &Arc<Mutex<NodeState>>,
+    peer: &NodeInfo,
+    via: Option<NodeInfo>,
+    application_event: bool,
+    encode_record: F,
+) -> Result<PreparedDirect, String>
 where
     F: FnOnce([u8; 16], u64) -> Result<Vec<u8>, String>,
 {
@@ -1804,7 +1864,7 @@ where
         }
     };
     let message_id = fresh_msg_id();
-    let (delivery, policy, durable, traffic) = {
+    let prepared = {
         let mut st = state.lock().unwrap_or_else(|p| p.into_inner());
         if st.pending_1to1.len() >= 1024 {
             return Err("too many unacknowledged direct messages".into());
@@ -1941,14 +2001,15 @@ where
             }
             let now = std::time::Instant::now();
             st.next_direct_sequence = next_direct_sequence;
+            let delivery = DirectDelivery {
+                peer: peer.clone(),
+                relay,
+                cells: Vec::new(),
+            };
             st.pending_1to1.insert(
                 message_id,
                 PendingDirect {
-                    delivery: DirectDelivery {
-                        peer: peer.clone(),
-                        relay,
-                        cells: Vec::new(),
-                    },
+                    delivery: delivery.clone(),
                     logical_record: Some(std::mem::take(&mut *direct)),
                     sequence,
                     next_attempt: now,
@@ -1962,8 +2023,15 @@ where
                 return Err(error);
             }
             // No ratchet slot or network operation has occurred. The exact
-            // logical record, ID and original deadline are now durable locally.
-            return Ok(message_id);
+            // logical record, ID and original deadline are now durable locally;
+            // completion has nothing to dispatch.
+            return Ok(PreparedDirect {
+                message_id,
+                delivery,
+                policy: st.frwd_target_policy.clone(),
+                durable,
+                traffic,
+            });
         }
 
         let old_route = st
@@ -2067,8 +2135,34 @@ where
         st.peer_route_generations
             .entry(peer.identity_pk.clone())
             .or_insert(0);
-        (delivery, st.frwd_target_policy.clone(), durable, traffic)
+        let policy = st.frwd_target_policy.clone();
+        PreparedDirect {
+            message_id,
+            delivery,
+            policy,
+            durable,
+            traffic,
+        }
     };
+    Ok(prepared)
+}
+
+pub(crate) async fn complete_direct_record(
+    scheduler: &RelayScheduler,
+    prepared: PreparedDirect,
+) -> Result<[u8; 16], String> {
+    let PreparedDirect {
+        message_id,
+        delivery,
+        policy,
+        durable,
+        traffic,
+    } = prepared;
+    if delivery.cells.is_empty() {
+        // Deferred during preparation: there is nothing to dispatch yet. The
+        // maintenance owner materializes it when a counter and route exist.
+        return Ok(message_id);
+    }
     if delivery.cells.len() == 2 {
         metrics::log_event("first_move_sent", &[]);
     } else {

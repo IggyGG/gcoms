@@ -189,7 +189,11 @@ Retain failures, source/executable/configuration/workload hashes and exact scope
   component kind for both the GC/2 counter reservation and scheduler admission;
   chat, acknowledgements, presence and contact updates keep the interactive and
   control reservations. Concurrent file transfers therefore share the bounded
-  bulk slots instead of the interactive capacity.
+  bulk slots instead of the interactive capacity. Direct and channel application
+  sends now prepare under the per-peer/channel preparation lock and complete
+  after releasing it, with a FIFO completion chain preserving wire/result order
+  and cancellation release; invite, membership, replay and recovery commands
+  still serialize their network waits.
 - Complete counter-window flow control, command preparation/completion split,
   authenticated class propagation, complete GC/2 routing, protected profiles,
   SDK/GChat profile integration and application/privacy/mobile gates: pending.

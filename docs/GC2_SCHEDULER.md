@@ -85,16 +85,18 @@ covered, including both historical v16 grammars, retained channel grants, machin
 scope and owner aliases. Older binaries must reject v19; rollback must use a build
 that understands the current archive. No identity or journal reset is required.
 
-Still required before enabling pipelining in production: counter-window flow
-control covering ACK/control traffic, removal of command-level network waits,
+Still required before enabling pipelining in production: the remaining
+control-plane command waits (invite, membership, replay and recovery),
 component fairness and the application-level comparison in the implementation
-ledger. Durable file records are classified as bulk from their authenticated
-component kind and use the existing bulk admission (at most three concurrent
-bulk jobs per pooled connection); chat, acknowledgements, presence and contact
-updates stay interactive. The class remains a local scheduling property on the
-legacy carrier; the experimental GC/2 natural wire authenticates it separately.
-The local scheduling `TrafficClass` is not yet an authenticated wire field on
-the legacy carrier.
+ledger. Counter-window flow control covering ACK/control traffic and the
+application send paths' command-level network waits are implemented. Durable
+file records are classified as bulk from their authenticated component kind and
+use the existing bulk admission (at most three concurrent bulk jobs per pooled
+connection); chat, acknowledgements, presence and contact updates stay
+interactive. The class remains a local scheduling property on the legacy
+carrier; the experimental GC/2 natural wire authenticates it separately. The
+local scheduling `TrafficClass` is not yet an authenticated wire field on the
+legacy carrier.
 
 Channel data and control recovery now have independent maintenance loops. A data
 batch can wait for up to 120 seconds; it no longer postpones the next retry of a
@@ -136,8 +138,13 @@ returns, allowing GChat to reopen the encrypted profile immediately. Invitation
 processing owns at most 64 active redemptions in addition to its bounded inbox;
 successive maintenance ticks cannot accumulate detached workers. The command
 shutdown deadline includes waiting to enqueue the request into a full queue.
-Per-peer/channel command serialization still includes network waits; this is
-resource ownership and shutdown recovery, not the remaining preparation split.
+Application sends now split preparation from completion. Preparation
+(validation, identities, ratchet/MLS state, durable commit) runs under the
+per-peer or per-channel preparation lock; completion (scheduler admission and
+hop acceptance) runs after that lock is released, in a FIFO completion chain,
+so wire and result order still match preparation order and cancellation
+releases the successor. Invite, membership, replay and recovery commands still
+hold their key across network waits.
 
 ## Larger useful file chunks
 

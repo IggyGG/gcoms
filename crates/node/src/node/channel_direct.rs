@@ -84,13 +84,18 @@ pub(crate) fn seal_channel_direct(
     Ok((route, envelope))
 }
 
-pub(crate) async fn send_channel_direct(
+pub(crate) struct PreparedChannelDirect {
+    message_id: [u8; 16],
+    route: crate::channel::ChannelRoute,
+    cell: Cell,
+}
+
+pub(crate) fn prepare_channel_direct(
     state: &Arc<Mutex<NodeState>>,
-    scheduler: &RelayScheduler,
     channel: &str,
     recipient: [u8; 32],
     text: &[u8],
-) -> Result<[u8; 16], String> {
+) -> Result<PreparedChannelDirect, String> {
     validate_application_payload(text)?;
     let message_id = fresh_msg_id();
     let mut plaintext = Vec::with_capacity(9 + text.len());
@@ -118,9 +123,26 @@ pub(crate) async fn send_channel_direct(
     let payload = envelope
         .encode()
         .ok_or("channel-direct envelope too large")?;
+    Ok(PreparedChannelDirect {
+        message_id,
+        route,
+        cell: Cell::new(CellType::Msg, 0, 0, payload),
+    })
+}
+
+pub(crate) async fn complete_channel_direct(
+    state: &Arc<Mutex<NodeState>>,
+    scheduler: &RelayScheduler,
+    prepared: PreparedChannelDirect,
+) -> Result<[u8; 16], String> {
+    let PreparedChannelDirect {
+        message_id,
+        route,
+        cell,
+    } = prepared;
     // The authenticated directory record uses this same FIFO control lane, so
     // a newly admitted recipient learns the sender key before direct traffic.
-    let result = push_ctrl_to_route(scheduler, &route, &Cell::new(CellType::Msg, 0, 0, payload))
+    let result = push_ctrl_to_route(scheduler, &route, &cell)
         .await
         .map(|_| message_id);
     if result.is_err() {
@@ -131,6 +153,19 @@ pub(crate) async fn send_channel_direct(
             .remove(&message_id);
     }
     result
+}
+
+#[cfg(test)]
+#[allow(dead_code)]
+pub(crate) async fn send_channel_direct(
+    state: &Arc<Mutex<NodeState>>,
+    scheduler: &RelayScheduler,
+    channel: &str,
+    recipient: [u8; 32],
+    text: &[u8],
+) -> Result<[u8; 16], String> {
+    let prepared = prepare_channel_direct(state, channel, recipient, text)?;
+    complete_channel_direct(state, scheduler, prepared).await
 }
 
 pub(crate) fn handle_channel_direct(
