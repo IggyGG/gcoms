@@ -366,9 +366,18 @@ pub(crate) fn spawn_direct_maintenance_loop(
 ) -> tokio::task::JoinHandle<()> {
     let mut rng = scheduler_profile.maintenance_rng_labeled(seed, b"direct");
     tokio::spawn(async move {
+        let mut maintenance = DirectMaintenance::default();
+        let clock = tokio::time::sleep(scheduler_profile.maintenance_delay(&mut rng));
+        tokio::pin!(clock);
         loop {
-            tokio::time::sleep(scheduler_profile.maintenance_delay(&mut rng)).await;
-            direct_tick(&state, &scheduler, &events).await;
+            tokio::select! {
+                _ = &mut clock => {
+                    maintenance.tick(&state, &scheduler, &events);
+                    clock.as_mut().reset(tokio::time::Instant::now()
+                        + scheduler_profile.maintenance_delay(&mut rng));
+                }
+                _ = maintenance.complete_next(&state), if !maintenance.is_empty() => {}
+            }
         }
     })
 }

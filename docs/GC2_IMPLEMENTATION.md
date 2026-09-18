@@ -107,6 +107,10 @@ Retain failures, source/executable/configuration/workload hashes and exact scope
   diagnostics: implemented in the task branch; congestion regression validated
   with a real TLS/H2 data response held open through a rejected control attempt
   and its successful retry.
+- Direct maintenance has bounded, independent receipt waits (16 ACKs and 48
+  retries), with exact-ciphertext deduplication and archived in-flight ACKs.
+  Real TLS fixtures verify healthy-lane progress behind a stalled retry and
+  preservation of an ACK whose receive queue renews before hop acceptance.
 - Node-wide endpoint/transit admission, protected cover allowance and deferred
   relay authorization: implemented; request preparation follows transport
   admission and retries preserve exact bytes.

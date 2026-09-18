@@ -2,6 +2,10 @@
 
 use super::*;
 
+#[cfg(all(test, feature = "client-persist"))]
+#[path = "direct_maintenance_tests.rs"]
+mod maintenance_tests;
+
 /// Grants an intermediary of the active set may use toward `peer`
 /// (SPEC §11.1): exclude the receiver's own relays, grants issued by the
 /// receiver, and this node's own relay.
@@ -106,13 +110,80 @@ pub(crate) fn reroute_deliveries(st: &mut NodeState, deliveries: &mut [DirectDel
     }
 }
 
-pub(crate) async fn direct_tick(
-    state: &Arc<Mutex<NodeState>>,
-    scheduler: &RelayScheduler,
-    events: &broadcast::Sender<Ev>,
-) {
-    let now = std::time::Instant::now();
-    let (acks, retries, policy) = {
+const MAX_DIRECT_ACK_ATTEMPTS: usize = 16;
+const MAX_DIRECT_RETRY_ATTEMPTS: usize = 48;
+
+/// Identify committed ciphertext independently of mutable relay/contact routes.
+/// A rekey can replace ciphertext under the same logical message ID; that is a
+/// distinct attempt. Lengths and every cell header make the digest unambiguous.
+fn direct_attempt_key(delivery: &DirectDelivery) -> [u8; 32] {
+    let mut hash = Sha256::new();
+    hash.update(b"gcoms.direct-maintenance.v1\0");
+    hash.update((delivery.peer.identity_pk.len() as u64).to_be_bytes());
+    hash.update(&delivery.peer.identity_pk);
+    hash.update((delivery.cells.len() as u64).to_be_bytes());
+    for cell in &delivery.cells {
+        hash.update([cell.version, cell.raw_type, cell.flags]);
+        hash.update(cell.round_ctr.to_be_bytes());
+        hash.update((cell.payload.len() as u64).to_be_bytes());
+        hash.update(&cell.payload);
+    }
+    hash.finalize().into()
+}
+
+struct DirectAttempt {
+    key: [u8; 32],
+    ack: bool,
+    delivery: DirectDelivery,
+    accepted: bool,
+}
+
+/// Own all maintenance receipts without holding up later ticks. ACKs remain in
+/// the archived outbox until hop acceptance; dropping this owner cannot lose an
+/// in-flight ACK. Retries retain their original pending entry and deadline.
+#[derive(Default)]
+pub(crate) struct DirectMaintenance {
+    active: HashMap<[u8; 32], bool>,
+    completions: futures_util::stream::FuturesUnordered<
+        futures_util::future::BoxFuture<'static, DirectAttempt>,
+    >,
+}
+
+impl DirectMaintenance {
+    pub(crate) fn is_empty(&self) -> bool {
+        self.active.is_empty()
+    }
+
+    fn start(
+        &mut self,
+        st: &mut NodeState,
+        scheduler: &RelayScheduler,
+        mut delivery: DirectDelivery,
+        ack: bool,
+    ) {
+        let key = direct_attempt_key(&delivery);
+        self.active.insert(key, ack);
+        reroute_deliveries(st, std::slice::from_mut(&mut delivery));
+        let scheduler = scheduler.clone();
+        let policy = st.frwd_target_policy.clone();
+        self.completions.push(Box::pin(async move {
+            let accepted = deliver_direct(&scheduler, &delivery, &policy).await.is_ok();
+            DirectAttempt {
+                key,
+                ack,
+                delivery,
+                accepted,
+            }
+        }));
+    }
+
+    pub(crate) fn tick(
+        &mut self,
+        state: &Arc<Mutex<NodeState>>,
+        scheduler: &RelayScheduler,
+        events: &broadcast::Sender<Ev>,
+    ) {
+        let now = std::time::Instant::now();
         let mut st = state.lock().unwrap_or_else(|p| p.into_inner());
         if st.owner_transition_failed {
             return;
@@ -126,51 +197,85 @@ pub(crate) async fn direct_tick(
         if let Err(error) = cleanup_expired_unconfirmed(&mut st, now) {
             metrics::log_event("session_cleanup_persist_error", &[("e", error)]);
         }
-        let acks = st.direct_ack_outbox.drain(..).collect::<Vec<_>>();
         st.pending_1to1.retain(|_, pending| pending.expires > now);
-        let mut retries = Vec::new();
-        for pending in st.pending_1to1.values_mut() {
-            if pending.next_attempt <= now && !pending.delivery.cells.is_empty() {
-                pending.next_attempt = now + jittered(std::time::Duration::from_secs(60));
-                retries.push(pending.delivery.clone());
-            }
-        }
         expire_direct_presence(&mut st, now, events);
         rotate_active_intermediaries(&mut st);
-        let mut acks = acks;
-        let mut retries = retries;
-        reroute_deliveries(&mut st, &mut acks);
-        reroute_deliveries(&mut st, &mut retries);
-        (acks, retries, st.frwd_target_policy.clone())
-    };
-    // Enqueue every ACK and retry first, then await all receipts together
-    // so one slow lane cannot delay the others.
-    let ack_jobs = acks
-        .into_iter()
-        .map(|ack| {
-            let scheduler = scheduler.clone();
-            let policy = policy.clone();
-            async move {
-                let ok = deliver_direct(&scheduler, &ack, &policy).await.is_ok();
-                (ack, ok)
+
+        let ack_count = self.active.values().filter(|&&ack| ack).count();
+        let mut selected = HashSet::new();
+        let acks: Vec<_> = st
+            .direct_ack_outbox
+            .iter()
+            .filter(|ack| {
+                let key = direct_attempt_key(ack);
+                !self.active.contains_key(&key) && selected.insert(key)
+            })
+            .take(MAX_DIRECT_ACK_ATTEMPTS - ack_count)
+            .cloned()
+            .collect();
+        for ack in acks {
+            self.start(&mut st, scheduler, ack, true);
+        }
+
+        // Oldest due work first, so the finite window cannot keep selecting an
+        // arbitrary HashMap prefix. Only admitted attempts move their deadline.
+        let mut due: Vec<_> = st
+            .pending_1to1
+            .iter()
+            .filter(|(_, pending)| {
+                pending.next_attempt <= now && !pending.delivery.cells.is_empty()
+            })
+            .map(|(id, pending)| (pending.next_attempt, pending.sequence, *id))
+            .collect();
+        due.sort_unstable();
+        let retry_count = self.active.values().filter(|&&ack| !ack).count();
+        let mut available = MAX_DIRECT_RETRY_ATTEMPTS - retry_count;
+        for (_, _, id) in due {
+            if available == 0 {
+                break;
             }
-        })
-        .collect::<Vec<_>>();
-    let retry_jobs = retries
-        .into_iter()
-        .map(|retry| {
-            let scheduler = scheduler.clone();
-            let policy = policy.clone();
-            async move {
-                let _ = deliver_direct(&scheduler, &retry, &policy).await;
+            let pending = st
+                .pending_1to1
+                .get_mut(&id)
+                .expect("selected pending entry");
+            if self
+                .active
+                .contains_key(&direct_attempt_key(&pending.delivery))
+            {
+                continue;
             }
-        })
-        .collect::<Vec<_>>();
-    let (ack_results, _) = tokio::join!(futures_join_all(ack_jobs), futures_join_all(retry_jobs));
-    let mut st = state.lock().unwrap_or_else(|p| p.into_inner());
-    for (ack, ok) in ack_results {
-        if !ok && st.direct_ack_outbox.len() < 1024 {
-            st.direct_ack_outbox.push_back(ack);
+            pending.next_attempt = now + jittered(std::time::Duration::from_secs(60));
+            let delivery = pending.delivery.clone();
+            self.start(&mut st, scheduler, delivery, false);
+            available -= 1;
+        }
+    }
+
+    pub(crate) async fn complete_next(&mut self, state: &Arc<Mutex<NodeState>>) {
+        use futures_util::StreamExt;
+        if let Some(attempt) = self.completions.next().await {
+            self.active.remove(&attempt.key);
+            if !attempt.ack {
+                return;
+            }
+            let mut st = state.lock().unwrap_or_else(|p| p.into_inner());
+            let matches = |ack: &DirectDelivery| {
+                ack.peer.identity_pk == attempt.delivery.peer.identity_pk
+                    && ack.cells == attempt.delivery.cells
+            };
+            if let Some(index) = st.direct_ack_outbox.iter().position(&matches) {
+                let retained = st.direct_ack_outbox.remove(index).expect("matched ACK");
+                st.direct_ack_outbox.retain(|ack| !matches(ack));
+                let current_destination = select_peer_route(&st, &retained.peer).ok();
+                let accepted_current_route = attempt.accepted
+                    && current_destination.as_ref().and_then(NodeInfo::primary)
+                        == attempt.delivery.peer.primary();
+                if !accepted_current_route {
+                    // Retry on a later tick, behind other waiting ACKs. Keep the
+                    // retained contact, which may have renewed during this wait.
+                    st.direct_ack_outbox.push_back(retained);
+                }
+            }
         }
     }
 }

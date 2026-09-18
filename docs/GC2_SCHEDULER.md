@@ -82,6 +82,24 @@ membership commit or ACK, whose convergence window is 90 seconds. Both loops sti
 submit through the existing scheduled lanes. A hop acceptance clears a retained
 control record only if its full route and ciphertext still match the attempt.
 
+Direct maintenance also advances independently of outstanding receipts. Its owner
+retains at most 16 ACK attempts and 48 retry attempts, all submitted through the
+existing scheduler. These owners retain bounded copies of the durable deliveries;
+the scheduler's 8 MiB accounting separately covers its admitted work. Due retries
+are selected oldest first; only selected attempts
+move their retry timer. Identical committed ciphertext cannot accumulate attempts
+across ticks or intermediary changes. Rewritten ciphertext after session recovery
+is a distinct attempt even when the logical message ID stays the same.
+
+ACKs remain in the bounded, archived outbox while in flight. Hop acceptance clears
+matching ciphertext only if the receiver's authenticated queue still matches the
+attempt. A changed receive queue or failed attempt leaves the cached ACK for a
+later tick, behind other waiters. No new ratchet counter is consumed to retry, and
+hop acceptance still does not complete a pending application delivery. A real
+TLS/H2 regression holds one retry's response open while a newly queued ACK retries
+on an independent lane and presence expires. This removes a maintenance stall;
+it is not evidence of an end-to-end throughput gain or wider ratchet safety.
+
 `NodeHandle::enable_diagnostics()` and `diagnostics()` expose bounded local
 aggregates for client and relay schedulers, their local resource use and the
 shared node budget. Local peaks occur independently; use the combined snapshot
