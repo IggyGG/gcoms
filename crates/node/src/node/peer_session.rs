@@ -213,7 +213,10 @@ impl PeerSession {
         key: &[u8; 32],
         context: &SessionContext,
     ) -> Result<PreparedSend, Error> {
-        let deadline = if matches!(decode_direct_record(bytes), Some(DirectRecord::Data { .. })) {
+        let deadline = if matches!(
+            decode_direct_record(bytes),
+            Some(DirectRecord::Data { .. } | DirectRecord::VolatileApplication { .. })
+        ) {
             now_unix().saturating_add(600)
         } else {
             0
@@ -240,24 +243,26 @@ impl PeerSession {
             }
             #[cfg(feature = "experimental-gc2")]
             Self::Credited(s) => {
-                // Volatile media requires a RAM-only repair policy before it
-                // may use a durable GC/2 send window.
-                let purpose = match decode_direct_record(bytes) {
-                    Some(DirectRecord::VolatileApplication { .. }) => {
-                        return Err(CryptoError::BadEncoding.into())
-                    }
-                    Some(DirectRecord::Data { .. }) => flow::Purpose::Interactive,
-                    _ => flow::Purpose::Control,
-                };
-                let deadline = match decode_direct_record(bytes) {
-                    Some(DirectRecord::Data { sent_ms, .. }) => {
-                        deadline.min(gc2_receipts::horizon(sent_ms))
-                    }
-                    _ => deadline,
+                let (purpose, volatile, deadline) = match decode_direct_record(bytes) {
+                    Some(DirectRecord::Data { sent_ms, .. }) => (
+                        flow::Purpose::Interactive,
+                        false,
+                        deadline.min(gc2_receipts::horizon(sent_ms)),
+                    ),
+                    Some(DirectRecord::VolatileApplication { sent_ms, .. }) => (
+                        flow::Purpose::Interactive,
+                        true,
+                        deadline.min(gc2_receipts::horizon(sent_ms)),
+                    ),
+                    _ => (flow::Purpose::Control, false, deadline),
                 };
                 let record = flow::Record::new(purpose, deadline, bytes, &mut rand::thread_rng())
                     .map_err(flow::SessionError::from)?;
-                let prepared = s.prepare_send(&record, now_unix(), key, context)?;
+                let prepared = if volatile {
+                    s.prepare_volatile_send(&record, now_unix(), key, context)?
+                } else {
+                    s.prepare_send(&record, now_unix(), key, context)?
+                };
                 let sealed = seal(
                     s.window().session(),
                     prepared.sealed_ratchet(),
@@ -367,7 +372,7 @@ impl PeerSession {
             #[cfg(feature = "experimental-gc2")]
             Self::Credited(s) => {
                 s.window().next_counter(purpose(bytes)).is_ok()
-                    && !s.window().repair_expired(now_unix())
+                    && !s.window().recovery_required(now_unix())
             }
         }
     }
@@ -445,7 +450,9 @@ pub(super) fn seal(
 #[cfg(feature = "experimental-gc2")]
 fn purpose(bytes: &[u8]) -> flow::Purpose {
     match decode_direct_record(bytes) {
-        Some(DirectRecord::Data { .. }) => flow::Purpose::Interactive,
+        Some(DirectRecord::Data { .. } | DirectRecord::VolatileApplication { .. }) => {
+            flow::Purpose::Interactive
+        }
         _ => flow::Purpose::Control,
     }
 }

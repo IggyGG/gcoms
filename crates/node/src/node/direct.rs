@@ -240,7 +240,8 @@ impl DirectMaintenance {
                     .pending_1to1
                     .values()
                     .any(|p| p.delivery.peer.identity_pk == *peer && p.expires > now);
-                ((session.window().repair_expired(now_unix()) || (expired_setup && live_pending))
+                ((session.window().recovery_required(now_unix())
+                    || (expired_setup && live_pending))
                     && !self.recovery_due.contains_key(peer))
                 .then(|| peer.clone())
             });
@@ -299,7 +300,7 @@ impl DirectMaintenance {
                 let PeerSession::Credited(session) = session else {
                     continue;
                 };
-                if session.window().repair_expired(now_unix()) {
+                if session.window().recovery_required(now_unix()) {
                     continue;
                 }
                 let Some(route) = st.peer_routes.get(peer) else {
@@ -609,11 +610,18 @@ pub(crate) fn accept_reliable_direct(
     #[cfg(feature = "experimental-gc2")]
     let receipt = if let (
         Some(tag),
-        Some(DirectRecord::Data {
-            message_id,
-            sent_ms,
-            ..
-        }),
+        Some(
+            DirectRecord::Data {
+                message_id,
+                sent_ms,
+                ..
+            }
+            | DirectRecord::VolatileApplication {
+                message_id,
+                sent_ms,
+                ..
+            },
+        ),
     ) = (staged.tag(), decode_direct_record(received.plaintext()))
     {
         let counter = gcoms_crypto::Frame::decode(ack.wire())
@@ -732,7 +740,9 @@ pub(crate) fn process_frame(
         }
         Ok(received) => match decode_direct_record(received.plaintext()) {
             Some(DirectRecord::VolatileApplication {
-                message_id, body, ..
+                message_id,
+                sent_ms,
+                body,
             }) => {
                 if body.len() > gcoms_core::APPLICATION_PAYLOAD_LIMIT
                     || st
@@ -743,6 +753,17 @@ pub(crate) fn process_frame(
                 {
                     return;
                 }
+                #[cfg(feature = "experimental-gc2")]
+                let Some((received, logical_duplicate)) =
+                    gc2_direct::logical_receive(st, &sender_pk, received, message_id, sent_ms)
+                else {
+                    return;
+                };
+                #[cfg(not(feature = "experimental-gc2"))]
+                let logical_duplicate = {
+                    let _ = sent_ms;
+                    false
+                };
                 // Persist only the ratchet and ordinary receipt ACK, never the
                 // incoming application body or its ciphertext frame.
                 if accept_reliable_direct(
@@ -756,6 +777,9 @@ pub(crate) fn process_frame(
                 )
                 .is_err()
                 {
+                    return;
+                }
+                if logical_duplicate {
                     return;
                 }
                 let _ = events.send(Ev::VolatileApplication {
@@ -773,42 +797,10 @@ pub(crate) fn process_frame(
                 body,
             }) => {
                 #[cfg(feature = "experimental-gc2")]
-                let logical_duplicate = if st.sessions[&sender_pk].tag().is_some() {
-                    let horizon = gc2_receipts::horizon(sent_ms);
-                    if horizon <= st.gc2_receipts.now(now_unix()) {
-                        // Preserve counter repair even when the immutable
-                        // logical deadline expired across a session replacement.
-                        if persist_received_direct_transaction(
-                            st,
-                            &sender_pk,
-                            received.sealed_state(),
-                            received.credit(),
-                        )
-                        .is_ok()
-                        {
-                            let _ = st
-                                .sessions
-                                .get_mut(&sender_pk)
-                                .unwrap()
-                                .commit_receive(received);
-                        }
-                        return;
-                    }
-                    match st.gc2_receipts.check(
-                        &sender_pk,
-                        message_id,
-                        Sha256::digest(received.plaintext()).into(),
-                        horizon,
-                        now_unix(),
-                    ) {
-                        Ok(duplicate) => duplicate,
-                        Err(error) => {
-                            metrics::log_event("gc2_logical_record_rejected", &[("e", error)]);
-                            return;
-                        }
-                    }
-                } else {
-                    false
+                let Some((received, logical_duplicate)) =
+                    gc2_direct::logical_receive(st, &sender_pk, received, message_id, sent_ms)
+                else {
+                    return;
                 };
                 #[cfg(not(feature = "experimental-gc2"))]
                 let logical_duplicate = false;

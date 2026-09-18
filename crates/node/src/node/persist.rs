@@ -2561,8 +2561,13 @@ pub(super) async fn decode_state_at_startup(
             let mut receipts = gc2_receipts::Ledger::default();
             for (peer, session, _) in &restored_sessions {
                 if let PeerSession::Credited(session) = session {
-                    if session.window().generation() != 1 {
-                        return Err("recovered GC/2 sessions require a v21 receipt archive".into());
+                    if session.window().generation() != 1
+                        || session.window().has_volatile_counters()
+                    {
+                        return Err(
+                            "recovered or volatile GC/2 sessions require a v21 receipt archive"
+                                .into(),
+                        );
                     }
                     receipts.migrate(peer, session.window());
                 }
@@ -2748,6 +2753,8 @@ pub(in crate::node) mod tests {
     include!("persist/gc2_session_tests.rs");
     #[cfg(feature = "experimental-gc2")]
     include!("persist/gc2_recovery_tests.rs");
+    #[cfg(feature = "experimental-gc2")]
+    include!("persist/gc2_volatile_tests.rs");
     include!("persist/channel_directory_tests.rs");
 
     fn contact(byte: u8) -> AliasContact {

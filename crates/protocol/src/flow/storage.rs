@@ -2,6 +2,7 @@ use super::*;
 
 const MAGIC: &[u8; 5] = b"GCW2\x01";
 const RECOVERY_MAGIC: &[u8; 5] = b"GCW2\x02";
+const VOLATILE_MAGIC: &[u8; 5] = b"GCW2\x03";
 /// At most 63 retained packets and 63 small receive/credit records.
 pub const MAX_PRIVATE_BYTES: usize = 128 + (MAX_MESSAGE + 43 + 153) * COUNTER_WINDOW as usize;
 
@@ -10,13 +11,16 @@ impl Window {
     /// atomically with the corresponding ratchet and application state.
     pub fn encode_private(&self) -> Zeroizing<Vec<u8>> {
         let mut out = Zeroizing::new(Vec::new());
-        out.extend_from_slice(if self.generation == 1 {
+        let has_volatile = self.tx.values().any(|entry| entry.volatile);
+        out.extend_from_slice(if has_volatile {
+            VOLATILE_MAGIC
+        } else if self.generation == 1 {
             MAGIC
         } else {
             RECOVERY_MAGIC
         });
         out.extend_from_slice(&self.session);
-        if self.generation > 1 {
+        if self.generation > 1 || has_volatile {
             out.extend_from_slice(&self.generation.to_be_bytes());
         }
         for value in [
@@ -33,8 +37,15 @@ impl Window {
             out.push(entry.purpose as u8);
             out.extend_from_slice(&entry.sent_unix.to_be_bytes());
             out.extend_from_slice(&entry.authority.secret.0);
-            out.extend_from_slice(&(entry.packet.len() as u16).to_be_bytes());
-            out.extend_from_slice(&entry.packet);
+            if has_volatile {
+                out.push(u8::from(entry.volatile));
+            }
+            if entry.volatile {
+                out.extend_from_slice(&entry.authority.packet_hash);
+            } else {
+                out.extend_from_slice(&(entry.packet.len() as u16).to_be_bytes());
+                out.extend_from_slice(&entry.packet);
+            }
         }
         out.push(self.rx.len() as u8);
         for (counter, entry) in &self.rx {
@@ -59,14 +70,15 @@ impl Window {
             return Err(Error::Length);
         }
         let mut input = Input { bytes, cursor: 0 };
-        let recovered = match input.take(5)? {
-            value if value == MAGIC => false,
-            value if value == RECOVERY_MAGIC => true,
+        let version = match input.take(5)? {
+            value if value == MAGIC => 1,
+            value if value == RECOVERY_MAGIC => 2,
+            value if value == VOLATILE_MAGIC => 3,
             _ => return Err(Error::Version),
         };
         let tag = input.array()?;
-        let generation = if recovered { input.u64()? } else { 1 };
-        if recovered && generation < 2 {
+        let generation = if version >= 2 { input.u64()? } else { 1 };
+        if version == 2 && generation < 2 {
             return Err(Error::State);
         }
         let mut window = Self::new_generation(tag, generation)?;
@@ -96,12 +108,26 @@ impl Window {
                 return Err(Error::State);
             }
             let secret = Secret(input.array()?);
-            let length = u16::from_be_bytes(input.array()?) as usize;
-            if length == 0 || length > MAX_MESSAGE {
-                return Err(Error::Length);
-            }
-            let packet = input.take(length)?;
-            let authority = Authority::new(&window.session, Sha256::digest(packet).into(), secret);
+            let volatile = if version == 3 {
+                match input.byte()? {
+                    0 => false,
+                    1 if purpose != Purpose::Control => true,
+                    _ => return Err(Error::State),
+                }
+            } else {
+                false
+            };
+            let (packet, packet_hash) = if volatile {
+                (&[][..], input.array()?)
+            } else {
+                let length = u16::from_be_bytes(input.array()?) as usize;
+                if length == 0 || length > MAX_MESSAGE {
+                    return Err(Error::Length);
+                }
+                let packet = input.take(length)?;
+                (packet, Sha256::digest(packet).into())
+            };
+            let authority = Authority::new(&window.session, packet_hash, secret);
             if window
                 .tx
                 .values()
@@ -116,6 +142,7 @@ impl Window {
                     packet: Arc::new(Zeroizing::new(packet.to_vec())),
                     purpose,
                     sent_unix,
+                    volatile,
                 },
             );
         }
@@ -180,6 +207,9 @@ impl Window {
         }
         if input.cursor != bytes.len() {
             return Err(Error::Length);
+        }
+        if version == 3 && !window.tx.values().any(|entry| entry.volatile) {
+            return Err(Error::State);
         }
         Ok(window)
     }

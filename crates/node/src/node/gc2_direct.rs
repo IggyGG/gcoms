@@ -315,3 +315,40 @@ pub(super) fn recover_peer(st: &mut NodeState, peer: &[u8]) -> Result<bool, Stri
     }
     Ok(true)
 }
+
+/// Both durable application bodies and ephemeral events need stable logical
+/// receipt metadata when a lost ACK is followed by session recovery. Expired
+/// records still repair their counter without creating another application effect.
+pub(super) fn logical_receive(
+    st: &mut NodeState,
+    peer: &[u8],
+    received: peer_session::PreparedReceive,
+    message_id: [u8; 16],
+    sent_ms: u64,
+) -> Option<(peer_session::PreparedReceive, bool)> {
+    if st.sessions[peer].tag().is_none() {
+        return Some((received, false));
+    }
+    let horizon = gc2_receipts::horizon(sent_ms);
+    if horizon <= st.gc2_receipts.now(now_unix()) {
+        if persist_received_direct_transaction(st, peer, received.sealed_state(), received.credit())
+            .is_ok()
+        {
+            let _ = st.sessions.get_mut(peer).unwrap().commit_receive(received);
+        }
+        return None;
+    }
+    match st.gc2_receipts.check(
+        peer,
+        message_id,
+        Sha256::digest(received.plaintext()).into(),
+        horizon,
+        now_unix(),
+    ) {
+        Ok(duplicate) => Some((received, duplicate)),
+        Err(error) => {
+            metrics::log_event("gc2_logical_record_rejected", &[("e", error)]);
+            None
+        }
+    }
+}

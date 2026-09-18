@@ -176,7 +176,10 @@ Retain failures, source/executable/configuration/workload hashes and exact scope
   leave control and dispatch headroom. Signed recovery generations and bounded,
   encrypted logical receipt history now cover lost setup, consumed messages,
   re-encryption, restart and skipped-key expiry in that fixture. Production
-  routing, outgoing volatile persistence and final qualification remain pending.
+  routing and final qualification remain pending. Volatile media now has RAM-only
+  exact retries, metadata-only persistence, missing-counter recovery after restart
+  and duplicate-event suppression. Protocol, node transaction and TLS tests cover
+  this path; no media body or ciphertext is restored from an archive.
 - Complete counter-window flow control, command preparation/completion split,
   authenticated class propagation, complete GC/2 routing, protected profiles,
   SDK/GChat profile integration and application/privacy/mobile gates: pending.

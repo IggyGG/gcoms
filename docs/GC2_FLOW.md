@@ -102,8 +102,21 @@ Each peer retains at most 63 packets and 63 receipt authorities. This is roughly
 one MiB per maximally occupied peer. The node accounts these retained ciphertexts
 alongside pending logical records, queued cells and ACK/credit outboxes in the
 scheduler's shared endpoint/transit budget. Incoming flow state retains hashes and receipt
-secrets, not application plaintext or incoming ciphertext. Outgoing volatile
-traffic needs a separate persistence policy before this path can carry it.
+secrets, not application plaintext or incoming ciphertext.
+
+Outgoing volatile media retains exact retry ciphertext only in RAM. Its private
+flow snapshot uses explicit version 3 and stores the counter, receipt authority,
+packet hash and retention marker, excluding the media body and ciphertext. No new
+wire traffic class reveals this retention choice. Durable and control frames keep
+their existing persistence policy. Live staged receive/ACK transactions share the
+RAM retry buffers rather than reopening their intentionally incomplete archive.
+
+After restart, an uncredited missing volatile packet stops new sends and triggers
+authenticated session recovery through maintenance. An authenticated selective
+receipt can instead establish that the missing packet arrived. Durable logical
+work keeps its IDs and deadlines during recovery; expired media is never rebuilt
+from disk. Volatile receives use the same bounded logical receipt metadata as
+Data, preventing duplicate events after re-encryption without saving the media.
 
 ## Compact peer packets and node adoption
 
@@ -188,12 +201,12 @@ maintenance dispatch, without an application-triggered entry dial. Replacement
 requeues logical records with their IDs, order and deadlines, retires the old wire
 outbox, and saves the new generation before emission. Admission pressure preserves
 the previous candidate; an uncertain recovery save pauses the node until restart.
-The Data timestamp supplies a fixed ten-minute ceiling, so re-encryption cannot
+The Data or volatile timestamp supplies a fixed ten-minute ceiling, so re-encryption cannot
 extend its original lifetime. GC/1 timing remains unchanged.
 
 A consumed inbox entry is insufficient to deduplicate a lost application ACK
 across recovery. The receiver therefore saves a logical receipt alongside each
-GC/2 Data acceptance: peer hash, message ID, record hash, lifetime ceiling, and the
+GC/2 Data or volatile acceptance: peer hash, message ID, record hash, lifetime ceiling, and the
 session tag/counter of its application ACK. Re-encrypting an unacknowledged record
 repeats its ACK without another inbox/event effect; conflicting bytes fail before
 commit. Receipt removal requires authenticated credit covering that application
@@ -238,10 +251,17 @@ carrier or production performance.
 The TLS integration fixture sends eight 11 KiB durable application bodies,
 waits for application acknowledgment, restarts the receiver from archive v21,
 checks the retained inbox IDs, and resumes bidirectional delivery using the
-sender's old contact card. The fixture uses the existing relay carrier and
+sender's old contact card. It also delivers volatile events in both directions,
+including after restart, while checking that they never enter the durable inbox.
+The fixture uses the existing relay carrier and
 compressed local cadence; it is not a GC/2 carrier or performance qualification.
 
-Volatile outgoing media policy, complete control deferral, and class/profile
-propagation remain required.
+Real-crypto volatile tests cover live exact repair, selective credit after
+restart, missing-counter recovery, failed receive/send writes, archive relabeling,
+and duplicate suppression across restart and re-encryption. The checkpoint at
+`target/gc2-volatile-validation-20260918/` retains source manifests and Linux/
+Windows GNU test evidence; this is not native MSVC release qualification.
+
+Complete control deferral and class/profile propagation remain required.
 The full natural-cell routing path, SDK/GChat selection, real-network goodput and
 packet-observation privacy gates remain separate integration/qualification work.

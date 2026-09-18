@@ -58,6 +58,19 @@ async fn receipt(node: &NodeHandle, id: [u8; 16]) {
     .expect("GC2 application ACK timeout");
 }
 
+async fn media(node: &NodeHandle, expected: &[u8]) {
+    tokio::time::timeout(Duration::from_secs(30), async {
+        loop {
+            if let Some(Ev::VolatileApplication { body, .. }) = node.next_event().await {
+                assert_eq!(body, expected);
+                return;
+            }
+        }
+    })
+    .await
+    .expect("GC2 volatile event timeout");
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn gc2_sessions_carry_durable_applications_over_tls_and_resume_after_restart() {
     let aa = Archive::default();
@@ -76,6 +89,12 @@ async fn gc2_sessions_carry_durable_applications_over_tls_and_resume_after_resta
         (0..8u8).collect::<Vec<_>>()
     );
     receipt(&a, delivered.last().unwrap().message_id).await;
+    let transient = vec![0xa7; 1024];
+    a.send_volatile_application(&original, &transient)
+        .await
+        .unwrap();
+    media(&b, &transient).await;
+    assert_eq!(b.application_inbox(0, 32).await.unwrap().len(), 8);
     let saved = ba.lock().unwrap().clone();
     assert_eq!(&saved[..6], b"GCNSTL");
     b.shutdown().await;
@@ -102,6 +121,11 @@ async fn gc2_sessions_carry_durable_applications_over_tls_and_resume_after_resta
         b"old caller contact, current session"
     );
     receipt(&a, final_delivery[8].message_id).await;
+    b.send_volatile_application(&a.info, b"volatile after restart")
+        .await
+        .unwrap();
+    media(&a, b"volatile after restart").await;
+    assert_eq!(a.application_inbox(0, 32).await.unwrap().len(), 1);
     a.shutdown().await;
     b.shutdown().await;
 }

@@ -38,7 +38,7 @@ pub(super) fn peer_key(peer: &[u8]) -> [u8; 32] {
     Sha256::digest(peer).into()
 }
 
-/// Direct Data currently has a ten-minute logical lifetime. Its authenticated
+/// Direct application records currently have a ten-minute logical lifetime. Its authenticated
 /// original timestamp provides an immutable ceiling across re-encryption.
 pub(super) fn horizon(sent_ms: u64) -> u64 {
     (sent_ms / 1000).saturating_add(600)

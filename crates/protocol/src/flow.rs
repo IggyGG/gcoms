@@ -215,6 +215,8 @@ struct Sent {
     packet: Arc<Zeroizing<Vec<u8>>>,
     purpose: Purpose,
     sent_unix: u64,
+    // Exact repair bytes live in RAM; private archives retain only authority.
+    volatile: bool,
 }
 
 #[derive(Clone)]
@@ -318,7 +320,10 @@ impl Window {
         self.received.floor
     }
     pub fn cached_payload_count(&self) -> usize {
-        self.tx.len()
+        self.tx
+            .values()
+            .filter(|entry| !entry.packet.is_empty())
+            .count()
     }
     pub fn cached_payload_bytes(&self) -> usize {
         self.tx.values().map(|entry| entry.packet.len()).sum()
@@ -334,6 +339,20 @@ impl Window {
         self.oldest_uncredited_unix().is_some_and(|oldest| {
             now_unix.saturating_sub(oldest) >= gcoms_crypto::session::SKIP_KEY_TTL.as_secs()
         })
+    }
+
+    /// A restart cannot reconstruct uncredited RAM-only ciphertext. A selective
+    /// authenticated receipt is sufficient to prove that such a counter needs
+    /// no repair; otherwise replace the session before consuming another counter.
+    pub fn recovery_required(&self, now_unix: u64) -> bool {
+        self.repair_expired(now_unix)
+            || self.tx.iter().any(|(counter, entry)| {
+                entry.volatile && entry.packet.is_empty() && !self.credited.contains(*counter)
+            })
+    }
+
+    pub fn has_volatile_counters(&self) -> bool {
+        self.tx.values().any(|entry| entry.volatile)
     }
 
     /// Check before preparing or consuming the next ratchet counter.
@@ -379,6 +398,7 @@ impl Window {
                 packet: Arc::new(Zeroizing::new(packet.to_vec())),
                 purpose: record.purpose,
                 sent_unix,
+                volatile: false,
             },
         );
         self.sent = counter;
@@ -510,7 +530,9 @@ impl Window {
     pub fn retries(&self) -> impl Iterator<Item = (u64, Purpose, &[u8])> {
         self.tx
             .iter()
-            .filter(|(counter, _)| !self.credited.contains(**counter))
+            .filter(|(counter, entry)| {
+                !self.credited.contains(**counter) && !entry.packet.is_empty()
+            })
             .map(|(counter, entry)| (*counter, entry.purpose, entry.packet.as_slice()))
     }
 }

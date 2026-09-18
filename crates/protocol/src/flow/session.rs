@@ -106,7 +106,34 @@ impl CreditedSession {
         wrapping_key: &[u8; 32],
         context: &SessionContext,
     ) -> Result<PreparedSend, SessionError> {
-        if self.window.repair_expired(now_unix) {
+        self.prepare_send_inner(record, now_unix, wrapping_key, context, false)
+    }
+
+    /// Keep retry ciphertext in RAM without writing it to a private archive.
+    /// A restored missing counter requires authenticated recovery, unless peer
+    /// credit proves it arrived. First moves and control records stay durable.
+    pub fn prepare_volatile_send(
+        &self,
+        record: &Record,
+        now_unix: u64,
+        wrapping_key: &[u8; 32],
+        context: &SessionContext,
+    ) -> Result<PreparedSend, SessionError> {
+        if record.purpose() == super::Purpose::Control {
+            return Err(Error::State.into());
+        }
+        self.prepare_send_inner(record, now_unix, wrapping_key, context, true)
+    }
+
+    fn prepare_send_inner(
+        &self,
+        record: &Record,
+        now_unix: u64,
+        wrapping_key: &[u8; 32],
+        context: &SessionContext,
+        volatile: bool,
+    ) -> Result<PreparedSend, SessionError> {
+        if self.window.recovery_required(now_unix) {
             return Err(SessionError::RecoveryRequired);
         }
         let counter = self.window.next_counter(record.purpose())?;
@@ -116,6 +143,11 @@ impl CreditedSession {
         let mut window = self.window.clone();
         let packet = crate::gc2_session::encode_frame_bytes(window.session(), prepared.wire())?;
         window.record_sent(counter, &packet, record, now_unix)?;
+        window
+            .tx
+            .get_mut(&counter)
+            .expect("recorded counter")
+            .volatile = volatile;
         Ok(PreparedSend {
             revision: self.revision.clone(),
             ratchet: prepared,
