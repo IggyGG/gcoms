@@ -5,7 +5,23 @@ use serde::{Deserialize, Serialize};
 
 pub const CONTENT_TYPE: &str = "application/vnd.ghost.file-record.v1";
 pub const ACK_CONTENT_TYPE: &str = "application/vnd.ghost.file-ack.v1";
-pub const CHUNK_BYTES: u64 = 8192;
+pub const CHUNK_BYTES: u64 = gcoms_core::file_stream::RECOMMENDED_CHUNK_BYTES;
+
+/// Choose a useful chunk without exceeding the recipient's existing contact or
+/// byte-credit grant. Existing 8 KiB contacts remain usable without migration.
+pub fn negotiated_chunk_bytes(
+    contact: &gcoms_core::file_stream::FileContact,
+) -> Result<u64, crate::SdkError> {
+    let bytes = CHUNK_BYTES
+        .min(contact.max_chunk_size)
+        .min(contact.max_inflight_bytes);
+    if bytes == 0 {
+        return Err(crate::SdkError::Protocol(
+            "file contact grants no chunk credit".into(),
+        ));
+    }
+    Ok(bytes)
+}
 
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -115,6 +131,44 @@ impl FileRequest {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn chunk_negotiation_preserves_old_contacts_and_byte_credit() {
+        use gcoms_core::file_stream::{checkpoint_batch_chunks, Contact, FileContact};
+        let mut contact = FileContact {
+            profile_version: 2,
+            transfer_id: [1; 16],
+            recipient_contact: Contact {
+                address: "192.0.2.1:443".parse().unwrap(),
+                relay_service_id: [2; 32],
+                queue_id: [3; 32],
+                epoch: 1,
+                push_cap: [4; 32],
+                lease_expiry: 2000,
+            },
+            file_cap: [5; 32],
+            contact_expiry: 1900,
+            max_file_size: 1_000_000,
+            max_chunk_size: 8192,
+            max_inflight_bytes: 32 * 8192,
+        };
+        for version in [1, 2] {
+            contact.profile_version = version;
+            let old = FileContact::decode(&contact.encode().unwrap(), 1000).unwrap();
+            assert_eq!(negotiated_chunk_bytes(&old).unwrap(), 8192);
+        }
+        contact.max_chunk_size = CHUNK_BYTES;
+        let size = negotiated_chunk_bytes(&contact).unwrap();
+        assert_eq!(size, 11264);
+        assert_eq!(
+            checkpoint_batch_chunks(contact.max_inflight_bytes, size).unwrap(),
+            23
+        );
+        contact.max_inflight_bytes = 1024;
+        assert_eq!(negotiated_chunk_bytes(&contact).unwrap(), 1024);
+        contact.max_inflight_bytes = 0;
+        assert!(negotiated_chunk_bytes(&contact).is_err());
+    }
+
     #[test]
     fn managed_calls_append_without_reinterpreting_legacy_file_ordinals() {
         let legacy = [

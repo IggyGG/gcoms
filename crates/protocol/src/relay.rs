@@ -1,3 +1,6 @@
+#[cfg(feature = "experimental-gc2")]
+pub mod gc2;
+
 use alloc::{format, string::String, vec::Vec};
 use core::error::Error;
 use core::fmt;

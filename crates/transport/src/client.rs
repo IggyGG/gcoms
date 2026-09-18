@@ -2,6 +2,7 @@ use crate::connector::{Connector, DirectConnector};
 use crate::hop::{HopOutcome, HopReply};
 use crate::tls;
 use bytes::Bytes;
+use gcoms_core::TrafficClass;
 use http::{Method, Request, Response, StatusCode};
 use sha2::{Digest, Sha256};
 use std::collections::{HashMap, VecDeque};
@@ -9,9 +10,12 @@ use std::error::Error;
 use std::future::poll_fn;
 use std::net::SocketAddr;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::Arc;
-use tokio::sync::{Mutex, Semaphore};
+use std::sync::{Arc, Weak};
+use tokio::sync::{Mutex, OwnedSemaphorePermit, Semaphore};
 use tokio_rustls::TlsConnector;
+
+#[cfg(feature = "experimental-gc2")]
+pub mod gc2;
 
 pub type Result<T> = std::result::Result<T, Box<dyn Error + Send + Sync>>;
 const REQUEST_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(60);
@@ -20,7 +24,11 @@ pub const STREAM_IDLE_TIMEOUT: std::time::Duration = std::time::Duration::from_s
 /// Concurrent HTTP/2 connections kept warm. A lane never opens a fresh TLS
 /// connection in response to real traffic when its peer is already pooled.
 pub const MAX_POOLED_CONNECTIONS: usize = 8;
+/// Hard bound includes busy connections and connection attempts.
+pub const MAX_ACTIVE_CONNECTIONS: usize = 64;
 const MAX_CONNECTION_ATTEMPTS: usize = 4;
+pub const MAX_FINITE_REQUESTS: usize = 4;
+pub const MAX_BULK_REQUESTS: usize = 3;
 // A failed dial must not make every queued job repeat the OS's connection
 // timeout (notably Windows' delayed refusal). This is a bounded negative cache
 // of pre-TLS I/O failures, scoped exactly like authenticated connections.
@@ -36,15 +44,38 @@ const H2_MAX_FRAME_SIZE: u32 = LARGE_WIRE_CELL as u32;
 const H2_INITIAL_STREAM_WINDOW: u32 = 256 * 1024;
 const H2_INITIAL_CONNECTION_WINDOW: u32 = 1024 * 1024;
 
+/// Materialize authenticated request bytes only after connection and request
+/// admission. Once prepared, retain the same bytes across a reconnect retry.
+enum RequestBody<'a> {
+    Ready(Option<Bytes>),
+    Prepare(Option<Box<dyn FnOnce() -> Result<Bytes> + Send + 'a>>),
+}
+
+impl RequestBody<'_> {
+    fn materialize(&mut self) -> Result<Option<Bytes>> {
+        if let Self::Prepare(make) = self {
+            let bytes = make.take().ok_or("request body was already prepared")?()?;
+            *self = Self::Ready(Some(bytes));
+        }
+        match self {
+            Self::Ready(bytes) => Ok(bytes.clone()),
+            Self::Prepare(_) => unreachable!("prepared above"),
+        }
+    }
+}
+
 pub struct Tp1Client {
     connector: Arc<dyn Connector>,
+    bind_traffic_classes: bool,
     connections: Mutex<Pool>,
     connection_attempts: Semaphore,
+    connection_slots: Arc<Semaphore>,
+    connecting: Mutex<HashMap<PoolKey, Weak<Mutex<()>>>>,
 }
 
 /// A pooled peer is always addressed by its pinned service identity. There
 /// is no unpinned path: a connection without a pin cannot be represented.
-type PoolKey = (SocketAddr, [u8; 32], [u8; 32]);
+type PoolKey = (SocketAddr, [u8; 32], [u8; 32], Option<TrafficClass>);
 
 #[derive(Clone, Copy)]
 struct Route<'a> {
@@ -54,12 +85,12 @@ struct Route<'a> {
 }
 
 impl Route<'_> {
-    fn key(&self) -> Result<PoolKey> {
+    fn key(&self, class: Option<TrafficClass>) -> Result<PoolKey> {
         if self.excluded.len() > 64 {
             return Err("too many terminal route exclusions".into());
         }
         if self.excluded.is_empty() {
-            return Ok((self.addr, self.service_id, [0; 32]));
+            return Ok((self.addr, self.service_id, [0; 32], class));
         }
         let mut excluded = self.excluded.to_vec();
         excluded.sort_unstable();
@@ -80,7 +111,7 @@ impl Route<'_> {
             hash.update(addr.port().to_be_bytes());
             hash.update(pin);
         }
-        Ok((self.addr, self.service_id, hash.finalize().into()))
+        Ok((self.addr, self.service_id, hash.finalize().into(), class))
     }
 }
 
@@ -88,6 +119,51 @@ struct PooledConnection {
     sender: h2::client::SendRequest<Bytes>,
     /// Open streams (pull channels) that must not be evicted from under.
     in_flight: AtomicUsize,
+    finite: Arc<Semaphore>,
+    bulk: Arc<Semaphore>,
+    _driver: ConnectionDriver,
+}
+
+struct ConnectionDriver(tokio::task::JoinHandle<()>);
+
+impl Drop for ConnectionDriver {
+    fn drop(&mut self) {
+        self.0.abort();
+    }
+}
+
+/// Covers queueing, request transmission and the complete response body. Drop
+/// also releases admission on timeout, cancellation and connection failure.
+struct ConnectionLease {
+    connection: Arc<PooledConnection>,
+    _finite: Option<OwnedSemaphorePermit>,
+    _bulk: Option<OwnedSemaphorePermit>,
+}
+
+impl Drop for ConnectionLease {
+    fn drop(&mut self) {
+        self.connection.in_flight.fetch_sub(1, Ordering::AcqRel);
+    }
+}
+
+impl PooledConnection {
+    async fn lease(self: &Arc<Self>, finite: bool, class: TrafficClass) -> Result<ConnectionLease> {
+        self.in_flight.fetch_add(1, Ordering::AcqRel);
+        let mut lease = ConnectionLease {
+            connection: self.clone(),
+            _finite: None,
+            _bulk: None,
+        };
+        if finite {
+            // Bulk waits for its own credit first, leaving one total permit
+            // available to interactive/control requests even with a bulk backlog.
+            if class == TrafficClass::Bulk {
+                lease._bulk = Some(self.bulk.clone().acquire_owned().await?);
+            }
+            lease._finite = Some(self.finite.clone().acquire_owned().await?);
+        }
+        Ok(lease)
+    }
 }
 
 #[derive(Default)]
@@ -141,21 +217,26 @@ impl Pool {
         self.entries.remove(key)
     }
 
-    fn insert(&mut self, key: PoolKey, connection: Arc<PooledConnection>) {
-        self.failed.remove(&key);
+    fn prune_idle(&mut self) {
         while self.entries.len() >= MAX_POOLED_CONNECTIONS {
             // Evict the least recently used connection that has no open
             // stream. If every pooled connection is busy, grow past the soft
-            // bound rather than tear down a live subscription.
+            // idle bound rather than tear down a live subscription. A separate
+            // permit enforces MAX_ACTIVE_CONNECTIONS for all busy connections.
             let Some(victim) = self.order.iter().copied().find(|k| {
-                self.entries
-                    .get(k)
-                    .is_some_and(|c| c.in_flight.load(Ordering::Acquire) == 0)
+                self.entries.get(k).is_some_and(|c| {
+                    c.in_flight.load(Ordering::Acquire) == 0 && Arc::strong_count(c) == 1
+                })
             }) else {
                 break;
             };
             self.remove(&victim);
         }
+    }
+
+    fn insert(&mut self, key: PoolKey, connection: Arc<PooledConnection>) {
+        self.failed.remove(&key);
+        self.prune_idle();
         self.entries.insert(key, connection);
         self.touch(key);
     }
@@ -169,9 +250,12 @@ impl Tp1Client {
     /// Preserve TP1 endpoint pinning and pooling over a caller-owned route.
     pub fn with_connector(connector: Arc<dyn Connector>) -> Result<Self> {
         Ok(Tp1Client {
+            bind_traffic_classes: connector.binds_traffic_class(),
             connector,
             connections: Mutex::new(Pool::default()),
             connection_attempts: Semaphore::new(MAX_CONNECTION_ATTEMPTS),
+            connection_slots: Arc::new(Semaphore::new(MAX_ACTIVE_CONNECTIONS)),
+            connecting: Mutex::new(HashMap::new()),
         })
     }
 
@@ -191,7 +275,8 @@ impl Tp1Client {
             },
             Method::GET,
             path,
-            None,
+            RequestBody::Ready(None),
+            TrafficClass::Interactive,
         )
         .await
     }
@@ -213,7 +298,8 @@ impl Tp1Client {
                 },
                 Method::POST,
                 &format!("/{token}"),
-                Some(cell_buf),
+                RequestBody::Ready(Some(cell_buf)),
+                TrafficClass::Interactive,
             )
             .await?;
         parse_hop_outcome(status, &body)
@@ -229,6 +315,26 @@ impl Tp1Client {
         cell_buf: Bytes,
         excluded: &[(SocketAddr, [u8; 32])],
     ) -> Result<HopOutcome> {
+        self.post_cell_with_class(
+            addr,
+            service_id,
+            token,
+            cell_buf,
+            excluded,
+            TrafficClass::Interactive,
+        )
+        .await
+    }
+
+    pub async fn post_cell_with_class(
+        &self,
+        addr: SocketAddr,
+        service_id: [u8; 32],
+        token: &str,
+        cell_buf: Bytes,
+        excluded: &[(SocketAddr, [u8; 32])],
+        class: TrafficClass,
+    ) -> Result<HopOutcome> {
         let (status, body) = self
             .finite_request(
                 Route {
@@ -238,7 +344,40 @@ impl Tp1Client {
                 },
                 Method::POST,
                 &format!("/{token}"),
-                Some(cell_buf),
+                RequestBody::Ready(Some(cell_buf)),
+                class,
+            )
+            .await?;
+        parse_hop_outcome(status, &body)
+    }
+
+    /// Prepare a cell after the pinned connection, finite-request permit and
+    /// HTTP/2 stream are ready. The builder runs once; reconnect retries reuse
+    /// its exact bytes, including its nonce and committed ciphertext. The whole
+    /// operation still shares the ordinary request deadline.
+    pub async fn post_cell_prepared<F>(
+        &self,
+        addr: SocketAddr,
+        service_id: [u8; 32],
+        token: &str,
+        excluded: &[(SocketAddr, [u8; 32])],
+        class: TrafficClass,
+        make: F,
+    ) -> Result<HopOutcome>
+    where
+        F: FnOnce() -> Result<Bytes> + Send,
+    {
+        let (status, body) = self
+            .finite_request(
+                Route {
+                    addr,
+                    service_id,
+                    excluded,
+                },
+                Method::POST,
+                &format!("/{token}"),
+                RequestBody::Prepare(Some(Box::new(make))),
+                class,
             )
             .await?;
         parse_hop_outcome(status, &body)
@@ -251,20 +390,94 @@ impl Tp1Client {
         token: &str,
         body: Option<&[u8]>,
     ) -> Result<CellStream> {
+        self.open_stream_body_with_class(addr, service_id, token, body, TrafficClass::Interactive)
+            .await
+    }
+
+    pub async fn open_stream_body_with_class(
+        &self,
+        addr: SocketAddr,
+        service_id: [u8; 32],
+        token: &str,
+        body: Option<&[u8]>,
+        class: TrafficClass,
+    ) -> Result<CellStream> {
         let body_bytes = body.map(bytes::Bytes::copy_from_slice);
         let (response, connection) = self
             .request(
-                addr,
-                service_id,
+                Route {
+                    addr,
+                    service_id,
+                    excluded: &[],
+                },
                 Method::POST,
                 &format!("/{token}"),
-                body_bytes.or_else(|| Some(bytes::Bytes::new())),
+                RequestBody::Ready(body_bytes.or_else(|| Some(bytes::Bytes::new()))),
+                class,
             )
             .await?;
         if response.status() != 200 {
             return Err(format!("stream refused: {}", response.status()).into());
         }
-        connection.in_flight.fetch_add(1, Ordering::AcqRel);
+        Ok(CellStream {
+            body: response.into_body(),
+            last_frame_len: 0,
+            framing: CellFraming::new(),
+            finished: false,
+            guard: Some(connection),
+        })
+    }
+
+    /// Prepare subscription authorization after the pinned HTTP/2 stream is
+    /// ready. Reconnect retries reuse its exact authenticated bytes. The request
+    /// deadline covers connection, admission, preparation and response headers.
+    pub async fn open_stream_prepared<F>(
+        &self,
+        addr: SocketAddr,
+        service_id: [u8; 32],
+        token: &str,
+        make: F,
+    ) -> Result<CellStream>
+    where
+        F: FnOnce() -> Result<Bytes> + Send,
+    {
+        self.open_stream_prepared_with_class(
+            addr,
+            service_id,
+            token,
+            TrafficClass::Interactive,
+            make,
+        )
+        .await
+    }
+
+    pub async fn open_stream_prepared_with_class<F>(
+        &self,
+        addr: SocketAddr,
+        service_id: [u8; 32],
+        token: &str,
+        class: TrafficClass,
+        make: F,
+    ) -> Result<CellStream>
+    where
+        F: FnOnce() -> Result<Bytes> + Send,
+    {
+        let (response, connection) = self
+            .request(
+                Route {
+                    addr,
+                    service_id,
+                    excluded: &[],
+                },
+                Method::POST,
+                &format!("/{token}"),
+                RequestBody::Prepare(Some(Box::new(make))),
+                class,
+            )
+            .await?;
+        if response.status() != 200 {
+            return Err(format!("stream refused: {}", response.status()).into());
+        }
         Ok(CellStream {
             body: response.into_body(),
             last_frame_len: 0,
@@ -276,35 +489,20 @@ impl Tp1Client {
 
     async fn request(
         &self,
-        addr: SocketAddr,
-        service_id: [u8; 32],
+        route: Route<'_>,
         method: Method,
         path: &str,
-        body: Option<Bytes>,
-    ) -> Result<(Response<h2::RecvStream>, Arc<PooledConnection>)> {
+        body: RequestBody<'_>,
+        class: TrafficClass,
+    ) -> Result<(Response<h2::RecvStream>, ConnectionLease)> {
         match tokio::time::timeout(
             REQUEST_TIMEOUT,
-            self.request_inner(
-                Route {
-                    addr,
-                    service_id,
-                    excluded: &[],
-                },
-                method,
-                path,
-                body,
-            ),
+            self.request_inner(route, method, path, body, false, class),
         )
         .await
         {
             Ok(result) => result,
-            Err(_) => {
-                self.connections
-                    .lock()
-                    .await
-                    .remove(&(addr, service_id, [0; 32]));
-                Err("transport request timed out".into())
-            }
+            Err(_) => Err("transport request timed out".into()),
         }
     }
 
@@ -313,11 +511,13 @@ impl Tp1Client {
         route: Route<'_>,
         method: Method,
         path: &str,
-        body: Option<Bytes>,
+        body: RequestBody<'_>,
+        class: TrafficClass,
     ) -> Result<(StatusCode, Bytes)> {
-        let pool_key = route.key()?;
         let result = tokio::time::timeout(REQUEST_TIMEOUT, async {
-            let (response, _connection) = self.request_inner(route, method, path, body).await?;
+            let (response, _connection) = self
+                .request_inner(route, method, path, body, true, class)
+                .await?;
             let status = response.status();
             let mut body = response.into_body();
             Ok::<_, Box<dyn Error + Send + Sync>>((status, read_body(&mut body).await?))
@@ -325,10 +525,9 @@ impl Tp1Client {
         .await;
         match result {
             Ok(result) => result,
-            Err(_) => {
-                self.connections.lock().await.remove(&pool_key);
-                Err("transport request timed out".into())
-            }
+            // A queued request or a slow response is not evidence that the
+            // connection failed. Cancellation drops only this stream's lease.
+            Err(_) => Err("transport request timed out".into()),
         }
     }
 
@@ -337,12 +536,15 @@ impl Tp1Client {
         route: Route<'_>,
         method: Method,
         path: &str,
-        body: Option<Bytes>,
-    ) -> Result<(Response<h2::RecvStream>, Arc<PooledConnection>)> {
-        let pool_key = route.key()?;
+        mut body: RequestBody<'_>,
+        finite: bool,
+        class: TrafficClass,
+    ) -> Result<(Response<h2::RecvStream>, ConnectionLease)> {
+        let pool_key = route.key(self.bind_traffic_classes.then_some(class))?;
         let addr = route.addr;
         for attempt in 0..2 {
-            let connection = self.connection(route).await?;
+            let connection = self.connection(route, class).await?;
+            let lease = connection.lease(finite, class).await?;
             let mut client = match connection.sender.clone().ready().await {
                 Ok(client) => client,
                 Err(_) => {
@@ -354,13 +556,14 @@ impl Tp1Client {
                 }
             };
 
+            let body_bytes = body.materialize()?;
             let uri: http::Uri = format!("http://{addr}{path}").parse()?;
             let request = Request::builder()
                 .method(method.clone())
                 .uri(uri)
                 .body(())
                 .expect("request builds");
-            let sent = client.send_request(request, body.is_none());
+            let sent = client.send_request(request, body_bytes.is_none());
             let (response, mut send) = match sent {
                 Ok(sent) => sent,
                 Err(error) => {
@@ -377,7 +580,7 @@ impl Tp1Client {
             // These finite requests carry one self-contained cell and are
             // idempotent, so evict the stale connection and retry once on a
             // fresh one rather than surface a transient transport error.
-            if let Some(b) = body.clone() {
+            if let Some(b) = body_bytes {
                 if let Err(error) = send.send_data(b, true) {
                     self.remove_connection(pool_key, &connection).await;
                     if attempt == 0 {
@@ -387,7 +590,7 @@ impl Tp1Client {
                 }
             }
             match response.await {
-                Ok(response) => return Ok((response, connection)),
+                Ok(response) => return Ok((response, lease)),
                 Err(error) => {
                     self.remove_connection(pool_key, &connection).await;
                     if attempt == 0 {
@@ -405,13 +608,37 @@ impl Tp1Client {
     /// handshake happens on the lane's own schedule, never at the moment
     /// real traffic first arrives.
     pub async fn warm(&self, addr: SocketAddr, service_id: [u8; 32]) -> Result<()> {
+        self.warm_excluding(addr, service_id, &[]).await
+    }
+
+    /// Warm the same constrained route that the eventual request will use.
+    pub async fn warm_excluding(
+        &self,
+        addr: SocketAddr,
+        service_id: [u8; 32],
+        excluded: &[(SocketAddr, [u8; 32])],
+    ) -> Result<()> {
+        self.warm_excluding_with_class(addr, service_id, excluded, TrafficClass::Interactive)
+            .await
+    }
+
+    pub async fn warm_excluding_with_class(
+        &self,
+        addr: SocketAddr,
+        service_id: [u8; 32],
+        excluded: &[(SocketAddr, [u8; 32])],
+        class: TrafficClass,
+    ) -> Result<()> {
         tokio::time::timeout(
             REQUEST_TIMEOUT,
-            self.connection(Route {
-                addr,
-                service_id,
-                excluded: &[],
-            }),
+            self.connection(
+                Route {
+                    addr,
+                    service_id,
+                    excluded,
+                },
+                class,
+            ),
         )
         .await
         .map_err(|_| "transport warming timed out")?
@@ -422,8 +649,12 @@ impl Tp1Client {
         self.connections.lock().await.entries.len()
     }
 
-    async fn connection(&self, route: Route<'_>) -> Result<Arc<PooledConnection>> {
-        let pool_key = route.key()?;
+    async fn connection(
+        &self,
+        route: Route<'_>,
+        class: TrafficClass,
+    ) -> Result<Arc<PooledConnection>> {
+        let pool_key = route.key(self.bind_traffic_classes.then_some(class))?;
         {
             let mut pool = self.connections.lock().await;
             if let Some(connection) = pool.get(pool_key) {
@@ -433,11 +664,21 @@ impl Tp1Client {
                 return Err("connection cooling down after failed dial".into());
             }
         }
-        let _attempt = self
-            .connection_attempts
-            .acquire()
-            .await
-            .map_err(|_| "connection attempt limiter closed")?;
+        let lock = {
+            let mut connecting = self.connecting.lock().await;
+            connecting.retain(|_, lock| lock.strong_count() != 0);
+            if let Some(lock) = connecting.get(&pool_key).and_then(Weak::upgrade) {
+                lock
+            } else {
+                if connecting.len() >= MAX_ACTIVE_CONNECTIONS {
+                    return Err("terminal connection attempt capacity exhausted".into());
+                }
+                let lock = Arc::new(Mutex::new(()));
+                connecting.insert(pool_key, Arc::downgrade(&lock));
+                lock
+            }
+        };
+        let _establishing = lock.lock().await;
         {
             let mut pool = self.connections.lock().await;
             if let Some(connection) = pool.get(pool_key) {
@@ -448,11 +689,36 @@ impl Tp1Client {
             }
         }
 
-        let tcp = match self
-            .connector
-            .connect_excluding(pool_key.0, pool_key.1, route.excluded)
+        // Same-peer waiters do not occupy independent connection-attempt slots.
+        let _attempt = self
+            .connection_attempts
+            .acquire()
             .await
+            .map_err(|_| "connection attempt limiter closed")?;
         {
+            let mut pool = self.connections.lock().await;
+            if pool.cooling_down(pool_key) {
+                return Err("connection cooling down after failed dial".into());
+            }
+            pool.prune_idle();
+        }
+        let slot = self
+            .connection_slots
+            .clone()
+            .try_acquire_owned()
+            .map_err(|_| "terminal connection capacity exhausted")?;
+        let connected = if self.bind_traffic_classes {
+            self.connector.connect_with_class_excluding(
+                pool_key.0,
+                pool_key.1,
+                route.excluded,
+                class,
+            )
+        } else {
+            self.connector
+                .connect_excluding(pool_key.0, pool_key.1, route.excluded)
+        };
+        let tcp = match connected.await {
             Ok(stream) => stream,
             Err(error) => {
                 // Only errors from obtaining the byte stream qualify. Never
@@ -483,12 +749,17 @@ impl Tp1Client {
             .initial_connection_window_size(H2_INITIAL_CONNECTION_WINDOW)
             .handshake(tls_stream)
             .await?;
-        tokio::spawn(async move {
+        let driver = ConnectionDriver(tokio::spawn(async move {
+            // Count the actual connection driver, including cancellation teardown.
+            let _slot = slot;
             let _ = connection.await;
-        });
+        }));
         let candidate = Arc::new(PooledConnection {
             sender,
             in_flight: AtomicUsize::new(0),
+            finite: Arc::new(Semaphore::new(MAX_FINITE_REQUESTS)),
+            bulk: Arc::new(Semaphore::new(MAX_BULK_REQUESTS)),
+            _driver: driver,
         });
 
         let mut connections = self.connections.lock().await;
@@ -533,14 +804,12 @@ pub struct CellStream {
     framing: CellFraming,
     finished: bool,
     /// Keeps the pooled connection marked busy for the stream's lifetime.
-    guard: Option<Arc<PooledConnection>>,
+    guard: Option<ConnectionLease>,
 }
 
 impl Drop for CellStream {
     fn drop(&mut self) {
-        if let Some(connection) = self.guard.take() {
-            connection.in_flight.fetch_sub(1, Ordering::AcqRel);
-        }
+        self.guard.take();
     }
 }
 

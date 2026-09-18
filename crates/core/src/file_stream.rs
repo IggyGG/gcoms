@@ -16,6 +16,9 @@ pub const PROFILE_VERSION_V2: u8 = 2;
 /// GC/1 v1 fixtures.
 pub const PROFILE_VERSION: u8 = PROFILE_VERSION_V1;
 pub const CHECKPOINT_BATCH_CHUNKS_MAX: u64 = 32;
+/// Useful file bytes, qualified against component, application, PQ-ratchet and
+/// nested relay framing. Negotiate down for older contacts and byte credit.
+pub const RECOMMENDED_CHUNK_BYTES: u64 = 11 * 1024;
 pub const CONTACT_LEN: usize = 132;
 pub const FILE_CONTACT_LEN: usize = 213;
 pub const FILE_INIT_LEN: usize = 249;

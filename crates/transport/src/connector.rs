@@ -1,5 +1,6 @@
 //! Byte-stream acquisition beneath TP1's independent endpoint authentication.
 use crate::client::Result;
+use gcoms_core::TrafficClass;
 use std::{future::Future, net::SocketAddr, pin::Pin};
 use tokio::io::{AsyncRead, AsyncWrite};
 
@@ -12,6 +13,25 @@ pub type ConnectFuture<'a> = Pin<Box<dyn Future<Output = Result<BoxStream>> + Se
 /// service. TP1 still authenticates that service using its own TLS pin.
 pub trait Connector: Send + Sync {
     fn connect(&self, addr: SocketAddr, service_id: [u8; 32]) -> ConnectFuture<'_>;
+
+    /// True when the byte stream is permanently bound to a traffic class.
+    /// TP1 freezes this property at construction and partitions its route pool
+    /// accordingly. Legacy connectors share connections as before.
+    fn binds_traffic_class(&self) -> bool {
+        false
+    }
+
+    /// Class-bound connectors must explicitly implement this operation. The
+    /// default must not silently ignore a declared class boundary or exclusions.
+    fn connect_with_class_excluding<'a>(
+        &'a self,
+        _addr: SocketAddr,
+        _service_id: [u8; 32],
+        _excluded: &'a [(SocketAddr, [u8; 32])],
+        _class: TrafficClass,
+    ) -> ConnectFuture<'a> {
+        Box::pin(async { Err("class-bound connector requires explicit class routing".into()) })
+    }
 
     /// Additional terminal services (for example inside an existing FRWD)
     /// cannot appear as an onion intermediary. Direct transit has no path to

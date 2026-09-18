@@ -1,6 +1,11 @@
 // Split from the former monolithic node.rs on 2026-09-05; no behaviour change.
 
 use super::*;
+use futures_util::{stream::FuturesUnordered, StreamExt};
+
+#[cfg(all(test, feature = "client-persist"))]
+#[path = "ticks_tests.rs"]
+mod tests;
 
 pub(crate) fn spawn_contact_subscription_pump(
     state: Arc<Mutex<NodeState>>,
@@ -11,18 +16,21 @@ pub(crate) fn spawn_contact_subscription_pump(
     let poll_interval = poll_interval.min(std::time::Duration::from_secs(1));
     let (stop, mut stopped) = tokio::sync::watch::channel(false);
     let task = tokio::spawn(async move {
-        let mut subscriptions = tokio::task::JoinSet::new();
+        let mut subscriptions = FuturesUnordered::new();
         let mut active = HashSet::new();
+        let mut clock = tokio::time::interval(poll_interval);
+        clock.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
         loop {
-            while let Some(completed) = subscriptions.try_join_next() {
-                if let Ok(queue_id) = completed {
+            tokio::select! {
+                biased;
+                _ = stopped.changed() => break,
+                Some(queue_id) = subscriptions.next(), if !subscriptions.is_empty() => {
                     active.remove(&queue_id);
-                    state
-                        .lock()
-                        .unwrap_or_else(|poisoned| poisoned.into_inner())
-                        .subscribed_contact_aliases
-                        .remove(&queue_id);
-                }
+                    state.lock().unwrap_or_else(|p| p.into_inner())
+                        .subscribed_contact_aliases.remove(&queue_id);
+                    continue;
+                },
+                _ = clock.tick() => {},
             }
             let aliases = {
                 let st = state
@@ -69,7 +77,7 @@ pub(crate) fn spawn_contact_subscription_pump(
                 let state = state.clone();
                 let scheduler = scheduler.clone();
                 let events = events.clone();
-                subscriptions.spawn(async move {
+                subscriptions.push(async move {
                     if !owner_alias_receiving(&state.lock().unwrap_or_else(|p| p.into_inner()), &alias) { return queue_id; }
                     let opened = match scheduler.subscribe(alias.clone()) {
                         Ok(receipt) => receipt.completion().await.stream(),
@@ -103,13 +111,8 @@ pub(crate) fn spawn_contact_subscription_pump(
                     queue_id
                 });
             }
-            tokio::select! {
-                biased;
-                _ = stopped.changed() => break,
-                _ = tokio::time::sleep(poll_interval) => {},
-            }
         }
-        subscriptions.shutdown().await;
+        drop(subscriptions);
     });
     super::api::ShutdownTask { stop, task }
 }
@@ -138,13 +141,19 @@ pub(crate) fn spawn_channel_subscription_pump(
 ) -> super::api::ShutdownTask {
     let (stop, mut stopped) = tokio::sync::watch::channel(false);
     let task = tokio::spawn(async move {
-        let mut subscriptions = tokio::task::JoinSet::new();
+        let mut subscriptions = FuturesUnordered::new();
         let mut active = std::collections::HashSet::new();
+        let mut clock = tokio::time::interval(std::time::Duration::from_millis(500));
+        clock.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
         loop {
-            while let Some(completed) = subscriptions.try_join_next() {
-                if let Ok(key) = completed {
+            tokio::select! {
+                biased;
+                _ = stopped.changed() => break,
+                Some(key) = subscriptions.next(), if !subscriptions.is_empty() => {
                     active.remove(&key);
-                }
+                    continue;
+                },
+                _ = clock.tick() => {},
             }
             let aliases = {
                 let st = state.lock().unwrap_or_else(|p| p.into_inner());
@@ -184,7 +193,7 @@ pub(crate) fn spawn_channel_subscription_pump(
                 let state = state.clone();
                 let scheduler = scheduler.clone();
                 let events = events.clone();
-                subscriptions.spawn(async move {
+                subscriptions.push(async move {
                     let stream = match scheduler.subscribe(alias) {
                         Ok(receipt) => receipt.completion().await.stream(),
                         Err(error) => Err(error.to_string()),
@@ -205,13 +214,8 @@ pub(crate) fn spawn_channel_subscription_pump(
                     key
                 });
             }
-            tokio::select! {
-                biased;
-                _ = stopped.changed() => break,
-                _ = tokio::time::sleep(std::time::Duration::from_millis(500)) => {},
-            }
         }
-        subscriptions.shutdown().await;
+        drop(subscriptions);
     });
     super::api::ShutdownTask { stop, task }
 }
@@ -372,9 +376,18 @@ pub(crate) fn spawn_direct_maintenance_loop(
 ) -> tokio::task::JoinHandle<()> {
     let mut rng = scheduler_profile.maintenance_rng_labeled(seed, b"direct");
     tokio::spawn(async move {
+        let mut maintenance = DirectMaintenance::default();
+        let clock = tokio::time::sleep(scheduler_profile.maintenance_delay(&mut rng));
+        tokio::pin!(clock);
         loop {
-            tokio::time::sleep(scheduler_profile.maintenance_delay(&mut rng)).await;
-            direct_tick(&state, &scheduler, &events).await;
+            tokio::select! {
+                _ = &mut clock => {
+                    maintenance.tick(&state, &scheduler, &events);
+                    clock.as_mut().reset(tokio::time::Instant::now()
+                        + scheduler_profile.maintenance_delay(&mut rng));
+                }
+                _ = maintenance.complete_next(&state), if !maintenance.is_empty() => {}
+            }
         }
     })
 }
@@ -386,12 +399,24 @@ pub(crate) fn spawn_channel_maintenance_loop(
     scheduler_profile: SchedulerProfile,
     seed: [u8; 32],
 ) -> tokio::task::JoinHandle<()> {
-    let mut rng = scheduler_profile.maintenance_rng_labeled(seed, b"channel");
+    let mut data_rng = scheduler_profile.maintenance_rng_labeled(seed, b"channel");
+    let mut control_rng = scheduler_profile.maintenance_rng_labeled(seed, b"channel-control");
     tokio::spawn(async move {
-        loop {
-            tokio::time::sleep(scheduler_profile.maintenance_delay(&mut rng)).await;
-            channel_tick(&state, &scheduler, &events).await;
-        }
+        // Both loops are owned by this task, so runtime shutdown cancels both.
+        // Their jobs still leave through the existing lane slots and cover policy.
+        let data = async {
+            loop {
+                tokio::time::sleep(scheduler_profile.maintenance_delay(&mut data_rng)).await;
+                channel_tick(&state, &scheduler, &events).await;
+            }
+        };
+        let control = async {
+            loop {
+                tokio::time::sleep(scheduler_profile.maintenance_delay(&mut control_rng)).await;
+                channel_control_tick(&state, &scheduler, &events).await;
+            }
+        };
+        tokio::join!(data, control);
     })
 }
 
@@ -404,17 +429,35 @@ pub(crate) fn spawn_invite_service_loop(
 ) -> super::api::ShutdownTask {
     let (stop, mut stopped) = tokio::sync::watch::channel(false);
     let task = tokio::spawn(async move {
-        let mut requests = tokio::task::JoinSet::new();
+        // An inbox bound alone does not bound detached work across ticks.
+        // Retain at most this many active redemptions, owned by this task so
+        // shutdown releases every state/profile reference before returning.
+        const MAX_ACTIVE: usize = 64;
+        let mut active = FuturesUnordered::new();
+        let mut clock = tokio::time::interval(std::time::Duration::from_millis(100));
+        clock.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
         loop {
             tokio::select! {
                 biased;
                 _ = stopped.changed() => break,
-                _ = tokio::time::sleep(std::time::Duration::from_millis(100)) => {},
+                Some(()) = active.next(), if !active.is_empty() => continue,
+                _ = clock.tick() => {},
             }
-            while requests.try_join_next().is_some() {}
-            invite_tick(&state, &scheduler, &events, &mut requests).await;
+            let requests: Vec<_> = {
+                let mut st = state.lock().unwrap_or_else(|p| p.into_inner());
+                let count = st.invite_redeem_inbox.len().min(MAX_ACTIVE - active.len());
+                st.invite_redeem_inbox.drain(..count).collect()
+            };
+            for request in requests {
+                let state = state.clone();
+                let scheduler = scheduler.clone();
+                let events = events.clone();
+                active.push(async move {
+                    service_one_invite(&state, &scheduler, &events, request).await;
+                });
+            }
         }
-        requests.shutdown().await;
+        drop(active);
     });
     super::api::ShutdownTask { stop, task }
 }

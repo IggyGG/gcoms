@@ -17,6 +17,50 @@ use super::*;
 /// Result of minting an invite: `(invite_id, invite_secret, expiry_unix)`.
 pub type CreatedInvite = ([u8; 16], [u8; 32], u64);
 
+#[cfg(test)]
+mod shutdown_tests {
+    use super::*;
+
+    #[tokio::test(start_paused = true)]
+    async fn full_command_queue_cannot_prevent_shutdown_from_joining_tasks() {
+        let mut node = start(NodeConfig {
+            seed: [73; 32],
+            listen: "127.0.0.1:0".parse().unwrap(),
+            control: None,
+            advertise: None,
+            inbox_relay: None,
+            profile: NodeProfile::fixture(),
+            alias_lifecycle: Default::default(),
+        })
+        .await
+        .unwrap();
+        // Hold a full command queue with no consumer. The shutdown request
+        // itself cannot be enqueued, but its timeout must still join task owners.
+        let (blocked, _receiver) = mpsc::channel(1);
+        let (done, _result) = tokio::sync::oneshot::channel();
+        blocked.send(Cmd::CurrentInfo { done }).await.unwrap();
+        let _original_commands = std::mem::replace(&mut node.cmd_tx, blocked);
+        let owned = Arc::new(());
+        let released = Arc::downgrade(&owned);
+        node.tasks
+            .lock()
+            .await
+            .as_mut()
+            .unwrap()
+            .push(tokio::spawn(async move {
+                let _owned = owned;
+                std::future::pending::<()>().await;
+            }));
+        tokio::time::timeout(std::time::Duration::from_secs(6), node.shutdown())
+            .await
+            .expect("a full command queue must not hang shutdown");
+        assert!(
+            released.upgrade().is_none(),
+            "shutdown must join task cancellation"
+        );
+    }
+}
+
 pub enum Cmd {
     InstallRoutingBootstrap {
         bundle: gcoms_routing::bootstrap::BootstrapBundle,
@@ -372,6 +416,17 @@ pub(crate) struct ShutdownTask {
     pub task: tokio::task::JoinHandle<()>,
 }
 
+/// Local aggregate counters only; no contacts, message IDs or payloads.
+#[derive(Debug, serde::Serialize)]
+pub struct NodeDiagnostics {
+    /// Shared node allowance; do not sum the independent local peak values.
+    pub resources: crate::scheduler::ResourceSnapshot,
+    pub client: crate::scheduler::diagnostics::SchedulerSnapshot,
+    pub relay: crate::scheduler::diagnostics::SchedulerSnapshot,
+    pub client_resources: crate::scheduler::ResourceSnapshot,
+    pub relay_resources: crate::scheduler::ResourceSnapshot,
+}
+
 #[derive(Clone)]
 pub struct NodeHandle {
     pub(crate) listener_addr: SocketAddr,
@@ -390,6 +445,24 @@ pub struct NodeHandle {
 }
 
 impl NodeHandle {
+    /// Enable bounded local counters without changing traffic scheduling.
+    /// Startup work may already be admitted before counters are enabled.
+    pub fn enable_diagnostics(&self) {
+        self.scheduler.enable_diagnostics();
+        self.transit_scheduler.enable_diagnostics();
+    }
+
+    /// Approximate during concurrent updates; quiesce before reconciling counts.
+    pub fn diagnostics(&self) -> NodeDiagnostics {
+        NodeDiagnostics {
+            resources: self.scheduler.combined_resource_snapshot(),
+            client: self.scheduler.diagnostics_snapshot(),
+            relay: self.transit_scheduler.diagnostics_snapshot(),
+            client_resources: self.scheduler.resource_snapshot(),
+            relay_resources: self.transit_scheduler.resource_snapshot(),
+        }
+    }
+
     /// The socket actually owned by this runtime, including an OS-assigned port.
     pub fn listener_addr(&self) -> SocketAddr {
         self.listener_addr
@@ -786,9 +859,14 @@ impl NodeHandle {
             }
         }
         let (done, done_rx) = tokio::sync::oneshot::channel();
-        if self.cmd_tx.send(Cmd::Shutdown { done }).await.is_ok() {
-            let _ = tokio::time::timeout(std::time::Duration::from_secs(5), done_rx).await;
-        }
+        // Saturation can block enqueue as well as completion. Bound the whole
+        // exchange before aborting and joining the owned runtime tasks below.
+        let _ = tokio::time::timeout(std::time::Duration::from_secs(5), async {
+            if self.cmd_tx.send(Cmd::Shutdown { done }).await.is_ok() {
+                let _ = done_rx.await;
+            }
+        })
+        .await;
         if let Some(tasks) = self.tasks.lock().await.take() {
             for task in &tasks {
                 task.abort();

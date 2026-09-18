@@ -19,29 +19,20 @@ pub(crate) async fn push_to_ref(
 pub(crate) async fn channel_tick(
     state: &Arc<Mutex<NodeState>>,
     scheduler: &RelayScheduler,
-    events: &broadcast::Sender<Ev>,
+    _events: &broadcast::Sender<Ev>,
 ) {
     /// One forward job: which pending id (if any) it belongs to, target, cell.
     type ForwardJob = (Option<[u8; 16]>, crate::channel::PeerRef, Cell);
     type ChannelTickAction = (String, Vec<ForwardJob>);
-    type ControlAction = (String, crate::channel::ChannelRoute, Vec<u8>);
-    let (actions, control_actions): (Vec<ChannelTickAction>, Vec<ControlAction>) = {
+    let actions: Vec<ChannelTickAction> = {
         let mut st = state.lock().unwrap_or_else(|p| p.into_inner());
         if st.owner_transition_failed {
             return;
         }
-        expire_channel_presence(&mut st, std::time::Instant::now(), events);
         let mut actions = Vec::new();
-        let mut control_actions = Vec::new();
         for (chan, cs) in st.channels.iter_mut() {
             if cs.own_route.aliases.len() != 2 {
                 continue;
-            }
-            let authenticated_routes = cs.directory.values().cloned().collect::<Vec<_>>();
-            for route in authenticated_routes {
-                for mut wire in cs.promote_unrouted_acks(&route) {
-                    wire.fill(0);
-                }
             }
             let self_ref = crate::channel::PeerRef::from_route(&cs.own_route.public);
             let mut pushes: Vec<ForwardJob> = Vec::new();
@@ -101,80 +92,8 @@ pub(crate) async fn channel_tick(
             if !pushes.is_empty() {
                 actions.push((chan.clone(), pushes));
             }
-            control_actions.extend(
-                cs.pending_control
-                    .iter()
-                    .cloned()
-                    .map(|(peer, wire)| (chan.clone(), peer, wire)),
-            );
-            if let Some(outbox) = &cs.membership_outbox {
-                control_actions.extend(
-                    outbox
-                        .expected
-                        .iter()
-                        .filter(|(identity, _)| !outbox.acknowledged.contains(*identity))
-                        .map(|(_, peer)| (chan.clone(), peer.clone(), outbox.commit.clone())),
-                );
-            }
         }
-        (actions, control_actions)
-    };
-    // Poll the independent control lanes alongside data gossip. Waiting for a
-    // data batch first could postpone membership retransmits by up to 120s.
-    let control = async {
-        futures_join_all(control_actions.into_iter().map(|(chan, peer, wire)| {
-            let state = state.clone();
-            let scheduler = scheduler.clone();
-            async move {
-                let cells = crate::proto::encode_chan_cells(&chan, &wire).unwrap_or_default();
-                let mut sent = !cells.is_empty();
-                let receipts = cells
-                    .iter()
-                    .map(|cell| {
-                        scheduler.push(
-                            ProducerClass::ChannelControl,
-                            peer.control.clone(),
-                            cell.clone(),
-                        )
-                    })
-                    .collect::<Vec<_>>();
-                // Every peer's jobs are queued before waiting for another peer. A
-                // failed/slow lane must not serialise all membership ACK retransmits.
-                sent &= tokio::time::timeout(std::time::Duration::from_secs(120), async {
-                    let outcomes =
-                        futures_join_all(receipts.into_iter().map(|receipt| async move {
-                            match receipt {
-                                Ok(receipt) => receipt.completion().await.accepted().is_ok(),
-                                Err(_) => false,
-                            }
-                        }))
-                        .await;
-                    outcomes.into_iter().all(|accepted| accepted)
-                })
-                .await
-                .unwrap_or(false);
-                if sent {
-                    let mut st = state.lock().unwrap_or_else(|p| p.into_inner());
-                    if let Some(cs) = st.channels.get_mut(&chan) {
-                        let mut index = 0;
-                        while index < cs.pending_control.len() {
-                            let remove = cs.pending_control[index].0.pseudonym == peer.pseudonym
-                                && cs.pending_control[index].1 == wire;
-                            if remove {
-                                if let Some((_, mut pending_wire)) =
-                                    cs.pending_control.remove(index)
-                                {
-                                    pending_wire.fill(0);
-                                }
-                            } else {
-                                index += 1;
-                            }
-                        }
-                    }
-                }
-            }
-        }))
-        .await;
+        actions
     };
     let data = async {
         for (chan, pushes) in actions {
@@ -249,7 +168,103 @@ pub(crate) async fn channel_tick(
             );
         }
     };
-    tokio::join!(control, data);
+    data.await;
+}
+
+/// Control recovery has its own maintenance clock. A data batch may wait for
+/// up to 120 seconds, longer than membership convergence, so it cannot own the
+/// clock that retransmits the corresponding ACKs and commits.
+pub(crate) async fn channel_control_tick(
+    state: &Arc<Mutex<NodeState>>,
+    scheduler: &RelayScheduler,
+    events: &broadcast::Sender<Ev>,
+) {
+    let control_actions = {
+        let mut st = state.lock().unwrap_or_else(|p| p.into_inner());
+        if st.owner_transition_failed {
+            return;
+        }
+        expire_channel_presence(&mut st, std::time::Instant::now(), events);
+        let mut control_actions = Vec::new();
+        for (chan, cs) in st.channels.iter_mut() {
+            if cs.own_route.aliases.len() != 2 {
+                continue;
+            }
+            let authenticated_routes = cs.directory.values().cloned().collect::<Vec<_>>();
+            for route in authenticated_routes {
+                for mut wire in cs.promote_unrouted_acks(&route) {
+                    wire.fill(0);
+                }
+            }
+            control_actions.extend(
+                cs.pending_control
+                    .iter()
+                    .cloned()
+                    .map(|(peer, wire)| (chan.clone(), peer, wire)),
+            );
+            if let Some(outbox) = &cs.membership_outbox {
+                control_actions.extend(
+                    outbox
+                        .expected
+                        .iter()
+                        .filter(|(identity, _)| !outbox.acknowledged.contains(*identity))
+                        .map(|(_, peer)| (chan.clone(), peer.clone(), outbox.commit.clone())),
+                );
+            }
+        }
+        control_actions
+    };
+
+    futures_join_all(control_actions.into_iter().map(|(chan, peer, wire)| {
+        let state = state.clone();
+        let scheduler = scheduler.clone();
+        async move {
+            let cells = crate::proto::encode_chan_cells(&chan, &wire).unwrap_or_default();
+            let mut sent = !cells.is_empty();
+            let receipts = cells
+                .iter()
+                .map(|cell| {
+                    scheduler.push(
+                        ProducerClass::ChannelControl,
+                        peer.control.clone(),
+                        cell.clone(),
+                    )
+                })
+                .collect::<Vec<_>>();
+            // Every peer's jobs are queued before waiting for another peer. A
+            // failed/slow lane must not serialise all membership ACK retransmits.
+            sent &= tokio::time::timeout(std::time::Duration::from_secs(120), async {
+                let outcomes = futures_join_all(receipts.into_iter().map(|receipt| async move {
+                    match receipt {
+                        Ok(receipt) => receipt.completion().await.accepted().is_ok(),
+                        Err(_) => false,
+                    }
+                }))
+                .await;
+                outcomes.into_iter().all(|accepted| accepted)
+            })
+            .await
+            .unwrap_or(false);
+            if sent {
+                let mut st = state.lock().unwrap_or_else(|p| p.into_inner());
+                if let Some(cs) = st.channels.get_mut(&chan) {
+                    let mut index = 0;
+                    while index < cs.pending_control.len() {
+                        let remove = cs.pending_control[index].0 == peer
+                            && cs.pending_control[index].1 == wire;
+                        if remove {
+                            if let Some((_, mut pending_wire)) = cs.pending_control.remove(index) {
+                                pending_wire.fill(0);
+                            }
+                        } else {
+                            index += 1;
+                        }
+                    }
+                }
+            }
+        }
+    }))
+    .await;
 }
 
 pub(crate) fn handle_pex_cell(state: &Arc<Mutex<NodeState>>, cell: Cell) {
@@ -1541,6 +1556,22 @@ async fn finalize_admission(
         None,
     )?;
     let converged = wait_for_membership_acks(state, channel).await;
+    if !converged {
+        let st = state.lock().unwrap_or_else(|p| p.into_inner());
+        if let Some(outbox) = st
+            .channels
+            .get(channel)
+            .and_then(|cs| cs.membership_outbox.as_ref())
+        {
+            metrics::log_event(
+                "channel_membership_pending",
+                &[
+                    ("expected", outbox.expected.len().to_string()),
+                    ("acknowledged", outbox.acknowledged.len().to_string()),
+                ],
+            );
+        }
+    }
     metrics::log_event(
         "channel_membership_converged",
         &[
@@ -1863,38 +1894,13 @@ pub(crate) async fn redeem_invite_remote(
     }
 }
 
-/// Owner side: drain queued invite-redeem requests and service each one
-/// concurrently, so a channel whose membership is slow to converge cannot block
-/// redemptions for other channels (head-of-line). Correctness of single-use
-/// rests on the `NodeState` lock inside `redeem_invite`, not on ordering, so
-/// concurrent servicing is safe; concurrency is bounded by the inbox cap.
-pub(crate) async fn invite_tick(
-    state: &Arc<Mutex<NodeState>>,
-    scheduler: &RelayScheduler,
-    events: &broadcast::Sender<Ev>,
-    tasks: &mut tokio::task::JoinSet<()>,
-) {
-    let requests: Vec<_> = {
-        let mut st = state.lock().unwrap_or_else(|p| p.into_inner());
-        st.invite_redeem_inbox.drain(..).collect()
-    };
-    for request in requests {
-        let state = state.clone();
-        let scheduler = scheduler.clone();
-        let events = events.clone();
-        tasks.spawn(async move {
-            service_one_invite(&state, &scheduler, &events, request).await;
-        });
-    }
-}
-
 /// How long to keep retrying a redemption blocked only by an in-flight
 /// membership change on the same channel, before giving up and telling the
 /// friend. Below the friend-side wait, so a retry can still land in time.
 const INVITE_REDEEM_RETRY_SECS: u64 = 45;
 
 /// Run one queued redemption and reply to the friend with the Welcome or error.
-async fn service_one_invite(
+pub(crate) async fn service_one_invite(
     state: &Arc<Mutex<NodeState>>,
     scheduler: &RelayScheduler,
     events: &broadcast::Sender<Ev>,

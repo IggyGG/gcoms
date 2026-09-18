@@ -10,6 +10,9 @@ use std::collections::{HashMap, VecDeque};
 use std::error::Error;
 use std::fmt;
 
+#[cfg(feature = "experimental-gc2")]
+pub mod gc2;
+
 pub const DEFAULT_QUEUE_CELLS: u16 = 256;
 pub const DEFAULT_QUEUE_BYTES: u64 = 4 * 1024 * 1024;
 pub const DEFAULT_MAX_GRANTS: usize = 1024;
@@ -174,6 +177,8 @@ struct ReplayRecord {
     operation: ReplayOperation,
     nonce: Nonce,
     expiry: u64,
+    #[cfg(feature = "experimental-gc2")]
+    gc2_push_binding: Option<[u8; 32]>,
 }
 
 struct LeaseRecord {
@@ -183,6 +188,9 @@ struct LeaseRecord {
     limits: LeaseLimits,
     capabilities: Capabilities,
     replay: VecDeque<ReplayRecord>,
+    // Earliest live replay expiry. Reads of unrelated queues need not walk
+    // this history until a record can actually expire.
+    next_replay_expiry: Option<u64>,
     dynamic_grants: VecDeque<u64>,
     temporary_expiry: Option<u64>,
 }
@@ -198,7 +206,14 @@ impl LeaseRecord {
     }
 
     fn purge_replay(&mut self, now_unix: u64) {
+        if self
+            .next_replay_expiry
+            .is_none_or(|expiry| expiry > now_unix)
+        {
+            return;
+        }
         self.replay.retain(|record| record.expiry > now_unix);
+        self.next_replay_expiry = self.replay.iter().map(|record| record.expiry).min();
     }
 
     fn has_replay(&self, epoch: u64, operation: ReplayOperation, nonce: &Nonce) -> bool {
@@ -230,7 +245,13 @@ impl LeaseRecord {
             operation,
             nonce,
             expiry,
+            #[cfg(feature = "experimental-gc2")]
+            gc2_push_binding: None,
         });
+        self.next_replay_expiry = Some(
+            self.next_replay_expiry
+                .map_or(expiry, |old| old.min(expiry)),
+        );
         Ok(())
     }
 }
@@ -246,9 +267,21 @@ impl Drop for LeaseRecord {
 struct Queue {
     bytes: u64,
     messages: VecDeque<QueuedMessage>,
+    #[cfg(feature = "experimental-gc2")]
+    classes: gc2::ClassQueues,
 }
 
-/// RAM-only FIFO storage. It deliberately contains no stream or task handles.
+impl Queue {
+    fn len(&self) -> usize {
+        let count = self.messages.len();
+        #[cfg(feature = "experimental-gc2")]
+        let count = count + self.classes.len();
+        count
+    }
+}
+
+/// RAM-only FIFO storage. It contains no stream or task handles. Experimental
+/// class queues own change notifications, not background tasks.
 pub struct QueueStore {
     max_queues: usize,
     queues: HashMap<QueueId, Queue>,
@@ -284,6 +317,8 @@ impl QueueStore {
             Queue {
                 bytes: 0,
                 messages: VecDeque::new(),
+                #[cfg(feature = "experimental-gc2")]
+                classes: gc2::ClassQueues::new(),
             },
         );
         Ok(())
@@ -465,6 +500,8 @@ impl LeaseStore {
             operation: ReplayOperation::Create,
             nonce: create.nonce,
             expiry: create.lease_expiry,
+            #[cfg(feature = "experimental-gc2")]
+            gc2_push_binding: None,
         });
         let lease = LeaseRecord {
             queue_id: create.queue_id,
@@ -476,6 +513,7 @@ impl LeaseStore {
             },
             capabilities: create.capabilities,
             replay,
+            next_replay_expiry: Some(create.lease_expiry),
             dynamic_grants: VecDeque::new(),
             temporary_expiry: grant.temporary_expiry,
         };
@@ -610,6 +648,14 @@ impl LeaseStore {
         lease.epoch = rotate.new_epoch;
         lease.expiry = rotate.lease_expiry;
         lease.replay.clear();
+        lease.next_replay_expiry = None;
+        #[cfg(feature = "experimental-gc2")]
+        self.queues
+            .queues
+            .get(&queue_id)
+            .expect("every lease owns a queue")
+            .classes
+            .wake_all();
         Ok(lease.view())
     }
 
@@ -685,6 +731,16 @@ impl LeaseStore {
             return Err(StoreError::Unauthorized);
         }
         if lease.has_replay(push.epoch, ReplayOperation::Push, &push.push_nonce) {
+            // A GC/1 request cannot retry a GC/2 deposit under the same nonce.
+            #[cfg(feature = "experimental-gc2")]
+            if lease.replay.iter().any(|record| {
+                record.epoch == push.epoch
+                    && record.operation == ReplayOperation::Push
+                    && record.nonce == push.push_nonce
+                    && record.gc2_push_binding.is_some()
+            }) {
+                return Err(StoreError::Replay);
+            }
             return Ok(PushOutcome::Duplicate);
         }
         let Some(msg) = push.msg else {
@@ -714,11 +770,7 @@ impl LeaseStore {
             .queues
             .get_mut(&queue_id)
             .expect("every lease owns a queue");
-        let next_cells = queue
-            .messages
-            .len()
-            .checked_add(1)
-            .ok_or(StoreError::QueueFull)?;
+        let next_cells = queue.len().checked_add(1).ok_or(StoreError::QueueFull)?;
         let next_bytes = queue
             .bytes
             .checked_add(natural_bytes)
@@ -805,10 +857,7 @@ impl LeaseStore {
 
     pub fn queue_len(&mut self, queue_id: &QueueId, now_unix: u64) -> usize {
         self.cleanup_expired(now_unix);
-        self.queues
-            .queues
-            .get(queue_id)
-            .map_or(0, |queue| queue.messages.len())
+        self.queues.queues.get(queue_id).map_or(0, Queue::len)
     }
 
     pub fn queue_bytes(&mut self, queue_id: &QueueId, now_unix: u64) -> u64 {
@@ -1191,6 +1240,90 @@ mod tests {
                 .unwrap(),
             PushOutcome::Enqueued
         );
+    }
+
+    #[test]
+    fn replay_cleanup_tracks_earlier_deadlines_and_exact_boundaries() {
+        let capabilities = caps(10);
+        let mut bounded = config(8, 1024);
+        bounded.max_replay_nonces_per_lease = 2;
+        let mut store = LeaseStore::new(RELAY_ID, bounded).unwrap();
+        create_lease(&mut store, capabilities, 8, 1024);
+        let push =
+            |nonce, expiry| push_wire_with_expiry(&capabilities, [nonce; 16], NOW + expiry, nonce);
+        store.authenticate_push(push(1, 100), NOW).unwrap();
+        // A newly appended record expires before the existing cached deadline.
+        store.authenticate_push(push(2, 10), NOW + 1).unwrap();
+        assert_eq!(
+            store.authenticate_push(push(3, 50), NOW + 9),
+            Err(StoreError::ReplayCapacity)
+        );
+        assert_eq!(
+            store.authenticate_push(push(3, 50), NOW + 10),
+            Ok(PushOutcome::Enqueued)
+        );
+        // A clock rollback must not remove still-live replay protection.
+        assert_eq!(
+            store.authenticate_push(push(1, 100), NOW + 5),
+            Ok(PushOutcome::Duplicate)
+        );
+        assert_eq!(
+            store.authenticate_push(push(4, 200), NOW + 49),
+            Err(StoreError::ReplayCapacity)
+        );
+        assert_eq!(
+            store.authenticate_push(push(4, 200), NOW + 50),
+            Ok(PushOutcome::Enqueued)
+        );
+        // Expiring replay records never discards the undelivered queue.
+        assert_eq!(store.queue_len(&QUEUE_ID, NOW + 50), 4);
+        assert_eq!(store.peek(&QUEUE_ID, NOW + 50).unwrap().push_nonce, [1; 16]);
+    }
+
+    #[test]
+    fn rotated_empty_history_tracks_new_replay_expiry() {
+        let old = caps(10);
+        let new = caps(20);
+        let mut bounded = config(4, 1024);
+        bounded.max_replay_nonces_per_lease = 1;
+        let mut store = LeaseStore::new(RELAY_ID, bounded).unwrap();
+        create_lease(&mut store, old, 4, 1024);
+        store
+            .authenticate_push(push_wire(&old, EPOCH, [1; 16], 10, 1), NOW)
+            .unwrap();
+        let rotate = LeaseRotate {
+            queue_id: QUEUE_ID,
+            old_epoch: EPOCH,
+            new_epoch: EPOCH + 1,
+            lease_expiry: NOW + 400,
+            new_capabilities: new,
+            nonce: [12; 16],
+        }
+        .encode(&old.admin, &RELAY_ID)
+        .unwrap();
+        store.rotate(&rotate, NOW).unwrap();
+        store
+            .authenticate_push(push_wire(&new, EPOCH + 1, [2; 16], 10, 2), NOW)
+            .unwrap();
+        assert_eq!(
+            store.authenticate_push(push_wire(&new, EPOCH + 1, [3; 16], 10, 3), NOW + 99),
+            Err(StoreError::ReplayCapacity)
+        );
+        let push = RelayPush {
+            queue_id: QUEUE_ID,
+            epoch: EPOCH + 1,
+            push_nonce: [3; 16],
+            push_expiry: NOW + 200,
+            msg: Some(msg(10, 3)),
+        };
+        let wire =
+            UnauthenticatedRelayPush::parse(push.encode_into_cell(&new.push, &RELAY_ID).unwrap())
+                .unwrap();
+        assert_eq!(
+            store.authenticate_push(wire, NOW + 100),
+            Ok(PushOutcome::Enqueued)
+        );
+        assert_eq!(store.queue_len(&QUEUE_ID, NOW + 100), 3);
     }
 
     #[test]

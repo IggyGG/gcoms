@@ -1,8 +1,10 @@
 # GC/2 implementation ledger
 
-Status: repository consolidation and research-tool migration complete. GC/1 remains the
-implemented runtime profile. No GC/2 compatibility, performance, privacy or mobile
-qualification is claimed by this ledger.
+Status: repository consolidation and research-tool migration complete. Bounded
+scheduling, session readiness and larger file-chunk work is in progress; see
+[the runtime increment](GC2_SCHEDULER.md). GC/1 remains the production wire and
+cover profile. No GC/2 compatibility, performance, privacy or mobile qualification
+is claimed by this ledger.
 
 ## Accepted contract
 
@@ -99,7 +101,55 @@ Retain failures, source/executable/configuration/workload hashes and exact scope
 - Research scripts, tests and aggregate result: migrated with per-file hashes.
 - Two-repository source validation: `scripts/check-gchat.py`; package-archive
   validation remains a separate gate.
-- Runtime GC/2 changes and their application/privacy/mobile gates: pending.
+- Bounded scheduler/terminal pooling, opt-in fixture pipelining, durable session
+  readiness and PQ-safe 11 KiB file framing: implemented in the task branch.
+- Independent channel data/control maintenance and local aggregate node
+  diagnostics: implemented in the task branch; congestion regression validated
+  with a real TLS/H2 data response held open through a rejected control attempt
+  and its successful retry.
+- Direct maintenance has bounded, independent receipt waits (16 ACKs and 48
+  retries), with exact-ciphertext deduplication and archived in-flight ACKs.
+  Real TLS fixtures verify healthy-lane progress behind a stalled retry and
+  preservation of an ACK whose receive queue renews before hop acceptance.
+- Node-wide endpoint/transit admission, protected cover allowance and deferred
+  relay authorization: implemented; request preparation follows transport
+  admission and retries preserve exact bytes.
+- Owned cancellation for maintenance, subscription and command work, bounded
+  active invitation processing and a shutdown deadline covering command enqueue:
+  implemented. GChat tests immediate profile reopen without an arbitrary sleep.
+- Explicit natural GC/2 cells and class-authenticated deposit, subscription and
+  forwarding codecs: implemented behind `experimental-gc2`; see
+  [the codec contract](GC2_WIRE.md). No runtime cutover or carrier qualification.
+- Experimental shared GCT2 entry carrier: implemented with two permanent class
+  channels, a shared 16-circuit bound, interactive reservations, fixed interactive
+  records and immediately eligible bulk. Real TLS fixtures exercise shared
+  connections, independent entry/middle/terminal pins, route exclusions,
+  class/profile binding and cancellation. Middle transit adds no second padding
+  schedule, and the entry owner owns nested drivers. See
+  [its exact scope](GCT2_CARRIER.md). Runtime adoption remains pending.
+- Class-bound terminal pooling and a prepared GC/2 connector: implemented.
+  Bulk/interactive connections share an entry while keeping their class, pin and
+  route exclusions; default GC/1 pooling is unchanged. Class-aware subscription
+  and warmup APIs are available, with runtime/application propagation pending.
+- Replay cleanup skips histories whose earliest expiry is still in the future.
+  Retention deadlines, admission limits and queued messages are unchanged. The
+  reproducible `relay_queue_cost` example measures only local queue-maintenance
+  CPU work; it is not an application throughput or privacy benchmark.
+- Experimental authenticated class queues share the existing storage and replay
+  limits. Opaque subscriptions revalidate class, epoch, expiry and queue
+  incarnation; queue changes wake waiters without polling. Exact GC/2 retries
+  bind all envelope bytes. See [queue lifecycle and costs](GC2_QUEUES.md).
+  An owned terminal service and explicit natural-cell client now exercise
+  authenticated deposits/subscriptions through the shared carrier. Production
+  node routing and SDK/application adoption remain pending.
+- Explicit private GC/2 introductions, authenticated renewal and bounded
+  background entry ownership are implemented experimentally. Ready connectors
+  cannot dial a new entry or signal maintenance from a message request. Renewal
+  and reconnect run independently of chat, preserving role isolation and route
+  exclusions. See [bounds, costs and remaining integration](GC2_DISCOVERY.md).
+- Complete counter-window flow control, command preparation/completion split,
+  authenticated class propagation, complete GC/2 routing, protected profiles,
+  SDK/GChat profile integration and application/privacy/mobile gates: pending.
 
 ## Consolidation validation — Linux, 2026-09-17
 

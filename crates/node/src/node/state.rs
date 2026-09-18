@@ -261,7 +261,7 @@ pub struct NodeState {
     pub(crate) frwd_target_policy: FrwdTargetPolicy,
     pub(crate) scheduler: RelayScheduler,
     /// Owner side: invite-redeem requests received from friends over sealed
-    /// direct sessions, awaiting async processing by `invite_tick`. Bounded.
+    /// direct sessions, awaiting async processing by the invite service. Bounded.
     pub(crate) invite_redeem_inbox: VecDeque<InviteRedeemRequest>,
     /// Friend side: redemptions this node is waiting on, keyed by the request
     /// message id. The oneshot wakes the `join_with_invite` caller when the
@@ -333,4 +333,28 @@ pub(crate) fn validate_application_size(payload: &[u8]) -> Result<(), String> {
         ));
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod cancellation_tests {
+    use super::futures_join_all;
+    use std::{future::Future, sync::Arc, task::Poll};
+
+    #[tokio::test]
+    async fn canceling_a_batch_drops_child_owners_before_returning() {
+        let owner = Arc::new(());
+        let released = Arc::downgrade(&owner);
+        let mut batch = Box::pin(futures_join_all([async move {
+            let _owner = owner;
+            std::future::pending::<()>().await;
+        }]));
+        std::future::poll_fn(|cx| {
+            assert!(batch.as_mut().poll(cx).is_pending());
+            Poll::Ready(())
+        })
+        .await;
+        drop(batch);
+        // No sleep/yield: cancellation must release the resource synchronously.
+        assert!(released.upgrade().is_none());
+    }
 }

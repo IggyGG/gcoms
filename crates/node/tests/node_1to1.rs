@@ -479,7 +479,7 @@ async fn restored_direct_session_propagates_fresh_route_without_card_exchange() 
         .last()
         .cloned()
         .expect("receiver transaction was persisted before delivery");
-    assert_eq!(&persisted_b[..6], b"GCNSTI");
+    assert_eq!(&persisted_b[..6], b"GCNSTJ");
     b.shutdown().await;
 
     b_snapshots.lock().unwrap().clear();

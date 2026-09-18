@@ -4,6 +4,8 @@ pub mod channel_invite;
 pub mod connectivity;
 pub mod control;
 pub mod forward;
+#[cfg(feature = "experimental-gc2")]
+pub mod gc2;
 pub mod keystore;
 pub mod lease;
 pub mod metrics;

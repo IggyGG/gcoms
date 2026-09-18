@@ -4,6 +4,8 @@ pub mod carrier;
 pub mod catalog;
 pub mod directory;
 pub mod discovery;
+#[cfg(feature = "experimental-gc2")]
+pub mod gc2;
 pub mod route;
 pub mod service;
 pub mod wire;

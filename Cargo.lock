@@ -1079,6 +1079,7 @@ dependencies = [
  "argon2",
  "bytes",
  "fs2",
+ "futures-util",
  "gcoms-core",
  "gcoms-crypto",
  "gcoms-gossip",
@@ -1089,8 +1090,10 @@ dependencies = [
  "gcoms-protocol",
  "gcoms-routing",
  "gcoms-transport",
+ "h2",
  "hkdf 0.12.4",
  "hmac 0.12.1",
+ "http",
  "libc",
  "quick-xml",
  "rand 0.8.8",
@@ -1141,6 +1144,7 @@ name = "gcoms-routing"
 version = "0.1.0"
 dependencies = [
  "bytes",
+ "futures-util",
  "gcoms-core",
  "gcoms-transport",
  "h2",

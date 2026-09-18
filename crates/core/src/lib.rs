@@ -8,8 +8,12 @@ pub mod cell;
 pub mod encoding;
 pub mod file_stream;
 pub mod fragment;
+#[cfg(feature = "experimental-gc2")]
+pub mod gc2;
 pub mod hop;
 pub mod lease;
+pub mod traffic;
+pub use traffic::TrafficClass;
 
 pub use cell::{
     decode, Bucket, Cell, CellClass, CellError, CellType, APPLICATION_PAYLOAD_LIMIT, F_LAST,

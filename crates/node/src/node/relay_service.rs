@@ -246,7 +246,7 @@ pub(crate) fn admit_frwd_cell(
         .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     let receipt = match scheduler.forward(frwd) {
         Ok(receipt) => receipt,
-        Err(EnqueueError::Full | EnqueueError::Shutdown) => {
+        Err(EnqueueError::Full | EnqueueError::Pending | EnqueueError::Shutdown) => {
             metrics::log_event(
                 "frwd_result",
                 &[
@@ -979,7 +979,9 @@ mod provision_authority_tests {
                     filled = true;
                     break;
                 }
-                Err(EnqueueError::Shutdown) => panic!("scheduler shut down while filling lane"),
+                Err(EnqueueError::Shutdown | EnqueueError::Pending) => {
+                    panic!("unexpected scheduler state while filling lane")
+                }
             }
         }
         assert!(filled, "forward lane did not reach its bound");

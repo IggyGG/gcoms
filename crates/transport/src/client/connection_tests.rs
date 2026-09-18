@@ -60,11 +60,14 @@ async fn refusal_is_scoped_to_address_pin_and_route_exclusions() {
     ] {
         for _ in 0..2 {
             assert!(client
-                .connection(Route {
-                    addr: address,
-                    service_id: pin,
-                    excluded: exclusions
-                })
+                .connection(
+                    Route {
+                        addr: address,
+                        service_id: pin,
+                        excluded: exclusions
+                    },
+                    TrafficClass::Interactive
+                )
                 .await
                 .is_err());
         }
@@ -92,11 +95,16 @@ async fn arbitrary_connector_failures_are_not_cached() {
 async fn refusal_cache_is_bounded_and_expired_entries_are_reclaimed() {
     let mut pool = Pool::default();
     for port in 1..=MAX_FAILED_ROUTES as u16 + 32 {
-        pool.dial_failed((SocketAddr::from(([127, 0, 0, 1], port)), [1; 32], [0; 32]));
+        pool.dial_failed((
+            SocketAddr::from(([127, 0, 0, 1], port)),
+            [1; 32],
+            [0; 32],
+            None,
+        ));
         assert!(pool.failed.len() <= MAX_FAILED_ROUTES);
     }
     tokio::time::advance(CONNECT_FAILURE_COOLDOWN).await;
-    assert!(!pool.cooling_down(("127.0.0.1:1".parse().unwrap(), [1; 32], [0; 32])));
+    assert!(!pool.cooling_down(("127.0.0.1:1".parse().unwrap(), [1; 32], [0; 32], None)));
     assert!(pool.failed.is_empty());
 }
 

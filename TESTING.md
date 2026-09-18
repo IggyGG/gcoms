@@ -31,8 +31,13 @@ python3 scripts/check-consumers.py
 `check-consumers.py` packages publishable Rust crates together, builds an aliased
 external consumer against extracted archives, and installs actual npm tarballs in
 a temporary project. It keeps package metadata free of private sibling paths. Use
-`--gchat /path/to/gchat` to qualify GChat against those same extracted Rust packages.
+`--gchat /path/to/gchat` to qualify GChat against those same extracted Rust packages
+and npm archives. The disposable GChat snapshot installs the local npm archives,
+checks/tests/builds its frontend and generates dependency notices before the
+standalone desktop Rust check. Original manifests and locks are preserved.
 This staging check does not publish anything or require registry credentials.
+Use `--consumer-target-dir` to reuse a Cargo build cache while retaining a fresh
+archive/evidence directory for each `--release` check.
 
 ## Current-source GChat integration and relay research
 
