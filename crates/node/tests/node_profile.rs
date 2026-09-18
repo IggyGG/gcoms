@@ -62,6 +62,43 @@ async fn gc2_carrier_fixture_starts_and_stops_with_an_in_memory_directory() {
 
 #[cfg(feature = "experimental-gc2")]
 #[tokio::test(flavor = "multi_thread")]
+async fn gc2_carrier_production_profile_starts_and_restores_its_directory() {
+    let dir = tempfile::tempdir().unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(dir.path(), std::fs::Permissions::from_mode(0o700)).unwrap();
+    }
+    let make = |seed: [u8; 32]| NodeConfig {
+        seed,
+        listen: "127.0.0.1:0".parse().unwrap(),
+        control: None,
+        advertise: None,
+        inbox_relay: None,
+        profile: NodeProfile::gc2_carrier_production(Some(dir.path().to_path_buf()), 1),
+        alias_lifecycle: Default::default(),
+    };
+    assert!(NodeProfile::gc2_carrier_production(None, 1).is_production());
+    assert!(NodeProfile::gc2_carrier_qualification(None, 1, 7).is_production());
+    let first = start(make([0x53; 32]))
+        .await
+        .expect("production carrier starts");
+    first.shutdown().await;
+    drop(first);
+    let second = start(make([0x53; 32]))
+        .await
+        .expect("same identity restores the directory");
+    second.shutdown().await;
+    drop(second);
+    let error = start(make([0x54; 32]))
+        .await
+        .err()
+        .expect("another identity must not open the directory");
+    assert!(!error.is_empty());
+}
+
+#[cfg(feature = "experimental-gc2")]
+#[tokio::test(flavor = "multi_thread")]
 async fn gc2_carrier_fixture_restores_its_directory_and_refuses_a_wrong_seed() {
     let dir = tempfile::tempdir().unwrap();
     #[cfg(unix)]

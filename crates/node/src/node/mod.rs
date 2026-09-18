@@ -99,6 +99,24 @@ pub enum NodeProfile {
     /// Local test harness. Refuses to listen on a non-loopback address so
     /// that a fixture cannot be exposed by mistake.
     Fixture(FixtureProfile),
+    /// Explicit GC/2 carrier selection with production transport behaviour.
+    /// The normal production selection stays GC/1 until the qualification
+    /// gates pass; this variant is the deployment candidate.
+    #[cfg(feature = "experimental-gc2")]
+    Gc2Carrier(Gc2CarrierProfile),
+}
+
+/// Deployment-shaped GC/2 carrier settings. A durable directory is required
+/// for a listener that keeps state across restarts; `None` is an explicit
+/// outbound-only fixture-style selection.
+#[cfg(feature = "experimental-gc2")]
+#[derive(Clone, Debug)]
+pub struct Gc2CarrierProfile {
+    pub directory: Option<std::path::PathBuf>,
+    pub entries: usize,
+    pub record_len: usize,
+    pub period_ms: u16,
+    pub scheduler: SchedulerProfile,
 }
 
 #[derive(Clone, Debug)]
@@ -169,7 +187,12 @@ impl NodeProfile {
     }
 
     pub fn is_production(&self) -> bool {
-        matches!(self, Self::Production)
+        match self {
+            Self::Production => true,
+            #[cfg(feature = "experimental-gc2")]
+            Self::Gc2Carrier(_) => true,
+            _ => false,
+        }
     }
 
     #[cfg(feature = "experimental-gc2")]
@@ -207,22 +230,68 @@ impl NodeProfile {
         Self::Fixture(fixture)
     }
 
+    /// Deployment-shaped carrier with the production transport schedule.
+    #[cfg(feature = "experimental-gc2")]
+    pub fn gc2_carrier_production(directory: Option<std::path::PathBuf>, entries: usize) -> Self {
+        Self::Gc2Carrier(Gc2CarrierProfile {
+            directory,
+            entries,
+            record_len: 4096,
+            period_ms: 1000,
+            scheduler: SchedulerProfile::production(),
+        })
+    }
+
+    /// Carrier with the compressed production schedule used by qualification
+    /// runs on one host.
+    #[cfg(feature = "experimental-gc2")]
+    pub fn gc2_carrier_qualification(
+        directory: Option<std::path::PathBuf>,
+        entries: usize,
+        seed: u64,
+    ) -> Self {
+        Self::Gc2Carrier(Gc2CarrierProfile {
+            directory,
+            entries,
+            record_len: 4096,
+            period_ms: 1000,
+            scheduler: SchedulerProfile::compressed_production(seed),
+        })
+    }
+
     #[cfg(feature = "experimental-gc2")]
     fn gc2_sessions(&self) -> bool {
-        matches!(self,Self::Fixture(f) if f.gc2_sessions)
+        match self {
+            Self::Fixture(fixture) => fixture.gc2_sessions,
+            Self::Gc2Carrier(_) => true,
+            Self::Production => false,
+        }
     }
 
     #[cfg(feature = "experimental-gc2")]
     fn gc2_gate(&self) -> bool {
-        matches!(self,Self::Fixture(f) if f.gc2_gate)
+        match self {
+            Self::Fixture(fixture) => fixture.gc2_gate,
+            Self::Gc2Carrier(_) => true,
+            Self::Production => false,
+        }
     }
 
     #[cfg(feature = "experimental-gc2")]
-    fn gc2_carrier(&self) -> Option<(Option<&std::path::Path>, usize)> {
+    fn gc2_carrier(&self) -> Option<(Option<&std::path::Path>, usize, usize, u16)> {
         match self {
-            Self::Fixture(fixture) if fixture.gc2_entries > 0 => {
-                Some((fixture.gc2_directory.as_deref(), fixture.gc2_entries))
-            }
+            Self::Fixture(fixture) if fixture.gc2_entries > 0 => Some((
+                fixture.gc2_directory.as_deref(),
+                fixture.gc2_entries,
+                4096,
+                1000,
+            )),
+            Self::Gc2Carrier(carrier) if carrier.entries > 0 => Some((
+                carrier.directory.as_deref(),
+                carrier.entries,
+                carrier.record_len,
+                carrier.period_ms,
+            )),
             _ => None,
         }
     }
@@ -231,6 +300,8 @@ impl NodeProfile {
         match self {
             Self::Production => SchedulerProfile::production(),
             Self::Fixture(fixture) => fixture.scheduler.clone(),
+            #[cfg(feature = "experimental-gc2")]
+            Self::Gc2Carrier(carrier) => carrier.scheduler.clone(),
         }
     }
 
@@ -243,6 +314,8 @@ impl NodeProfile {
             Self::Fixture(fixture) => {
                 configured.unwrap_or_else(|| FrwdTargetPolicy::new(fixture.allow_local_targets))
             }
+            #[cfg(feature = "experimental-gc2")]
+            Self::Gc2Carrier(_) => configured.unwrap_or_else(|| FrwdTargetPolicy::new(false)),
         }
     }
 
@@ -252,6 +325,8 @@ impl NodeProfile {
         match self {
             Self::Production => gcoms_transport::ServerLimits::default(),
             Self::Fixture(_) => gcoms_transport::ServerLimits::shared_host(),
+            #[cfg(feature = "experimental-gc2")]
+            Self::Gc2Carrier(_) => gcoms_transport::ServerLimits::default(),
         }
     }
 
@@ -266,6 +341,12 @@ impl NodeProfile {
                 slot_interval: fixture.stream_slot_interval,
                 emission_probability: 1.0,
                 emit_cover: fixture.stream_emit_cover,
+            },
+            #[cfg(feature = "experimental-gc2")]
+            Self::Gc2Carrier(_) => StreamEmission {
+                slot_interval: crate::scheduler::SLOT_INTERVAL,
+                emission_probability: crate::scheduler::EMISSION_PROBABILITY,
+                emit_cover: true,
             },
         }
     }
@@ -1039,7 +1120,7 @@ async fn start_with_tls_policy_control_sink_and_bootstrap(
         initialized?;
 
         #[cfg(feature = "experimental-gc2")]
-        if let Some((directory_path, entries)) = cfg.profile.gc2_carrier() {
+        if let Some((directory_path, entries, record_len, period_ms)) = cfg.profile.gc2_carrier() {
             let directory = match directory_path {
                 Some(path) => {
                     let cache = crate::routing_cache::Cache::open_gc2(path, &cfg.seed)
@@ -1050,8 +1131,9 @@ async fn start_with_tls_policy_control_sink_and_bootstrap(
             };
             let (owner, ready) = gcoms_routing::gc2::owner::EntryOwner::new(
                 directory.clone(),
-                gcoms_routing::gc2::CandidateProfile::new(4096, 1000)
-                    .map_err(|_| "invalid GC/2 candidate profile".to_string())?,
+                gcoms_routing::gc2::CandidateProfile::new(record_len, period_ms).map_err(|_| {
+                    format!("invalid GC/2 candidate profile {record_len}/{period_ms}")
+                })?,
                 entries,
             )
             .map_err(|e| e.to_string())?;

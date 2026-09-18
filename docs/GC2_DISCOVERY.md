@@ -169,7 +169,11 @@ delivers session frames as authenticated natural terminal deposits and drains
 its own class queues through natural subscriptions. Delivery and subscriptions
 prefer the protected client over the ready connector whenever the directory has
 live entries; the direct client only serves bootstrap migration and fixtures
-without a route. Runtime adoption still needs private
-provisioning/advertisement integration, production profile selection,
-Node/SDK/GChat class and profile propagation, and the application/privacy/device
-gates in [the implementation ledger](GC2_IMPLEMENTATION.md).
+without a route. An explicit deployment profile
+(`NodeProfile::gc2_carrier_production`, with a compressed qualification
+schedule) selects the protected carrier with production transport behaviour,
+and a GC/2 carrier archive cannot be restored under a GC/1 profile, so a
+restart cannot silently downgrade. Runtime adoption still needs private
+provisioning/advertisement integration, Node/SDK/GChat class and profile
+propagation, and the application/privacy/device gates in
+[the implementation ledger](GC2_IMPLEMENTATION.md).

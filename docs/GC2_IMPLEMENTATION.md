@@ -206,8 +206,12 @@ Retain failures, source/executable/configuration/workload hashes and exact scope
   queues through natural subscriptions; delivery and subscriptions prefer the
   protected entry/middle client once the directory has live entries, and a
   two-node TLS fixture proves durable applications in both directions. The
-  legacy relay path remains for sessions that did not migrate. Provisioning
-  advertisement, production selection and SDK/GChat send options remain.
+  legacy relay path remains for sessions that did not migrate. An explicit
+  deployment profile (`gc2_carrier_production`, or the compressed qualification
+  variant) selects the protected carrier with production transport behaviour;
+  a GC/2 carrier archive cannot be restored under a GC/1 profile, so a restart
+  cannot silently downgrade. Provisioning advertisement and SDK/GChat selection
+  remain.
 - Complete GC/2 routing, protected profiles, SDK/GChat profile integration and
   application/privacy/mobile gates: pending. Counter-window flow control, the
   application-send preparation/completion split and authenticated class

@@ -161,3 +161,49 @@ async fn gc2_natural_carrier_delivers_durable_applications_both_ways() {
     a.shutdown().await;
     b.shutdown().await;
 }
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn gc2_carrier_archive_cannot_restore_under_a_gc1_profile() {
+    let aa = Archive::default();
+    let a = endpoint_with_profile(
+        73,
+        aa.clone(),
+        None,
+        NodeProfile::gc2_carrier_fixture(None, 1),
+    )
+    .await;
+    let b = endpoint_with_profile(
+        74,
+        Archive::default(),
+        None,
+        NodeProfile::gc2_carrier_fixture(None, 1),
+    )
+    .await;
+    let original = b.current_info().await.unwrap();
+    a.send_durable_1to1(&original, b"seed the archive", None)
+        .await
+        .unwrap();
+    let _ = receive(&b, 1).await;
+    a.shutdown().await;
+    let archive = aa.lock().unwrap().clone();
+    assert_eq!(&archive[..6], b"GCNSTL");
+    let error = start_persistent_restored(
+        NodeConfig {
+            seed: [73; 32],
+            listen: "127.0.0.1:0".parse().unwrap(),
+            control: None,
+            advertise: None,
+            inbox_relay: None,
+            profile: NodeProfile::fixture(),
+            alias_lifecycle: Default::default(),
+        },
+        None,
+        Arc::new(|_| Ok(())),
+        Some(&archive),
+    )
+    .await
+    .err()
+    .expect("a GC/1 profile must not restore a GC/2 carrier archive");
+    assert!(error.contains("GC/2"), "{error}");
+    b.shutdown().await;
+}
