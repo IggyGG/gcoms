@@ -1122,10 +1122,15 @@ dependencies = [
 name = "gcoms-protocol"
 version = "0.1.0"
 dependencies = [
+ "aes-gcm",
  "gcoms-core",
  "gcoms-crypto",
+ "hkdf 0.12.4",
  "hmac 0.12.1",
+ "rand 0.8.8",
+ "rand_core 0.6.4",
  "sha2 0.10.9",
+ "zeroize",
 ]
 
 [[package]]

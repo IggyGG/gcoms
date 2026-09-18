@@ -3,5 +3,7 @@
 extern crate alloc;
 pub use gcoms_core::lease;
 pub mod alias;
+#[cfg(feature = "experimental-gc2")]
+pub mod flow;
 pub mod proto;
 pub mod relay;

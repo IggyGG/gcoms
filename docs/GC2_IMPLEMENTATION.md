@@ -4,7 +4,12 @@ Status: repository consolidation and research-tool migration complete. Bounded
 scheduling, session readiness and larger file-chunk work is in progress; see
 [the runtime increment](GC2_SCHEDULER.md). GC/1 remains the production wire and
 cover profile. No GC/2 compatibility, performance, privacy or mobile qualification
-is claimed by this ledger.
+is claimed by this ledger. The owner deferred physical mobile testing on
+2026-09-18; it is outside this rollout's acceptance scope and remains unqualified.
+Desktop/server validation and deployment to all eight Hetzner native relays remain
+in scope. The read-only fleet preflight found every relay active on the same
+binary, SHA-256 `965f8007321128cb0cd4fba1e9c071342da67fe878fd8132cdb07ca73469b229`.
+Both HEL and FSN bootstrap providers were active. No fleet update has occurred.
 
 ## Accepted contract
 
@@ -91,8 +96,9 @@ traffic-independent protected scheduling and no chat-triggered extra connections
 or bulk emissions. This is a limited empirical gate, not an anonymity proof.
 
 Measure actual interface costs and physical-device power separately. Include
-Wi-Fi/cellular, foreground/background, suspension and reconnect. Linux results do
-not qualify mobile energy or availability. Missing mobile evidence remains pending.
+Wi-Fi/cellular, foreground/background, suspension and reconnect when mobile
+qualification resumes. Those physical-device checks are deferred by the owner
+for this rollout. Linux results do not qualify mobile energy or availability.
 Retain failures, source/executable/configuration/workload hashes and exact scope.
 
 ## Progress
@@ -147,6 +153,12 @@ Retain failures, source/executable/configuration/workload hashes and exact scope
   cannot dial a new entry or signal maintenance from a message request. Renewal
   and reconnect run independently of chat, preserving role isolation and route
   exclusions. See [bounds, costs and remaining integration](GC2_DISCOVERY.md).
+- Experimental ratchet credit now bounds every encrypted counter, reserves
+  capacity for interactive/control records, repairs exact ciphertext after loss,
+  and uses non-ratcheted authenticated credit to avoid mutual ACK deadlock.
+  The session wrapper stages crypto and flow state together and rejects stale
+  or cross-session commits. See [the transaction and adoption contract](GC2_FLOW.md).
+  Node archive/resource integration and explicit session recovery remain pending.
 - Complete counter-window flow control, command preparation/completion split,
   authenticated class propagation, complete GC/2 routing, protected profiles,
   SDK/GChat profile integration and application/privacy/mobile gates: pending.
