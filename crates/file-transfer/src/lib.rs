@@ -2,3 +2,5 @@
 pub mod journal;
 pub mod receiver;
 pub use receiver::{Receiver, ReceiverError};
+
+pub mod swarm;

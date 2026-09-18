@@ -652,6 +652,27 @@ pub trait GcClient: Send + Sync {
         enabled: bool,
     ) -> Result<(), SdkError>;
 
+    /// Versioned binary channel application data. Receivers must dispatch this
+    /// envelope before their text archiver. File completion is application-owned.
+    async fn send_channel_application(
+        &self,
+        channel: &str,
+        recipient_member_id: [u8; 32],
+        content_type: &str,
+        body: &[u8],
+    ) -> Result<MessageId, SdkError> {
+        if content_type != gcoms_core::PIECE_CONTENT_TYPE {
+            return Err(SdkError::PermissionDenied);
+        }
+        let wire = ApplicationMessage {
+            content_type: content_type.into(),
+            body: body.to_vec(),
+        }
+        .encode()?;
+        self.send_channel_direct(channel, recipient_member_id, &wire)
+            .await
+    }
+
     async fn send_channel_direct(
         &self,
         channel: &str,
