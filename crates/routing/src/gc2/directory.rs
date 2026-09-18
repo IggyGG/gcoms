@@ -1,5 +1,6 @@
 //! Explicit private GC/2 introductions. Stale descriptors retain only re-entry
 //! authority; fresh entry/transit credentials are never manufactured locally.
+mod storage;
 use super::{entry::EntryDescriptor, transit::TransitDescriptor};
 use crate::{
     wire::{decode_address, encode_address},
@@ -17,9 +18,12 @@ pub const MAX_INTRODUCTIONS: usize = 8;
 pub const MAX_BUNDLE_BYTES: usize = 6 + MAX_INTRODUCTIONS * INTRODUCTION_BYTES;
 pub const MAX_RELAYS: usize = 64;
 pub const MAX_GUARDS: usize = 3;
+pub const MAX_OWN_SERVICES: usize = 8;
+pub const MAX_PRIVATE_BYTES: usize =
+    8 + MAX_RELAYS * INTRODUCTION_BYTES + MAX_GUARDS * 32 + MAX_OWN_SERVICES * 51;
 pub const MAX_ADVERTISEMENT_AGE: u64 = 24 * 60 * 60;
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct Introduction {
     pub addr: SocketAddr,
     pub service_id: [u8; 32],
@@ -165,19 +169,23 @@ impl BootstrapBundle {
     }
 }
 
-#[derive(Default)]
+#[derive(Clone, Default, PartialEq, Eq)]
 struct View {
     relays: Vec<Introduction>,
     guards: Vec<[u8; 32]>,
     own: Vec<(SocketAddr, [u8; 32])>,
 }
 type AddressPolicy = Arc<dyn Fn(SocketAddr) -> bool + Send + Sync>;
+/// Durably save the complete private view before making it available to routing.
+/// Called under the directory write lock; must not reenter the directory.
+pub type Checkpoint = Arc<dyn Fn(&[u8]) -> Result<()> + Send + Sync>;
 
 /// Bounded private metadata, separate from GC/1's directory. Installing a
 /// descriptor never opens a connection or changes its authenticated expiry.
 pub struct Directory {
     view: RwLock<View>,
     allowed: AddressPolicy,
+    checkpoint: Option<Checkpoint>,
 }
 impl Default for Directory {
     fn default() -> Self {
@@ -195,7 +203,24 @@ impl Directory {
         Self {
             view: RwLock::new(View::default()),
             allowed,
+            checkpoint: None,
         }
+    }
+    /// Installs persistence before the directory is shared with a connection
+    /// owner. Failure leaves no directory available for new connections.
+    pub fn with_checkpoint(mut self, checkpoint: Checkpoint) -> Result<Self> {
+        checkpoint(&self.encode_private()?)?;
+        self.checkpoint = Some(checkpoint);
+        Ok(self)
+    }
+    fn commit(&self, current: &mut View, next: View) -> Result<()> {
+        if *current != next {
+            if let Some(checkpoint) = &self.checkpoint {
+                checkpoint(&next.encode()?)?;
+            }
+            *current = next;
+        }
+        Ok(())
     }
     fn admissible(&self, relay: &Introduction, now: u64) -> Result<()> {
         relay.validate()?;
@@ -207,27 +232,34 @@ impl Directory {
         Ok(())
     }
     pub fn set_own_services(&self, services: Vec<(SocketAddr, [u8; 32])>) -> Result<()> {
-        if services.len() > 8 {
+        if services.len() > MAX_OWN_SERVICES {
             return Err("too many own GC/2 services".into());
         }
-        for (addr, pin) in &services {
+        for (index, (addr, pin)) in services.iter().enumerate() {
             decode_address(&encode_address(*addr))?;
-            if *pin == [0; 32] {
+            if *pin == [0; 32] || services[..index].contains(&(*addr, *pin)) {
                 return Err("invalid own GC/2 service identity".into());
             }
         }
         let mut view = self.view.write().unwrap_or_else(|p| p.into_inner());
-        view.own = services;
-        Self::prune_guards(&mut view);
-        Ok(())
+        let mut next = view.clone();
+        next.own = services;
+        Self::prune_guards(&mut next);
+        self.commit(&mut view, next)
     }
     pub fn set_guards(&self, guards: Vec<[u8; 32]>) -> Result<()> {
         if guards.len() > MAX_GUARDS {
             return Err("too many GC/2 guards".into());
         }
         let mut view = self.view.write().unwrap_or_else(|p| p.into_inner());
+        Self::validate_guards(&view, &guards)?;
+        let mut next = view.clone();
+        next.guards = guards;
+        self.commit(&mut view, next)
+    }
+    fn validate_guards(view: &View, guards: &[[u8; 32]]) -> Result<()> {
         let mut selected: Vec<&Introduction> = Vec::new();
-        for pin in &guards {
+        for pin in guards {
             let relay = view
                 .relays
                 .iter()
@@ -245,8 +277,25 @@ impl Directory {
             }
             selected.push(relay);
         }
-        view.guards = guards;
         Ok(())
+    }
+    /// Atomically retain one known independent guard. Full, duplicate or
+    /// overlapping candidates return false; persistence failures return errors.
+    pub fn retain_guard(&self, pin: [u8; 32]) -> Result<bool> {
+        let mut view = self.view.write().unwrap_or_else(|p| p.into_inner());
+        if !view.relays.iter().any(|relay| relay.service_id == pin) {
+            return Err("unknown GC/2 guard".into());
+        }
+        if view.guards.len() == MAX_GUARDS || view.guards.contains(&pin) {
+            return Ok(false);
+        }
+        let mut next = view.clone();
+        next.guards.push(pin);
+        if Self::validate_guards(&next, &next.guards).is_err() {
+            return Ok(false);
+        }
+        self.commit(&mut view, next)?;
+        Ok(true)
     }
     pub fn guards(&self) -> Vec<[u8; 32]> {
         self.view
@@ -272,36 +321,38 @@ impl Directory {
                 );
             }
         }
+        let mut next = view.clone();
         let mut fresh = 0;
         for relay in &bundle.relays {
-            if let Some(index) = view
+            if let Some(index) = next
                 .relays
                 .iter()
                 .position(|old| old.service_id == relay.service_id)
             {
-                if view.relays[index].expires_at > relay.expires_at {
+                if next.relays[index].expires_at > relay.expires_at {
                     continue;
                 }
-                view.relays[index] = relay.clone();
+                next.relays[index] = relay.clone();
             } else {
-                if view.relays.len() == MAX_RELAYS {
-                    let victim = view
+                if next.relays.len() == MAX_RELAYS {
+                    let victim = next
                         .relays
                         .iter()
                         .enumerate()
-                        .filter(|(_, old)| !view.guards.contains(&old.service_id))
+                        .filter(|(_, old)| !next.guards.contains(&old.service_id))
                         .min_by_key(|(_, old)| old.expires_at)
                         .map(|(index, _)| index)
                         .expect("at most three of sixty-four entries are guards");
-                    view.relays.remove(victim);
+                    next.relays.remove(victim);
                 }
-                view.relays.push(relay.clone());
+                next.relays.push(relay.clone());
             }
             if relay.expires_at > now {
                 fresh += 1;
             }
         }
-        Self::prune_guards(&mut view);
+        Self::prune_guards(&mut next);
+        self.commit(&mut view, next)?;
         Ok(fresh)
     }
     pub fn eligible(
@@ -404,6 +455,134 @@ mod tests {
                 NOW,
             )
             .unwrap();
+    }
+    fn restore(bytes: &[u8], now: u64) -> Result<Directory> {
+        Directory::restore_with_policy(bytes, now, Arc::new(|addr| addr.ip().is_loopback()))
+    }
+    #[test]
+    fn private_restart_keeps_stale_guards_exclusions_and_exact_authority() {
+        let directory = Directory::for_loopback_fixture();
+        for seed in 1..=64 {
+            remember(&directory, relay(seed));
+        }
+        directory
+            .set_guards(vec![[3; 32], [2; 32], [1; 32]])
+            .unwrap();
+        directory
+            .set_own_services((100..108).map(|n| (relay(n).addr, [n; 32])).collect())
+            .unwrap();
+        let bytes = directory.encode_private().unwrap();
+        assert_eq!(bytes.len(), MAX_PRIVATE_BYTES);
+        let restored = restore(&bytes, NOW + 101).unwrap();
+        assert_eq!(restored.encode_private().unwrap(), bytes);
+        assert_eq!(restored.guards(), vec![[3; 32], [2; 32], [1; 32]]);
+        assert!(restored.eligible(&[], NOW + 101).unwrap().is_empty());
+        assert_eq!(restored.reentry_candidates()[0].reentry_cap, [201; 32]);
+        assert!(restored.reentry_candidates()[0].entry(NOW + 101).is_err());
+        assert!(Directory::restore_private(&bytes, NOW).is_err()); // loopback isn't production
+        assert!(restore(&bytes, 0).is_err()); // no lifetime expansion on clock rollback
+        assert_eq!(
+            restore(&bytes, u64::MAX).unwrap().encode_private().unwrap(),
+            bytes
+        );
+    }
+    #[test]
+    fn private_decoder_rejects_truncation_duplicate_records_and_invalid_guards() {
+        let directory = Directory::for_loopback_fixture();
+        remember(&directory, relay(1));
+        remember(&directory, relay(2));
+        directory.set_guards(vec![[1; 32], [2; 32]]).unwrap();
+        directory
+            .set_own_services(vec![(relay(3).addr, [3; 32])])
+            .unwrap();
+        let bytes = directory.encode_private().unwrap();
+        for length in 0..bytes.len() {
+            assert!(restore(&bytes[..length], NOW).is_err(), "{length}");
+        }
+        let mut trailing = bytes.to_vec();
+        trailing.push(0);
+        assert!(restore(&trailing, NOW).is_err());
+        let guard_count = 6 + 2 * INTRODUCTION_BYTES;
+        let own_count = guard_count + 1 + 64;
+        for (offset, value) in [(4, 1), (5, 65), (guard_count, 4), (own_count, 9)] {
+            let mut bad = bytes.to_vec();
+            bad[offset] = value;
+            assert!(restore(&bad, NOW).is_err());
+        }
+        let mut bad = bytes.to_vec();
+        bad.copy_within(6..6 + INTRODUCTION_BYTES, 6 + INTRODUCTION_BYTES);
+        assert!(restore(&bad, NOW).is_err());
+        for pin in [[1; 32], [99; 32]] {
+            let mut bad = bytes.to_vec();
+            bad[guard_count + 33..guard_count + 65].copy_from_slice(&pin);
+            assert!(restore(&bad, NOW).is_err());
+        }
+        let mut bad = bytes.to_vec();
+        bad[own_count + 1..own_count + 20].copy_from_slice(&encode_address(relay(1).addr));
+        assert!(restore(&bad, NOW).is_err()); // own-IP overlap with a retained guard
+        let mut bad = bytes.to_vec();
+        bad[own_count + 20..own_count + 52].fill(0);
+        assert!(restore(&bad, NOW).is_err());
+    }
+    #[test]
+    fn checkpoint_failure_never_publishes_new_authority_or_guard_changes() {
+        use std::sync::{
+            atomic::{AtomicBool, AtomicUsize, Ordering},
+            Mutex,
+        };
+        let fail = Arc::new(AtomicBool::new(false));
+        let writes = Arc::new(AtomicUsize::new(0));
+        let saved = Arc::new(Mutex::new(Zeroizing::new(Vec::new())));
+        let sink = saved.clone();
+        let reject = fail.clone();
+        let count = writes.clone();
+        let directory = Directory::for_loopback_fixture()
+            .with_checkpoint(Arc::new(move |bytes| {
+                if reject.load(Ordering::SeqCst) {
+                    return Err("fixture disk unavailable".into());
+                }
+                restore(bytes, NOW)?;
+                *sink.lock().unwrap() = Zeroizing::new(bytes.to_vec());
+                count.fetch_add(1, Ordering::SeqCst);
+                Ok(())
+            }))
+            .unwrap();
+        remember(&directory, relay(1));
+        remember(&directory, relay(2));
+        assert!(directory.retain_guard([1; 32]).unwrap());
+        let before = directory.encode_private().unwrap();
+        let count = writes.load(Ordering::SeqCst);
+        fail.store(true, Ordering::SeqCst);
+        assert!(directory.retain_guard([2; 32]).is_err());
+        assert!(directory.set_guards(vec![[2; 32]]).is_err());
+        assert!(directory
+            .set_own_services(vec![(relay(1).addr, [99; 32])])
+            .is_err());
+        let mut renewed = relay(1);
+        renewed.expires_at += 100;
+        renewed.entry_cap = [204; 32];
+        assert!(directory
+            .remember(
+                &BootstrapBundle {
+                    relays: vec![renewed]
+                },
+                NOW
+            )
+            .is_err());
+        assert_eq!(directory.encode_private().unwrap(), before);
+        assert_eq!(*saved.lock().unwrap(), before);
+        // Unchanged state needs no write and does not depend on storage availability.
+        directory.set_guards(vec![[1; 32]]).unwrap();
+        remember(&directory, relay(1));
+        assert!(!directory.retain_guard([1; 32]).unwrap());
+        assert_eq!(writes.load(Ordering::SeqCst), count);
+        fail.store(false, Ordering::SeqCst);
+        assert!(directory.retain_guard([2; 32]).unwrap());
+        let restarted = restore(&saved.lock().unwrap(), NOW).unwrap();
+        assert_eq!(restarted.guards(), vec![[1; 32], [2; 32]]);
+        assert!(Directory::for_loopback_fixture()
+            .with_checkpoint(Arc::new(|_| Err("disk failed".into())))
+            .is_err());
     }
     #[test]
     fn bundle_is_bounded_canonical_and_version_separated() {

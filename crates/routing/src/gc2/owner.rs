@@ -230,29 +230,22 @@ impl EntryOwner {
 
     // Pick guards without any application event. Never rotate retained guards
     // merely because they are expired or a connection attempt failed.
-    fn retain_guards(&self) {
-        let mut guards = self.directory.guards();
+    fn retain_guards(&self) -> Result<()> {
         let mut candidates = self.directory.reentry_candidates();
         candidates.shuffle(&mut rand::thread_rng());
         for candidate in candidates {
-            if guards.len() == MAX_GUARDS {
+            if self.directory.guards().len() == MAX_GUARDS {
                 break;
             }
-            if guards.contains(&candidate.service_id) {
-                continue;
-            }
-            let mut proposed = guards.clone();
-            proposed.push(candidate.service_id);
-            if self.directory.set_guards(proposed.clone()).is_ok() {
-                guards = proposed;
-            }
+            self.directory.retain_guard(candidate.service_id)?;
         }
+        Ok(())
     }
 
     async fn discovery_loop(&self) -> Result<()> {
         let mut schedule = HashMap::<[u8; 32], Renewal>::new();
         loop {
-            self.retain_guards();
+            self.retain_guards()?;
             let guards = self.directory.guards();
             let candidates: Vec<_> = self
                 .directory
@@ -350,7 +343,7 @@ impl EntryOwner {
                     _ = tick.tick() => (),
                     _ = self.refreshed.notified() => (),
                 }} => {
-                    self.retain_guards();
+                    self.retain_guards()?;
                     let guards = self.directory.guards();
                     let eligible = self.directory.eligible(&[], now_unix())?;
                     for (pin, attempt) in &mut active {
@@ -550,6 +543,40 @@ mod tests {
         for _ in 0..30 {
             tokio::task::yield_now().await;
         }
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn unsaved_guards_cannot_trigger_entry_or_control_dials() {
+        let directory = Arc::try_unwrap(directory()).ok().unwrap();
+        let writes = Arc::new(AtomicUsize::new(0));
+        let count = writes.clone();
+        let directory = Arc::new(
+            directory
+                .with_checkpoint(Arc::new(move |_| {
+                    if count.fetch_add(1, Ordering::SeqCst) == 0 {
+                        Ok(())
+                    } else {
+                        Err("fixture disk full".into())
+                    }
+                }))
+                .unwrap(),
+        );
+        let attempts = Arc::new(Mutex::new(Vec::new()));
+        let (owner, ready) = EntryOwner::with_entry_connector(
+            directory.clone(),
+            CandidateProfile::new(4096, 1000).unwrap(),
+            1,
+            Arc::new(FailingDial {
+                attempts: attempts.clone(),
+            }),
+        )
+        .unwrap();
+        // Test both independently: the combined owner may poll either first.
+        assert!(owner.entries_loop().await.is_err());
+        assert!(owner.discovery_loop().await.is_err());
+        assert!(attempts.lock().unwrap().is_empty());
+        assert!(directory.guards().is_empty());
+        assert_eq!(ready.ready_entries(), 0);
     }
 
     #[tokio::test(start_paused = true)]

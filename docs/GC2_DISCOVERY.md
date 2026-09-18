@@ -30,6 +30,31 @@ non-guard record is evicted. Own services and
 every supplied terminal exclusion remove matching IPs or pins from selection.
 Address updates prune guards that now overlap one another or an own service.
 
+The private directory snapshot uses a separate `GCDR` + version 2 format. It
+retains every introduction, guard order, and up to eight own-service exclusions,
+at most 10,432 bytes. Strict restoration rejects duplicate pins, overlapping or
+unknown guards, invalid authorities, oversized counts, truncation and trailing
+bytes. Restoration keeps expired seeds and their original expiry; a backward
+clock jump that puts an expiry more than 24 hours ahead fails closed. The raw
+snapshot contains capabilities and must be authenticated and encrypted.
+
+`Directory::with_checkpoint` saves the initial view before returning the
+directory. Later mutations stage a candidate under the directory write lock,
+save it, then publish it to routing. Failed writes leave the live view unchanged;
+unchanged state needs no write. The callback must not reenter the directory.
+The background owner distinguishes an unsuitable guard from a failed checkpoint:
+the latter ends the owner before either entry acquisition or private renewal
+can dial that unsaved guard.
+
+`gcoms-node::routing_cache::Cache::open_gc2(...).gc2_directory(now)` supplies
+the encrypted file implementation and retains the exclusive writer lock for the
+directory's lifetime. It uses a distinct HKDF domain, authenticated `GCRN` version
+2 header and `routing-gc2.cache` filename. AES-256-GCM with a fresh random nonce
+adds 35 bytes. Private permissions, bounded reads, atomic replacement and synced
+writes use the existing platform storage code. The same writer lock excludes
+concurrent GC/1 or GC/2 cache owners. The original `routing.cache` is preserved;
+there is no implicit conversion of GC/1 authorities or profiles.
+
 The relay derives stable re-entry authority using HMAC-SHA256 under its retained
 relay secret with domain `ghost.gct2.reentry.v2\0` and its service pin. Entry and
 middle authorities retain their separate hourly domains. The client authenticates
@@ -126,6 +151,7 @@ with legacy cells inside an explicit GC/2 circuit. They are not application
 goodput, packet-classifier, mobile-power or operated-network qualification.
 
 Runtime adoption still needs installation of this combined-listener gate,
-durable guard and bootstrap migration, private provisioning/advertisement integration,
+connection of the durable directory to profile startup and explicit bootstrap
+migration, private provisioning/advertisement integration,
 counter-window recovery, Node/SDK/GChat class and profile propagation, and the
 application/privacy/device gates in [the implementation ledger](GC2_IMPLEMENTATION.md).

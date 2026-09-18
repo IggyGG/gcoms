@@ -156,6 +156,11 @@ Retain failures, source/executable/configuration/workload hashes and exact scope
   cannot dial a new entry or signal maintenance from a message request. Renewal
   and reconnect run independently of chat, preserving role isolation and route
   exclusions. See [bounds, costs and remaining integration](GC2_DISCOVERY.md).
+- GC/2 directory snapshots retain guard order, exact authority lifetimes and
+  own-service exclusions. The encrypted cache saves staged changes before they
+  become available to routing; failed guard checkpoints stop entry/control dials.
+  Its version, key domain and file are separate from GC/1, with a shared exclusive
+  writer lock. Profile startup and explicit bootstrap migration remain pending.
 - Experimental ratchet credit now bounds every encrypted counter, reserves
   capacity for interactive/control records, repairs exact ciphertext after loss,
   and uses non-ratcheted authenticated credit to avoid mutual ACK deadlock.
