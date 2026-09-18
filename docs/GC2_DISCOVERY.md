@@ -156,8 +156,12 @@ factory that passes every path through until this node provisions a relay
 service, then fixes entry/transit/control roles and rejects unknown paths
 without any GC/1 fallback within the connection. The owned terminal queue
 service is composed under the same gate; its handler accepts only authenticated
-queue tokens that resolve to a current lease in this node's store. Runtime
-adoption still needs connection of the durable directory to profile startup,
+queue tokens that resolve to a current lease in this node's store.
+`NodeProfile::gc2_carrier_fixture` additionally opens the encrypted GC/2
+directory (or an in-memory one), starts a one-to-three-entry background owner
+whose future is owned by the node task set, and retains the ready connector on
+the node state. Restoring a directory with a different identity fails closed.
+Runtime adoption still needs the outbound data path through the ready connector,
 explicit bootstrap migration, private provisioning/advertisement integration,
 production profile selection, Node/SDK/GChat class and profile propagation, and
 the application/privacy/device gates in

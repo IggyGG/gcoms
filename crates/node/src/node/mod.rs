@@ -108,6 +108,14 @@ pub struct FixtureProfile {
     /// act as relays pass every path through unchanged.
     #[cfg(feature = "experimental-gc2")]
     pub gc2_gate: bool,
+    /// Optional encrypted GC/2 routing directory; `None` uses an in-memory
+    /// directory for tests. The cache keeps its exclusive writer lock for the
+    /// node lifetime.
+    #[cfg(feature = "experimental-gc2")]
+    pub gc2_directory: Option<std::path::PathBuf>,
+    /// Background entry count (one to three). Zero disables the carrier owner.
+    #[cfg(feature = "experimental-gc2")]
+    pub gc2_entries: usize,
     /// Relay lane and maintenance scheduling.
     pub scheduler: SchedulerProfile,
     /// Permit loopback/private FRWD targets (all fixtures need this).
@@ -126,6 +134,10 @@ impl NodeProfile {
             gc2_sessions: false,
             #[cfg(feature = "experimental-gc2")]
             gc2_gate: false,
+            #[cfg(feature = "experimental-gc2")]
+            gc2_directory: None,
+            #[cfg(feature = "experimental-gc2")]
+            gc2_entries: 0,
             scheduler: SchedulerProfile::fixture(),
             allow_local_targets: true,
             stream_slot_interval: std::time::Duration::from_millis(10),
@@ -141,6 +153,10 @@ impl NodeProfile {
             gc2_sessions: false,
             #[cfg(feature = "experimental-gc2")]
             gc2_gate: false,
+            #[cfg(feature = "experimental-gc2")]
+            gc2_directory: None,
+            #[cfg(feature = "experimental-gc2")]
+            gc2_entries: 0,
             scheduler: SchedulerProfile::compressed_production(seed),
             allow_local_targets: true,
             stream_slot_interval: std::time::Duration::from_millis(10),
@@ -172,6 +188,21 @@ impl NodeProfile {
         Self::Fixture(fixture)
     }
 
+    /// Fixture that runs the experimental GC/2 carrier owner: the role gate,
+    /// peer sessions, and one to three background entries over the given
+    /// directory (an in-memory directory when `directory` is `None`).
+    #[cfg(feature = "experimental-gc2")]
+    pub fn gc2_carrier_fixture(directory: Option<std::path::PathBuf>, entries: usize) -> Self {
+        let Self::Fixture(mut fixture) = Self::fixture() else {
+            unreachable!()
+        };
+        fixture.gc2_sessions = true;
+        fixture.gc2_gate = true;
+        fixture.gc2_directory = directory;
+        fixture.gc2_entries = entries;
+        Self::Fixture(fixture)
+    }
+
     #[cfg(feature = "experimental-gc2")]
     fn gc2_sessions(&self) -> bool {
         matches!(self,Self::Fixture(f) if f.gc2_sessions)
@@ -180,6 +211,16 @@ impl NodeProfile {
     #[cfg(feature = "experimental-gc2")]
     fn gc2_gate(&self) -> bool {
         matches!(self,Self::Fixture(f) if f.gc2_gate)
+    }
+
+    #[cfg(feature = "experimental-gc2")]
+    fn gc2_carrier(&self) -> Option<(Option<&std::path::Path>, usize)> {
+        match self {
+            Self::Fixture(fixture) if fixture.gc2_entries > 0 => {
+                Some((fixture.gc2_directory.as_deref(), fixture.gc2_entries))
+            }
+            _ => None,
+        }
     }
 
     pub(crate) fn scheduler_profile(&self) -> SchedulerProfile {
@@ -862,6 +903,8 @@ async fn start_with_tls_policy_control_sink_and_bootstrap(
             #[cfg(feature = "experimental-gc2")]
             gc2_sessions: cfg.profile.gc2_sessions(),
             #[cfg(feature = "experimental-gc2")]
+            gc2_carrier: None,
+            #[cfg(feature = "experimental-gc2")]
             retained_direct: std::sync::OnceLock::new(),
             #[cfg(feature = "experimental-gc2")]
             gc2_receipts: gc2_receipts::Ledger::default(),
@@ -986,6 +1029,31 @@ async fn start_with_tls_policy_control_sink_and_bootstrap(
         }
         .await;
         initialized?;
+
+        #[cfg(feature = "experimental-gc2")]
+        if let Some((directory_path, entries)) = cfg.profile.gc2_carrier() {
+            let directory = match directory_path {
+                Some(path) => {
+                    let cache = crate::routing_cache::Cache::open_gc2(path, &cfg.seed)
+                        .map_err(|e| e.to_string())?;
+                    std::sync::Arc::new(cache.gc2_directory(now_unix()).map_err(|e| e.to_string())?)
+                }
+                None => std::sync::Arc::new(gcoms_routing::gc2::directory::Directory::new()),
+            };
+            let (owner, ready) = gcoms_routing::gc2::owner::EntryOwner::new(
+                directory,
+                gcoms_routing::gc2::CandidateProfile::new(4096, 1000)
+                    .map_err(|_| "invalid GC/2 candidate profile".to_string())?,
+                entries,
+            )
+            .map_err(|e| e.to_string())?;
+            state.lock().unwrap_or_else(|p| p.into_inner()).gc2_carrier = Some(ready);
+            tasks.push(tokio::spawn(async move {
+                if let Err(error) = owner.run().await {
+                    metrics::log_event("gc2_carrier_owner_error", &[("e", error.to_string())]);
+                }
+            }));
+        }
 
         if let Some(runtime) = &routing {
             runtime.bind_state(&state)?;

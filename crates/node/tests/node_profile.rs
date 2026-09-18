@@ -46,3 +46,49 @@ async fn fixture_profile_runs_on_loopback() {
         .expect("fixture starts");
     handle.shutdown().await;
 }
+
+#[cfg(feature = "experimental-gc2")]
+#[tokio::test(flavor = "multi_thread")]
+async fn gc2_carrier_fixture_starts_and_stops_with_an_in_memory_directory() {
+    let handle = start(config(
+        "127.0.0.1:0",
+        NodeProfile::gc2_carrier_fixture(None, 1),
+    ))
+    .await
+    .expect("GC/2 carrier fixture starts");
+    handle.shutdown().await;
+    drop(handle);
+}
+
+#[cfg(feature = "experimental-gc2")]
+#[tokio::test(flavor = "multi_thread")]
+async fn gc2_carrier_fixture_restores_its_directory_and_refuses_a_wrong_seed() {
+    let dir = tempfile::tempdir().unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(dir.path(), std::fs::Permissions::from_mode(0o700)).unwrap();
+    }
+    let make = |seed: [u8; 32]| NodeConfig {
+        seed,
+        listen: "127.0.0.1:0".parse().unwrap(),
+        control: None,
+        advertise: None,
+        inbox_relay: None,
+        profile: NodeProfile::gc2_carrier_fixture(Some(dir.path().to_path_buf()), 1),
+        alias_lifecycle: Default::default(),
+    };
+    let first = start(make([0x51; 32])).await.expect("first carrier start");
+    first.shutdown().await;
+    drop(first);
+    let second = start(make([0x51; 32]))
+        .await
+        .expect("same identity restores the directory");
+    second.shutdown().await;
+    drop(second);
+    let error = start(make([0x52; 32]))
+        .await
+        .err()
+        .expect("another identity must not open the directory");
+    assert!(!error.is_empty());
+}

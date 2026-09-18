@@ -183,6 +183,11 @@ pub(crate) fn fresh_msg_id() -> [u8; 16] {
 pub struct NodeState {
     #[cfg(feature = "experimental-gc2")]
     pub(crate) gc2_sessions: bool,
+    /// Retained GC/2 carrier readiness. The background owner future is owned by
+    /// the node task set; this handle only opens circuits through it. Not
+    /// archived: the startup profile selects the carrier.
+    #[cfg(feature = "experimental-gc2")]
+    pub(crate) gc2_carrier: Option<std::sync::Arc<gcoms_routing::gc2::owner::ReadyConnector>>,
     #[cfg(feature = "experimental-gc2")]
     pub(super) gc2_receipts: super::gc2_receipts::Ledger,
     #[cfg(feature = "experimental-gc2")]

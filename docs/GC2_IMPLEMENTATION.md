@@ -196,8 +196,11 @@ Retain failures, source/executable/configuration/workload hashes and exact scope
   still serialize their network waits. The experimental combined-listener GC/2
   role gate is attachable through an explicit fixture profile; it is late-bound
   to owner provisioning and never falls back to GC/1 within a connection. The
-  owned terminal queue service is composed under the same gate. Durable
-  directory startup and production profile selection remain.
+  owned terminal queue service is composed under the same gate. An explicit
+  carrier fixture opens the encrypted directory, runs the bounded background
+  entry owner under the node task set and retains the ready connector; a wrong
+  identity cannot restore another node's directory. The outbound data path
+  through that connector and production profile selection remain.
 - Complete GC/2 routing, protected profiles, SDK/GChat profile integration and
   application/privacy/mobile gates: pending. Counter-window flow control, the
   application-send preparation/completion split and authenticated class
