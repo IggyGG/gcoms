@@ -7,7 +7,7 @@ use super::{
     CandidateProfile,
 };
 use crate::{route::now_unix, wire::Target, Result};
-use futures_util::{stream::FuturesUnordered, StreamExt};
+use futures_util::{stream::FuturesUnordered, FutureExt, StreamExt};
 use gcoms_core::TrafficClass;
 use gcoms_transport::{
     connector::{ConnectFuture, Connector, DirectConnector},
@@ -20,7 +20,7 @@ use std::{
     net::SocketAddr,
     pin::Pin,
     sync::{Arc, RwLock},
-    time::Duration,
+    time::{Duration, SystemTime},
 };
 use tokio::{
     sync::{oneshot, Notify},
@@ -38,6 +38,17 @@ struct ActiveEntry {
 struct Renewal {
     next: Instant,
     failures: u8,
+}
+
+fn renewal_delay(
+    normal: Duration,
+    expiry: Option<u64>,
+    wall_now: SystemTime,
+    expiry_jitter: Duration,
+) -> Duration {
+    expiry.map_or(normal, |expiry| {
+        normal.min(super::remaining_authority_at(expiry, wall_now) + expiry_jitter)
+    })
 }
 
 #[derive(Clone)]
@@ -269,7 +280,7 @@ impl EntryOwner {
                 }
                 // Direct renewal is deliberately limited to retained guards
                 // on this background timer. No request-time fallback exists.
-                let mut renewed = false;
+                let mut renewed = None;
                 if let Ok(Ok(bundle)) =
                     timeout(DIAL_TIMEOUT, discovery::refresh(&self.control, &seed, &[])).await
                 {
@@ -278,17 +289,21 @@ impl EntryOwner {
                         // immediately, without waiting for the next retry tick.
                         // Application requests cannot signal this notification.
                         self.refreshed.notify_one();
-                        renewed = true;
+                        renewed = bundle
+                            .relays
+                            .iter()
+                            .find(|relay| relay.service_id == seed.service_id)
+                            .map(|relay| relay.expires_at);
                     }
                 }
-                let failures = if renewed {
+                let failures = if renewed.is_some() {
                     0
                 } else {
                     schedule
                         .get(&seed.service_id)
                         .map_or(1, |old| old.failures.saturating_add(1).min(4))
                 };
-                let seconds = if renewed {
+                let seconds = if renewed.is_some() {
                     DISCOVERY_PERIOD.as_secs()
                 } else {
                     (60 * (1u64 << (failures - 1))).min(DISCOVERY_PERIOD.as_secs())
@@ -296,13 +311,18 @@ impl EntryOwner {
                 // Positive jitter prevents synchronized fleet refresh bursts;
                 // it never depends on message arrivals, class or byte quotas.
                 let jitter = rand::thread_rng().gen_range(0..=seconds * 100);
+                let normal = Duration::from_secs(seconds) + Duration::from_millis(jitter);
+                // Hourly expiry may arrive before the usual five-minute
+                // refresh. Wake just after it, when the new epoch is available,
+                // instead of leaving an expired guard asleep for that period.
+                let expiry_jitter = Duration::from_millis(rand::thread_rng().gen_range(0..=1000));
+                let now = Instant::now();
+                let delay = renewal_delay(normal, renewed, SystemTime::now(), expiry_jitter);
                 schedule.insert(
                     seed.service_id,
                     Renewal {
                         failures,
-                        next: Instant::now()
-                            + Duration::from_secs(seconds)
-                            + Duration::from_millis(jitter),
+                        next: now + delay,
                     },
                 );
             }
@@ -340,6 +360,13 @@ impl EntryOwner {
                     }
                     // Canceled drivers still count until polled to completion;
                     // a configuration change cannot transiently double entries.
+                    // Renewal and expiry may become ready in the same poll.
+                    // Reap completed/canceled drivers before consuming the
+                    // renewal wakeup, so their old slots cannot defer new
+                    // authority until another 30-second retry opportunity.
+                    while let Some(Some(pin)) = tasks.next().now_or_never() {
+                        active.remove(&pin);
+                    }
                     let start = cursor;
                     for offset in 0..guards.len() {
                         if active.len() == self.entries { break; }
@@ -356,6 +383,7 @@ impl EntryOwner {
                         tasks.push(Box::pin(async move {
                             let _slot = ReadySlot { state: state.clone(), pin };
                             tokio::select! {
+                                biased;
                                 _ = canceled => (),
                                 _ = maintain_entry(dial, state, introduction, profile) => (),
                             }
@@ -416,6 +444,77 @@ mod tests {
         Mutex,
     };
     use tokio::time::Instant;
+
+    #[test]
+    fn renewal_honors_near_expiry_without_shortening_failure_backoff() {
+        let now = std::time::UNIX_EPOCH + Duration::from_millis(9750);
+        let normal = Duration::from_secs(315);
+        assert_eq!(
+            renewal_delay(normal, Some(10), now, Duration::from_millis(500)),
+            Duration::from_millis(750)
+        );
+        assert_eq!(
+            renewal_delay(normal, Some(1000), now, Duration::from_secs(1)),
+            normal
+        );
+        assert_eq!(
+            renewal_delay(Duration::from_secs(66), None, now, Duration::from_secs(1)),
+            Duration::from_secs(66)
+        );
+        assert_eq!(
+            renewal_delay(normal, Some(9), now, Duration::from_millis(500)),
+            Duration::from_millis(500)
+        );
+    }
+
+    struct GatedFailure {
+        entered: Arc<AtomicUsize>,
+        release: Mutex<Option<oneshot::Receiver<()>>>,
+    }
+    impl Connector for GatedFailure {
+        fn connect(&self, _: SocketAddr, _: [u8; 32]) -> ConnectFuture<'_> {
+            Box::pin(async move {
+                self.entered.fetch_add(1, Ordering::SeqCst);
+                let wait = self.release.lock().unwrap().take();
+                if let Some(wait) = wait {
+                    let _ = wait.await;
+                }
+                Err("fixture entry ended at renewal".into())
+            })
+        }
+    }
+    #[tokio::test(start_paused = true)]
+    async fn simultaneous_renewal_and_entry_completion_cannot_lose_the_ready_slot() {
+        // Exercise both orders of Tokio's randomized select polling while
+        // keeping the background retry clock stationary throughout each case.
+        for _ in 0..32 {
+            let entered = Arc::new(AtomicUsize::new(0));
+            let (release, released) = oneshot::channel();
+            let (owner, _) = EntryOwner::with_entry_connector(
+                directory(),
+                CandidateProfile::new(4096, 1000).unwrap(),
+                1,
+                Arc::new(GatedFailure {
+                    entered: entered.clone(),
+                    release: Mutex::new(Some(released)),
+                }),
+            )
+            .unwrap();
+            let owner = Arc::new(owner);
+            let running = owner.clone();
+            let task = tokio::spawn(async move { running.entries_loop().await });
+            settle().await;
+            assert_eq!(entered.load(Ordering::SeqCst), 1);
+            let before = Instant::now();
+            release.send(()).unwrap();
+            owner.refreshed.notify_one();
+            settle().await;
+            assert_eq!(entered.load(Ordering::SeqCst), 2);
+            assert_eq!(Instant::now(), before);
+            task.abort();
+            assert!(task.await.unwrap_err().is_cancelled());
+        }
+    }
 
     struct FailingDial {
         attempts: Arc<Mutex<Vec<Instant>>>,

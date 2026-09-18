@@ -2,7 +2,10 @@
 //! qualified privacy settings. Records require an authenticated TLS service;
 //! the codec itself provides neither authentication nor a sending schedule.
 use gcoms_core::TrafficClass;
-use std::{fmt, time::Duration};
+use std::{
+    fmt,
+    time::{Duration, SystemTime, UNIX_EPOCH},
+};
 
 pub mod channel;
 pub mod connector;
@@ -18,6 +21,30 @@ pub const HEADER_LEN: usize = 9;
 pub const MAX_RECORD: usize = 16 * 1024;
 const RECORD_LENGTHS: [usize; 3] = [1024, 2048, 4096];
 const PERIODS_MS: [u16; 4] = [250, 500, 1000, 1500];
+
+/// Preserve the fractional second at an absolute credential deadline. Invalid
+/// timestamps and expired authority have no remaining lifetime.
+pub(super) fn remaining_authority_at(expires_at: u64, now: SystemTime) -> Duration {
+    UNIX_EPOCH
+        .checked_add(Duration::from_secs(expires_at))
+        .and_then(|expiry| expiry.duration_since(now).ok())
+        .unwrap_or_default()
+}
+
+pub(super) fn authority_deadline(
+    expires_at: u64,
+    maximum: Duration,
+) -> Option<tokio::time::Instant> {
+    // Sample the monotonic clock first so sampling overhead cannot extend the
+    // advertised expiry when converting the wall-clock interval.
+    let now = tokio::time::Instant::now();
+    let remaining = remaining_authority_at(expires_at, SystemTime::now()).min(maximum);
+    if remaining.is_zero() {
+        return None;
+    }
+    now.checked_add(remaining)
+        .filter(|deadline| *deadline > tokio::time::Instant::now())
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct CandidateProfile {
@@ -241,6 +268,25 @@ impl RecordCodec {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn authority_expiry_does_not_round_up_or_revive_invalid_timestamps() {
+        assert_eq!(
+            remaining_authority_at(10, UNIX_EPOCH + Duration::from_millis(9750)),
+            Duration::from_millis(250)
+        );
+        assert_eq!(
+            remaining_authority_at(10, UNIX_EPOCH + Duration::from_secs(10)),
+            Duration::ZERO
+        );
+        assert_eq!(
+            remaining_authority_at(10, UNIX_EPOCH + Duration::from_millis(10001)),
+            Duration::ZERO
+        );
+        assert_eq!(remaining_authority_at(u64::MAX, UNIX_EPOCH), Duration::ZERO);
+        assert!(authority_deadline(crate::route::now_unix(), Duration::from_secs(30)).is_none());
+        assert!(authority_deadline(crate::route::now_unix() + 30, Duration::ZERO).is_none());
+    }
 
     #[test]
     fn all_candidates_keep_interactive_size_fixed_and_bulk_natural() {

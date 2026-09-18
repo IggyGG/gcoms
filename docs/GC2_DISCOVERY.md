@@ -63,7 +63,10 @@ jitter, serially across retained guards, with a 20-second deadline per attempt.
 Failures retry after 60, 120, 240 and then at most 300 seconds plus the same
 jitter, independently for each guard. This avoids waiting a full refresh period
 on first failure and spreads synchronized fleet retries without using chat as
-an input. Successful background renewal
+an input. Successful renewal also schedules a refresh at credential expiry plus
+0–1 second of independent jitter if that comes sooner; an hourly epoch change
+cannot sleep through the usual five-minute interval. Rejected renewal retains
+its bounded failure backoff. Successful background renewal
 can immediately wake entry selection, avoiding an extra retry interval for a
 previously expired bootstrap. Requests cannot signal that wakeup. Missed timer
 ticks use delay behavior rather than catch-up bursts.
@@ -84,7 +87,9 @@ TLS pin. Application traffic cannot increase the entry count or change profile.
 
 The owner contains all entry futures, including connecting sockets, both class
 channels and nested circuit drivers. Cancellation removes published readiness
-and drops the driver tree and its private TP1 pool. Canceled entries continue to
+and drops the driver tree and its private TP1 pool. Credential lifetimes retain
+subsecond precision when converted to monotonic deadlines. Expired or invalid
+timestamps cannot start a handshake. Canceled entries continue to
 count against the configured bound until their futures have completed. Directory
 updates cannot transiently double the physical entry set.
 
@@ -99,9 +104,11 @@ before TLS/TCP overhead, retransmissions, control connections and bulk:
 | 4 KiB every 1.5 seconds, both directions | 14.16 GB | 42.47 GB |
 
 These candidates exceed the accepted advisory desktop/mobile targets. No lower
-cost profile is qualified here. Direct private control adds up to three routinely
-reused guard connections; their handshakes, requests and replies are extra costs.
-The existing bounded TP1 pool still applies if guard addresses change. Natural
+cost profile is qualified here. Direct private control visits up to three retained
+guards. Requests can reuse a live pooled connection, but the normal five-minute
+refresh interval exceeds the server's two-minute idle timeout, so regular rounds
+generally require another handshake. These handshakes, requests and replies are
+extra costs. The existing bounded TP1 pool still applies if guard addresses change. Natural
 control responses contain at most 1,252 cell bytes, but that is not total measured
 interface usage. The directory's raw introduction payload is at most 9,920 bytes,
 excluding vector storage, locks and allocator overhead. Entry buffer bounds remain

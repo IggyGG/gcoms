@@ -19,7 +19,7 @@ use std::{
 use tokio::{
     io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadBuf},
     sync::oneshot,
-    time::timeout,
+    time::{timeout, timeout_at},
 };
 use tokio_rustls::TlsConnector;
 use zeroize::Zeroize;
@@ -63,11 +63,9 @@ pub(super) async fn open(
 ) -> Result<(BoxStream, Driver)> {
     relay.validate()?;
     let class = stream.class();
-    let lifetime = MAX_LIFETIME.min(Duration::from_secs(
-        relay.expires_at.saturating_sub(now_unix()),
-    ));
-    let deadline = tokio::time::Instant::now() + lifetime;
-    timeout(HANDSHAKE_TIMEOUT.min(lifetime), async {
+    let deadline = super::authority_deadline(relay.expires_at, MAX_LIFETIME)
+        .ok_or("GC/2 middle authority expired")?;
+    timeout_at(deadline.min(tokio::time::Instant::now() + HANDSHAKE_TIMEOUT), async {
         let tls = TlsConnector::from(Arc::new(tls::client_config_pinned(relay.service_id)?))
             .connect(tls::server_name_ip(relay.addr.ip()), stream).await?;
         if tls.get_ref().1.alpn_protocol() != Some(tls::ALPN_H2) {
@@ -155,6 +153,9 @@ impl AsyncWrite for TransitStream {
 pub(crate) fn accept(expires_at: u64, connect: TargetConnector) -> AcceptedDuplex {
     Box::new(move |body, mut respond| {
         Box::pin(async move {
+            let Some(deadline) = super::authority_deadline(expires_at, MAX_LIFETIME) else {
+                return;
+            };
             let headers = http::Response::builder()
                 .header("content-type", "application/octet-stream")
                 .body(())
@@ -163,9 +164,7 @@ pub(crate) fn accept(expires_at: u64, connect: TargetConnector) -> AcceptedDuple
                 return;
             };
             let mut io = H2Stream::new(body, send);
-            let lifetime =
-                MAX_LIFETIME.min(Duration::from_secs(expires_at.saturating_sub(now_unix())));
-            let _ = timeout(lifetime, async {
+            let _ = timeout_at(deadline, async {
             let opened = timeout(HANDSHAKE_TIMEOUT, async {
                 let mut header = [0; 7];
                 io.read_exact(&mut header).await?;
@@ -195,6 +194,39 @@ pub(crate) fn accept(expires_at: u64, connect: TargetConnector) -> AcceptedDuple
 mod tests {
     use super::*;
     use std::sync::Mutex;
+
+    #[tokio::test(start_paused = true)]
+    async fn authority_expiry_cancels_partial_open_before_a_target_is_dialed() {
+        let connect: TargetConnector =
+            Arc::new(|_, _| panic!("expired partial open dialed a target"));
+        let (client_io, server_io) = tokio::io::duplex(8192);
+        let server = tokio::spawn(async move {
+            let mut connection = h2::server::handshake(server_io).await.unwrap();
+            let (request, respond) = connection.accept().await.unwrap().unwrap();
+            tokio::select! {
+                _ = accept(now_unix() + 2, connect)(request.into_body(), respond) => (),
+                _ = async { while connection.accept().await.is_some() {} } => (),
+            }
+        });
+        let (mut sender, connection) = h2::client::handshake(client_io).await.unwrap();
+        let connection = tokio::spawn(connection);
+        let (response, send) = sender.send_request(http::Request::new(()), false).unwrap();
+        let mut wire = H2Stream::new(response.await.unwrap().into_body(), send);
+        wire.write_all(b"GC").await.unwrap();
+        tokio::time::advance(Duration::from_secs(2)).await;
+        timeout(Duration::from_millis(1), server)
+            .await
+            .unwrap()
+            .unwrap();
+        let mut byte = [0];
+        assert!(!matches!(wire.read(&mut byte).await, Ok(n) if n > 0));
+        drop((wire, sender));
+        timeout(Duration::from_secs(1), connection)
+            .await
+            .unwrap()
+            .unwrap()
+            .ok();
+    }
 
     #[tokio::test]
     async fn reset_cancels_an_admitted_middle_target_connection() {

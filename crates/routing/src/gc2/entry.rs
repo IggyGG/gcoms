@@ -16,7 +16,7 @@ use std::{
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     sync::{mpsc, oneshot, Semaphore},
-    time::{timeout, Instant},
+    time::{timeout, timeout_at, Instant},
 };
 use tokio_rustls::TlsConnector;
 use zeroize::Zeroize;
@@ -144,10 +144,9 @@ pub async fn run(
     ready: oneshot::Sender<EntryCarrier>,
 ) -> Result<()> {
     descriptor.validate()?;
-    let lifetime = MAX_LIFETIME.min(Duration::from_secs(
-        descriptor.expires_at.saturating_sub(now_unix()),
-    ));
-    timeout(lifetime, async {
+    let deadline = super::authority_deadline(descriptor.expires_at, MAX_LIFETIME)
+        .ok_or("GC/2 entry authority expired")?;
+    timeout_at(deadline, async {
         let tls = timeout(HANDSHAKE_TIMEOUT, async {
             let tls = TlsConnector::from(Arc::new(tls::client_config_pinned(descriptor.service_id)?))
                 .connect(tls::server_name_ip(descriptor.addr.ip()), socket).await?;
@@ -336,6 +335,9 @@ impl ConnectionContext {
         let permit = self.pending.clone().try_acquire_owned();
         Box::new(move |body, mut respond| {
             Box::pin(async move {
+                let Some(deadline) = super::authority_deadline(expires_at, MAX_LIFETIME) else {
+                    return;
+                };
                 let Ok(_permit) = permit else {
                     let _ = respond.send_response(
                         http::Response::builder().status(503).body(()).unwrap(),
@@ -351,9 +353,7 @@ impl ConnectionContext {
                     return;
                 };
                 let wire = H2Stream::new(body, send);
-                let lifetime =
-                    MAX_LIFETIME.min(Duration::from_secs(expires_at.saturating_sub(now_unix())));
-                let _ = timeout(lifetime, context.serve(wire, connect)).await;
+                let _ = timeout_at(deadline, context.serve(wire, connect)).await;
             })
         })
     }
