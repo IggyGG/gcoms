@@ -160,9 +160,12 @@ queue tokens that resolve to a current lease in this node's store.
 `NodeProfile::gc2_carrier_fixture` additionally opens the encrypted GC/2
 directory (or an in-memory one), starts a one-to-three-entry background owner
 whose future is owned by the node task set, and retains the ready connector on
-the node state. Restoring a directory with a different identity fails closed.
-Runtime adoption still needs the outbound data path through the ready connector,
-explicit bootstrap migration, private provisioning/advertisement integration,
-production profile selection, Node/SDK/GChat class and profile propagation, and
-the application/privacy/device gates in
-[the implementation ledger](GC2_IMPLEMENTATION.md).
+the node state. Restoring a directory with a different identity fails closed. Retained GC/1
+re-entry authorities are migrated explicitly through the authenticated private
+PEX exchange (`refresh_reentry`): the reply must present the same stable
+authority and a valid GC/2 entry, retries are background-paced at a bounded
+count, and a failure never falls back to GC/1. Runtime adoption still needs the
+outbound data path through the ready connector, private
+provisioning/advertisement integration, production profile selection,
+Node/SDK/GChat class and profile propagation, and the application/privacy/device
+gates in [the implementation ledger](GC2_IMPLEMENTATION.md).

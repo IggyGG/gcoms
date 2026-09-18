@@ -22,15 +22,40 @@ pub async fn refresh(
     excluded: &[(SocketAddr, [u8; 32])],
 ) -> Result<BootstrapBundle> {
     seed.validate()?;
+    refresh_reentry(
+        client,
+        seed.addr,
+        seed.service_id,
+        seed.reentry_cap,
+        excluded,
+    )
+    .await
+}
+
+/// Explicit migration from a retained GC/1 re-entry authority, which carries no
+/// GC/2 entry or transit capability yet. The reply must still present the same
+/// stable re-entry authority and a valid entry; nothing is converted implicitly
+/// and a failure never falls back to GC/1.
+pub async fn refresh_reentry(
+    client: &Tp1Client,
+    addr: SocketAddr,
+    service_id: [u8; 32],
+    reentry_cap: [u8; 32],
+    excluded: &[(SocketAddr, [u8; 32])],
+) -> Result<BootstrapBundle> {
+    if service_id == [0; 32] || reentry_cap == [0; 32] {
+        return Err("invalid GC/2 re-entry seed".into());
+    }
+    crate::wire::decode_address(&crate::wire::encode_address(addr))?;
     if excluded.len() > 64 {
         return Err("too many GC/2 discovery exclusions".into());
     }
-    let token = Zeroizing::new(gcoms_transport::encode_b64url(&seed.reentry_cap));
+    let token = Zeroizing::new(gcoms_transport::encode_b64url(&reentry_cap));
     let outcome = client
         .post_natural_prepared(
             NaturalRoute {
-                addr: seed.addr,
-                service_id: seed.service_id,
+                addr,
+                service_id,
                 token: &token,
                 excluded,
                 class: TrafficClass::Interactive,
@@ -48,13 +73,30 @@ pub async fn refresh(
     let own = bundle
         .relays
         .iter()
-        .find(|relay| relay.service_id == seed.service_id)
+        .find(|relay| relay.service_id == service_id)
         .ok_or("GC/2 discovery omitted its authenticated service")?;
     // Pin authentication does not authorize an implicit capability migration.
     // A stable re-entry authority is retained only across explicit v2 renewal.
-    if own.reentry_cap != seed.reentry_cap {
+    if own.reentry_cap != reentry_cap {
         return Err("GC/2 discovery changed its stable re-entry authority".into());
     }
     own.entry(now_unix())?;
     Ok(bundle)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn reentry_seed_requires_nonzero_authorities() {
+        let client = Tp1Client::new().unwrap();
+        let addr = "127.0.0.1:1".parse().unwrap();
+        assert!(refresh_reentry(&client, addr, [0; 32], [1; 32], &[])
+            .await
+            .is_err());
+        assert!(refresh_reentry(&client, addr, [1; 32], [0; 32], &[])
+            .await
+            .is_err());
+    }
 }

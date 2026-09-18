@@ -47,6 +47,8 @@ mod gc2_direct;
 #[cfg(feature = "experimental-gc2")]
 mod gc2_gate;
 #[cfg(feature = "experimental-gc2")]
+mod gc2_migration;
+#[cfg(feature = "experimental-gc2")]
 mod gc2_receipts;
 mod peer_session;
 #[cfg(feature = "experimental-gc2")]
@@ -1041,12 +1043,31 @@ async fn start_with_tls_policy_control_sink_and_bootstrap(
                 None => std::sync::Arc::new(gcoms_routing::gc2::directory::Directory::new()),
             };
             let (owner, ready) = gcoms_routing::gc2::owner::EntryOwner::new(
-                directory,
+                directory.clone(),
                 gcoms_routing::gc2::CandidateProfile::new(4096, 1000)
                     .map_err(|_| "invalid GC/2 candidate profile".to_string())?,
                 entries,
             )
             .map_err(|e| e.to_string())?;
+            if let Some(runtime) = routing.clone() {
+                let migration_directory = directory;
+                // Share the endpoint pool: background migration creates no
+                // third data-plane client.
+                let client = client.clone();
+                tasks.push(tokio::spawn(async move {
+                    loop {
+                        let installed =
+                            gc2_migration::migrate_once(&migration_directory, &runtime, &client)
+                                .await;
+                        let delay = if installed > 0 {
+                            std::time::Duration::from_secs(300)
+                        } else {
+                            std::time::Duration::from_secs(60)
+                        };
+                        tokio::time::sleep(delay).await;
+                    }
+                }));
+            }
             state.lock().unwrap_or_else(|p| p.into_inner()).gc2_carrier = Some(ready);
             tasks.push(tokio::spawn(async move {
                 if let Err(error) = owner.run().await {

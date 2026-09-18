@@ -199,8 +199,10 @@ Retain failures, source/executable/configuration/workload hashes and exact scope
   owned terminal queue service is composed under the same gate. An explicit
   carrier fixture opens the encrypted directory, runs the bounded background
   entry owner under the node task set and retains the ready connector; a wrong
-  identity cannot restore another node's directory. The outbound data path
-  through that connector and production profile selection remain.
+  identity cannot restore another node's directory, and retained GC/1 re-entry
+  authorities migrate explicitly through the authenticated private PEX exchange
+  without any implicit conversion. The outbound data path through that connector
+  and production profile selection remain.
 - Complete GC/2 routing, protected profiles, SDK/GChat profile integration and
   application/privacy/mobile gates: pending. Counter-window flow control, the
   application-send preparation/completion split and authenticated class
