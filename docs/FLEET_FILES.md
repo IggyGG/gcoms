@@ -90,6 +90,30 @@ Faults target disposable state only. Cache mutation requires a stopped client.
 Recovery retains identities and valid ciphertext; a missing piece without a
 surviving source must wait rather than report completion.
 
+## Fault preconditions and admission
+
+Each receiver admits at most two active downloads. The coordinator waits up to
+15 minutes for a slot and records admission delay separately; transfer timing
+still begins at acceptance and the five-minute small-file gate is unchanged.
+Pause, restart, quota, path and membership faults use fresh 256 MiB transfers and
+require observed nonzero, incomplete verified progress before injection. They do
+not reuse the original large corpus after its possible completion.
+
+The missing-source case first observes an unaccepted offer, stops its only seed,
+then accepts. It requires a waiting state and zero verified bytes while the seed
+is absent, followed by a verified export after restoration. The complementary
+seed case joins the late receiver while both pruned seeds remain paused and the
+original sender is stopped. It resumes the even-piece seed alone, verifies that
+half at the receiver, pauses it, then resumes the odd-piece seed to finish. This
+proves contribution by both sources through exclusive availability, including
+source switching; it is not a simultaneous multi-source throughput measurement.
+Both original seed copies and the final receiver require independent export hashes.
+
+Reports require partial-progress and complementary-contribution observations in
+addition to passing scenario labels. A 30-minute measured baseline is mandatory,
+as is the full four-hour mixed window. An already complete fixture or two
+advertised sources cannot supply the missing fault evidence.
+
 ## GC/1 capacity constraint
 
 The production scheduler uses three-second slots and a 0.5 emission probability

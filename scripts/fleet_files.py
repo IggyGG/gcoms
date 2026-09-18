@@ -96,7 +96,32 @@ def analyze(manifest, events):
     corpus=len([t for t in large if t.get('size')==GIB])==4 and len([t for t in large if t.get('size')==256*1024*1024])==4
     pairs={(t['sender']//2,int(client)//2) for t in transfers.values() if t.get('label','').startswith('coverage-') for client,receipt in t['receivers'].items() if receipt.get('valid')}
     covered=pairs=={(a,b) for a in range(8) for b in range(8) if a!=b}
-    complete = manifest['phase']=='campaign' and measured>=14400 and covered and ready==set(range(16)) and diagnostic_clients==set(range(16)) and traffic==set(range(8)) and corpus and all(v=='pass' for v in cases.values()) and clean and b95 is not None and m95 is not None
+    partial_cases=('pause_resume','receiver_restart','quota','relay_restart','path_outage','loss_delay')
+    fault_evidence={name:False for name in (*partial_cases,'missing_source','multisource_late_join')}
+    for e in events:
+        t=transfers.get(e.get('transfer'),{})
+        if e['event']=='fault_precondition' and e.get('name') in partial_cases:
+            valid=t.get('label')==e['name'] and e.get('size')==t.get('size') and 0<e.get('verified_bytes',0)<t.get('size',0) and e.get('state') in ('downloading','waiting_for_peers')
+            receipt=t.get('receivers',{}).get(str(e.get('client')), {})
+            fault_evidence[e['name']] |= valid and receipt.get('valid',False) and receipt['accepted']<=e['elapsed']<receipt['exported']
+        if e['event']=='source_unavailable':
+            receipt=t.get('receivers',{}).get(str(e.get('client')), {})
+            fault_evidence['missing_source'] |= t.get('label')=='missing-source' and e.get('stopped_before_acceptance') is True and e.get('verified_bytes')==0 and receipt.get('valid',False) and receipt['accepted']<=e['elapsed']<receipt['exported']
+    for ident,t in transfers.items():
+        parts=[e for e in events if e['event']=='source_contribution' and e.get('transfer')==ident]
+        if len(parts)!=2: continue
+        first,second=parts
+        receipt=t['receivers'].get(str(first.get('client')), {})
+        fault_evidence['multisource_late_join'] |= (
+            t.get('label')=='complementary' and first.get('client')==second.get('client')
+            and first.get('source')!=second.get('source')
+            and all(e.get('exclusive_source') is True for e in parts)
+            and first.get('verified_before')==0
+            and 0<first.get('verified_after',0)<t.get('size',0)
+            and second.get('verified_before')==first['verified_after']
+            and second.get('verified_after')==t.get('size') and receipt.get('valid',False)
+            and receipt['accepted']<=first['elapsed']<receipt['exported']<=second['elapsed'])
+    complete = manifest['phase']=='campaign' and measured>=14400 and windows.get('baseline',{}).get('duration',0)>=1800 and covered and ready==set(range(16)) and diagnostic_clients==set(range(16)) and traffic==set(range(8)) and corpus and all(v=='pass' for v in cases.values()) and all(fault_evidence.values()) and clean and b95 is not None and m95 is not None
     cross_host=any(t.get('sender') is not None and t['sender']//2!=int(client)//2 and receipt.get('valid') for t in transfers.values() for client,receipt in t['receivers'].items())
     canary_ok=manifest['phase']=='canary' and len(ready)==2 and cross_host and clean and not failures
     coverage_ok=manifest['phase']=='coverage' and covered and ready==set(range(16)) and cases['coverage']==cases['boundaries']=='pass' and clean and not failures
@@ -114,6 +139,7 @@ def analyze(manifest, events):
             'phase_passed':(complete and not failures) or canary_ok or coverage_ok,
             'scope':'isolated GC/1 test listeners; 16 Linux clients; up to 1 GiB',
             'observed_mixed_seconds':measured,'verified_directed_host_pairs':len(pairs),'cases':cases,'failures':failures,
+            'fault_evidence':fault_evidence,
             'transfers':transfers,'file_metrics_by_size':file_metrics,
             'file_diagnostics_by_host':{str(e['host']):e.get('file_diagnostics',{}) for e in events if e['event']=='relay_traffic'},
             'chat':{'sent':len(sent),'acknowledged':len(acknowledged),
@@ -142,6 +168,7 @@ class Campaign:
         self.chat_seen = set()
         self.expected_units = set()
         self.intended_stops = set()
+        self.admission_locks = [threading.Lock() for _ in range(16)]
 
     def event(self, event, **facts):
         value = {'event':event,'elapsed':round(time.monotonic()-self.start,3),**facts}
@@ -344,14 +371,36 @@ class Campaign:
         self.event('transfer',transfer=ident,sender=sender,expected_receivers=receivers,size=size,sha256=expected['sha256'],label=label,import_seconds=time.monotonic()-started)
         return {'id':ident,'sender':sender,'receivers':receivers,'size':size,'sha256':expected['sha256'],'name':name,'channel':channel}
 
-    def accept(self, transfer, receiver):
+    def offer(self, transfer, receiver):
         ident=transfer['id']
         def offered():
             return next((f for f in self.files(receiver)['files'] if f['id']==ident),None)
         info=self.until(offered,180,'file offer')
         if info['state']!='offered' or info['verified_bytes']!='0': raise RuntimeError('offer downloaded without acceptance')
-        self.files(receiver,'accept',id=ident)
-        self.event('accepted',transfer=ident,client=receiver)
+        return info
+
+    def activate(self, transfer, receiver, action='accept'):
+        # Serialize local admission on each receiver, including fault resumes.
+        # Network completion never holds this lock. Admission delay is separate
+        # from the unchanged five-minute transfer deadline.
+        started=time.monotonic(); deadline=started+900
+        lock=self.admission_locks[receiver]
+        if not lock.acquire(timeout=900): raise RuntimeError('file admission lock deadline')
+        try:
+            def slot():
+                active=[f for f in self.files(receiver)['files']
+                        if f['id']!=transfer['id'] and f['state'] in ('downloading','waiting_for_peers')]
+                return len(active)<2
+            self.until(slot,max(0,deadline-time.monotonic()),'file admission slot')
+            self.files(receiver,action,id=transfer['id'])
+            self.event('admission',transfer=transfer['id'],client=receiver,action=action,
+                       seconds=time.monotonic()-started)
+            if action=='accept': self.event('accepted',transfer=transfer['id'],client=receiver)
+        finally: lock.release()
+
+    def accept(self, transfer, receiver):
+        self.offer(transfer,receiver)
+        self.activate(transfer,receiver)
 
     def finish_transfer(self, transfer, receiver, deadline):
         last=0
@@ -536,23 +585,41 @@ class Campaign:
             return str(exc)
         raise RuntimeError('operation unexpectedly succeeded')
 
+    def active_transfer(self, sender, receiver, label, channel=None):
+        # Fresh data is required: the original large corpus can have completed
+        # before the fault suite's 30-minute start.
+        t=self.prepare_transfer(sender,[receiver],256*1024*1024,
+                                channel or self.channels['fleet']['id'],label)
+        self.accept(t,receiver)
+        def partial():
+            info=self.info(receiver,t['id'])
+            current=int(info['verified_bytes'])
+            return info if info['state'] in ('downloading','waiting_for_peers') and 0<current<t['size'] else None
+        info=self.until(partial,300,'active partial transfer',interval=1)
+        self.event('fault_precondition',name=label,transfer=t['id'],client=receiver,
+                   verified_bytes=int(info['verified_bytes']),size=t['size'],state=info['state'])
+        return t
+
     def pause_resume(self):
-        t=self.large[0]; client=t['receivers'][0]
+        client=8; t=self.active_transfer(0,client,'pause_resume')
         self.files(client,'pause',id=t['id'])
         first=self.info(client,t['id'])
-        if first['state']!='paused': raise RuntimeError('pause state missing')
+        if first['state']!='paused' or not 0<int(first['verified_bytes'])<t['size']:
+            raise RuntimeError('pause did not hold an incomplete transfer')
         self.stop.wait(10)
         if self.info(client,t['id'])['verified_bytes']!=first['verified_bytes']:
             raise RuntimeError('paused transfer advanced')
-        self.files(client,'resume',id=t['id'])
+        self.activate(t,client,'resume')
+        self.finish_transfer(t,client,time.monotonic()+900)
 
     def receiver_restart(self):
-        t=self.large[1]; client=t['receivers'][0]
+        client=9; t=self.active_transfer(1,client,'receiver_restart')
         before=int(self.info(client,t['id'])['verified_bytes'])
         self.restart(client,kill=True)
         after=int(self.info(client,t['id'])['verified_bytes'])
         if after<before: raise RuntimeError('restart lost verified pieces')
         self.until(lambda:int(self.info(client,t['id'])['verified_bytes'])>after or self.info(client,t['id'])['state']=='complete',300,'restart progress')
+        self.finish_transfer(t,client,time.monotonic()+900)
 
     def partial_import(self, label, client=7):
         ident=uuid.uuid4().hex; name=f'{label}-{ident}.bin'; channel=self.channels['fleet']['id']
@@ -582,18 +649,22 @@ class Campaign:
         if info['state']!='offered' or info['verified_bytes']!='0': raise RuntimeError('unaccepted bytes downloaded')
 
     def relay_restart(self):
+        t=self.active_transfer(7,15,'relay_restart')
         self.remote(3,'fault',kind='stop_relay'); self.stop.wait(60)
         self.remote(3,'relay')
         self.until(lambda:self.remote(3,'control',command='status'),120,'relay restart')
         # Client 15's assigned inbox is relay 3, so this proves recovery of an
         # affected receiver rather than an unrelated healthy pair.
+        self.finish_transfer(t,15,time.monotonic()+900)
         self.transfer(7,15,65536,self.channels['fleet']['id'],'after-relay-restart')
 
     def network_fault(self, kind, seconds):
+        t=self.active_transfer(10,2,'path_outage' if kind=='blackhole' else 'loss_delay')
         try:
             self.remote(5,'fault',kind=kind)
             self.stop.wait(seconds)
         finally: self.remote(5,'fault',kind='clear_netem')
+        self.finish_transfer(t,2,time.monotonic()+900)
         self.transfer(10,2,65536,self.channels['fleet']['id'],'after-'+kind)
 
     def multisource(self):
@@ -610,20 +681,45 @@ class Campaign:
                 self.remote(client//2,'client',slot=client%2)
                 self.until(lambda client=client:self.request(client,'snapshot'),120,'seeder reopen')
             self.event('complementary_pieces',transfer=t['id'],retained=[list(x['pieces']) for x in retained])
+            sets=[{int(name.removesuffix('.piece')) for name in row['pieces']} for row in retained]
+            if sets[0]&sets[1] or sets[0]|sets[1]!=set(range(16)) or not all(sets):
+                raise RuntimeError('seeds are not a complete complementary partition')
             for client in (4,8):
-                self.files(client,'resume',id=t['id'])
+                if self.info(client,t['id'])['state']!='paused':
+                    raise RuntimeError('pruned seed resumed before late join')
             invite=self.invitation(4,channel); self.submit(12,f'/join {invite} c12')
-            self.accept(t,12); self.finish_transfer(t,12,time.monotonic()+900)
+            self.accept(t,12)
+            # Expose each disjoint inventory alone. Neither seed can repair
+            # itself from the other before contributing to the late receiver.
+            self.activate(t,4,'resume')
+            expected=len(sets[0])*262144
+            self.until(lambda:int(self.info(12,t['id'])['verified_bytes'])==expected,
+                       900,'first complementary source contribution',interval=1)
+            self.files(4,'pause',id=t['id'])
+            if self.info(4,t['id'])['state']!='paused': raise RuntimeError('first seed was not held')
+            self.event('source_contribution',transfer=t['id'],client=12,source=4,
+                       verified_before=0,verified_after=expected,exclusive_source=True)
+            self.activate(t,8,'resume')
+            self.finish_transfer(t,12,time.monotonic()+900)
+            self.event('source_contribution',transfer=t['id'],client=12,source=8,
+                       verified_before=expected,verified_after=t['size'],exclusive_source=True)
         finally:
             self.remote(0,'client',slot=0)
 
     def missing_source(self):
         channel=self.channels['fleet']['id']
         t=self.prepare_transfer(3,[11],4*1024*1024,channel,'missing-source')
-        self.accept(t,11)
+        self.offer(t,11)
         self.remote(1,'fault',kind='stop_client',slot=1)
         try:
+            self.accept(t,11)
             self.until(lambda:self.info(11,t['id'])['state']=='waiting_for_peers',300,'no source waiting state')
+            self.stop.wait(30)
+            info=self.info(11,t['id'])
+            if info['state'] not in ('downloading','waiting_for_peers') or info['verified_bytes']!='0':
+                raise RuntimeError('unavailable source produced file progress')
+            self.event('source_unavailable',transfer=t['id'],client=11,verified_bytes=0,
+                       stopped_before_acceptance=True)
         finally: self.remote(1,'client',slot=1)
         self.finish_transfer(t,11,time.monotonic()+900)
 
@@ -635,7 +731,7 @@ class Campaign:
         self.until(lambda:self.request(14,'snapshot'),120,'corrupt cache reopen')
         info=self.info(14,t['id'])
         if int(info['verified_bytes'])>=t['size']: raise RuntimeError('corrupt bytes trusted after reopen')
-        if info['state']=='paused': self.files(14,'resume',id=t['id'])
+        if info['state']=='paused': self.activate(t,14,'resume')
         self.finish_transfer(dict(t,name='repaired-'+t['name'],audit=True),14,time.monotonic()+900)
 
     def disk_full(self):
@@ -657,19 +753,23 @@ class Campaign:
         self.probe(client,{'action':'export','id':ident,'name':'export-'+name,**expected})
 
     def quota(self):
-        client=13; t=self.large[5]
+        client=13; t=self.active_transfer(5,client,'quota')
+        self.files(client,'pause',id=t['id'])
         before=self.info(client,t['id'])
+        if before['state']!='paused' or not 0<int(before['verified_bytes'])<t['size']:
+            raise RuntimeError('quota test requires retained incomplete data')
         try:
             self.files(client,'configure',quota_bytes=str(1024*1024),retention_days=7)
             self.expect_error(lambda:self.files(client,'prepare',id=uuid.uuid4().hex,conversation=self.channels['fleet']['id'],name='quota.bin',size_bytes=str(2*1024*1024)))
             after=self.info(client,t['id'])
             if int(after['verified_bytes'])<int(before['verified_bytes']): raise RuntimeError('quota evicted active data')
         finally: self.files(client,'configure',quota_bytes=str(8*GIB),retention_days=7)
+        self.activate(t,client,'resume')
+        self.finish_transfer(t,client,time.monotonic()+900)
 
     def membership(self):
         channel=self.channel('revocation',[1,5,9])
-        t=self.prepare_transfer(1,[],4*1024*1024,channel,'revocation')
-        self.accept(t,5)
+        t=self.active_transfer(1,5,'membership_removal',channel)
         self.submit(1,'/kick c5',channel)
         self.until(lambda:self.info(5,t['id'])['state']=='paused',180,'revoked download pause')
         before=self.info(5,t['id'])['verified_bytes']

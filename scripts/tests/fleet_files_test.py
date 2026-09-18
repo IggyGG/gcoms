@@ -79,6 +79,131 @@ class EvidenceTests(unittest.TestCase):
         self.assertFalse(report['phase_passed'])
         self.assertEqual(report['verified_directed_host_pairs'],0)
 
+    def test_fault_requires_partial_progress_before_verified_export(self):
+        transfer=self.transfer()
+        transfer[0]['label']='pause_resume'
+        exported={'event':'export_verified','transfer':'a','client':1,'elapsed':3,
+                  'verified':True,'size':4,'sha256':'abcd'}
+        partial={'event':'fault_precondition','name':'pause_resume','transfer':'a',
+                 'client':1,'elapsed':2,'state':'downloading','verified_bytes':2,'size':4}
+        for change,expected in (({},True),({'verified_bytes':0},False),
+                                ({'verified_bytes':4},False),({'elapsed':4},False),
+                                ({'state':'complete'},False),({'size':5},False)):
+            report=analyze({'phase':'campaign'},transfer+[dict(partial,**change),exported])
+            self.assertEqual(report['fault_evidence']['pause_resume'],expected)
+
+    def test_sources_advertised_are_not_proof_of_multisource_completion(self):
+        transfer=self.transfer()
+        transfer[0]['label']='complementary'
+        first={'event':'source_contribution','transfer':'a','client':1,'source':4,
+               'verified_before':0,'verified_after':2,'exclusive_source':True,'elapsed':2}
+        second=dict(first,source=8,verified_before=2,verified_after=4,elapsed=4)
+        exported={'event':'export_verified','transfer':'a','client':1,'elapsed':3,
+                  'verified':True,'size':4,'sha256':'abcd','sources':2}
+        for parts,expected in (([],False),([first],False),([first,second],True),
+                               ([first,dict(second,source=4)],False),
+                               ([first,dict(second,verified_before=1)],False),
+                               ([first,dict(second,exclusive_source=False)],False)):
+            report=analyze({'phase':'campaign'},transfer+[exported]+parts)
+            self.assertEqual(report['fault_evidence']['multisource_late_join'],expected)
+
+    def test_generic_partial_progress_cannot_replace_specialized_source_evidence(self):
+        for name in ('missing_source','multisource_late_join'):
+            transfer=self.transfer()
+            transfer[0]['label']=name
+            partial={'event':'fault_precondition','name':name,'transfer':'a','client':1,
+                     'elapsed':2,'state':'downloading','verified_bytes':2,'size':4}
+            exported={'event':'export_verified','transfer':'a','client':1,'elapsed':3,
+                      'verified':True,'size':4,'sha256':'abcd'}
+            report=analyze({'phase':'campaign'},transfer+[partial,exported])
+            self.assertFalse(report['fault_evidence'][name])
+
+class ScenarioTests(unittest.TestCase):
+    def setUp(self):
+        self.folder=tempfile.TemporaryDirectory()
+        self.campaign=Campaign(Path(self.folder.name),{'run_id':'ff-test','phase':'campaign'})
+        self.campaign.channels['fleet']={'id':'channel'}
+
+    def tearDown(self):
+        self.campaign.jobs.shutdown()
+        self.campaign.chat_jobs.shutdown()
+        self.folder.cleanup()
+
+    def test_admission_waits_for_real_slot_before_acceptance(self):
+        c=self.campaign
+        active=[{'id':'a','state':'downloading'},{'id':'b','state':'waiting_for_peers'}]
+        calls=[]
+        def files(client,action='list',**values):
+            calls.append(action)
+            if action=='list': return {'files':[dict(f) for f in active]}
+            self.assertEqual(action,'accept')
+            self.assertEqual(sum(f['state']=='downloading' for f in active),1)
+        def wait(_): active[1]['state']='complete'
+        with patch.object(c,'files',side_effect=files), patch.object(c.stop,'wait',side_effect=wait):
+            c.activate({'id':'new'},3)
+        self.assertEqual(calls,['list','list','accept'])
+        self.assertEqual([e['event'] for e in c.events],['admission','accepted'])
+
+    def test_missing_source_stops_seed_before_acceptance_and_restores_on_failure(self):
+        c=self.campaign; calls=[]; t={'id':'file'}
+        with patch.object(c,'prepare_transfer',return_value=t), \
+             patch.object(c,'offer',side_effect=lambda *a:calls.append('offer')), \
+             patch.object(c,'accept',side_effect=lambda *a:calls.append('accept')), \
+             patch.object(c,'remote',side_effect=lambda h,a,**v:calls.append(v.get('kind',a))), \
+             patch.object(c,'until',side_effect=RuntimeError('missing waiting state')):
+            with self.assertRaisesRegex(RuntimeError,'missing waiting state'): c.missing_source()
+        self.assertEqual(calls,['offer','stop_client','accept','client'])
+
+    def test_already_complete_transfer_cannot_supply_fault_precondition(self):
+        c=self.campaign
+        t={'id':'file','size':256*1024*1024}
+        def until(predicate,*args,**kwargs):
+            self.assertIsNone(predicate())
+            raise RuntimeError('partial progress missing')
+        with patch.object(c,'prepare_transfer',return_value=t),patch.object(c,'accept'), \
+             patch.object(c,'info',return_value={'state':'complete','verified_bytes':str(t['size'])}), \
+             patch.object(c,'until',side_effect=until):
+            with self.assertRaisesRegex(RuntimeError,'partial progress missing'):
+                c.active_transfer(0,8,'pause_resume')
+        self.assertFalse(any(e['event']=='fault_precondition' for e in c.events))
+
+    def test_late_join_precedes_seeding_and_complementary_sources_never_overlap(self):
+        c=self.campaign; states={4:'complete',8:'complete'}; seed_stopped=False
+        t={'id':'file','size':4*1024*1024}
+        def remote(host,action,**values):
+            nonlocal seed_stopped
+            if host==0: seed_stopped=action=='fault'
+            if action=='cache_fault':
+                client=host*2; states[client]='paused'
+                parity=0 if values['mode']=='even' else 1
+                return {'pieces':{f'{n}.piece':'hash' for n in range(parity,16,2)}}
+        def activate(transfer,client,action):
+            self.assertTrue(seed_stopped)
+            self.assertEqual(states[8 if client==4 else 4],'paused')
+            states[client]='downloading'
+        def accept(transfer,client):
+            if client==12:
+                self.assertTrue(seed_stopped)
+                self.assertEqual(states,{4:'paused',8:'paused'})
+        def info(client,ident):
+            return {'state':states.get(client,'downloading'),
+                    'verified_bytes':str(2*1024*1024 if client==12 else 0)}
+        def finish(transfer,client,deadline):
+            if client==12:
+                self.assertEqual(states,{4:'paused',8:'downloading'})
+                self.assertEqual([e['source'] for e in c.events if e['event']=='source_contribution'],[4])
+        def files(client,action,**values):
+            self.assertEqual(action,'pause'); states[client]='paused'
+        with patch.object(c,'channel',return_value='channel'),patch.object(c,'prepare_transfer',return_value=t), \
+             patch.object(c,'accept',side_effect=accept),patch.object(c,'finish_transfer',side_effect=finish), \
+             patch.object(c,'remote',side_effect=remote),patch.object(c,'request',return_value=True), \
+             patch.object(c,'info',side_effect=info),patch.object(c,'files',side_effect=files), \
+             patch.object(c,'activate',side_effect=activate),patch.object(c,'invitation',return_value='invite'), \
+             patch.object(c,'submit'):
+            c.multisource()
+        self.assertFalse(seed_stopped)
+        self.assertEqual([e['source'] for e in c.events if e['event']=='source_contribution'],[4,8])
+
 class DeploymentTests(unittest.TestCase):
     def host(self): return Host({'run_id':'ff-test','host':0,'base':'/var/tmp'})
 
