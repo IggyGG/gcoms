@@ -10,6 +10,9 @@ use std::collections::{HashMap, VecDeque};
 use std::error::Error;
 use std::fmt;
 
+#[cfg(feature = "experimental-gc2")]
+pub mod gc2;
+
 pub const DEFAULT_QUEUE_CELLS: u16 = 256;
 pub const DEFAULT_QUEUE_BYTES: u64 = 4 * 1024 * 1024;
 pub const DEFAULT_MAX_GRANTS: usize = 1024;
@@ -174,6 +177,8 @@ struct ReplayRecord {
     operation: ReplayOperation,
     nonce: Nonce,
     expiry: u64,
+    #[cfg(feature = "experimental-gc2")]
+    gc2_push_binding: Option<[u8; 32]>,
 }
 
 struct LeaseRecord {
@@ -240,6 +245,8 @@ impl LeaseRecord {
             operation,
             nonce,
             expiry,
+            #[cfg(feature = "experimental-gc2")]
+            gc2_push_binding: None,
         });
         self.next_replay_expiry = Some(
             self.next_replay_expiry
@@ -260,9 +267,21 @@ impl Drop for LeaseRecord {
 struct Queue {
     bytes: u64,
     messages: VecDeque<QueuedMessage>,
+    #[cfg(feature = "experimental-gc2")]
+    classes: gc2::ClassQueues,
 }
 
-/// RAM-only FIFO storage. It deliberately contains no stream or task handles.
+impl Queue {
+    fn len(&self) -> usize {
+        let count = self.messages.len();
+        #[cfg(feature = "experimental-gc2")]
+        let count = count + self.classes.len();
+        count
+    }
+}
+
+/// RAM-only FIFO storage. It contains no stream or task handles. Experimental
+/// class queues own change notifications, not background tasks.
 pub struct QueueStore {
     max_queues: usize,
     queues: HashMap<QueueId, Queue>,
@@ -298,6 +317,8 @@ impl QueueStore {
             Queue {
                 bytes: 0,
                 messages: VecDeque::new(),
+                #[cfg(feature = "experimental-gc2")]
+                classes: gc2::ClassQueues::new(),
             },
         );
         Ok(())
@@ -479,6 +500,8 @@ impl LeaseStore {
             operation: ReplayOperation::Create,
             nonce: create.nonce,
             expiry: create.lease_expiry,
+            #[cfg(feature = "experimental-gc2")]
+            gc2_push_binding: None,
         });
         let lease = LeaseRecord {
             queue_id: create.queue_id,
@@ -626,6 +649,13 @@ impl LeaseStore {
         lease.expiry = rotate.lease_expiry;
         lease.replay.clear();
         lease.next_replay_expiry = None;
+        #[cfg(feature = "experimental-gc2")]
+        self.queues
+            .queues
+            .get(&queue_id)
+            .expect("every lease owns a queue")
+            .classes
+            .wake_all();
         Ok(lease.view())
     }
 
@@ -701,6 +731,16 @@ impl LeaseStore {
             return Err(StoreError::Unauthorized);
         }
         if lease.has_replay(push.epoch, ReplayOperation::Push, &push.push_nonce) {
+            // A GC/1 request cannot retry a GC/2 deposit under the same nonce.
+            #[cfg(feature = "experimental-gc2")]
+            if lease.replay.iter().any(|record| {
+                record.epoch == push.epoch
+                    && record.operation == ReplayOperation::Push
+                    && record.nonce == push.push_nonce
+                    && record.gc2_push_binding.is_some()
+            }) {
+                return Err(StoreError::Replay);
+            }
             return Ok(PushOutcome::Duplicate);
         }
         let Some(msg) = push.msg else {
@@ -730,11 +770,7 @@ impl LeaseStore {
             .queues
             .get_mut(&queue_id)
             .expect("every lease owns a queue");
-        let next_cells = queue
-            .messages
-            .len()
-            .checked_add(1)
-            .ok_or(StoreError::QueueFull)?;
+        let next_cells = queue.len().checked_add(1).ok_or(StoreError::QueueFull)?;
         let next_bytes = queue
             .bytes
             .checked_add(natural_bytes)
@@ -821,10 +857,7 @@ impl LeaseStore {
 
     pub fn queue_len(&mut self, queue_id: &QueueId, now_unix: u64) -> usize {
         self.cleanup_expired(now_unix);
-        self.queues
-            .queues
-            .get(queue_id)
-            .map_or(0, |queue| queue.messages.len())
+        self.queues.queues.get(queue_id).map_or(0, Queue::len)
     }
 
     pub fn queue_bytes(&mut self, queue_id: &QueueId, now_unix: u64) -> u64 {

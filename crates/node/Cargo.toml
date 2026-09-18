@@ -57,6 +57,8 @@ gcoms-crypto = { version = "0.1.0", path = "../crypto", features = ["test-vector
 
 [features]
 chaos-debug = []
+# Queue/runtime plumbing for the explicit GC/2 wire; not a production profile.
+experimental-gc2 = ["gcoms-core/experimental-gc2", "gcoms-protocol/experimental-gc2", "gcoms-routing/experimental-gc2"]
 # Opt-in state export/import + persist-enabled crypto/mls for clients that
 # keep an encrypted-at-rest archive (SPEC §1: clients MAY archive locally).
 client-persist = ["gcoms-crypto/client-persist", "gcoms-mls/client-persist"]

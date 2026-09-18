@@ -132,6 +132,11 @@ Retain failures, source/executable/configuration/workload hashes and exact scope
   Retention deadlines, admission limits and queued messages are unchanged. The
   reproducible `relay_queue_cost` example measures only local queue-maintenance
   CPU work; it is not an application throughput or privacy benchmark.
+- Experimental authenticated class queues share the existing storage and replay
+  limits. Opaque subscriptions revalidate class, epoch, expiry and queue
+  incarnation; queue changes wake waiters without polling. Exact GC/2 retries
+  bind all envelope bytes. See [queue lifecycle and costs](GC2_QUEUES.md).
+  Natural-cell server/client runtime adoption remains pending.
 - Complete counter-window flow control, command preparation/completion split,
   authenticated class propagation, complete GC/2 routing, protected profiles,
   SDK/GChat profile integration and application/privacy/mobile gates: pending.
