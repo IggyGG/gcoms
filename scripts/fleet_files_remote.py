@@ -426,6 +426,17 @@ with ThreadPoolExecutor(max_workers=8) as pool:
                 'max_buffered_bytes':max((v['buffered_bytes'] for v in samples),default=0),
                 'max_pending_pulls':max((v['pending_pulls'] for v in samples),default=0),
                 'max_pending_actions':max((v['pending_actions'] for v in samples),default=0)}
+            # Counters restart with the daemon. Sum each process's maximum;
+            # summing every observation would count the same retry repeatedly.
+            processes={}
+            for sample in samples:
+                counters=processes.setdefault(sample['pid'],{})
+                for key in ('verified_pieces','rejected_pieces','retries','received_blocks',
+                            'received_bytes','send_failures','send_timeouts'):
+                    counters[key]=max(counters.get(key,0),sample.get(key,0))
+            diagnostics[str(slot)]['counters']={key:sum(p.get(key,0) for p in processes.values())
+                for key in ('verified_pieces','rejected_pieces','retries','received_blocks',
+                            'received_bytes','send_failures','send_timeouts')}
         return {'events':dict(counts),'file_diagnostics':diagnostics}
 
 def main(request):

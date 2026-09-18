@@ -27,6 +27,25 @@ class EvidenceTests(unittest.TestCase):
             events=self.transfer()+[{'event':'export_verified','transfer':'a','client':1,'elapsed':3,'verified':True,'size':size,'sha256':digest}]
             self.assertEqual(analyze({'phase':'canary'},events)['verdict'],'fail')
 
+    def test_export_requires_recorded_acceptance_and_reports_measured_goodput(self):
+        exported={'event':'export_verified','transfer':'a','client':1,'elapsed':3,'verified':True,'size':4,'sha256':'abcd'}
+        report=analyze({'phase':'canary'},[self.transfer()[0],exported])
+        self.assertEqual(report['verdict'],'fail')
+        self.assertEqual(report['file_metrics_by_size'],{})
+        report=analyze({'phase':'canary'},self.transfer()+[exported])
+        self.assertEqual(report['file_metrics_by_size']['4'],{
+            'exports':1,'completion_p50_seconds':2,'completion_p95_seconds':2,
+            'goodput_p50_bytes_per_second':2})
+
+    def test_cleanup_requires_every_distinct_host_and_uses_recovery_observations(self):
+        cleanup=[{'event':'cleanup','host':0,'passed':True} for _ in range(8)]
+        self.assertFalse(analyze({'phase':'canary'},cleanup)['cleanup_complete'])
+        cleanup=[{'event':'cleanup','host':i,'passed':True} for i in range(8)]
+        cleanup.append({'event':'cleanup','host':3,'passed':False})
+        self.assertFalse(analyze({'phase':'canary'},cleanup)['cleanup_complete'])
+        cleanup.append({'event':'cleanup','host':3,'passed':True})
+        self.assertTrue(analyze({'phase':'canary'},cleanup)['cleanup_complete'])
+
     def test_cancel_must_be_explicit(self):
         events=self.transfer()
         events[0]['expected_receivers']=[]
@@ -62,6 +81,19 @@ class EvidenceTests(unittest.TestCase):
 
 class DeploymentTests(unittest.TestCase):
     def host(self): return Host({'run_id':'ff-test','host':0,'base':'/var/tmp'})
+
+    def test_diagnostic_counters_include_restarts_without_counting_samples_twice(self):
+        with tempfile.TemporaryDirectory() as folder:
+            host=self.host(); host.root=Path(folder); host.data=host.root/'data'; host.data.mkdir()
+            (host.root/'owner.json').write_text(json.dumps({'run_id':host.id,'host':host.index}))
+            samples=[dict(event='file_diagnostics',pid=pid,retries=retries,
+                buffered_bytes=12,pending_pulls=1,pending_actions=0)
+                for pid,retries in ((10,1),(10,3),(10,3),(20,2))]
+            (host.data/'client0.log').write_text(''.join(json.dumps(x)+'\n' for x in samples))
+            stats=host.traffic()['file_diagnostics']['0']
+            self.assertEqual(stats['samples'],4)
+            self.assertEqual(stats['counters']['retries'],5)
+
     def test_selection_rejects_external_paths_and_units(self):
         for bad in ('../live','ff-../live','ghost-relay'):
             with self.assertRaises(ValueError): Host({'run_id':bad,'host':0,'base':'/var/tmp'})

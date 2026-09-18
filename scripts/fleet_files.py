@@ -55,8 +55,11 @@ def analyze(manifest, events):
             if e['event'] == 'accepted': t['receivers'][str(e['client'])] = {'accepted': e['elapsed']}
             if e['event'] == 'export_verified':
                 receiver = t['receivers'].setdefault(str(e['client']), {})
-                valid = e.get('size') == t.get('size') and e.get('sha256') == t.get('sha256') and e.get('verified') is True
+                valid = 'accepted' in receiver and e['elapsed'] >= receiver['accepted'] and e.get('size') == t.get('size') and e.get('sha256') == t.get('sha256') and e.get('verified') is True
                 receiver.update({'exported': e['elapsed'], 'valid': valid})
+                if valid:
+                    seconds=e['elapsed']-receiver['accepted']
+                    receiver.update({'seconds':seconds,'goodput_bytes_per_second':t['size']/seconds if seconds>0 else None})
                 if not valid: failures.append({'event':'failure','error':'export verification mismatch','transfer':e['transfer']})
     cancelled={(e['transfer'],str(e['client'])) for e in events if e['event']=='cancelled'}
     for key, t in transfers.items():
@@ -78,8 +81,8 @@ def analyze(manifest, events):
     b95, m95 = percentile(baseline,.95), percentile(mixed,.95)
     if b95 is not None and m95 is not None and (m95 > max(2*b95,b95+2) or max(mixed)>120):
         failures.append({'event':'failure','error':'mixed chat latency gate failed'})
-    cleanup = [e for e in events if e['event']=='cleanup']
-    clean = len(cleanup)==8 and all(e.get('passed') for e in cleanup)
+    cleanup = {e['host']:e for e in events if e['event']=='cleanup'}
+    clean = set(cleanup)==set(range(8)) and all(e.get('passed') for e in cleanup.values())
     ready={e['client'] for e in events if e['event']=='client_ready'}
     traffic={e['host'] for e in events if e['event']=='relay_traffic' and e.get('events',{}).get('sub_attached',0)>0}
     diagnostic_clients=set()
@@ -97,11 +100,23 @@ def analyze(manifest, events):
     cross_host=any(t.get('sender') is not None and t['sender']//2!=int(client)//2 and receipt.get('valid') for t in transfers.values() for client,receipt in t['receivers'].items())
     canary_ok=manifest['phase']=='canary' and len(ready)==2 and cross_host and clean and not failures
     coverage_ok=manifest['phase']=='coverage' and covered and ready==set(range(16)) and cases['coverage']==cases['boundaries']=='pass' and clean and not failures
+    timings={}
+    for transfer in transfers.values():
+        for receipt in transfer['receivers'].values():
+            if receipt.get('valid'):
+                timings.setdefault(str(transfer['size']),[]).append(receipt)
+    file_metrics={size:{'exports':len(receipts),
+        'completion_p50_seconds':percentile([r['seconds'] for r in receipts],.5),
+        'completion_p95_seconds':percentile([r['seconds'] for r in receipts],.95),
+        'goodput_p50_bytes_per_second':percentile([r['goodput_bytes_per_second'] for r in receipts if r['goodput_bytes_per_second'] is not None],.5)}
+        for size,receipts in timings.items()}
     return {'schema':1,'verdict':'pass' if complete and not failures else ('fail' if failures else 'incomplete'),
             'phase_passed':(complete and not failures) or canary_ok or coverage_ok,
             'scope':'isolated GC/1 test listeners; 16 Linux clients; up to 1 GiB',
             'observed_mixed_seconds':measured,'verified_directed_host_pairs':len(pairs),'cases':cases,'failures':failures,
-            'transfers':transfers,'chat':{'sent':len(sent),'acknowledged':len(acknowledged),
+            'transfers':transfers,'file_metrics_by_size':file_metrics,
+            'file_diagnostics_by_host':{str(e['host']):e.get('file_diagnostics',{}) for e in events if e['event']=='relay_traffic'},
+            'chat':{'sent':len(sent),'acknowledged':len(acknowledged),
             'baseline_p95_seconds':b95,'mixed_p95_seconds':m95},'cleanup_complete':clean}
 
 class Campaign:
@@ -747,7 +762,9 @@ def main():
         print(json.dumps(report,indent=2)); return 0 if report['verdict']=='pass' else 1
     if args.command=='cleanup':
         manifest=json.loads((directory/'manifest.json').read_text()); campaign=Campaign(directory,manifest)
-        campaign.nodes=manifest['hosts']; campaign.cleanup(); return 0
+        campaign.nodes=manifest['hosts']; campaign.cleanup()
+        cleanup=[e for e in campaign.events if e['event']=='cleanup']
+        return 0 if len(cleanup)==8 and all(e.get('passed') for e in cleanup) else 1
     directory.mkdir(parents=True,exist_ok=False)
     (directory/'tools').mkdir()
     for name in ('fleet_files.py','fleet_files_remote.py'):

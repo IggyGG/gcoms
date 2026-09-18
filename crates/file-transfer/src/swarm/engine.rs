@@ -11,6 +11,8 @@ const REQUEST_TIMEOUT: u64 = 30;
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Diagnostics {
     pub verified_pieces: u64,
+    pub received_blocks: u64,
+    pub received_bytes: u64,
     pub rejected_pieces: u64,
     pub retries: u64,
     pub buffered_bytes: usize,
@@ -428,6 +430,12 @@ impl Engine {
                     return Err(Error::Invalid("piece response"));
                 }
                 pull.proof = Some(proof);
+                self.diagnostics.received_blocks =
+                    self.diagnostics.received_blocks.saturating_add(1);
+                self.diagnostics.received_bytes = self
+                    .diagnostics
+                    .received_bytes
+                    .saturating_add(bytes.len() as u64);
                 pull.bytes.extend(bytes);
                 pull.deadline = now + REQUEST_TIMEOUT;
                 pull.attempts = 0;

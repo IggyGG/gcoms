@@ -74,7 +74,7 @@ are private and need review before sharing.
 ## Workload and evidence
 
 The campaign ramps through two, eight and sixteen clients, with two clients per
-host and remote inbox assignments. It checks all 56 directed inbox-host pairs,
+host and remote inbox assignments. It checks all 56 directed client-host pairs,
 empty files and block/piece boundaries, then takes a 30-minute chat baseline.
 The four-hour mixed phase sends four 1 GiB and four 256 MiB files plus a rotating
 small-file workload. Four workload channels each have four members; a separate
@@ -89,6 +89,29 @@ cache filesystem reaching ENOSPC, quota, membership withdrawal and PM isolation.
 Faults target disposable state only. Cache mutation requires a stopped client.
 Recovery retains identities and valid ciphertext; a missing piece without a
 surviving source must wait rather than report completion.
+
+## GC/1 capacity constraint
+
+The production scheduler uses three-second slots and a 0.5 emission probability
+per destination lane. File data shares those lanes with protocol work, and each
+block carries at most 11 KiB. A continuously available single-source lane therefore
+has a nominal payload rate of about 1.8 KiB/s before requests, discovery, retries
+and other overhead. At that rate 1 MiB takes about nine minutes and 1 GiB about
+159 hours. These are calculations from the current implementation, not measured
+fleet throughput or guarantees. Multiple sources can contribute separate lanes;
+they do not eliminate the initial distribution cost.
+
+Keep the five-minute small-file and four-hour large-file acceptance gates visible.
+A failure can expose a capacity limit as well as a correctness defect. Do not
+speed up the privacy scheduler, bypass relay authentication, or label a smaller
+diagnostic fixture as large-file qualification. Repeat the same workload after
+the planned protocol improvements have application integration.
+
+Reports group verified exports by file size and include measured completion p50/p95,
+median goodput, and local file-engine counters. Completion timings start at recorded
+acceptance. Diagnostic counters are summed across daemon processes without counting
+repeated samples twice. Cleanup recovery uses the latest observation for every
+distinct host; the manual cleanup command fails if any host remains unclean.
 
 `events.jsonl` retains observations, `manifest.json` binds inputs, private host
 archives retain logs, and `report.json` derives the result. Canary success is
