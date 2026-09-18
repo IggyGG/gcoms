@@ -7,6 +7,6 @@ are not acceptable in project spaces.
 
 Maintainers may edit or remove abusive content, limit participation, or exclude
 participants after considering context and impact. Reports are handled privately;
-maintainers involved in a report should recuse themselves. A public conduct contact
-must be configured before launch; see release/publication.json. Security issues
-follow SECURITY.md.
+maintainers involved in a report should recuse themselves. Send conduct reports
+privately to [iggy@gchat.boo](mailto:iggy@gchat.boo). Security issues follow
+[the security policy](SECURITY.md).

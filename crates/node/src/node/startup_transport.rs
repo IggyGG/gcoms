@@ -1,8 +1,8 @@
 //! Constructor ownership until the transport is transferred to NodeHandle.
-use super::{api::TransportTask, Tp1Server};
+use super::{api::ShutdownTask, Tp1Server};
 
 pub(super) struct StartupTransport {
-    transport: Option<TransportTask>,
+    transport: Option<ShutdownTask>,
 }
 
 impl StartupTransport {
@@ -20,7 +20,7 @@ impl StartupTransport {
                 .await;
         });
         Self {
-            transport: Some(TransportTask { stop, task }),
+            transport: Some(ShutdownTask { stop, task }),
         }
     }
 
@@ -33,7 +33,7 @@ impl StartupTransport {
         self.transport.take();
     }
 
-    pub(super) fn take(&mut self) -> TransportTask {
+    pub(super) fn take(&mut self) -> ShutdownTask {
         self.transport.take().expect("constructor owns transport")
     }
 }

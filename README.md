@@ -1,16 +1,14 @@
 # GComs
 
-**GComs** is a Rust communication protocol and developer platform for encrypted
-messaging and typed application services. **GChat** is its separate reference
+**GComs** is a Rust communication protocol for secure connections, with typed
+service APIs for addon and client integration. **GChat** is its separate reference
 application, with a desktop UI, terminal UI and local service.
 
-Current development uses the existing [private local Forgejo repository](http://127.0.0.1:3300/ghost-local/gcoms)
-and its [companion GChat repository](http://127.0.0.1:3300/ghost-local/gchat).
-Public publication is deferred by the project owner. Public URLs, reporting contacts
-and publisher accounts are future release decisions, not prerequisites for this
-private development stage. The intended preview version remains 0.1.0. See
-[development and future release status](docs/RELEASE.md). The current release
-effort qualifies Linux x86_64 and Windows x86_64; macOS is unavailable and unqualified.
+Development and release authority remains in the existing local Forgejo repository.
+Public delivery uses [IggyGG/gcoms](https://github.com/IggyGG/gcoms) and
+[IggyGG/gchat](https://github.com/IggyGG/gchat) as GitHub mirrors.
+The first signed release is being prepared for Linux x86_64, Windows x86_64,
+and macOS Apple Silicon/Intel. See [release preparation](docs/RELEASE.md).
 
 ## Start here
 

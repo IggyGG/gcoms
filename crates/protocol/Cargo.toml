@@ -5,6 +5,7 @@ documentation = "https://docs.rs/gcoms-protocol"
 description = "Runtime-free GC/1 contact, direct-message, and relay wire codecs"
 edition.workspace = true
 license.workspace = true
+repository.workspace = true
 rust-version.workspace = true
 version.workspace = true
 publish.workspace = true

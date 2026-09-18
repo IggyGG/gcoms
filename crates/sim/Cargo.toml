@@ -5,6 +5,7 @@ documentation = "https://docs.rs/gcoms-sim"
 description = "GComs GC/1 discrete-event simulation: gossip delivery at scale, G-M5 gates"
 edition.workspace = true
 license.workspace = true
+repository.workspace = true
 rust-version.workspace = true
 version.workspace = true
 publish = false

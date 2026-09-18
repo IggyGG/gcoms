@@ -1,0 +1,21 @@
+name: Public source and website
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+concurrency:
+  group: public-delivery-main
+  cancel-in-progress: false
+jobs:
+  mirror:
+    if: vars.ENABLE_PUBLIC_MIRROR == 'true'
+    runs-on: gcoms-linux-x64
+    steps:
+      - uses: https://code.forgejo.org/actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Mirror audited source
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_MIRROR_TOKEN }}
+        run: python3 scripts/github-mirror.py

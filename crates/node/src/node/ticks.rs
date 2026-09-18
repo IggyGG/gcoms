@@ -12,15 +12,18 @@ pub(crate) fn spawn_contact_subscription_pump(
     scheduler: RelayScheduler,
     events: broadcast::Sender<Ev>,
     poll_interval: std::time::Duration,
-) -> tokio::task::JoinHandle<()> {
+) -> super::api::ShutdownTask {
     let poll_interval = poll_interval.min(std::time::Duration::from_secs(1));
-    tokio::spawn(async move {
+    let (stop, mut stopped) = tokio::sync::watch::channel(false);
+    let task = tokio::spawn(async move {
         let mut subscriptions = FuturesUnordered::new();
         let mut active = HashSet::new();
         let mut clock = tokio::time::interval(poll_interval);
         clock.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
         loop {
             tokio::select! {
+                biased;
+                _ = stopped.changed() => break,
                 Some(queue_id) = subscriptions.next(), if !subscriptions.is_empty() => {
                     active.remove(&queue_id);
                     state.lock().unwrap_or_else(|p| p.into_inner())
@@ -34,7 +37,7 @@ pub(crate) fn spawn_contact_subscription_pump(
                     .lock()
                     .unwrap_or_else(|poisoned| poisoned.into_inner());
                 if st.owner_transition_failed {
-                    return;
+                    break;
                 }
                 if super::routing::recovering(&st) {
                     Vec::new()
@@ -109,7 +112,9 @@ pub(crate) fn spawn_contact_subscription_pump(
                 });
             }
         }
-    })
+        subscriptions.clear();
+    });
+    super::api::ShutdownTask { stop, task }
 }
 
 pub(crate) fn spawn_alias_lifecycle_loop(
@@ -133,14 +138,17 @@ pub(crate) fn spawn_channel_subscription_pump(
     state: Arc<Mutex<NodeState>>,
     scheduler: RelayScheduler,
     events: broadcast::Sender<Ev>,
-) -> tokio::task::JoinHandle<()> {
-    tokio::spawn(async move {
+) -> super::api::ShutdownTask {
+    let (stop, mut stopped) = tokio::sync::watch::channel(false);
+    let task = tokio::spawn(async move {
         let mut subscriptions = FuturesUnordered::new();
         let mut active = std::collections::HashSet::new();
         let mut clock = tokio::time::interval(std::time::Duration::from_millis(500));
         clock.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
         loop {
             tokio::select! {
+                biased;
+                _ = stopped.changed() => break,
                 Some(key) = subscriptions.next(), if !subscriptions.is_empty() => {
                     active.remove(&key);
                     continue;
@@ -150,7 +158,7 @@ pub(crate) fn spawn_channel_subscription_pump(
             let aliases = {
                 let st = state.lock().unwrap_or_else(|p| p.into_inner());
                 if st.owner_transition_failed {
-                    return;
+                    break;
                 }
                 st.channels
                     .iter()
@@ -207,7 +215,9 @@ pub(crate) fn spawn_channel_subscription_pump(
                 });
             }
         }
-    })
+        subscriptions.clear();
+    });
+    super::api::ShutdownTask { stop, task }
 }
 
 pub(crate) fn spawn_channel_alias_renew_loop(
@@ -416,8 +426,9 @@ pub(crate) fn spawn_invite_service_loop(
     state: Arc<Mutex<NodeState>>,
     scheduler: RelayScheduler,
     events: broadcast::Sender<Ev>,
-) -> tokio::task::JoinHandle<()> {
-    tokio::spawn(async move {
+) -> super::api::ShutdownTask {
+    let (stop, mut stopped) = tokio::sync::watch::channel(false);
+    let task = tokio::spawn(async move {
         // An inbox bound alone does not bound detached work across ticks.
         // Retain at most this many active redemptions, owned by this task so
         // shutdown releases every state/profile reference before returning.
@@ -427,6 +438,8 @@ pub(crate) fn spawn_invite_service_loop(
         clock.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
         loop {
             tokio::select! {
+                biased;
+                _ = stopped.changed() => break,
                 Some(()) = active.next(), if !active.is_empty() => continue,
                 _ = clock.tick() => {},
             }
@@ -444,5 +457,7 @@ pub(crate) fn spawn_invite_service_loop(
                 });
             }
         }
-    })
+        active.clear();
+    });
+    super::api::ShutdownTask { stop, task }
 }

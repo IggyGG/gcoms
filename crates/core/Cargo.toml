@@ -5,6 +5,7 @@ documentation = "https://docs.rs/gcoms-core"
 description = "GComs GC/1 wire format: cells, buckets, fragmentation"
 edition.workspace = true
 license.workspace = true
+repository.workspace = true
 rust-version.workspace = true
 version.workspace = true
 publish.workspace = true

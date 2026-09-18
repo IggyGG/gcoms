@@ -23,3 +23,10 @@ Maintainers review changes and publish tagged releases. A pull request author
 should obtain independent review before merging security-sensitive changes. The
 initial maintainer roster and public reporting channels must be set in the release
 configuration before public publication.
+
+## Public GitHub mirrors
+
+Public issues and proposed changes may be opened on the IggyGG mirror. Maintainers
+review and integrate accepted changes in authoritative Forgejo, preserving author
+attribution, then mirror main back to GitHub. Do not merge independently into the
+GitHub mirror. Security reports use the private channel in SECURITY.md.

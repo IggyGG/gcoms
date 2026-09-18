@@ -5,6 +5,7 @@ documentation = "https://docs.rs/gcoms-sdk"
 description = "Typed embedded and IPC client API for GC/1 applications"
 edition.workspace = true
 license.workspace = true
+repository.workspace = true
 rust-version.workspace = true
 version.workspace = true
 publish.workspace = true

@@ -6,10 +6,13 @@ scheduling, session readiness and larger file-chunk work is in progress; see
 cover profile. No GC/2 compatibility, performance, privacy or mobile qualification
 is claimed by this ledger. The owner deferred physical mobile testing on
 2026-09-18; it is outside this rollout's acceptance scope and remains unqualified.
-Desktop/server validation and deployment to all eight Hetzner native relays remain
-in scope. The read-only fleet preflight found every relay active on the same
+Desktop/server validation and deployment to every Hetzner relay remain in scope:
+eight native services and three Kubernetes anchors, eleven instances across eight
+servers. The read-only fleet preflight found every native relay active on the same
 binary, SHA-256 `965f8007321128cb0cd4fba1e9c071342da67fe878fd8132cdb07ca73469b229`.
-Both HEL and FSN bootstrap providers were active. No fleet update has occurred.
+Both HEL and FSN bootstrap providers were active. The `ghost-com/gc-anchor`
+StatefulSet had three Ready replicas with persistent identity claims; the
+`ghost-com-chaos` selector had no relay pods. No fleet update has occurred.
 
 ## Accepted contract
 

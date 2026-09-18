@@ -927,22 +927,25 @@ async fn start_with_tls_policy_control_sink_and_bootstrap(
             ));
         }
 
-        tasks.push(ticks::spawn_contact_subscription_pump(
-            state.clone(),
-            scheduler.clone(),
-            events_tx.clone(),
-            cfg.alias_lifecycle.poll_interval,
-        ));
+        let workers = vec![
+            ticks::spawn_contact_subscription_pump(
+                state.clone(),
+                scheduler.clone(),
+                events_tx.clone(),
+                cfg.alias_lifecycle.poll_interval,
+            ),
+            ticks::spawn_channel_subscription_pump(
+                state.clone(),
+                scheduler.clone(),
+                events_tx.clone(),
+            ),
+            ticks::spawn_invite_service_loop(state.clone(), scheduler.clone(), events_tx.clone()),
+        ];
         tasks.push(ticks::spawn_alias_lifecycle_loop(
             state.clone(),
             scheduler.clone(),
             events_tx.clone(),
             cfg.alias_lifecycle,
-        ));
-        tasks.push(ticks::spawn_channel_subscription_pump(
-            state.clone(),
-            scheduler.clone(),
-            events_tx.clone(),
         ));
         tasks.push(ticks::spawn_channel_alias_renew_loop(
             state.clone(),
@@ -984,11 +987,6 @@ async fn start_with_tls_policy_control_sink_and_bootstrap(
             events_tx.clone(),
             scheduler_profile,
             cfg.seed,
-        ));
-        tasks.push(ticks::spawn_invite_service_loop(
-            state.clone(),
-            scheduler.clone(),
-            events_tx.clone(),
         ));
 
         if let Some(control_listener) = control_listener {
@@ -1035,6 +1033,7 @@ async fn start_with_tls_policy_control_sink_and_bootstrap(
             events_tx,
             compat_rx: Arc::new(tokio::sync::Mutex::new(compat_rx)),
             tasks: Arc::new(tokio::sync::Mutex::new(Some(tasks))),
+            workers: Arc::new(tokio::sync::Mutex::new(Some(workers))),
             scheduler,
             transit_scheduler,
             transport: Arc::new(tokio::sync::Mutex::new(Some(transport.take()))),

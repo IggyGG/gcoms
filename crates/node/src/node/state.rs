@@ -86,6 +86,59 @@ where
     futures_util::future::join_all(futures).await
 }
 
+#[cfg(test)]
+mod concurrent_futures_tests {
+    use super::futures_join_all;
+    use std::{future::Future, sync::Arc, task::Context};
+
+    #[tokio::test]
+    async fn cancellation_drops_children_before_returning_to_the_owner() {
+        let owner = Arc::new(());
+        let jobs = (0..3).map(|_| {
+            let owner = owner.clone();
+            async move {
+                let _owner = owner;
+                std::future::pending::<()>().await;
+            }
+        });
+        let mut joined = Box::pin(futures_join_all(jobs));
+        let mut context = Context::from_waker(std::task::Waker::noop());
+        assert!(joined.as_mut().poll(&mut context).is_pending());
+        assert_eq!(Arc::strong_count(&owner), 4);
+        drop(joined);
+        assert_eq!(Arc::strong_count(&owner), 1);
+    }
+
+    #[tokio::test]
+    async fn polls_every_child_and_preserves_input_order() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        let polled = Arc::new(AtomicUsize::new(0));
+        let mut senders = Vec::new();
+        let mut jobs = Vec::new();
+        for index in 0..3 {
+            let (sender, receiver) = tokio::sync::oneshot::channel::<()>();
+            senders.push(sender);
+            let polled = polled.clone();
+            jobs.push(async move {
+                polled.fetch_add(1, Ordering::SeqCst);
+                receiver.await.unwrap();
+                index
+            });
+        }
+        let mut joined = Box::pin(futures_join_all(jobs));
+        let mut context = Context::from_waker(std::task::Waker::noop());
+        assert!(joined.as_mut().poll(&mut context).is_pending());
+        assert_eq!(polled.load(Ordering::SeqCst), 3);
+        for sender in senders.into_iter().rev() {
+            sender.send(()).unwrap();
+        }
+        assert_eq!(joined.await, vec![0, 1, 2]);
+        assert!(futures_join_all(Vec::<std::future::Ready<()>>::new())
+            .await
+            .is_empty());
+    }
+}
+
 /// Size of the active intermediary set (SPEC §15 `LANE_SET`).
 pub(crate) const LANE_SET: usize = 4;
 /// One member of the active set is replaced this often (SPEC §15 `LANE_ROTATE`).
