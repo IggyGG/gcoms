@@ -52,7 +52,7 @@ to a colocated relay's public address. These fixes preserve the isolated-listene
 scope. Collection failure no longer prevents cleanup. Reports reject missing
 exports, missing acceptance, incomplete host coverage and incomplete cleanup.
 
-Two findings remain open:
+Run 09 left two findings for follow-up:
 
 * GC/1's production lane rate is incompatible with the planned single-source
   1 GiB/four-hour target. The runbook records the calculation separately from
@@ -98,3 +98,50 @@ commits:
 Do not publish raw archives or retained test volumes: they can contain private
 test identities, routing metadata and encrypted caches. No such material is
 included in the source commits.
+
+## Follow-up before the next fleet candidate — 2026-09-18
+
+The committed GC/2 component branch (`74c783e`) has been merged into this task.
+GC/1 remains the selected Node/GChat fleet profile. GC/2 application adoption is
+still required for the large-file capacity gate; these changes do not constitute
+a new fleet result.
+
+The channel command serializer now releases its lock after file authorization,
+encryption and enqueue, before awaiting hop acceptance. A real TLS/H2 regression
+holds one peer's receipt open and verifies delivery to another peer in the same
+channel, then cancellation during shutdown. Its old-code failure is retained in
+`target/channel-application-red-02.log`; the fix passes in
+`target/channel-application-green.log`.
+
+The PEX framing refusal is repaired with an authenticated pairwise MSG envelope,
+using disposition 4 so disposition 3 remains file application traffic. The
+three-node regression first verifies ordinary plaintext and all-member delivery
+ACKs, then requires actual PEX reception. It fails before and passes after the
+repair (`target/pex-relay-red.log`, `target/pex-relay-green-02.log`). The relay's
+MSG-only deposit boundary is unchanged. This fixes the rejection; it does not
+prove that PEX caused the fleet transfer timeout.
+
+The harness now waits for a download slot, records admission separately, creates
+fresh partial transfers for faults, stops an unavailable seed before acceptance,
+and verifies complementary source contributions in two exclusive phases. It
+requires actual partial-progress and source observations instead of accepting
+scenario labels alone. The broader Python suite passes 88 tests. One analyzer
+shortcut discovered during review is retained in `target/fleet-fault-evidence-red.log`;
+the new regression rejects it.
+
+GC/2's directory now serializes exact introductions and retained guard order in
+bounded version-2 private state. A durable sink commits before publication. A
+failed or ambiguous save disables routing through that directory until actual
+authenticated storage is reloaded. A public-API reproduction demonstrates the
+previous ambiguous-save failure and its correction in
+`target/guard-ambiguity-red.log` and `target/guard-ambiguity-green.log`. Node/GChat
+storage and profile integration remain pending.
+
+Validation: the combined workspace with the Node fixes passed 732 Rust cases
+(six ignored), including the 24-node overlay; GChat passed all 147 cases against
+an unchanged source snapshot (`test-gc-chat-3ic3l10s.json`). The subsequent routing
+persistence work passed all 67 routing cases separately. Strict workspace Clippy,
+formatting, eight independent cell vectors, source inventory and research import
+checks also passed during this follow-up. Logs remain under `target/` and the
+source-check report directory. No further fleet campaign has run at this point;
+the latest standard canary remains the failed run 09 above.

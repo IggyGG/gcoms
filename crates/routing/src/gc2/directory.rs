@@ -8,9 +8,15 @@ use crate::{
 use std::{
     fmt,
     net::SocketAddr,
-    sync::{Arc, RwLock},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc, RwLock,
+    },
 };
 use zeroize::{Zeroize, Zeroizing};
+
+mod persistence;
+pub use persistence::{PrivateStateSink, MAX_PRIVATE_BYTES};
 
 pub const INTRODUCTION_BYTES: usize = 155;
 pub const MAX_INTRODUCTIONS: usize = 8;
@@ -165,7 +171,7 @@ impl BootstrapBundle {
     }
 }
 
-#[derive(Default)]
+#[derive(Clone, Default)]
 struct View {
     relays: Vec<Introduction>,
     guards: Vec<[u8; 32]>,
@@ -178,6 +184,8 @@ type AddressPolicy = Arc<dyn Fn(SocketAddr) -> bool + Send + Sync>;
 pub struct Directory {
     view: RwLock<View>,
     allowed: AddressPolicy,
+    persist: Option<PrivateStateSink>,
+    persistence_failed: AtomicBool,
 }
 impl Default for Directory {
     fn default() -> Self {
@@ -195,6 +203,8 @@ impl Directory {
         Self {
             view: RwLock::new(View::default()),
             allowed,
+            persist: None,
+            persistence_failed: AtomicBool::new(false),
         }
     }
     fn admissible(&self, relay: &Introduction, now: u64) -> Result<()> {
@@ -217,9 +227,10 @@ impl Directory {
             }
         }
         let mut view = self.view.write().unwrap_or_else(|p| p.into_inner());
-        view.own = services;
-        Self::prune_guards(&mut view);
-        Ok(())
+        let mut next = view.clone();
+        next.own = services;
+        Self::prune_guards(&mut next);
+        self.commit_view(&mut view, next)
     }
     pub fn set_guards(&self, guards: Vec<[u8; 32]>) -> Result<()> {
         if guards.len() > MAX_GUARDS {
@@ -245,8 +256,39 @@ impl Directory {
             }
             selected.push(relay);
         }
-        view.guards = guards;
-        Ok(())
+        let mut next = view.clone();
+        next.guards = guards;
+        self.commit_view(&mut view, next)
+    }
+
+    /// Background-only selection, committed as one transaction before any dial.
+    pub(crate) fn retain_guards(&self, candidates: &[[u8; 32]]) -> Result<()> {
+        if candidates.len() > MAX_INTRODUCTIONS {
+            return Err("too many GC/2 guard candidates".into());
+        }
+        let mut view = self.view.write().unwrap_or_else(|p| p.into_inner());
+        let mut next = view.clone();
+        for pin in candidates {
+            if next.guards.len() == MAX_GUARDS {
+                break;
+            }
+            let Some(relay) = next.relays.iter().find(|relay| &relay.service_id == pin) else {
+                continue;
+            };
+            if next
+                .own
+                .iter()
+                .any(|(addr, pin)| relay.conflicts(*addr, *pin))
+                || next.relays.iter().any(|old| {
+                    next.guards.contains(&old.service_id)
+                        && old.conflicts(relay.addr, relay.service_id)
+                })
+            {
+                continue;
+            }
+            next.guards.push(*pin);
+        }
+        self.commit_view(&mut view, next)
     }
     pub fn guards(&self) -> Vec<[u8; 32]> {
         self.view
@@ -272,36 +314,38 @@ impl Directory {
                 );
             }
         }
+        let mut next = view.clone();
         let mut fresh = 0;
         for relay in &bundle.relays {
-            if let Some(index) = view
+            if let Some(index) = next
                 .relays
                 .iter()
                 .position(|old| old.service_id == relay.service_id)
             {
-                if view.relays[index].expires_at > relay.expires_at {
+                if next.relays[index].expires_at > relay.expires_at {
                     continue;
                 }
-                view.relays[index] = relay.clone();
+                next.relays[index] = relay.clone();
             } else {
-                if view.relays.len() == MAX_RELAYS {
-                    let victim = view
+                if next.relays.len() == MAX_RELAYS {
+                    let victim = next
                         .relays
                         .iter()
                         .enumerate()
-                        .filter(|(_, old)| !view.guards.contains(&old.service_id))
+                        .filter(|(_, old)| !next.guards.contains(&old.service_id))
                         .min_by_key(|(_, old)| old.expires_at)
                         .map(|(index, _)| index)
                         .expect("at most three of sixty-four entries are guards");
-                    view.relays.remove(victim);
+                    next.relays.remove(victim);
                 }
-                view.relays.push(relay.clone());
+                next.relays.push(relay.clone());
             }
             if relay.expires_at > now {
                 fresh += 1;
             }
         }
-        Self::prune_guards(&mut view);
+        Self::prune_guards(&mut next);
+        self.commit_view(&mut view, next)?;
         Ok(fresh)
     }
     pub fn eligible(
@@ -313,6 +357,8 @@ impl Directory {
             return Err("too many GC/2 route exclusions".into());
         }
         let view = self.view.read().unwrap_or_else(|p| p.into_inner());
+        // Pair the failure flag with this exact view after any pending writer.
+        self.check_persistence()?;
         Ok(view
             .relays
             .iter()
@@ -332,6 +378,9 @@ impl Directory {
     /// retry timing; a data request must not cause direct re-entry.
     pub fn reentry_candidates(&self) -> Vec<Introduction> {
         let view = self.view.read().unwrap_or_else(|p| p.into_inner());
+        if self.check_persistence().is_err() {
+            return Vec::new();
+        }
         let mut relays: Vec<_> = view
             .relays
             .iter()

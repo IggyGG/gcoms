@@ -147,7 +147,13 @@ Retain failures, source/executable/configuration/workload hashes and exact scope
   cannot dial a new entry or signal maintenance from a message request. Renewal
   and reconnect run independently of chat, preserving role isolation and route
   exclusions. See [bounds, costs and remaining integration](GC2_DISCOVERY.md).
-- Complete counter-window flow control, command preparation/completion split,
+- The fleet branch releases the channel command lock after authorizing, sealing
+  and enqueueing file application traffic, before awaiting hop acceptance. A
+  held real TLS/H2 response no longer blocks a different peer in that channel.
+- GC/2 private directory snapshots now preserve ordered guards and exact relay
+  authority with atomic save-before-publication. Failed guard persistence blocks
+  entry and renewal dials. Node/GChat storage wiring remains pending.
+- Complete counter-window flow control, general command preparation/completion split,
   authenticated class propagation, complete GC/2 routing, protected profiles,
   SDK/GChat profile integration and application/privacy/mobile gates: pending.
 

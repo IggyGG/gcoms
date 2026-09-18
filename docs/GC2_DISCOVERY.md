@@ -56,6 +56,35 @@ requests still authenticate their complete envelopes, and neither terminal nor
 entry/transit/control connections may switch to the other role. Simple duplex
 fallback composition does not provide this enforcement.
 
+## Durable private guard state
+
+`Directory::encode_private` emits bounded `GCRD` version 2 state: relay count,
+guard count, up to 64 exact introductions and up to three ordered guard pins.
+The maximum is 10,023 bytes. The production restore API rejects nonpublic
+addresses; local fixtures use an explicitly separate restore API. GC/1 state,
+truncation, trailing data, duplicate relay pins, unknown/overlapping guards and
+invalid freshness fail closed. Expired introductions preserve re-entry only;
+restoring does not extend authority. Own listener exclusions must be installed
+before starting the owner and are not serialized as remote introductions.
+
+`Directory::with_persistence` attaches an authenticated, encrypted atomic storage
+sink before the directory is shared. The initial snapshot must commit. Subsequent
+guard selection, renewal and guard pruning save their complete candidate view
+under the directory lock before publishing it. Failure leaves the old in-memory
+view intact and makes that directory unavailable for routing. A save may have
+replaced the file before its final flush failed, so recovery must reload actual
+authenticated storage into a new directory. Retrying an unchanged in-memory
+snapshot cannot skip that recovery. Unchanged state requires no write only while
+storage remains healthy. The sink must not call back into the directory. The
+background owner propagates persistence failures and cancels its entry drivers;
+failed guard selection cannot start entry or renewal connections. The default
+in-memory constructor remains available for explicit component experiments.
+
+This closes the component-level guard persistence gap. Wiring the sink into the
+Node/GChat encrypted profile, selecting the explicit GC/2 runtime and migrating
+existing profile state remain application integration work. The new codec does
+not convert GC/1 authority into GC/2 authority.
+
 ## Background connected periods
 
 `EntryOwner::new` returns an owned background future and a `ReadyConnector`.
@@ -126,6 +155,6 @@ with legacy cells inside an explicit GC/2 circuit. They are not application
 goodput, packet-classifier, mobile-power or operated-network qualification.
 
 Runtime adoption still needs installation of this combined-listener gate,
-durable guard and bootstrap migration, private provisioning/advertisement integration,
+Node/profile persistence and bootstrap migration, private provisioning/advertisement integration,
 counter-window recovery, Node/SDK/GChat class and profile propagation, and the
 application/privacy/device gates in [the implementation ledger](GC2_IMPLEMENTATION.md).
