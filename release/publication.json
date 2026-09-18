@@ -3,8 +3,8 @@
   "channel": "developer-preview",
   "version": "0.1.0",
   "companion_url": "https://github.com/IggyGG/gchat",
-  "security_contact": null,
-  "conduct_contact": null,
+  "security_contact": "iggy@gchat.boo",
+  "conduct_contact": "iggy@gchat.boo",
   "maintainers": [
     "IggyGG"
   ],

@@ -5,11 +5,10 @@ security review. Passing tests is not a claim of anonymity, traffic-analysis
 resistance, production availability, or security against a compromised endpoint.
 
 Do not post unpatched security issues, private keys, invitations, contact cards,
-archives or user data in public issues. Private reporting is configured in release/publication.json. The public mirror
-supports [private vulnerability reports](https://github.com/IggyGG/gcoms/security/advisories/new)
-after mirror setup enables that feature. A monitored private email address must
-also be configured before application publication. For current private development,
-use the existing private project channels. No response-time SLA is claimed.
+archives or user data in public issues. Report security issues privately to
+[iggy@gchat.boo](mailto:iggy@gchat.boo), or use
+[GitHub private vulnerability reporting](https://github.com/IggyGG/gcoms/security/advisories/new).
+No response-time SLA is claimed.
 
 A useful report describes the affected version, expected boundary, observed
 behavior and a minimal disposable fixture. Maintainers triage privately, agree a
