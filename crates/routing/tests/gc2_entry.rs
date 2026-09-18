@@ -765,3 +765,103 @@ async fn malformed_middle_open_is_rejected_before_any_target_dial() {
     assert_eq!(middle.active_circuits(), 0);
     fixture.stop().await;
 }
+
+#[tokio::test]
+async fn background_owner_preconnects_without_messages_and_never_dials_from_send() {
+    use gcoms_routing::gc2::{
+        directory::{BootstrapBundle, Directory as Gc2Directory},
+        owner::EntryOwner,
+    };
+    let mut fixture = Fixture::new().await;
+    let middle = fixture.middle().await;
+    let directory = Arc::new(Gc2Directory::for_loopback_fixture());
+    let first = fixture.service.gc2_introduction(now_unix() - 7200);
+    let second = middle.gc2_introduction(now_unix() - 7200);
+    directory
+        .remember(
+            &BootstrapBundle {
+                relays: vec![first.clone(), second.clone()],
+            },
+            now_unix(),
+        )
+        .unwrap();
+    directory
+        .set_guards(vec![first.service_id, second.service_id])
+        .unwrap();
+    assert!(directory.eligible(&[], now_unix()).unwrap().is_empty());
+    let (owner, ready) = EntryOwner::new(
+        directory.clone(),
+        CandidateProfile::new(4096, 250).unwrap(),
+        1,
+    )
+    .unwrap();
+    let owner = fixture.tasks.spawn(async move {
+        let _ = owner.run().await;
+    });
+    timeout(Duration::from_secs(8), async {
+        while ready.ready_entries() != 1 || directory.eligible(&[], now_unix()).unwrap().len() != 2
+        {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .unwrap();
+    // One protected entry and one periodic private control connection to this
+    // guard exist before any application request. Neither depends on messages.
+    assert_eq!(fixture.connections.load(Ordering::SeqCst), 2);
+    let client = Tp1Client::with_connector(ready.clone()).unwrap();
+    for class in [TrafficClass::Bulk, TrafficClass::Interactive] {
+        let cell = Cell::new(CellType::Msg, 0, 0, vec![5; 128]);
+        let response = timeout(
+            Duration::from_secs(15),
+            client.post_cell_with_class(
+                fixture.terminal_addr,
+                fixture.terminal_pin,
+                "fixture-echo",
+                Bytes::from(cell.encode_wire().unwrap()),
+                &[],
+                class,
+            ),
+        )
+        .await
+        .unwrap()
+        .unwrap();
+        let gcoms_transport::HopOutcome::Accepted(Some(echo)) = response else {
+            panic!("expected terminal reply");
+        };
+        assert_eq!(echo.payload, cell.payload);
+        assert_eq!(ready.ready_entries(), 1);
+        assert_eq!(fixture.connections.load(Ordering::SeqCst), 2);
+    }
+    assert!(ready
+        .connect_excluding(
+            fixture.terminal_addr,
+            fixture.terminal_pin,
+            &[(first.addr, first.service_id)]
+        )
+        .await
+        .is_err());
+    assert!(ready
+        .connect_excluding(
+            fixture.terminal_addr,
+            fixture.terminal_pin,
+            &[(second.addr, second.service_id)]
+        )
+        .await
+        .is_err());
+    assert_eq!(fixture.connections.load(Ordering::SeqCst), 2);
+    owner.abort();
+    timeout(Duration::from_secs(3), async {
+        while ready.ready_entries() != 0 {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .unwrap();
+    assert!(ready
+        .connect(fixture.terminal_addr, fixture.terminal_pin)
+        .await
+        .is_err());
+    assert_eq!(fixture.connections.load(Ordering::SeqCst), 2);
+    fixture.stop().await;
+}

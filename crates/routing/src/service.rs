@@ -66,6 +66,10 @@ pub struct RelayService {
     slots: Arc<Semaphore>,
     #[cfg(feature = "experimental-gc2")]
     gc2_bulk_slots: Arc<Semaphore>,
+    #[cfg(feature = "experimental-gc2")]
+    gc2_control_slots: Arc<Semaphore>,
+    #[cfg(feature = "experimental-gc2")]
+    gc2_directory: Arc<crate::gc2::directory::Directory>,
     private: Mutex<PrivateState>,
     probes: Semaphore,
     catalog_origins: Mutex<Vec<String>>,
@@ -121,6 +125,12 @@ impl RelayService {
             slots: Arc::new(Semaphore::new(policy.max_circuits)),
             #[cfg(feature = "experimental-gc2")]
             gc2_bulk_slots: Arc::new(Semaphore::new(policy.max_circuits.saturating_sub(1))),
+            #[cfg(feature = "experimental-gc2")]
+            gc2_control_slots: Arc::new(Semaphore::new(4)),
+            #[cfg(feature = "experimental-gc2")]
+            gc2_directory: Arc::new(crate::gc2::directory::Directory::with_address_policy(
+                policy.target_allowed.clone(),
+            )),
             catalog_origins: Mutex::new(policy.catalog_origins.clone()),
             policy,
             private: Mutex::new(PrivateState {
@@ -186,6 +196,83 @@ impl RelayService {
         }
     }
 
+    /// Explicit versioned bootstrap authority. Re-entry survives hourly circuit
+    /// expiry; its domain is separate from GC/1, entry and middle capabilities.
+    #[cfg(feature = "experimental-gc2")]
+    pub fn gc2_introduction(&self, now: u64) -> crate::gc2::directory::Introduction {
+        let entry = self.gc2_entry_descriptor(now);
+        let transit = self.gc2_transit_descriptor(now);
+        let mut hash =
+            Hmac::<Sha256>::new_from_slice(self.secret.as_ref()).expect("fixed HMAC key");
+        hash.update(b"ghost.gct2.reentry.v2\0");
+        hash.update(&self.service_id);
+        crate::gc2::directory::Introduction {
+            addr: entry.addr,
+            service_id: entry.service_id,
+            reentry_cap: hash.finalize().into_bytes().into(),
+            entry_cap: entry.entry_cap,
+            transit_cap: transit.transit_cap,
+            expires_at: entry.expires_at,
+        }
+    }
+
+    #[cfg(feature = "experimental-gc2")]
+    pub fn gc2_directory(&self) -> &Arc<crate::gc2::directory::Directory> {
+        &self.gc2_directory
+    }
+
+    #[cfg(feature = "experimental-gc2")]
+    async fn gc2_introductions(
+        &self,
+        mut body: h2::RecvStream,
+        mut response: h2::server::SendResponse<bytes::Bytes>,
+    ) -> Result<()> {
+        use crate::gc2::{
+            directory::{BootstrapBundle, MAX_INTRODUCTIONS},
+            discovery::REQUEST,
+        };
+        use gcoms_core::{gc2::NaturalCell, CellType, HEADER_LEN};
+        use gcoms_transport::{gc2::status_cell, hop::HopReply};
+        let permit = self.gc2_control_slots.clone().try_acquire_owned();
+        let admitted = permit.is_ok()
+            && self
+                .private
+                .lock()
+                .unwrap_or_else(|p| p.into_inner())
+                .admit()
+                .is_ok();
+        let cell = if admitted {
+            let bytes =
+                gcoms_transport::server::read_body(&mut body, HEADER_LEN + REQUEST.len()).await?;
+            let request = NaturalCell::decode(&bytes)?;
+            if request.kind() != CellType::Pex
+                || request.flags() != 0
+                || request.payload() != REQUEST
+            {
+                return Err("invalid GC/2 private discovery request".into());
+            }
+            let now = now_unix();
+            let own = self.gc2_introduction(now);
+            let mut relays = self
+                .gc2_directory
+                .eligible(&[(own.addr, own.service_id)], now)?;
+            relays.shuffle(&mut rand::thread_rng());
+            relays.truncate(MAX_INTRODUCTIONS - 1);
+            relays.insert(0, own);
+            let bytes = BootstrapBundle { relays }.encode()?;
+            NaturalCell::new(CellType::Pex, 0, bytes.to_vec())?
+        } else {
+            status_cell(HopReply::Overloaded)
+        };
+        let headers = http::Response::builder()
+            .status(200)
+            .header("content-type", "application/octet-stream")
+            .body(())?;
+        let mut send = response.send_response(headers, false)?;
+        send.send_data(bytes::Bytes::from(cell.encode()), true)?;
+        Ok(())
+    }
+
     #[cfg(feature = "experimental-gc2")]
     fn gc2_target_connector(self: &Arc<Self>) -> crate::gc2::mux::TargetConnector {
         let service = self.clone();
@@ -203,11 +290,18 @@ impl RelayService {
         })
     }
 
-    /// Attach with `Tp1Server::with_duplex_factory`: each physical connection
-    /// gets exactly one class/profile binding and one shared 16-circuit budget.
+    /// Attach with `Tp1Server::with_duplex_factory` to fix entry, transit or
+    /// control role per physical connection. A protected entry fixes its class
+    /// channels/profile and shares one 16-circuit budget.
     #[cfg(feature = "experimental-gc2")]
     pub fn gc2_handler_factory(self: &Arc<Self>) -> gcoms_transport::server::DuplexHandlerFactory {
         use crate::gc2::{entry, transit};
+        #[derive(Clone, Copy, PartialEq, Eq)]
+        enum Role {
+            Entry,
+            Transit,
+            Control,
+        }
         let service = self.clone();
         Arc::new(move || {
             let context = Arc::new(entry::ConnectionContext::default());
@@ -215,29 +309,45 @@ impl RelayService {
             let service = service.clone();
             Arc::new(move |path| {
                 let mut cap = gcoms_transport::decode_b64url(path)?;
-                let own = service.gc2_entry_descriptor(now_unix());
-                let middle = service.gc2_transit_descriptor(now_unix());
-                let entry = bool::from(cap.as_slice().ct_eq(&own.entry_cap));
-                let transit = bool::from(cap.as_slice().ct_eq(&middle.transit_cap));
+                let now = now_unix();
+                let intro = service.gc2_introduction(now);
+                let entry = bool::from(cap.as_slice().ct_eq(&intro.entry_cap));
+                let transit = bool::from(cap.as_slice().ct_eq(&intro.transit_cap));
+                let control = bool::from(cap.as_slice().ct_eq(&intro.reentry_cap));
                 zeroize::Zeroize::zeroize(&mut cap);
-                if !entry && !transit {
+                let requested = if entry {
+                    Role::Entry
+                } else if transit {
+                    Role::Transit
+                } else if control {
+                    Role::Control
+                } else {
                     return None;
-                }
+                };
                 // Possessing both capabilities cannot add unshaped transit
                 // paths to a connection already bound as a protected entry.
                 let mut selected = role.lock().unwrap_or_else(|p| p.into_inner());
-                if selected.is_some_and(|was_entry| was_entry != entry || !entry) {
+                if selected.is_some_and(|role| role != requested || role == Role::Transit) {
                     return None;
                 }
                 // A nested TLS connection extends exactly one middle target;
                 // only the protected entry role multiplexes circuit opens.
-                *selected = Some(entry);
+                *selected = Some(requested);
                 drop(selected);
+                if control {
+                    let service = service.clone();
+                    let accepted: AcceptedDuplex = Box::new(move |body, respond| {
+                        Box::pin(async move {
+                            let _ = service.gc2_introductions(body, respond).await;
+                        })
+                    });
+                    return Some(accepted);
+                }
                 let connect = service.gc2_target_connector();
                 Some(if entry {
-                    context.accept(own.expires_at, connect)
+                    context.accept(intro.expires_at, connect)
                 } else {
-                    transit::accept(middle.expires_at, connect)
+                    transit::accept(intro.expires_at, connect)
                 })
             })
         })

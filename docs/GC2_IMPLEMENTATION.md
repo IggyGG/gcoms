@@ -122,8 +122,7 @@ Retain failures, source/executable/configuration/workload hashes and exact scope
   connections, independent entry/middle/terminal pins, route exclusions,
   class/profile binding and cancellation. Middle transit adds no second padding
   schedule, and the entry owner owns nested drivers. See
-  [its exact scope](GCT2_CARRIER.md); private GC/2 discovery, preconnected entry
-  selection and runtime adoption remain pending.
+  [its exact scope](GCT2_CARRIER.md). Runtime adoption remains pending.
 - Class-bound terminal pooling and a prepared GC/2 connector: implemented.
   Bulk/interactive connections share an entry while keeping their class, pin and
   route exclusions; default GC/1 pooling is unchanged. Class-aware subscription
@@ -138,7 +137,12 @@ Retain failures, source/executable/configuration/workload hashes and exact scope
   bind all envelope bytes. See [queue lifecycle and costs](GC2_QUEUES.md).
   An owned terminal service and explicit natural-cell client now exercise
   authenticated deposits/subscriptions through the shared carrier. Production
-  node routing, private discovery and SDK/application adoption remain pending.
+  node routing and SDK/application adoption remain pending.
+- Explicit private GC/2 introductions, authenticated renewal and bounded
+  background entry ownership are implemented experimentally. Ready connectors
+  cannot dial a new entry or signal maintenance from a message request. Renewal
+  and reconnect run independently of chat, preserving role isolation and route
+  exclusions. See [bounds, costs and remaining integration](GC2_DISCOVERY.md).
 - Complete counter-window flow control, command preparation/completion split,
   authenticated class propagation, complete GC/2 routing, protected profiles,
   SDK/GChat profile integration and application/privacy/mobile gates: pending.

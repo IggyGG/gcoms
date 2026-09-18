@@ -35,4 +35,4 @@ gcoms-core = { version = "0.1.0", path = "../core" }
 rcgen = { version = "0.13", default-features = false, features = ["aws_lc_rs", "pem"] }
 
 [features]
-experimental-gc2 = ["dep:gcoms-core", "dep:futures-util"]
+experimental-gc2 = ["dep:gcoms-core", "gcoms-core/experimental-gc2", "gcoms-transport/experimental-gc2", "dep:futures-util"]

@@ -9,10 +9,10 @@ cover. Data never waits for a record to fill.
 
 This is an experimental transport building block, not a node or GChat profile.
 GC/1 remains the default runtime. Independently pinned middle-hop extension now
-works through this entry. Private GC/2 discovery, automatic entry selection,
-authenticated relay queue class enforcement,
-counter-window flow control, SDK/application integration and qualification are
-still pending. Complete entry/middle/terminal circuits pass local fixtures; this
+works through this entry. Private GC/2 discovery, background entry selection and
+authenticated class queues are separate experimental components. Counter-window
+flow control, Node/SDK/application integration and qualification are still
+pending. Complete entry/middle/terminal circuits pass local fixtures; this
 is not evidence of operated-network or production protocol qualification.
 
 ## Wire and sending behavior
@@ -56,8 +56,9 @@ authenticates the terminal; it never inherits the middle's TLS identity.
 Before opening a circuit, the API rejects entry/middle/terminal IP or pin overlap
 and checks every supplied route exclusion against both intermediaries. It cannot
 dial a replacement entry in response to a failed route. The existing target
-allowlist and reachability policy apply at each relay. Private descriptor refresh
-and selecting a compatible preconnected entry are still runtime integration work.
+allowlist and reachability policy apply at each relay. The experimental
+[background owner](GC2_DISCOVERY.md) renews private descriptors and provides a
+compatible preconnected entry selector. Production runtime integration is pending.
 
 `gc2::connector::PreparedConnector` connects TP1 to a ready entry and explicit
 middle descriptor. It declares a permanent traffic-class binding. TP1 partitions
@@ -72,7 +73,8 @@ The two class pools can hold two logical terminal connections per route on one
 physical entry. Each remains subject to its existing finite-request limits and
 the shared entry circuit bound. Performance comparisons must account for both
 logical and physical connections. These APIs do not select a GC/2 node wire mode;
-natural-cell relay transport and application class propagation remain pending.
+natural-cell relay transport is explicit and experimental, while application
+class propagation remains pending.
 
 ## Ownership and resource bounds
 
@@ -117,7 +119,7 @@ not silently reduce padding or select another profile.
 The service uses a separate HMAC-derived `ghost.gct2.entry.v2` capability bound to
 its service identity and hourly epoch. GC/1 circuit and re-entry capabilities are
 not accepted. Middle transit uses the independent `ghost.gct2.transit.v2` domain.
-A physical connection binds to either entry or transit: possessing both tokens
+A physical connection binds to entry, transit or private control: possessing their tokens
 cannot add an unshaped path to a protected entry. Service target policy,
 reachability admission and capacity still
 apply. The returned logical stream carries opaque bytes: the next hop requires

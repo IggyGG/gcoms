@@ -6,8 +6,11 @@ use std::{fmt, time::Duration};
 
 pub mod channel;
 pub mod connector;
+pub mod directory;
+pub mod discovery;
 pub mod entry;
 pub mod mux;
+pub mod owner;
 pub mod transit;
 
 const MAGIC: &[u8; 4] = b"GCT2";
