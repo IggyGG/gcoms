@@ -75,25 +75,87 @@ pub(crate) struct DirectPresenceObservation {
 }
 
 /// Await a set of independent futures concurrently and collect their
-/// outputs in order. Small enough that pulling in `futures` is not worth it.
+/// outputs in order. Poll in the owning task so cancellation drops all child
+/// futures before releasing the node's persistent state.
 pub(crate) async fn futures_join_all<F, T>(futures: impl IntoIterator<Item = F>) -> Vec<T>
 where
     F: std::future::Future<Output = T> + Send + 'static,
     T: Send + 'static,
 {
-    let mut set = tokio::task::JoinSet::new();
-    let mut count = 0usize;
-    for (index, future) in futures.into_iter().enumerate() {
-        set.spawn(async move { (index, future.await) });
-        count += 1;
-    }
-    let mut slots: Vec<Option<T>> = (0..count).map(|_| None).collect();
-    while let Some(joined) = set.join_next().await {
-        if let Ok((index, value)) = joined {
-            slots[index] = Some(value);
+    use std::task::Poll;
+    let mut pending: Vec<_> = futures.into_iter().map(|f| Some(Box::pin(f))).collect();
+    let mut remaining = pending.len();
+    let mut slots: Vec<Option<T>> = (0..remaining).map(|_| None).collect();
+    std::future::poll_fn(|cx| {
+        for (future, slot) in pending.iter_mut().zip(&mut slots) {
+            if let Some(current) = future.as_mut() {
+                if let Poll::Ready(value) = current.as_mut().poll(cx) {
+                    *slot = Some(value);
+                    *future = None;
+                    remaining -= 1;
+                }
+            }
         }
+        if remaining == 0 {
+            Poll::Ready(slots.iter_mut().map(|slot| slot.take().unwrap()).collect())
+        } else {
+            Poll::Pending
+        }
+    })
+    .await
+}
+
+#[cfg(test)]
+mod concurrent_futures_tests {
+    use super::futures_join_all;
+    use std::{future::Future, sync::Arc, task::Context};
+
+    #[tokio::test]
+    async fn cancellation_drops_children_before_returning_to_the_owner() {
+        let owner = Arc::new(());
+        let jobs = (0..3).map(|_| {
+            let owner = owner.clone();
+            async move {
+                let _owner = owner;
+                std::future::pending::<()>().await;
+            }
+        });
+        let mut joined = Box::pin(futures_join_all(jobs));
+        let mut context = Context::from_waker(std::task::Waker::noop());
+        assert!(joined.as_mut().poll(&mut context).is_pending());
+        assert_eq!(Arc::strong_count(&owner), 4);
+        drop(joined);
+        assert_eq!(Arc::strong_count(&owner), 1);
     }
-    slots.into_iter().flatten().collect()
+
+    #[tokio::test]
+    async fn polls_every_child_and_preserves_input_order() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        let polled = Arc::new(AtomicUsize::new(0));
+        let mut senders = Vec::new();
+        let mut jobs = Vec::new();
+        for index in 0..3 {
+            let (sender, receiver) = tokio::sync::oneshot::channel::<()>();
+            senders.push(sender);
+            let polled = polled.clone();
+            jobs.push(async move {
+                polled.fetch_add(1, Ordering::SeqCst);
+                receiver.await.unwrap();
+                index
+            });
+        }
+        let mut joined = Box::pin(futures_join_all(jobs));
+        let mut context = Context::from_waker(std::task::Waker::noop());
+        assert!(joined.as_mut().poll(&mut context).is_pending());
+        assert_eq!(polled.load(Ordering::SeqCst), 3);
+        for sender in senders.into_iter().rev() {
+            sender.send(()).unwrap();
+        }
+        assert_eq!(joined.await, vec![0, 1, 2]);
+        assert!(futures_join_all(Vec::<std::future::Ready<()>>::new())
+            .await
+            .is_empty());
+    }
 }
 
 /// Size of the active intermediary set (SPEC §15 `LANE_SET`).

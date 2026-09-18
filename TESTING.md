@@ -123,10 +123,21 @@ a five-second, 64-route cooldown and cancels scheduler waits during shutdown.
 TLS, HTTP and ambiguous application outcomes are not automatically retried by this
 cache. GC/1, IPC v16 and retained-state formats stay unchanged.
 
-The follow-up Linux GComs workspace run has 604 passing cases and five explicit
-ignored cases; strict Clippy passes. The full Windows run is still under review,
-including a concurrent-admission responsiveness failure. A passing diagnostic
-harness does not substitute for native MSVC and installer qualification.
+The 2026-09-18 Linux workspace runs have 606 passing GComs cases (five explicit
+ignored cases) and 143 passing GChat cases. Strict Clippy passes for both workspaces.
+The Windows GNU VM passes 16 focused cases covering the chat service, immediate
+profile reopening, daemon/archive continuity, in-flight-save cancellation and the
+standalone daemon. The empty Windows `gchat-api` harness is excluded from that count.
+Broader Windows routing and native MSVC qualification remain unfinished; earlier
+full-run failures are retained, including concurrent-admission responsiveness.
+
+GChat now joins its persistence and event-forwarding tasks during shutdown. GComs
+joins subscription, invitation and command workers; parallel maintenance futures
+are owned by their caller so cancellation releases their state before returning.
+The reconnect test opens the encrypted profile immediately, without a delay or
+weakening its exclusive lock. A regression holds a save in flight and verifies
+shutdown cancels it before releasing the profile. Windows profile migration now
+uses a writable handle when flushing the preserved encrypted bytes to disk.
 
 GChat's portable service, archive-reopen and standalone-daemon suites now run on
 Windows too. Their readiness probes use IPC connections, since named pipes have

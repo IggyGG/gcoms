@@ -367,7 +367,7 @@ pub enum RecvEventError {
     Closed,
 }
 
-pub(crate) struct TransportTask {
+pub(crate) struct ShutdownTask {
     pub stop: tokio::sync::watch::Sender<bool>,
     pub task: tokio::task::JoinHandle<()>,
 }
@@ -383,9 +383,10 @@ pub struct NodeHandle {
     pub(crate) events_tx: broadcast::Sender<Ev>,
     pub(crate) compat_rx: Arc<tokio::sync::Mutex<broadcast::Receiver<Ev>>>,
     pub(crate) tasks: Arc<tokio::sync::Mutex<Option<Vec<tokio::task::JoinHandle<()>>>>>,
+    pub(crate) workers: Arc<tokio::sync::Mutex<Option<Vec<ShutdownTask>>>>,
     pub(crate) scheduler: RelayScheduler,
     pub(crate) transit_scheduler: RelayScheduler,
-    pub(crate) transport: Arc<tokio::sync::Mutex<Option<TransportTask>>>,
+    pub(crate) transport: Arc<tokio::sync::Mutex<Option<ShutdownTask>>>,
 }
 
 impl NodeHandle {
@@ -774,6 +775,16 @@ impl NodeHandle {
         }
         self.scheduler.shutdown();
         self.transit_scheduler.shutdown();
+        // These parents own subscription/invitation tasks. Let them abort and
+        // join their children before acknowledging shutdown to the profile owner.
+        if let Some(workers) = self.workers.lock().await.take() {
+            for worker in &workers {
+                worker.stop.send_replace(true);
+            }
+            for worker in workers {
+                let _ = worker.task.await;
+            }
+        }
         let (done, done_rx) = tokio::sync::oneshot::channel();
         if self.cmd_tx.send(Cmd::Shutdown { done }).await.is_ok() {
             let _ = tokio::time::timeout(std::time::Duration::from_secs(5), done_rx).await;

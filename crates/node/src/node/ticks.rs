@@ -7,9 +7,10 @@ pub(crate) fn spawn_contact_subscription_pump(
     scheduler: RelayScheduler,
     events: broadcast::Sender<Ev>,
     poll_interval: std::time::Duration,
-) -> tokio::task::JoinHandle<()> {
+) -> super::api::ShutdownTask {
     let poll_interval = poll_interval.min(std::time::Duration::from_secs(1));
-    tokio::spawn(async move {
+    let (stop, mut stopped) = tokio::sync::watch::channel(false);
+    let task = tokio::spawn(async move {
         let mut subscriptions = tokio::task::JoinSet::new();
         let mut active = HashSet::new();
         loop {
@@ -28,7 +29,7 @@ pub(crate) fn spawn_contact_subscription_pump(
                     .lock()
                     .unwrap_or_else(|poisoned| poisoned.into_inner());
                 if st.owner_transition_failed {
-                    return;
+                    break;
                 }
                 if super::routing::recovering(&st) {
                     Vec::new()
@@ -102,9 +103,15 @@ pub(crate) fn spawn_contact_subscription_pump(
                     queue_id
                 });
             }
-            tokio::time::sleep(poll_interval).await;
+            tokio::select! {
+                biased;
+                _ = stopped.changed() => break,
+                _ = tokio::time::sleep(poll_interval) => {},
+            }
         }
-    })
+        subscriptions.shutdown().await;
+    });
+    super::api::ShutdownTask { stop, task }
 }
 
 pub(crate) fn spawn_alias_lifecycle_loop(
@@ -128,8 +135,9 @@ pub(crate) fn spawn_channel_subscription_pump(
     state: Arc<Mutex<NodeState>>,
     scheduler: RelayScheduler,
     events: broadcast::Sender<Ev>,
-) -> tokio::task::JoinHandle<()> {
-    tokio::spawn(async move {
+) -> super::api::ShutdownTask {
+    let (stop, mut stopped) = tokio::sync::watch::channel(false);
+    let task = tokio::spawn(async move {
         let mut subscriptions = tokio::task::JoinSet::new();
         let mut active = std::collections::HashSet::new();
         loop {
@@ -141,7 +149,7 @@ pub(crate) fn spawn_channel_subscription_pump(
             let aliases = {
                 let st = state.lock().unwrap_or_else(|p| p.into_inner());
                 if st.owner_transition_failed {
-                    return;
+                    break;
                 }
                 st.channels
                     .iter()
@@ -197,9 +205,15 @@ pub(crate) fn spawn_channel_subscription_pump(
                     key
                 });
             }
-            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+            tokio::select! {
+                biased;
+                _ = stopped.changed() => break,
+                _ = tokio::time::sleep(std::time::Duration::from_millis(500)) => {},
+            }
         }
-    })
+        subscriptions.shutdown().await;
+    });
+    super::api::ShutdownTask { stop, task }
 }
 
 pub(crate) fn spawn_channel_alias_renew_loop(
@@ -387,11 +401,20 @@ pub(crate) fn spawn_invite_service_loop(
     state: Arc<Mutex<NodeState>>,
     scheduler: RelayScheduler,
     events: broadcast::Sender<Ev>,
-) -> tokio::task::JoinHandle<()> {
-    tokio::spawn(async move {
+) -> super::api::ShutdownTask {
+    let (stop, mut stopped) = tokio::sync::watch::channel(false);
+    let task = tokio::spawn(async move {
+        let mut requests = tokio::task::JoinSet::new();
         loop {
-            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-            invite_tick(&state, &scheduler, &events).await;
+            tokio::select! {
+                biased;
+                _ = stopped.changed() => break,
+                _ = tokio::time::sleep(std::time::Duration::from_millis(100)) => {},
+            }
+            while requests.try_join_next().is_some() {}
+            invite_tick(&state, &scheduler, &events, &mut requests).await;
         }
-    })
+        requests.shutdown().await;
+    });
+    super::api::ShutdownTask { stop, task }
 }

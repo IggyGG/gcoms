@@ -1872,6 +1872,7 @@ pub(crate) async fn invite_tick(
     state: &Arc<Mutex<NodeState>>,
     scheduler: &RelayScheduler,
     events: &broadcast::Sender<Ev>,
+    tasks: &mut tokio::task::JoinSet<()>,
 ) {
     let requests: Vec<_> = {
         let mut st = state.lock().unwrap_or_else(|p| p.into_inner());
@@ -1881,7 +1882,7 @@ pub(crate) async fn invite_tick(
         let state = state.clone();
         let scheduler = scheduler.clone();
         let events = events.clone();
-        tokio::spawn(async move {
+        tasks.spawn(async move {
             service_one_invite(&state, &scheduler, &events, request).await;
         });
     }

@@ -257,7 +257,7 @@ pub(crate) fn spawn_command_loop(ctx: CommandLoopContext) -> tokio::task::JoinHa
                         while spawned.join_next().await.is_some() {}
                     });
                     if drain.await.is_err() {
-                        spawned.abort_all();
+                        spawned.shutdown().await;
                     }
                     let _ = done.send(());
                     break;
