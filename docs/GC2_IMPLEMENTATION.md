@@ -116,8 +116,14 @@ Retain failures, source/executable/configuration/workload hashes and exact scope
 - Explicit natural GC/2 cells and class-authenticated deposit, subscription and
   forwarding codecs: implemented behind `experimental-gc2`; see
   [the codec contract](GC2_WIRE.md). No runtime cutover or carrier qualification.
+- Experimental shared GCT2 entry carrier: implemented with two permanent class
+  channels, a shared 16-circuit bound, interactive reservations, fixed interactive
+  records and immediately eligible bulk. Real TLS fixtures exercise shared
+  connections, independent entry/terminal pins, class/profile binding and
+  cancellation. See [its exact scope](GCT2_CARRIER.md); complete middle-hop
+  extension and runtime adoption remain pending.
 - Complete counter-window flow control, command preparation/completion split,
-  authenticated class propagation, shared GCT2 carrier, protected profiles,
+  authenticated class propagation, complete GC/2 routing, protected profiles,
   SDK/GChat profile integration and application/privacy/mobile gates: pending.
 
 ## Consolidation validation — Linux, 2026-09-17

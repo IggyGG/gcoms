@@ -33,6 +33,11 @@ pub type AcceptedDuplex = Box<
         + Send,
 >;
 pub type DuplexHandler = Arc<dyn Fn(&str) -> Option<AcceptedDuplex> + Send + Sync>;
+/// Creates isolated service state once per established TLS/HTTP2 connection.
+/// All duplex paths on that connection share the returned handler. Creation is
+/// not private-service authorization: each path must still be authenticated.
+/// Keep this state lightweight; per-stream allocations follow path admission.
+pub type DuplexHandlerFactory = Arc<dyn Fn() -> DuplexHandler + Send + Sync>;
 
 #[derive(Clone)]
 struct Handlers {
@@ -190,7 +195,7 @@ pub struct Tp1Server {
     on_cell: CellHandler,
     on_queue_cell: Option<QueueCellHandler>,
     on_stream: StreamHandler,
-    on_duplex: Option<DuplexHandler>,
+    duplex_factory: Option<DuplexHandlerFactory>,
     tls: TlsAcceptor,
     limits: ServerLimits,
 }
@@ -315,7 +320,7 @@ impl Tp1Server {
             on_cell,
             on_queue_cell,
             on_stream,
-            on_duplex: None,
+            duplex_factory: None,
             tls: TlsAcceptor::from(Arc::new(cfg)),
             limits: ServerLimits::default(),
         })
@@ -329,8 +334,15 @@ impl Tp1Server {
 
     /// Add private authenticated streaming services without changing existing
     /// queue/post handlers or requiring request END_STREAM before the response.
-    pub fn with_duplex(mut self, handler: DuplexHandler) -> Self {
-        self.on_duplex = Some(handler);
+    pub fn with_duplex(self, handler: DuplexHandler) -> Self {
+        self.with_duplex_factory(Arc::new(move || handler.clone()))
+    }
+
+    /// Share bounded service state across all authenticated duplex paths on one
+    /// physical connection, without sharing it with another connection.
+    /// Transport shutdown drains requests before releasing this state.
+    pub fn with_duplex_factory(mut self, factory: DuplexHandlerFactory) -> Self {
+        self.duplex_factory = Some(factory);
         self
     }
 
@@ -379,12 +391,14 @@ impl Tp1Server {
                 on_cell: self.on_cell.clone(),
                 on_queue_cell: self.on_queue_cell.clone(),
                 on_stream: self.on_stream.clone(),
-                on_duplex: self.on_duplex.clone(),
+                on_duplex: None,
             };
             let tls = self.tls.clone();
             let stopped = stopped.clone();
+            let factory = self.duplex_factory.clone();
             connections.spawn(async move {
-                let _ = handle_connection(stream, tls, handlers, Arc::new(slot), stopped).await;
+                let _ = handle_connection(stream, tls, handlers, Arc::new(slot), stopped, factory)
+                    .await;
             });
         };
         drop(self.listener);
@@ -405,9 +419,10 @@ async fn server_stopped(receiver: &mut tokio::sync::watch::Receiver<bool>) {
 async fn handle_connection(
     stream: TcpStream,
     tls: TlsAcceptor,
-    handlers: Handlers,
+    mut handlers: Handlers,
     slot: Arc<SourceSlot>,
     mut stopped: tokio::sync::watch::Receiver<bool>,
+    factory: Option<DuplexHandlerFactory>,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
     let request_slots = Arc::new(Semaphore::new(MAX_INFLIGHT_PER_CONNECTION));
     let mut builder = h2::server::Builder::new();
@@ -426,6 +441,9 @@ async fn handle_connection(
         result = handshake => result,
     }
     .map_err(|_| io::Error::new(io::ErrorKind::TimedOut, "connection handshake timed out"))??;
+    // Initializing service state cannot block the accept loop, and malformed
+    // TLS/HTTP2 probes never allocate it.
+    handlers.on_duplex = factory.map(|factory| factory());
     let mut requests = tokio::task::JoinSet::new();
     let result = async {
     loop {

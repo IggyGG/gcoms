@@ -42,7 +42,8 @@ the MAC implementation's constant-time tag comparison.
 
 The tests cover maximum-message forwarding, exact natural lengths, malformed
 headers, class/ciphertext/context tampering, class mismatch, nested expiry,
-destination policy and attempted tag reuse across versions. Carrier multiplexing,
-ratchet flow control, runtime class filters, archive migration, SDK/GChat profile
+destination policy and attempted tag reuse across versions. An experimental
+[shared entry carrier](GCT2_CARRIER.md) now supplies bounded multiplexing; complete
+GC/2 routing, ratchet flow control, runtime class filters, archive migration, SDK/GChat profile
 selection and performance/privacy qualification remain separate work in
 [the implementation ledger](GC2_IMPLEMENTATION.md).

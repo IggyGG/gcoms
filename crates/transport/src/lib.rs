@@ -1,6 +1,7 @@
 pub mod client;
 pub mod connector;
 pub mod decoy;
+pub mod duplex;
 pub mod hop;
 pub mod server;
 pub mod tls;

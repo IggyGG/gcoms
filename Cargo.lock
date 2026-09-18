@@ -1140,6 +1140,7 @@ name = "gcoms-routing"
 version = "0.1.0"
 dependencies = [
  "bytes",
+ "futures-util",
  "gcoms-core",
  "gcoms-transport",
  "h2",

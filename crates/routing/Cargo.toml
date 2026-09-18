@@ -10,7 +10,9 @@ version.workspace = true
 publish.workspace = true
 
 [dependencies]
+gcoms-core = { version = "0.1.0", path = "../core", optional = true }
 gcoms-transport = { version = "0.1.0", path = "../transport" }
+futures-util = { version = "0.3", default-features = false, features = ["std"], optional = true }
 tokio = { version = "1", features = ["rt-multi-thread", "net", "macros", "time", "io-util", "sync"] }
 tokio-rustls = "0.26"
 h2 = "0.4"
@@ -28,5 +30,9 @@ webpki-roots = "1"
 url = "2"
 
 [dev-dependencies]
+tokio = { version = "1", features = ["test-util"] }
 gcoms-core = { version = "0.1.0", path = "../core" }
 rcgen = { version = "0.13", default-features = false, features = ["aws_lc_rs", "pem"] }
+
+[features]
+experimental-gc2 = ["dep:gcoms-core", "dep:futures-util"]
