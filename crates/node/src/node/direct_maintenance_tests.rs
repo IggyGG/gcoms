@@ -27,6 +27,44 @@ fn pending(delivery: DirectDelivery, sequence: u64, now: Instant) -> PendingDire
     }
 }
 
+fn component_record(kind: &str, body: &[u8]) -> Vec<u8> {
+    let mut application = b"GCAPP1".to_vec();
+    application.extend_from_slice(&(kind.len() as u16).to_be_bytes());
+    application.extend_from_slice(kind.as_bytes());
+    application.extend_from_slice(body);
+    let routed = gcoms_core::component::RoutedApplication {
+        source: [7; 16],
+        destination: [8; 16],
+        application,
+    };
+    crate::proto::encode_direct_durable_data([9; 16], 1, &routed.encode().unwrap())
+}
+
+#[test]
+fn durable_file_records_are_bulk_while_chat_control_and_volatile_stay_interactive() {
+    assert_eq!(
+        direct_traffic_class(&component_record(
+            gcoms_core::FILE_RECORD_CONTENT_TYPE,
+            b"chunk"
+        )),
+        gcoms_core::TrafficClass::Bulk
+    );
+    assert_eq!(
+        direct_traffic_class(&component_record("application/vnd.ghost.chat.v1", b"hi")),
+        gcoms_core::TrafficClass::Interactive
+    );
+    assert_eq!(
+        direct_traffic_class(&crate::proto::encode_direct_ack([4; 16], false)),
+        gcoms_core::TrafficClass::Interactive
+    );
+    assert_eq!(
+        direct_traffic_class(&crate::proto::encode_volatile_application(
+            [5; 16], 1, b"media"
+        )),
+        gcoms_core::TrafficClass::Interactive
+    );
+}
+
 #[cfg(feature = "experimental-gc2")]
 #[tokio::test]
 async fn gc2_owned_retry_copies_are_charged_before_poll_and_released_on_cancel() {

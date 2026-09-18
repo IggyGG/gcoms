@@ -88,7 +88,13 @@ that understands the current archive. No identity or journal reset is required.
 Still required before enabling pipelining in production: counter-window flow
 control covering ACK/control traffic, removal of command-level network waits,
 component fairness and the application-level comparison in the implementation
-ledger. The local scheduling `TrafficClass` is not yet an authenticated wire field.
+ledger. Durable file records are classified as bulk from their authenticated
+component kind and use the existing bulk admission (at most three concurrent
+bulk jobs per pooled connection); chat, acknowledgements, presence and contact
+updates stay interactive. The class remains a local scheduling property on the
+legacy carrier; the experimental GC/2 natural wire authenticates it separately.
+The local scheduling `TrafficClass` is not yet an authenticated wire field on
+the legacy carrier.
 
 Channel data and control recovery now have independent maintenance loops. A data
 batch can wait for up to 120 seconds; it no longer postpones the next retry of a

@@ -446,7 +446,13 @@ pub(crate) async fn renew_contact_aliases(
     };
     let _ = events.send(Ev::IdentityUpdated { info, generation });
     for delivery in deliveries {
-        let _ = deliver_direct(scheduler, &delivery, &policy).await;
+        let _ = deliver_direct(
+            scheduler,
+            &delivery,
+            &policy,
+            gcoms_core::TrafficClass::Interactive,
+        )
+        .await;
     }
     Ok(())
 }
@@ -822,7 +828,13 @@ pub(crate) async fn contact_alias_lifecycle_tick(
     if let Some((generation, info, deliveries, policy)) = announcement {
         let _ = events.send(Ev::IdentityUpdated { info, generation });
         for delivery in deliveries {
-            let _ = deliver_direct(scheduler, &delivery, &policy).await;
+            let _ = deliver_direct(
+                scheduler,
+                &delivery,
+                &policy,
+                gcoms_core::TrafficClass::Interactive,
+            )
+            .await;
         }
     }
 
@@ -1126,7 +1138,13 @@ pub(crate) async fn install_inbox_relay(
     };
     let _ = events.send(Ev::IdentityUpdated { info, generation });
     for delivery in deliveries {
-        let _ = deliver_direct(scheduler, &delivery, &policy).await;
+        let _ = deliver_direct(
+            scheduler,
+            &delivery,
+            &policy,
+            gcoms_core::TrafficClass::Interactive,
+        )
+        .await;
     }
     Ok(())
 }

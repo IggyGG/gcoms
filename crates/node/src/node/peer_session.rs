@@ -245,7 +245,7 @@ impl PeerSession {
             Self::Credited(s) => {
                 let (purpose, volatile, deadline) = match decode_direct_record(bytes) {
                     Some(DirectRecord::Data { sent_ms, .. }) => (
-                        flow::Purpose::Interactive,
+                        data_purpose(bytes),
                         false,
                         deadline.min(gc2_receipts::horizon(sent_ms)),
                     ),
@@ -450,10 +450,21 @@ pub(super) fn seal(
 #[cfg(feature = "experimental-gc2")]
 fn purpose(bytes: &[u8]) -> flow::Purpose {
     match decode_direct_record(bytes) {
-        Some(DirectRecord::Data { .. } | DirectRecord::VolatileApplication { .. }) => {
-            flow::Purpose::Interactive
-        }
+        Some(DirectRecord::Data { .. }) => data_purpose(bytes),
+        Some(DirectRecord::VolatileApplication { .. }) => flow::Purpose::Interactive,
         _ => flow::Purpose::Control,
+    }
+}
+
+/// Durable file data is the bulk flow producer; every other application record
+/// keeps the interactive reservation. The class is re-derived from the
+/// authenticated logical record so materialized and retried copies agree.
+#[cfg(feature = "experimental-gc2")]
+fn data_purpose(bytes: &[u8]) -> flow::Purpose {
+    if super::direct::direct_traffic_class(bytes) == gcoms_core::TrafficClass::Bulk {
+        flow::Purpose::Bulk
+    } else {
+        flow::Purpose::Interactive
     }
 }
 

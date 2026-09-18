@@ -77,9 +77,10 @@ pub(crate) async fn deliver_direct(
     scheduler: &RelayScheduler,
     delivery: &DirectDelivery,
     policy: &FrwdTargetPolicy,
+    traffic: gcoms_core::TrafficClass,
 ) -> Result<(), String> {
     let reservation = direct_payload_reservation(scheduler, delivery)?;
-    deliver_direct_reserved(scheduler, delivery, policy, reservation).await
+    deliver_direct_reserved(scheduler, delivery, policy, reservation, traffic).await
 }
 
 fn direct_payload_reservation(
@@ -105,16 +106,18 @@ async fn deliver_direct_reserved(
     delivery: &DirectDelivery,
     policy: &FrwdTargetPolicy,
     _reservation: Option<crate::scheduler::PayloadReservation>,
+    traffic: gcoms_core::TrafficClass,
 ) -> Result<(), String> {
     let destination = delivery.peer.primary().ok_or("peer has no public alias")?;
     for msg in &delivery.cells {
         scheduler
-            .frwd(
+            .frwd_with_class(
                 ProducerClass::Direct,
                 delivery.relay.clone(),
                 destination.clone(),
                 msg.clone(),
                 policy.clone(),
+                traffic,
             )
             .map_err(|e| e.to_string())?
             .completion()
@@ -193,6 +196,7 @@ impl DirectMaintenance {
         st: &mut NodeState,
         scheduler: &RelayScheduler,
         mut delivery: DirectDelivery,
+        traffic: gcoms_core::TrafficClass,
         ack: bool,
     ) -> bool {
         let key = direct_attempt_key(&delivery);
@@ -204,9 +208,10 @@ impl DirectMaintenance {
         let scheduler = scheduler.clone();
         let policy = st.frwd_target_policy.clone();
         self.completions.push(Box::pin(async move {
-            let accepted = deliver_direct_reserved(&scheduler, &delivery, &policy, reservation)
-                .await
-                .is_ok();
+            let accepted =
+                deliver_direct_reserved(&scheduler, &delivery, &policy, reservation, traffic)
+                    .await
+                    .is_ok();
             DirectAttempt {
                 key,
                 ack,
@@ -295,7 +300,13 @@ impl DirectMaintenance {
             .cloned()
             .collect();
         for ack in acks {
-            self.start(&mut st, scheduler, ack, true);
+            self.start(
+                &mut st,
+                scheduler,
+                ack,
+                gcoms_core::TrafficClass::Interactive,
+                true,
+            );
         }
 
         #[cfg(feature = "experimental-gc2")]
@@ -315,7 +326,7 @@ impl DirectMaintenance {
                 let Some(route) = st.peer_routes.get(peer) else {
                     continue;
                 };
-                for (_, _, packet) in session.window().retries() {
+                for (_, purpose, packet) in session.window().retries() {
                     if repairs.len() >= available {
                         break 'sessions;
                     }
@@ -326,12 +337,12 @@ impl DirectMaintenance {
                     };
                     let key = direct_attempt_key(&delivery);
                     if !self.active.contains_key(&key) && !self.repair_due.contains_key(&key) {
-                        repairs.push((key, delivery));
+                        repairs.push((key, delivery, purpose.traffic()));
                     }
                 }
             }
-            for (key, delivery) in repairs {
-                if self.start(&mut st, scheduler, delivery, false) {
+            for (key, delivery, traffic) in repairs {
+                if self.start(&mut st, scheduler, delivery, traffic, false) {
                     self.repair_due
                         .insert(key, now + jittered(std::time::Duration::from_secs(60)));
                 }
@@ -366,7 +377,12 @@ impl DirectMaintenance {
                 continue;
             }
             let delivery = pending.delivery.clone();
-            if self.start(&mut st, scheduler, delivery, false) {
+            let traffic = pending
+                .logical_record
+                .as_deref()
+                .map(direct_traffic_class)
+                .unwrap_or(gcoms_core::TrafficClass::Interactive);
+            if self.start(&mut st, scheduler, delivery, traffic, false) {
                 st.pending_1to1
                     .get_mut(&id)
                     .expect("selected retry")
@@ -1788,7 +1804,7 @@ where
         }
     };
     let message_id = fresh_msg_id();
-    let (delivery, policy, durable) = {
+    let (delivery, policy, durable, traffic) = {
         let mut st = state.lock().unwrap_or_else(|p| p.into_inner());
         if st.pending_1to1.len() >= 1024 {
             return Err("too many unacknowledged direct messages".into());
@@ -1811,6 +1827,7 @@ where
         }
         let durable = crate::proto::is_durable_direct_data(&direct);
         let control = direct_control_record(&direct);
+        let traffic = direct_traffic_class(&direct);
         if crate::proto::is_volatile_application(&direct)
             && (!st.sessions.contains_key(&peer.identity_pk)
                 || !matches!(
@@ -2050,7 +2067,7 @@ where
         st.peer_route_generations
             .entry(peer.identity_pk.clone())
             .or_insert(0);
-        (delivery, st.frwd_target_policy.clone(), durable)
+        (delivery, st.frwd_target_policy.clone(), durable, traffic)
     };
     if delivery.cells.len() == 2 {
         metrics::log_event("first_move_sent", &[]);
@@ -2064,12 +2081,13 @@ where
         // (or the existing transport expiry), including scheduler backpressure.
         let destination = delivery.peer.primary().ok_or("peer has no public alias")?;
         for cell in &delivery.cells {
-            if let Err(error) = scheduler.frwd(
+            if let Err(error) = scheduler.frwd_with_class(
                 ProducerClass::Direct,
                 delivery.relay.clone(),
                 destination.clone(),
                 cell.clone(),
                 policy.clone(),
+                traffic,
             ) {
                 metrics::log_event(
                     "durable_application_enqueue_deferred",
@@ -2079,7 +2097,7 @@ where
             }
         }
     } else {
-        deliver_direct(scheduler, &delivery, &policy).await?;
+        deliver_direct(scheduler, &delivery, &policy, traffic).await?;
     }
     Ok(message_id)
 }
@@ -2289,6 +2307,27 @@ pub(crate) fn direct_session_context_for_tag(
         None => (b"gc-node/direct-session/v1", b"direct"),
     };
     SessionContext::new(machine, domain, peer, conversation).map_err(|error| error.to_string())
+}
+
+/// Derive the local scheduling class from the authenticated logical record.
+/// Durable file data is the bulk producer; chat, acknowledgements, presence and
+/// contact updates stay interactive. Deriving from the record keeps deferred,
+/// materialized and retried copies consistent without a new archive field.
+pub(crate) fn direct_traffic_class(record: &[u8]) -> gcoms_core::TrafficClass {
+    let Some(crate::proto::DirectRecord::Data { body, .. }) =
+        crate::proto::decode_direct_record(record)
+    else {
+        return gcoms_core::TrafficClass::Interactive;
+    };
+    let Some(application) = gcoms_core::component::RoutedApplication::decode(&body).ok() else {
+        return gcoms_core::TrafficClass::Interactive;
+    };
+    match gcoms_core::component::application_parts(&application.application) {
+        Some((kind, _)) if kind == gcoms_core::FILE_RECORD_CONTENT_TYPE => {
+            gcoms_core::TrafficClass::Bulk
+        }
+        _ => gcoms_core::TrafficClass::Interactive,
+    }
 }
 
 fn direct_component_source(record: &[u8]) -> Option<gcoms_core::component::ComponentId> {

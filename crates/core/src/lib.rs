@@ -39,6 +39,10 @@ pub mod payload_contact;
 pub const VOLATILE_CONTACT_CONTENT_TYPE: &str = "application/vnd.ghost.payload-contact.v1";
 pub const VOLATILE_FILE_CONTENT_TYPE: &str = "application/vnd.ghost.file-attempt-record.v1";
 pub const VOLATILE_FILE_ACK_CONTENT_TYPE: &str = "application/vnd.ghost.file-attempt-ack.v1";
+/// Durable file transfer record; the bulk scheduling producer.
+pub const FILE_RECORD_CONTENT_TYPE: &str = "application/vnd.ghost.file-record.v1";
+/// Durable file acknowledgement; interactive, not bulk.
+pub const FILE_ACK_CONTENT_TYPE: &str = "application/vnd.ghost.file-ack.v1";
 pub fn is_volatile_content_type(kind: &str) -> bool {
     [
         VOLATILE_CONTACT_CONTENT_TYPE,

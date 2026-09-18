@@ -185,6 +185,11 @@ Retain failures, source/executable/configuration/workload hashes and exact scope
   maintenance owner (16 per tick, four per peer), and reliable control records
   journal without consuming a counter. Tests cover full bidirectional windows,
   restart with lost credit, uncertain writes and the legacy archive barrier.
+  Durable file records are now classified as bulk from their authenticated
+  component kind for both the GC/2 counter reservation and scheduler admission;
+  chat, acknowledgements, presence and contact updates keep the interactive and
+  control reservations. Concurrent file transfers therefore share the bounded
+  bulk slots instead of the interactive capacity.
 - Complete counter-window flow control, command preparation/completion split,
   authenticated class propagation, complete GC/2 routing, protected profiles,
   SDK/GChat profile integration and application/privacy/mobile gates: pending.

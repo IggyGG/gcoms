@@ -27,6 +27,58 @@ async fn gc2_restore(node: &NodeState, seed: u8) -> Arc<Mutex<NodeState>> {
 }
 
 #[tokio::test]
+async fn gc2_durable_file_records_reserve_the_bulk_counter_window() {
+    fn file_record(body: &[u8]) -> Vec<u8> {
+        let mut application = b"GCAPP1".to_vec();
+        application
+            .extend_from_slice(&(gcoms_core::FILE_RECORD_CONTENT_TYPE.len() as u16).to_be_bytes());
+        application.extend_from_slice(gcoms_core::FILE_RECORD_CONTENT_TYPE.as_bytes());
+        application.extend_from_slice(body);
+        gcoms_core::component::RoutedApplication {
+            source: [11; 16],
+            destination: [12; 16],
+            application,
+        }
+        .encode()
+        .unwrap()
+    }
+    let alice = Arc::new(Mutex::new(gc2_node(87)));
+    let bob = gc2_node(88);
+    let scheduler = alice.lock().unwrap().scheduler.clone();
+    send_durable_1to1(
+        &alice,
+        &scheduler,
+        &bob.info,
+        &file_record(b"file chunk"),
+        None,
+    )
+    .await
+    .unwrap();
+    let peer = bob.info.identity_pk.clone();
+    alice
+        .lock()
+        .unwrap()
+        .session_states
+        .insert(peer.clone(), DirectSessionState::Established);
+    send_durable_1to1(&alice, &scheduler, &bob.info, b"chat", None)
+        .await
+        .unwrap();
+    let a = alice.lock().unwrap();
+    let PeerSession::Credited(session) = &a.sessions[&peer] else {
+        panic!("GC2 session expected");
+    };
+    let purposes: Vec<_> = session
+        .window()
+        .retries()
+        .map(|(_, purpose, _)| purpose)
+        .collect();
+    assert!(purposes.contains(&gcoms_protocol::flow::Purpose::Bulk));
+    assert!(purposes.contains(&gcoms_protocol::flow::Purpose::Interactive));
+    a.scheduler.shutdown();
+    bob.scheduler.shutdown();
+}
+
+#[tokio::test]
 async fn gc2_runtime_durable_delivery_credit_and_ack_survive_restart() {
     let alice=Arc::new(Mutex::new(gc2_node(21)));
     let mut bob=gc2_node(22);

@@ -3,8 +3,8 @@
 use crate::ContactCard;
 use serde::{Deserialize, Serialize};
 
-pub const CONTENT_TYPE: &str = "application/vnd.ghost.file-record.v1";
-pub const ACK_CONTENT_TYPE: &str = "application/vnd.ghost.file-ack.v1";
+pub const CONTENT_TYPE: &str = gcoms_core::FILE_RECORD_CONTENT_TYPE;
+pub const ACK_CONTENT_TYPE: &str = gcoms_core::FILE_ACK_CONTENT_TYPE;
 pub const CHUNK_BYTES: u64 = gcoms_core::file_stream::RECOMMENDED_CHUNK_BYTES;
 
 /// Choose a useful chunk without exceeding the recipient's existing contact or
