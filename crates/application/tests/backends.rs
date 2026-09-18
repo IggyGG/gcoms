@@ -1,0 +1,413 @@
+#![cfg(all(feature = "embedded", feature = "ipc"))]
+use gcoms::{
+    async_trait, rpc,
+    sdk::{ipc::Capability, ChannelVisibility, GcClient},
+    Application, Backend,
+};
+use std::{
+    path::{Path, PathBuf},
+    sync::{
+        atomic::{AtomicU32, Ordering},
+        Arc,
+    },
+    time::Duration,
+};
+
+#[gcoms::service(name = "example.echo", version = 1)]
+trait Echo {
+    #[rpc(id = "echo", kind = "query")]
+    async fn echo(&self, text: String) -> Result<String, String>;
+    #[rpc(id = "count", kind = "operation")]
+    async fn count(&self) -> Result<u32, String>;
+}
+struct Host(Arc<AtomicU32>);
+#[async_trait]
+impl Echo for Host {
+    async fn echo(&self, text: String) -> Result<String, String> {
+        Ok(text)
+    }
+    async fn count(&self) -> Result<u32, String> {
+        Ok(self.0.fetch_add(1, Ordering::SeqCst) + 1)
+    }
+}
+fn builder(path: &Path, name: &str, backend: Backend, port: u16) -> gcoms::ApplicationBuilder {
+    Application::builder(name)
+        .profile(path)
+        .unlock_secret("fixture-passphrase")
+        .backend(backend)
+        .local_fixture()
+        .listen(([127, 0, 0, 1], port).into())
+}
+fn port() -> u16 {
+    std::net::TcpListener::bind("127.0.0.1:0")
+        .unwrap()
+        .local_addr()
+        .unwrap()
+        .port()
+}
+async fn daemon(
+    dir: &Path,
+) -> (
+    PathBuf,
+    tokio::sync::oneshot::Sender<()>,
+    tokio::task::JoinHandle<Result<(), String>>,
+) {
+    let endpoint = dir.join("service.sock");
+    let (stop, stopped) = tokio::sync::oneshot::channel();
+    let socket = endpoint.clone();
+    let task = tokio::spawn(async move {
+        gcoms::daemon::serve(&socket, async {
+            let _ = stopped.await;
+        })
+        .await
+    });
+    for _ in 0..100 {
+        if gcoms::control::exchange(&endpoint, gcoms::control::Request::Ping)
+            .await
+            .is_ok()
+        {
+            return (endpoint, stop, task);
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    panic!("daemon startup timed out")
+}
+async fn qualify(backend: Backend, dir: &Path) {
+    let (a_path, b_path) = (dir.join("alice.profile"), dir.join("bob.profile"));
+    let (a_port, b_port) = (port(), port());
+    let client_app = builder(&a_path, "alice", backend.clone(), a_port)
+        .rpc_contract(EchoContract::descriptor())
+        .open()
+        .await
+        .unwrap();
+    let alice = client_app.peer().await.unwrap();
+    let counter = Arc::new(AtomicU32::new(0));
+    let allowed = alice.principal();
+    let server_builder = || {
+        builder(&b_path, "bob", backend.clone(), b_port)
+            .peer(alice.clone())
+            .service(
+                Arc::new(EchoDispatcher(Host(counter.clone()))),
+                Arc::new({
+                    let allowed = allowed.clone();
+                    move |caller: &rpc::Caller, _: &str, _: u16, _: &str| {
+                        caller.principal == allowed
+                    }
+                }),
+            )
+    };
+    let server = server_builder().open().await.unwrap();
+    let bob = server.peer().await.unwrap();
+    assert_ne!(alice.identity, bob.identity);
+    client_app.trust_peer(bob.clone()).await.unwrap();
+    let client = EchoClient::new(
+        client_app
+            .rpc(&bob, "bob", &EchoContract::descriptor())
+            .unwrap(),
+    );
+    let reply = tokio::time::timeout(Duration::from_secs(10), client.echo("hello".into())).await;
+    assert!(
+        reply.is_ok(),
+        "RPC workers: client={:?}, server={:?}; inbox counts: client={}, server={}",
+        client_app.worker_error(),
+        server.worker_error(),
+        client_app
+            .messaging()
+            .application_inbox(0, 32)
+            .await
+            .unwrap()
+            .len(),
+        server
+            .messaging()
+            .application_inbox(0, 32)
+            .await
+            .unwrap()
+            .len()
+    );
+    assert_eq!(reply.unwrap().unwrap(), "hello");
+    let prepared = client.prepare_count().unwrap();
+    assert_eq!(client.inner.start_and_wait(&prepared).await.unwrap(), 1);
+    // Mixed inbox: ordinary messages still arrive while the same consumer handles RPC.
+    client_app
+        .messaging()
+        .submit_durable_opaque(&bob.contact, "example.message", b"durable hello")
+        .await
+        .unwrap();
+    let delivery = tokio::time::timeout(Duration::from_secs(10), server.receive())
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(delivery.message.body, b"durable hello");
+    drop(delivery);
+    let delivery = tokio::time::timeout(Duration::from_secs(10), server.receive())
+        .await
+        .unwrap()
+        .unwrap();
+    delivery.acknowledge().await.unwrap();
+    // Journal replay after a real runtime restart cannot repeat the effect.
+    server.stop_profile().await.unwrap();
+    let server = server_builder().open().await.unwrap();
+    let renewed = server.peer().await.unwrap();
+    assert_eq!(bob.identity, renewed.identity);
+    client_app.trust_peer(renewed).await.unwrap();
+    // Route recovery can outlast the RPC deadline. Resume the original handle;
+    // a timeout must never cause this test to submit a new operation identity.
+    let replay = match client.inner.start_and_wait(&prepared).await {
+        Err(rpc::CallError::Rpc(error)) if error.code == rpc::ErrorCode::Timeout => {
+            client.inner.resume::<u32, String>(&prepared.handle).await
+        }
+        outcome => outcome,
+    };
+    assert_eq!(replay.unwrap(), 1);
+    assert_eq!(counter.load(Ordering::SeqCst), 1);
+    // Channel invitation is available through both backends.
+    server
+        .messaging()
+        .create_channel("invite-test", "bob", 16, ChannelVisibility::Private)
+        .await
+        .unwrap();
+    let invitation = server
+        .messaging()
+        .create_channel_invitation("invite-test", 300)
+        .await
+        .unwrap();
+    let inspected = client_app
+        .messaging()
+        .inspect_channel_invitation(&invitation.link)
+        .await
+        .unwrap();
+    assert_eq!(inspected.channel, "invite-test");
+    assert_eq!(
+        client_app
+            .messaging()
+            .join_channel_invitation(&invitation.link, "alice", 10)
+            .await
+            .unwrap(),
+        "invite-test"
+    );
+    assert!(builder(&a_path, "different-app", backend.clone(), a_port)
+        .receive_messages(false)
+        .open()
+        .await
+        .is_err());
+    client_app.stop_profile().await.unwrap();
+    server.stop_profile().await.unwrap();
+}
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn embedded_typed_rpc_messages_invites_and_restart() {
+    let dir = private_dir();
+    qualify(Backend::Embedded, dir.path()).await;
+}
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn shared_typed_rpc_messages_invites_and_restart() {
+    let dir = private_dir();
+    let (endpoint, stop, task) = daemon(dir.path()).await;
+    qualify(Backend::Attach { endpoint }, dir.path()).await;
+    stop.send(()).unwrap();
+    task.await.unwrap().unwrap();
+}
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn shared_attachment_credentials_exclusive_inbox_and_detach() {
+    let dir = private_dir();
+    let (endpoint, stop, task) = daemon(dir.path()).await;
+    let backend = Backend::Attach { endpoint };
+    let path = dir.path().join("profile");
+    let bind_port = port();
+    let app = builder(&path, "app", backend.clone(), bind_port)
+        .open()
+        .await
+        .unwrap();
+    let identity = app.identity();
+    assert!(builder(&path, "app", backend.clone(), bind_port)
+        .open()
+        .await
+        .is_err());
+    assert!(builder(&path, "app", backend.clone(), bind_port)
+        .unlock_secret("wrong")
+        .receive_messages(false)
+        .open()
+        .await
+        .is_err());
+    let observer = builder(&path, "app", backend.clone(), bind_port)
+        .receive_messages(false)
+        .open()
+        .await
+        .unwrap();
+    assert_eq!(identity.safety_number, observer.identity().safety_number);
+    app.close().await.unwrap();
+    // Detaching releases only the consumer, retaining the hosted runtime.
+    let app = builder(&path, "app", backend, bind_port)
+        .open()
+        .await
+        .unwrap();
+    assert_eq!(identity.safety_number, app.identity().safety_number);
+    observer.close().await.unwrap();
+    app.stop_profile().await.unwrap();
+    stop.send(()).unwrap();
+    task.await.unwrap().unwrap();
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn profile_credentials_capabilities_and_lease_release() {
+    let dir = private_dir();
+    let (endpoint, stop, task) = daemon(dir.path()).await;
+    let path = dir.path().join("secured");
+    let listen_port = port();
+    let app = builder(
+        &path,
+        "secured",
+        Backend::Attach {
+            endpoint: endpoint.clone(),
+        },
+        listen_port,
+    )
+    .receive_messages(false)
+    .open()
+    .await
+    .unwrap();
+    let registration: serde_json::Value = serde_json::from_slice(
+        &std::fs::read(dir.path().join("secured.gcoms-registration")).unwrap(),
+    )
+    .unwrap();
+    let token: [u8; 32] = serde_json::from_value(registration["token"].clone()).unwrap();
+    let attachment = gcoms::control::exchange(
+        &endpoint,
+        gcoms::control::Request::Open {
+            config: gcoms::control::ProfileConfig {
+                application: "secured".into(),
+                profile: path,
+                listen: ([127, 0, 0, 1], listen_port).into(),
+                fixture: true,
+                advertise: None,
+                relay: None,
+                network: None,
+                network_recovery: true,
+                providers: Vec::new(),
+            },
+            token,
+            secret: "fixture-passphrase".into(),
+            create: false,
+        },
+    )
+    .await
+    .unwrap()
+    .unwrap();
+    use gcoms::sdk::IpcClient;
+    assert!(IpcClient::connect(
+        &attachment.endpoint,
+        "unauthenticated",
+        vec![Capability::IdentityRead]
+    )
+    .await
+    .is_err());
+    assert!(IpcClient::connect_profile(
+        &attachment.endpoint,
+        "wrong-token",
+        vec![Capability::IdentityRead],
+        [0; 32]
+    )
+    .await
+    .is_err());
+    let observer = IpcClient::connect_profile(
+        &attachment.endpoint,
+        "observer",
+        vec![Capability::IdentityRead],
+        token,
+    )
+    .await
+    .unwrap();
+    assert!(observer.application_inbox(0, 1).await.is_err());
+    assert!(observer.import_network_invitation("denied").await.is_err());
+    // A denied reader never acquires the exclusive consumer lease.
+    let first = IpcClient::connect_profile(
+        &attachment.endpoint,
+        "first",
+        vec![Capability::IdentityRead, Capability::DurableApplication],
+        token,
+    )
+    .await
+    .unwrap();
+    first.application_inbox(0, 1).await.unwrap();
+    let next = IpcClient::connect_profile(
+        &attachment.endpoint,
+        "next",
+        vec![Capability::IdentityRead, Capability::DurableApplication],
+        token,
+    )
+    .await
+    .unwrap();
+    assert!(next.application_inbox(0, 1).await.is_err());
+    assert!(next.commit_application(0, [0; 32]).await.is_err());
+    first.close().await;
+    tokio::time::timeout(Duration::from_secs(3), async {
+        loop {
+            if next.application_inbox(0, 1).await.is_ok() {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .unwrap();
+    next.close().await;
+    observer.close().await;
+    app.stop_profile().await.unwrap();
+    stop.send(()).unwrap();
+    task.await.unwrap().unwrap();
+}
+
+#[cfg(unix)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn bundled_daemon_starts_once_and_attaches() {
+    struct Stop(rustix::process::Pid);
+    impl Drop for Stop {
+        fn drop(&mut self) {
+            let _ = rustix::process::kill_process(self.0, rustix::process::Signal::TERM);
+        }
+    }
+    let dir = private_dir();
+    let endpoint = dir.path().join("bundle.sock");
+    let backend = Backend::Shared {
+        executable: PathBuf::from(env!("CARGO_BIN_EXE_gcomsd")),
+        endpoint: endpoint.clone(),
+    };
+    let first = builder(&dir.path().join("first"), "first", backend.clone(), port())
+        .open()
+        .await
+        .unwrap();
+    let socket = gcoms::sdk::local::connect(&gcoms::sdk::LocalEndpoint::new(&endpoint))
+        .await
+        .unwrap();
+    let pid = socket.peer_cred().unwrap().pid().unwrap();
+    let guard = Stop(rustix::process::Pid::from_raw(pid).unwrap());
+    drop(socket);
+    let second = builder(&dir.path().join("second"), "second", backend, port())
+        .open()
+        .await
+        .unwrap();
+    let socket = gcoms::sdk::local::connect(&gcoms::sdk::LocalEndpoint::new(&endpoint))
+        .await
+        .unwrap();
+    assert_eq!(pid, socket.peer_cred().unwrap().pid().unwrap());
+    drop(socket);
+    assert_ne!(
+        first.identity().safety_number,
+        second.identity().safety_number
+    );
+    first.stop_profile().await.unwrap();
+    second.stop_profile().await.unwrap();
+    drop(guard);
+    tokio::time::timeout(Duration::from_secs(5), async {
+        while endpoint.exists() {
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .unwrap();
+}
+
+fn private_dir() -> tempfile::TempDir {
+    let dir = tempfile::tempdir().unwrap();
+    gcoms::sdk::private_fs::make_private(dir.path(), true).unwrap();
+    dir
+}

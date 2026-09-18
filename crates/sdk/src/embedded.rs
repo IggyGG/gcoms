@@ -68,6 +68,103 @@ impl EmbeddedClient {
 
 #[async_trait]
 impl GcClient for EmbeddedClient {
+    async fn create_channel_invitation(
+        &self,
+        channel: &str,
+        ttl_secs: u64,
+    ) -> Result<crate::ChannelInvitation, SdkError> {
+        let (id, secret, expiry) = self
+            .node
+            .create_channel_invite(channel, ttl_secs)
+            .await
+            .map_err(SdkError::Runtime)?;
+        let invite = gcoms_node::channel_invite::ChannelInvite {
+            owner: self.node.current_info().await.map_err(SdkError::Runtime)?,
+            channel: channel.into(),
+            id,
+            secret,
+            expiry,
+        };
+        let link = if self.node.uses_onion_routing() {
+            invite.to_link_with_bootstrap(self.node.routing_bootstrap().map_err(SdkError::Runtime)?)
+        } else {
+            invite.to_link()
+        }
+        .ok_or_else(|| SdkError::Protocol("invite is too large to encode".into()))?;
+        self.inspect_channel_invitation(&link).await
+    }
+    async fn inspect_channel_invitation(
+        &self,
+        link: &str,
+    ) -> Result<crate::ChannelInvitation, SdkError> {
+        let envelope = gcoms_node::channel_invite::InviteEnvelope::from_link(link.trim())
+            .ok_or_else(|| SdkError::Protocol("invalid channel invitation".into()))?;
+        let invite = envelope.invite;
+        Ok(crate::ChannelInvitation {
+            link: link.trim().into(),
+            channel: invite.channel,
+            expires_at: invite.expiry,
+            local_only: invite.owner.aliases.iter().all(|a| {
+                a.target.address.ip().is_loopback() || a.target.address.ip().is_unspecified()
+            }),
+        })
+    }
+    async fn join_channel_invitation(
+        &self,
+        link: &str,
+        display: &str,
+        timeout_secs: u64,
+    ) -> Result<String, SdkError> {
+        let envelope = gcoms_node::channel_invite::InviteEnvelope::from_link(link.trim())
+            .ok_or_else(|| SdkError::Protocol("invalid channel invitation".into()))?;
+        let invite = envelope.invite;
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+        let remaining = invite.expiry.saturating_sub(now).min(timeout_secs).min(600);
+        if remaining == 0 {
+            return Err(SdkError::Protocol(
+                "invite expired or join deadline elapsed".into(),
+            ));
+        }
+        let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(remaining);
+        tokio::time::timeout_at(deadline, async {
+            if let Some(bootstrap) = envelope.bootstrap {
+                self.node.install_routing_bootstrap(bootstrap).await?;
+            }
+            self.node.wait_for_inbox(deadline).await?;
+            let request = self.node.prepare_channel_join(display).await?;
+            let package = self.node.channel_key_package(request).await?;
+            let welcome = self
+                .node
+                .redeem_invite_remote(
+                    invite.owner,
+                    &invite.channel,
+                    display,
+                    &package,
+                    invite.id,
+                    invite.secret,
+                    deadline
+                        .saturating_duration_since(tokio::time::Instant::now())
+                        .as_secs(),
+                )
+                .await?;
+            self.node
+                .join_channel(
+                    request,
+                    &invite.channel,
+                    gcoms_node::channel::ChannelVisibility::Private,
+                    &welcome,
+                )
+                .await?;
+            Ok::<_, String>(invite.channel)
+        })
+        .await
+        .map_err(|_| SdkError::Runtime("invite join deadline elapsed".into()))?
+        .map_err(SdkError::Runtime)
+    }
+
     async fn configure_catalog_origins(&self, origins: Vec<String>) -> Result<(), SdkError> {
         self.node
             .configure_catalog_origins(origins)

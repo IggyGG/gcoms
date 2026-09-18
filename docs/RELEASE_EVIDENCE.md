@@ -33,7 +33,7 @@ python3 scripts/check-consumers.py --release --gchat /path/to/gchat \
   --output /path/to/evidence/rc-01/packages
 ```
 
-This snapshots both checkouts, packages all 17 publishable Rust crates, checks an
+This snapshots both checkouts, packages all publishable Rust crates, checks an
 external renamed-dependency consumer, builds both GChat Cargo workspaces against
 the extracted crates, and installs the two npm tarballs in an external consumer.
 Original source and lockfiles are checked for changes and never rewritten.

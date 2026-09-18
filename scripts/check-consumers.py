@@ -54,10 +54,7 @@ def qualify(root, chat, args, out, env):
         config = temp / 'packages.toml'
         config.write_text('\n'.join(patches) + '\n')
         consumer = temp / 'consumer'; (consumer / 'src').mkdir(parents=True)
-        deps = ['comms={package="gcoms-rpc",version="0.1.0",features=["file-store"]}']
-        for package in packages:
-            if package['name'] != 'gcoms-rpc':
-                deps.append(f'{package["name"]}={json.dumps(package["version"])}')
+        deps = ['comms={package="gcoms",version="0.1.0"}']
         (consumer / 'Cargo.toml').write_text('[package]\nname="external-gcoms-consumer"\nversion="0.0.0"\nedition="2021"\n[dependencies]\n' + '\n'.join(deps) + '\n')
         (consumer / 'src/lib.rs').write_text((root / 'examples/renamed-dependency/src/lib.rs').read_text())
         base = ['cargo', 'check', '--config', config, '--target-dir', out / 'consumer-target']

@@ -390,7 +390,7 @@ async fn new_bootstrap_sdk_rejects_old_welcome_without_sending_a_request() {
         let Frame::Hello(hello) = read_frame(&mut stream).await.unwrap() else {
             panic!("hello")
         };
-        assert_eq!((hello.min_version, hello.max_version), (16, 16));
+        assert_eq!((hello.min_version, hello.max_version), (VERSION, VERSION));
         write_frame(
             &mut stream,
             &Frame::Welcome(Welcome {

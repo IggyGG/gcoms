@@ -30,7 +30,7 @@ def patches(root):
                 raise ValueError("workspace member escapes GComs")
             package = tomllib.loads((directory / "Cargo.toml").read_text())["package"]
             name = package["name"]
-            if name.startswith("gcoms-"):
+            if (name == "gcoms" or name.startswith("gcoms-")):
                 packages.append(name)
                 lines.append(f"{json.dumps(name)} = {{ path = {json.dumps(str(directory))} }}")
     if not {"gcoms-node", "gcoms-sdk", "gcoms-rpc"}.issubset(packages):

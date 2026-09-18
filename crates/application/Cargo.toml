@@ -1,0 +1,50 @@
+[package]
+name = "gcoms"
+description = "Application communication over embedded or shared GComs runtimes"
+readme = "README.md"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+version.workspace = true
+publish.workspace = true
+
+[features]
+default = ["embedded", "ipc", "rpc"]
+embedded = ["dep:gcoms-runtime", "gcoms-sdk/embedded", "rpc"]
+ipc = ["gcoms-sdk/ipc", "rpc"]
+rpc = ["gcoms-rpc/native", "gcoms-rpc/file-store"]
+wasm = ["gcoms-rpc/wasm"]
+
+[dependencies]
+gcoms-rpc = { version = "0.1.0", path = "../rpc", default-features = false }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+gcoms-sdk = { version = "0.1.0", path = "../sdk", default-features = false, features = ["ipc"] }
+gcoms-runtime = { version = "0.1.0", path = "../runtime", optional = true }
+gcoms-private-fs = { version = "0.1.0", path = "../private-fs" }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time", "net", "io-util", "process", "signal"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+postcard = { version = "1", default-features = false, features = ["alloc"] }
+zeroize = "1"
+rand = "0.8"
+fs2 = "0.4"
+tempfile = "3"
+sha2 = "0.10"
+argon2 = "0.5"
+
+[target.'cfg(unix)'.dependencies]
+rustix = { version = "1", features = ["process"] }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_System_Threading"] }
+
+[[bin]]
+name = "gcomsd"
+path = "src/bin/gcomsd.rs"
+required-features = ["embedded", "ipc"]
+
+
+[[example]]
+name = "open"
+required-features = ["embedded", "ipc"]

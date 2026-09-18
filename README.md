@@ -1,5 +1,9 @@
 # GComs
 
+Rust applications start with the [`gcoms` application API](crates/application/README.md):
+one dependency, typed services and durable messages, with embedded or automatically
+started shared `gcomsd` backends. GChat consumes the same API.
+
 **GComs** is a Rust communication protocol for secure connections, with typed
 service APIs for addon and client integration. **GChat** is its separate reference
 application, with a desktop UI, terminal UI and local service.

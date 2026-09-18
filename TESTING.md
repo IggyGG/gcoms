@@ -34,6 +34,26 @@ a temporary project. It keeps package metadata free of private sibling paths. Us
 `--gchat /path/to/gchat` to qualify GChat against those same extracted Rust packages.
 This staging check does not publish anything or require registry credentials.
 
+## Application facade
+
+`gcoms` is the public application dependency. The [application guide](crates/application/README.md)
+covers embedded and shared runtimes, bundled daemon startup, private profiles,
+authenticated peers, and durable operation recovery. GChat uses this facade.
+
+`cargo test -p gcoms --all-features --locked -- --test-threads=1` exercises both
+backends with real encrypted profiles: typed queries and durable operations,
+mixed message delivery, channel invitations, profile restart and replay,
+credential/capability denial, exclusive inbox attachment, and bundled daemon startup.
+A reconnection timeout is recovered with the original operation handle; the
+handler effect must remain single. Runtime storage and shutdown regressions now
+live in `gcoms-runtime`. IPC17 appends operations without changing GC/1 or GCPRT1.
+
+Also compile the facade with `--no-default-features --features ipc`,
+`--no-default-features --features embedded`, and
+`--no-default-features --features wasm --target wasm32-unknown-unknown`.
+The isolated archive consumer uses only a renamed `gcoms` dependency.
+These fixtures do not qualify operated-network reachability or native Windows.
+
 ## Current-source GChat integration and relay research
 
 Use `python3 scripts/check-gchat.py --gchat /path/to/gchat --offline` to test the
