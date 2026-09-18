@@ -195,8 +195,9 @@ Retain failures, source/executable/configuration/workload hashes and exact scope
   and cancellation release; invite, membership, replay and recovery commands
   still serialize their network waits. The experimental combined-listener GC/2
   role gate is attachable through an explicit fixture profile; it is late-bound
-  to owner provisioning and never falls back to GC/1 within a connection.
-  Terminal queue composition and production profile selection remain.
+  to owner provisioning and never falls back to GC/1 within a connection. The
+  owned terminal queue service is composed under the same gate. Durable
+  directory startup and production profile selection remain.
 - Complete GC/2 routing, protected profiles, SDK/GChat profile integration and
   application/privacy/mobile gates: pending. Counter-window flow control, the
   application-send preparation/completion split and authenticated class

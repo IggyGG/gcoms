@@ -154,9 +154,11 @@ The combined-listener gate is now installed for an explicit fixture profile
 (`NodeProfile::gc2_gate_fixture`): the listener attaches a late-bound dispatch
 factory that passes every path through until this node provisions a relay
 service, then fixes entry/transit/control roles and rejects unknown paths
-without any GC/1 fallback within the connection. Runtime adoption still needs
-the terminal queue service composition, connection of the durable directory to
-profile startup, explicit bootstrap migration, private
-provisioning/advertisement integration, production profile selection,
-Node/SDK/GChat class and profile propagation, and the application/privacy/device
-gates in [the implementation ledger](GC2_IMPLEMENTATION.md).
+without any GC/1 fallback within the connection. The owned terminal queue
+service is composed under the same gate; its handler accepts only authenticated
+queue tokens that resolve to a current lease in this node's store. Runtime
+adoption still needs connection of the durable directory to profile startup,
+explicit bootstrap migration, private provisioning/advertisement integration,
+production profile selection, Node/SDK/GChat class and profile propagation, and
+the application/privacy/device gates in
+[the implementation ledger](GC2_IMPLEMENTATION.md).

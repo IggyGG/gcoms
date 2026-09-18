@@ -713,7 +713,11 @@ async fn start_with_tls_policy_control_sink_and_bootstrap(
     .with_limits(cfg.profile.server_limits());
     #[cfg(feature = "experimental-gc2")]
     let server = if cfg.profile.gc2_gate() {
-        server.with_dispatch_factory(gc2_gate::dispatch_factory(routing.clone(), None))
+        // Compose the owned terminal queue service under the same role gate.
+        // Its handler only accepts authenticated queue tokens that resolve to a
+        // current lease in this node's store.
+        let terminal = Some(crate::gc2::QueueService::new(leases.clone()).handler());
+        server.with_dispatch_factory(gc2_gate::dispatch_factory(routing.clone(), terminal))
     } else {
         server
     };

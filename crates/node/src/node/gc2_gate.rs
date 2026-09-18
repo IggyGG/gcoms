@@ -81,4 +81,34 @@ mod tests {
         let handler = factory();
         assert!(matches!(handler("unknown", false), Dispatch::Pass));
     }
+
+    #[test]
+    fn gate_offers_unknown_paths_to_the_terminal_service() {
+        use gcoms_transport::server::AcceptedDuplex;
+
+        let runtime = runtime();
+        let directory = Arc::new(Directory::new());
+        let service = RelayService::new(
+            "127.0.0.1:443".parse().unwrap(),
+            [9; 32],
+            [7; 32],
+            directory,
+            ServicePolicy::default(),
+        )
+        .unwrap();
+        *runtime.service.lock().unwrap_or_else(|p| p.into_inner()) = Some(service);
+        let terminal: DuplexHandler = Arc::new(|path: &str| {
+            (path == "gc2/terminal").then(|| {
+                let accepted: AcceptedDuplex = Box::new(|_body, _respond| Box::pin(async {}));
+                accepted
+            })
+        });
+        let factory = dispatch_factory(Some(runtime), Some(terminal));
+        let handler = factory();
+        assert!(matches!(
+            handler("gc2/terminal", false),
+            Dispatch::Accepted(_)
+        ));
+        assert!(matches!(handler("gc2/other", false), Dispatch::Rejected));
+    }
 }
