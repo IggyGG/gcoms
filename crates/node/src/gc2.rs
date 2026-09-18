@@ -57,8 +57,9 @@ impl QueueService {
     }
 
     /// Attach through the transport's owned duplex handler. If combined with
-    /// an entry service, compose with its per-connection handler factory so
-    /// entry role and profile binding are preserved.
+    /// an entry service, supply this handler to
+    /// `RelayService::gc2_handler_factory_with_terminal` and install the result
+    /// with `Tp1Server::with_dispatch_factory` to enforce one connection role.
     pub fn handler(&self) -> DuplexHandler {
         let service = self.clone();
         Arc::new(move |token| {

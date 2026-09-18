@@ -290,25 +290,48 @@ impl RelayService {
         })
     }
 
-    /// Attach with `Tp1Server::with_duplex_factory` to fix entry, transit or
-    /// control role per physical connection. A protected entry fixes its class
-    /// channels/profile and shares one 16-circuit budget.
+    /// Attach with `Tp1Server::with_dispatch_factory` to fix entry, transit,
+    /// control or terminal role before any registered endpoint can run. A
+    /// protected entry fixes its profile and shares one 16-circuit budget.
     #[cfg(feature = "experimental-gc2")]
-    pub fn gc2_handler_factory(self: &Arc<Self>) -> gcoms_transport::server::DuplexHandlerFactory {
+    pub fn gc2_handler_factory(
+        self: &Arc<Self>,
+    ) -> gcoms_transport::server::DispatchHandlerFactory {
+        self.gc2_dispatch_factory(None)
+    }
+
+    /// Compose a natural terminal service under the same connection role gate.
+    /// An accepted terminal path must still authenticate its complete envelope.
+    #[cfg(feature = "experimental-gc2")]
+    pub fn gc2_handler_factory_with_terminal(
+        self: &Arc<Self>,
+        terminal: DuplexHandler,
+    ) -> gcoms_transport::server::DispatchHandlerFactory {
+        self.gc2_dispatch_factory(Some(terminal))
+    }
+
+    #[cfg(feature = "experimental-gc2")]
+    fn gc2_dispatch_factory(
+        self: &Arc<Self>,
+        terminal: Option<DuplexHandler>,
+    ) -> gcoms_transport::server::DispatchHandlerFactory {
         use crate::gc2::{entry, transit};
+        use gcoms_transport::server::Dispatch;
         #[derive(Clone, Copy, PartialEq, Eq)]
         enum Role {
             Entry,
             Transit,
             Control,
+            Terminal,
         }
         let service = self.clone();
         Arc::new(move || {
             let context = Arc::new(entry::ConnectionContext::default());
             let role = Mutex::new(None);
             let service = service.clone();
-            Arc::new(move |path| {
-                let mut cap = gcoms_transport::decode_b64url(path)?;
+            let terminal = terminal.clone();
+            Arc::new(move |path, registered| {
+                let mut cap = gcoms_transport::decode_b64url(path).unwrap_or_default();
                 let now = now_unix();
                 let intro = service.gc2_introduction(now);
                 let entry = bool::from(cap.as_slice().ct_eq(&intro.entry_cap));
@@ -322,13 +345,27 @@ impl RelayService {
                 } else if control {
                     Role::Control
                 } else {
-                    return None;
+                    let mut selected = role.lock().unwrap_or_else(|p| p.into_inner());
+                    if selected.is_some_and(|role| role != Role::Terminal) {
+                        return Dispatch::Rejected;
+                    }
+                    if registered {
+                        *selected = Some(Role::Terminal);
+                        return Dispatch::Pass;
+                    }
+                    if let Some(accepted) = terminal.as_ref().and_then(|handler| handler(path)) {
+                        *selected = Some(Role::Terminal);
+                        return Dispatch::Accepted(accepted);
+                    }
+                    // An unknown path neither promotes source admission nor
+                    // commits the physical connection to a service role.
+                    return Dispatch::Rejected;
                 };
                 // Possessing both capabilities cannot add unshaped transit
                 // paths to a connection already bound as a protected entry.
                 let mut selected = role.lock().unwrap_or_else(|p| p.into_inner());
                 if selected.is_some_and(|role| role != requested || role == Role::Transit) {
-                    return None;
+                    return Dispatch::Rejected;
                 }
                 // A nested TLS connection extends exactly one middle target;
                 // only the protected entry role multiplexes circuit opens.
@@ -341,10 +378,10 @@ impl RelayService {
                             let _ = service.gc2_introductions(body, respond).await;
                         })
                     });
-                    return Some(accepted);
+                    return Dispatch::Accepted(accepted);
                 }
                 let connect = service.gc2_target_connector();
-                Some(if entry {
+                Dispatch::Accepted(if entry {
                     context.accept(intro.expires_at, connect)
                 } else {
                     transit::accept(intro.expires_at, connect)

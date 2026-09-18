@@ -39,6 +39,21 @@ pub type DuplexHandler = Arc<dyn Fn(&str) -> Option<AcceptedDuplex> + Send + Syn
 /// Keep this state lightweight; per-stream allocations follow path admission.
 pub type DuplexHandlerFactory = Arc<dyn Fn() -> DuplexHandler + Send + Sync>;
 
+/// Connection-wide dispatch runs before registered endpoints and legacy duplex
+/// services. Rejection is final and does not authenticate an unknown source.
+pub enum Dispatch {
+    /// Continue ordinary registry/duplex routing.
+    Pass,
+    /// Uniform decoy response, without invoking any later endpoint handler.
+    Rejected,
+    /// The private path is authenticated; own this service future as usual.
+    Accepted(AcceptedDuplex),
+}
+/// The boolean indicates a currently registered private path, not body-level
+/// queue authorization. A passed request still runs its normal envelope checks.
+pub type DispatchHandler = Arc<dyn Fn(&str, bool) -> Dispatch + Send + Sync>;
+pub type DispatchHandlerFactory = Arc<dyn Fn() -> DispatchHandler + Send + Sync>;
+
 #[derive(Clone)]
 struct Handlers {
     registry: Arc<TokenRegistry>,
@@ -46,6 +61,7 @@ struct Handlers {
     on_queue_cell: Option<QueueCellHandler>,
     on_stream: StreamHandler,
     on_duplex: Option<DuplexHandler>,
+    on_dispatch: Option<DispatchHandler>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -196,6 +212,7 @@ pub struct Tp1Server {
     on_queue_cell: Option<QueueCellHandler>,
     on_stream: StreamHandler,
     duplex_factory: Option<DuplexHandlerFactory>,
+    dispatch_factory: Option<DispatchHandlerFactory>,
     tls: TlsAcceptor,
     limits: ServerLimits,
 }
@@ -321,6 +338,7 @@ impl Tp1Server {
             on_queue_cell,
             on_stream,
             duplex_factory: None,
+            dispatch_factory: None,
             tls: TlsAcceptor::from(Arc::new(cfg)),
             limits: ServerLimits::default(),
         })
@@ -343,6 +361,14 @@ impl Tp1Server {
     /// Transport shutdown drains requests before releasing this state.
     pub fn with_duplex_factory(mut self, factory: DuplexHandlerFactory) -> Self {
         self.duplex_factory = Some(factory);
+        self
+    }
+
+    /// Bind connection policy before any POST endpoint can run. Unlike a
+    /// duplex fallback, this gate also sees registered queue/post/stream paths.
+    /// Returning `Rejected` cannot fall through to another service.
+    pub fn with_dispatch_factory(mut self, factory: DispatchHandlerFactory) -> Self {
+        self.dispatch_factory = Some(factory);
         self
     }
 
@@ -392,13 +418,23 @@ impl Tp1Server {
                 on_queue_cell: self.on_queue_cell.clone(),
                 on_stream: self.on_stream.clone(),
                 on_duplex: None,
+                on_dispatch: None,
             };
             let tls = self.tls.clone();
             let stopped = stopped.clone();
             let factory = self.duplex_factory.clone();
+            let dispatch_factory = self.dispatch_factory.clone();
             connections.spawn(async move {
-                let _ = handle_connection(stream, tls, handlers, Arc::new(slot), stopped, factory)
-                    .await;
+                let _ = handle_connection(
+                    stream,
+                    tls,
+                    handlers,
+                    Arc::new(slot),
+                    stopped,
+                    factory,
+                    dispatch_factory,
+                )
+                .await;
             });
         };
         drop(self.listener);
@@ -423,6 +459,7 @@ async fn handle_connection(
     slot: Arc<SourceSlot>,
     mut stopped: tokio::sync::watch::Receiver<bool>,
     factory: Option<DuplexHandlerFactory>,
+    dispatch_factory: Option<DispatchHandlerFactory>,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
     let request_slots = Arc::new(Semaphore::new(MAX_INFLIGHT_PER_CONNECTION));
     let mut builder = h2::server::Builder::new();
@@ -444,6 +481,7 @@ async fn handle_connection(
     // Initializing service state cannot block the accept loop, and malformed
     // TLS/HTTP2 probes never allocate it.
     handlers.on_duplex = factory.map(|factory| factory());
+    handlers.on_dispatch = dispatch_factory.map(|factory| factory());
     let mut requests = tokio::task::JoinSet::new();
     let result = async {
     loop {
@@ -504,6 +542,7 @@ async fn per_request(
         on_queue_cell,
         on_stream,
         on_duplex,
+        on_dispatch,
     } = handlers;
     let (parts, mut body) = request.into_parts();
     let path = parts.uri.path().to_string();
@@ -511,6 +550,20 @@ async fn per_request(
         Method::GET => serve_decoy(&mut respond, path.as_str()).await,
         Method::POST => {
             let token = path.trim_start_matches('/').to_string();
+            if let Some(dispatch) = &on_dispatch {
+                match dispatch(&token, registry.kind(&token).is_some()) {
+                    Dispatch::Pass => (),
+                    Dispatch::Rejected => {
+                        serve_decoy(&mut respond, "/_").await;
+                        return;
+                    }
+                    Dispatch::Accepted(accepted) => {
+                        slot.authenticate();
+                        accepted(body, respond).await;
+                        return;
+                    }
+                }
+            }
             // A random private path is a service capability. Promotion releases
             // only the unauthenticated source slot, never the global slot.
             if registry.kind(&token).is_some() {

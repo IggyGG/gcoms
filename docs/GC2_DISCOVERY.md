@@ -47,10 +47,14 @@ provisioning and advertisement. It does not reserve a data-circuit slot. Bodies
 have a 10-byte bound and the transport's body-read deadline. Authenticated overload
 uses the existing eight-byte natural hop status; invalid bodies fail closed.
 
-This role binding applies to `gc2_handler_factory`. A production listener that
-also hosts queue endpoints or legacy registered handlers must enforce the role
-across the combined dispatch path before adoption. Simple handler composition
-does not establish that invariant.
+Install `gc2_handler_factory` through `Tp1Server::with_dispatch_factory`, which
+runs before registered endpoints and legacy duplex handlers. Its typed rejection
+is final and does not promote an unauthenticated source. Known registered paths
+select a terminal role; unknown paths cannot commit a role. To cohost natural
+queues, pass their handler to `gc2_handler_factory_with_terminal`. Terminal
+requests still authenticate their complete envelopes, and neither terminal nor
+entry/transit/control connections may switch to the other role. Simple duplex
+fallback composition does not provide this enforcement.
 
 ## Background connected periods
 
@@ -121,7 +125,7 @@ TLS entry/middle/terminal reuse. These are component tests, including a fixture
 with legacy cells inside an explicit GC/2 circuit. They are not application
 goodput, packet-classifier, mobile-power or operated-network qualification.
 
-Runtime adoption still needs combined-listener role enforcement, durable guard
-and bootstrap migration, private provisioning/advertisement integration,
+Runtime adoption still needs installation of this combined-listener gate,
+durable guard and bootstrap migration, private provisioning/advertisement integration,
 counter-window recovery, Node/SDK/GChat class and profile propagation, and the
 application/privacy/device gates in [the implementation ledger](GC2_IMPLEMENTATION.md).

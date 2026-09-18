@@ -32,10 +32,12 @@ struct Fixture {
 impl Fixture {
     async fn new() -> Self {
         let identity = TlsIdentity::generate().unwrap();
+        let registry = TokenRegistry::new();
+        registry.insert_post("fixture-registered");
         let server = Tp1Server::bind_with_identity(
             "127.0.0.91:0".parse().unwrap(),
-            TokenRegistry::new(),
-            Arc::new(|_, _| Ok(None)),
+            registry,
+            Arc::new(|_, cell| Ok(Some(cell))),
             Arc::new(|_| None),
             &identity,
         )
@@ -55,7 +57,7 @@ impl Fixture {
         let connections = Arc::new(AtomicUsize::new(0));
         let observed = connections.clone();
         let factory = service.gc2_handler_factory();
-        let server = server.with_duplex_factory(Arc::new(move || {
+        let server = server.with_dispatch_factory(Arc::new(move || {
             observed.fetch_add(1, Ordering::SeqCst);
             factory()
         }));
@@ -180,15 +182,39 @@ async fn roles_cannot_mix_and_gc1_authority_cannot_authenticate_v2_discovery() {
         let handler = factory();
         // Invalid authority never commits the physical connection's role.
         for cap in [old.reentry_cap, old.circuit_cap, [0; 32]] {
-            assert!(handler(&gcoms_transport::encode_b64url(&cap)).is_none());
+            assert!(matches!(
+                handler(&gcoms_transport::encode_b64url(&cap), false),
+                gcoms_transport::server::Dispatch::Rejected
+            ));
         }
-        assert!(handler(&gcoms_transport::encode_b64url(first)).is_some());
+        assert!(matches!(
+            handler(&gcoms_transport::encode_b64url(first), false),
+            gcoms_transport::server::Dispatch::Accepted(_)
+        ));
         for (next, cap) in roles.iter().enumerate() {
             assert_eq!(
-                handler(&gcoms_transport::encode_b64url(cap)).is_some(),
+                matches!(
+                    handler(&gcoms_transport::encode_b64url(cap), false),
+                    gcoms_transport::server::Dispatch::Accepted(_)
+                ),
                 index == next && index != 1
             );
         }
+        assert!(matches!(
+            handler("fixture-registered", true),
+            gcoms_transport::server::Dispatch::Rejected
+        ));
+    }
+    let terminal = factory();
+    assert!(matches!(
+        terminal("fixture-registered", true),
+        gcoms_transport::server::Dispatch::Pass
+    ));
+    for cap in &roles {
+        assert!(matches!(
+            terminal(&gcoms_transport::encode_b64url(cap), false),
+            gcoms_transport::server::Dispatch::Rejected
+        ));
     }
     let client = Tp1Client::new().unwrap();
     discovery::refresh(&client, &seed, &[]).await.unwrap();
@@ -205,6 +231,45 @@ async fn roles_cannot_mix_and_gc1_authority_cannot_authenticate_v2_discovery() {
     }
     discovery::refresh(&client, &seed, &[]).await.unwrap();
     assert_eq!(fixture.connections.load(Ordering::SeqCst), 1);
+    fixture.stop().await;
+}
+
+#[tokio::test]
+async fn registered_endpoint_cannot_bypass_control_role_or_then_switch_to_control() {
+    use gcoms_core::Cell;
+    use gcoms_transport::HopOutcome;
+    let fixture = Fixture::new().await;
+    let seed = fixture.service.gc2_introduction(now_unix());
+    let bytes = bytes::Bytes::from(
+        Cell::new(CellType::Msg, 0, 0, vec![7; 128])
+            .encode_wire()
+            .unwrap(),
+    );
+    let control = Tp1Client::new().unwrap();
+    discovery::refresh(&control, &seed, &[]).await.unwrap();
+    assert_eq!(
+        control
+            .post_cell_pinned(
+                seed.addr,
+                seed.service_id,
+                "fixture-registered",
+                bytes.clone()
+            )
+            .await
+            .unwrap(),
+        HopOutcome::Decoy(404)
+    );
+    discovery::refresh(&control, &seed, &[]).await.unwrap();
+    let terminal = Tp1Client::new().unwrap();
+    assert!(matches!(
+        terminal
+            .post_cell_pinned(seed.addr, seed.service_id, "fixture-registered", bytes)
+            .await
+            .unwrap(),
+        HopOutcome::Accepted(Some(_))
+    ));
+    assert!(discovery::refresh(&terminal, &seed, &[]).await.is_err());
+    assert_eq!(fixture.connections.load(Ordering::SeqCst), 2);
     fixture.stop().await;
 }
 

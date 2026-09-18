@@ -48,10 +48,12 @@ struct Fixture {
 impl Fixture {
     async fn new() -> Self {
         let entry_identity = TlsIdentity::generate().unwrap();
+        let local_registry = TokenRegistry::new();
+        local_registry.insert_post("fixture-local");
         let entry_server = Tp1Server::bind_with_identity(
             "127.0.0.81:0".parse().unwrap(),
-            TokenRegistry::new(),
-            Arc::new(|_, _| Ok(None)),
+            local_registry,
+            Arc::new(|_, cell| Ok(Some(cell))),
             Arc::new(|_| None),
             &entry_identity,
         )
@@ -71,7 +73,7 @@ impl Fixture {
         let factory = service.gc2_handler_factory();
         let connections = Arc::new(AtomicUsize::new(0));
         let observed = connections.clone();
-        let entry_server = entry_server.with_duplex_factory(Arc::new(move || {
+        let entry_server = entry_server.with_dispatch_factory(Arc::new(move || {
             observed.fetch_add(1, Ordering::SeqCst);
             factory()
         }));
@@ -162,7 +164,7 @@ impl Fixture {
             },
         )
         .unwrap();
-        let server = server.with_duplex_factory(service.gc2_handler_factory());
+        let server = server.with_dispatch_factory(service.gc2_handler_factory());
         let (tx, rx) = oneshot::channel();
         self.stop.push(tx);
         self.tasks.spawn(async move {
@@ -694,6 +696,35 @@ async fn profile_and_class_binding_are_immutable_on_one_connection() {
         "an entry connection cannot add an unshaped transit path"
     );
     denied.send_reset(h2::Reason::CANCEL);
+    // Even a valid registered application endpoint is denied before it can
+    // echo unshaped payload outside the two established carrier channels.
+    let (response, mut body) = sender
+        .send_request(
+            http::Request::builder()
+                .method("POST")
+                .uri(format!("https://{}/fixture-local", descriptor.addr))
+                .body(())
+                .unwrap(),
+            false,
+        )
+        .unwrap();
+    body.send_data(
+        Bytes::from(
+            Cell::new(CellType::Msg, 0, 0, vec![7; 128])
+                .encode_wire()
+                .unwrap(),
+        ),
+        true,
+    )
+    .unwrap();
+    assert_eq!(
+        timeout(Duration::from_secs(2), response)
+            .await
+            .unwrap()
+            .unwrap()
+            .status(),
+        404
+    );
     assert_eq!(fixture.connections.load(Ordering::SeqCst), 1);
     drop((held, bulk, sender));
     fixture.stop().await;

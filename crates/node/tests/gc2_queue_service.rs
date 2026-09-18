@@ -41,11 +41,60 @@ const CAPS: Capabilities = Capabilities {
 const I: TrafficClass = TrafficClass::Interactive;
 const B: TrafficClass = TrafficClass::Bulk;
 
+#[tokio::test]
+async fn composed_terminal_and_relay_services_cannot_switch_connection_roles() {
+    let fixture = Fixture::new().await;
+    let intro = fixture.terminal_relay.gc2_introduction(now_unix());
+    let control = Tp1Client::new().unwrap();
+    gcoms_routing::gc2::discovery::refresh(&control, &intro, &[])
+        .await
+        .unwrap();
+    let push = fixture.push(B, 90, 128);
+    assert_eq!(
+        fixture.deposit(&control, &push).await,
+        NaturalOutcome::Decoy(404)
+    );
+    assert_eq!(
+        fixture.store.lock().unwrap().queue_len(&QUEUE, now_unix()),
+        0
+    );
+    assert_eq!(fixture.service.active_subscriptions(), 0);
+    let terminal = Tp1Client::new().unwrap();
+    assert_eq!(
+        fixture.deposit(&terminal, &push).await,
+        NaturalOutcome::Accepted(None)
+    );
+    assert_eq!(
+        fixture.store.lock().unwrap().queue_len(&QUEUE, now_unix()),
+        1
+    );
+    for cap in [intro.entry_cap, intro.transit_cap, intro.reentry_cap] {
+        let token = gcoms_transport::encode_b64url(&cap);
+        let result = terminal
+            .post_natural_prepared(fixture.route(&token, I), || {
+                Ok(NaturalCell::new(CellType::Pex, 0, b"GCD2".to_vec())?)
+            })
+            .await
+            .unwrap();
+        assert_eq!(result, NaturalOutcome::Decoy(404));
+    }
+    let mut subscription = fixture.subscribe(&terminal, B, 91).await;
+    assert_eq!(
+        subscription.recv().await.unwrap().unwrap(),
+        push.msg.unwrap()
+    );
+    drop(subscription);
+    fixture.inactive().await;
+    assert_eq!(fixture.terminal_relay.active_circuits(), 0);
+    fixture.finish().await;
+}
+
 struct Fixture {
     address: SocketAddr,
     pin: [u8; 32],
     store: Arc<Mutex<LeaseStore>>,
     service: QueueService,
+    terminal_relay: Arc<RelayService>,
     stops: Vec<oneshot::Sender<()>>,
     tasks: JoinSet<()>,
     carriers: Vec<AbortHandle>,
@@ -91,14 +140,28 @@ impl Fixture {
             &identity,
         )
         .await
-        .unwrap()
-        .with_duplex(service.handler());
+        .unwrap();
+        let terminal_relay = RelayService::new(
+            server.local_addr().unwrap(),
+            pin,
+            [0x85; 32],
+            Arc::new(Directory::new()),
+            ServicePolicy {
+                target_allowed: Arc::new(|addr| addr.ip().is_loopback()),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        let server = server.with_dispatch_factory(
+            terminal_relay.gc2_handler_factory_with_terminal(service.handler()),
+        );
         let address = server.local_addr().unwrap();
         let mut fixture = Self {
             address,
             pin,
             store,
             service,
+            terminal_relay,
             stops: Vec::new(),
             tasks: JoinSet::new(),
             carriers: Vec::new(),
@@ -187,7 +250,7 @@ impl Fixture {
         .unwrap();
         let factory = service.gc2_handler_factory();
         let connections = self.entry_connections.clone();
-        self.add(server.with_duplex_factory(Arc::new(move || {
+        self.add(server.with_dispatch_factory(Arc::new(move || {
             if observe {
                 connections.fetch_add(1, Ordering::SeqCst);
             }

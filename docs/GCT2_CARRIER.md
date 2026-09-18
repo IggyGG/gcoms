@@ -119,12 +119,18 @@ not silently reduce padding or select another profile.
 The service uses a separate HMAC-derived `ghost.gct2.entry.v2` capability bound to
 its service identity and hourly epoch. GC/1 circuit and re-entry capabilities are
 not accepted. Middle transit uses the independent `ghost.gct2.transit.v2` domain.
-A physical connection binds to entry, transit or private control: possessing their tokens
+A physical connection binds to entry, transit, private control or terminal use:
+possessing their tokens
 cannot add an unshaped path to a protected entry. Service target policy,
 reachability admission and capacity still
 apply. The returned logical stream carries opaque bytes: the next hop requires
 its own TLS pin and capability. Complete route selection must preserve every
 endpoint, terminal and adjacent-hop exclusion before using a shared entry.
+
+The relay factory installs with `Tp1Server::with_dispatch_factory`. Its role
+decision precedes registered paths and ordinary duplex fallbacks, so cohosted
+endpoints cannot bypass the binding. Natural queue handlers join that same gate
+through `gc2_handler_factory_with_terminal`.
 
 ## Costs and remaining evidence
 
