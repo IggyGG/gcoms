@@ -5,6 +5,7 @@ documentation = "https://docs.rs/gcoms-node"
 description = "GComs GC/1 PoC node: relay queues, FRWD, 1:1 over real hops, keystore, metrics"
 edition.workspace = true
 license.workspace = true
+repository.workspace = true
 rust-version.workspace = true
 version.workspace = true
 publish.workspace = true

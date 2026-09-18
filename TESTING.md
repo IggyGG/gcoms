@@ -1,11 +1,9 @@
 # Validation
 
-Current work covers secure connections in GComs and GChat only, in their existing
-private local Forgejo repositories. Validate peer authentication, transport security,
-IPC access controls and connection recovery on Linux and the existing Windows VM.
-macOS is unavailable and excluded. Installer qualification and publication are
-deferred; the broader checks below remain guidance for future release work.
-The private candidate gate is documented in [release evidence](docs/RELEASE_EVIDENCE.md).
+Current release work covers GComs/GChat source, signed installers, and GChat's
+website/onboarding. Validate secure connections on Linux, the native MSVC Windows
+VM, and GitHub-hosted macOS Apple Silicon/Intel runners. The local Mac remains
+unavailable. Historical results below do not qualify these new release inputs.
 
 Run from the repository root with Rust 1.98, Node 22, npm 11 and Python 3.11+.
 Native builds require the standard C/C++ toolchain used by aws-lc-rs. The public
@@ -87,7 +85,7 @@ receive no signing/registry secrets and must not execute on a developer workstat
 Public GChat CI starts after its GComs registry dependencies are available; local
 pre-publication checks use the documented extracted-package staging.
 
-If macOS support is revisited, bind-based multi-relay fixtures need distinct
+For GitHub-hosted macOS qualification, bind-based multi-relay fixtures need distinct
 loopback aliases and both Intel and ARM64 native qualification. No Mac access is
 required for the current Linux/Windows connection checks.
 
@@ -104,7 +102,7 @@ This checks Windows runtime behavior, including named pipes and file permissions
 It does not establish MSVC compilation, native compiler UI tests, desktop installer
 behavior, signing or a configured Forgejo runner. Those require the corresponding
 Windows build dependencies and separate acceptance evidence when release work
-resumes. Public publication remains deferred.
+resumes. Public release preparation is active; required evidence must still be completed.
 
 The [2026-09-17 runtime record](release/native-validation-2026-09-17.json) contains
 584 passing GComs Windows cases (five ignored) and 121 passing GChat Windows cases.

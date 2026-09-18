@@ -5,6 +5,7 @@ documentation = "https://docs.rs/gcoms-crypto"
 description = "GComs GC/1 1:1 crypto: hybrid handshake, ratchet, PQ refresh, identity keys"
 edition.workspace = true
 license.workspace = true
+repository.workspace = true
 rust-version.workspace = true
 version.workspace = true
 publish.workspace = true

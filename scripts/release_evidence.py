@@ -14,7 +14,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 PROJECTS = ("gcoms", "gchat")
-TARGETS = ("linux-x86_64", "windows-x86_64")
+TARGETS = ("linux-x86_64", "windows-x86_64", "macos-x86_64", "macos-aarch64")
 STAGES = ("candidate", "preflight", "published")
 NATIVE = {f"native.{project}.{target}" for project in PROJECTS for target in TARGETS}
 INSTALLERS = {f"installer.gchat.{target}" for target in TARGETS}
@@ -25,7 +25,7 @@ CANDIDATE = NATIVE | INSTALLERS | {
     "soak.application",
 }
 PREFLIGHT = CANDIDATE | {"review.rights", "review.operator", "review.maintainers",
-                         "signing.windows", "signing.manifest"}
+                         "signing.windows", "signing.macos", "signing.linux", "signing.manifest"}
 PUBLISHED = PREFLIGHT | {"published.rust", "published.npm", "published.gchat"}
 INSTALL_SCENARIOS = {
     "fresh_install", "invite_unlock", "messaging", "file_transfer", "reconnect",
@@ -170,6 +170,9 @@ def validate_report(check, report, candidate, base, artifacts):
         require(environment.get("native_target") == target, "cross compilation is not native qualification")
         if target == "windows-x86_64":
             require(environment.get("rust_host") == "x86_64-pc-windows-msvc", "Windows release qualification requires native MSVC")
+        if target.startswith("macos"):
+            expected = "aarch64-apple-darwin" if target == "macos-aarch64" else "x86_64-apple-darwin"
+            require(environment.get("rust_host") == expected, "macOS qualification must run on its native architecture")
         counts = report.get("tests", {})
         require(type(counts.get("passed")) is int and counts["passed"] > 0, "no native tests executed")
         require(type(counts.get("failed")) is int and counts["failed"] == 0, "native test failures")
@@ -220,7 +223,7 @@ def validate_report(check, report, candidate, base, artifacts):
 def validate_publication(config, project, version):
     require(config.get("project") == project and config.get("version") == version, "publication identity/version mismatch")
     require(config.get("publication_status") == "approved_by_owner", "public publication remains deferred")
-    for key in ("forgejo_url", "companion_url"):
+    for key in ("public_repository_url", "companion_url"):
         u = urlparse(config.get(key) or "")
         require(u.scheme == "https" and bool(u.hostname) and not u.username and not u.password and u.hostname not in {"localhost", "127.0.0.1", "::1"}, f"missing public {key}")
     for key in ("security_contact", "conduct_contact"):
@@ -229,7 +232,7 @@ def validate_publication(config, project, version):
     maintainers = config.get("maintainers")
     require(isinstance(maintainers, list) and maintainers and all(nonempty(x) for x in maintainers), "missing maintainer roster")
     if project == "gchat":
-        for platform in ("windows",):
+        for platform in ("windows", "macos", "linux"):
             identity = config.get("publisher_identities", {}).get(platform)
             require(isinstance(identity, dict) and nonempty(identity.get("name")) and nonempty(identity.get("certificate_fingerprint")), f"missing {platform} distribution signer")
 
@@ -241,7 +244,7 @@ def validate(candidate, base, stage="candidate", repositories=None, publication=
         require(isinstance(candidate, dict) and type(candidate.get("schema_version")) is int and candidate["schema_version"] == 1, "unsupported candidate schema")
         require(candidate.get("channel") == "developer-preview" and candidate.get("wire_profile") == "GC/1", "candidate is not the GC/1 developer preview")
         require(nonempty(candidate.get("version")), "missing candidate version")
-        require(candidate.get("targets") == list(TARGETS), "candidate must retain the Linux and Windows qualification targets")
+        require(candidate.get("targets") == list(TARGETS), "candidate must retain Linux, Windows, and both macOS qualification targets")
         validate_sources(candidate, base, repositories)
         artifacts = candidate.get("artifacts")
         require(isinstance(artifacts, dict) and artifacts, "no release artifacts recorded")
