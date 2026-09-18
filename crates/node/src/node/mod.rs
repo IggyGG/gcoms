@@ -43,6 +43,8 @@ mod direct;
 #[cfg(feature = "experimental-gc2")]
 mod gc2_acks;
 #[cfg(feature = "experimental-gc2")]
+mod gc2_carrier;
+#[cfg(feature = "experimental-gc2")]
 mod gc2_direct;
 #[cfg(feature = "experimental-gc2")]
 mod gc2_gate;
@@ -907,6 +909,8 @@ async fn start_with_tls_policy_control_sink_and_bootstrap(
             #[cfg(feature = "experimental-gc2")]
             gc2_carrier: None,
             #[cfg(feature = "experimental-gc2")]
+            gc2_carrier_client: None,
+            #[cfg(feature = "experimental-gc2")]
             retained_direct: std::sync::OnceLock::new(),
             #[cfg(feature = "experimental-gc2")]
             gc2_receipts: gc2_receipts::Ledger::default(),
@@ -1069,6 +1073,10 @@ async fn start_with_tls_policy_control_sink_and_bootstrap(
                 }));
             }
             state.lock().unwrap_or_else(|p| p.into_inner()).gc2_carrier = Some(ready);
+            state
+                .lock()
+                .unwrap_or_else(|p| p.into_inner())
+                .gc2_carrier_client = Some(client.clone());
             tasks.push(tokio::spawn(async move {
                 if let Err(error) = owner.run().await {
                     metrics::log_event("gc2_carrier_owner_error", &[("e", error.to_string())]);
@@ -1105,6 +1113,25 @@ async fn start_with_tls_policy_control_sink_and_bootstrap(
             ),
             ticks::spawn_invite_service_loop(state.clone(), scheduler.clone(), events_tx.clone()),
         ];
+        // The natural carrier drains its own class queues; the legacy pump
+        // stays for sessions that did not migrate.
+        #[cfg(feature = "experimental-gc2")]
+        let workers = {
+            let mut workers = workers;
+            if let Some(client) = state
+                .lock()
+                .unwrap_or_else(|p| p.into_inner())
+                .gc2_carrier_client
+                .clone()
+            {
+                workers.push(gc2_carrier::spawn_subscriptions(
+                    state.clone(),
+                    client,
+                    events_tx.clone(),
+                ));
+            }
+            workers
+        };
         tasks.push(ticks::spawn_alias_lifecycle_loop(
             state.clone(),
             scheduler.clone(),

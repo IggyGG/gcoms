@@ -78,9 +78,10 @@ pub(crate) async fn deliver_direct(
     delivery: &DirectDelivery,
     policy: &FrwdTargetPolicy,
     traffic: gcoms_core::TrafficClass,
+    natural: Option<&std::sync::Arc<gcoms_transport::Tp1Client>>,
 ) -> Result<(), String> {
     let reservation = direct_payload_reservation(scheduler, delivery)?;
-    deliver_direct_reserved(scheduler, delivery, policy, reservation, traffic).await
+    deliver_direct_reserved(scheduler, delivery, policy, reservation, traffic, natural).await
 }
 
 fn direct_payload_reservation(
@@ -107,7 +108,14 @@ async fn deliver_direct_reserved(
     policy: &FrwdTargetPolicy,
     _reservation: Option<crate::scheduler::PayloadReservation>,
     traffic: gcoms_core::TrafficClass,
+    natural: Option<&std::sync::Arc<gcoms_transport::Tp1Client>>,
 ) -> Result<(), String> {
+    #[cfg(feature = "experimental-gc2")]
+    if let Some(client) = natural {
+        return super::gc2_carrier::deliver_all(client, delivery, traffic).await;
+    }
+    #[cfg(not(feature = "experimental-gc2"))]
+    let _ = natural;
     let destination = delivery.peer.primary().ok_or("peer has no public alias")?;
     for msg in &delivery.cells {
         scheduler
@@ -207,11 +215,21 @@ impl DirectMaintenance {
         reroute_deliveries(st, std::slice::from_mut(&mut delivery));
         let scheduler = scheduler.clone();
         let policy = st.frwd_target_policy.clone();
+        #[cfg(feature = "experimental-gc2")]
+        let natural = st.gc2_carrier_client.clone();
+        #[cfg(not(feature = "experimental-gc2"))]
+        let natural: Option<std::sync::Arc<gcoms_transport::Tp1Client>> = None;
         self.completions.push(Box::pin(async move {
-            let accepted =
-                deliver_direct_reserved(&scheduler, &delivery, &policy, reservation, traffic)
-                    .await
-                    .is_ok();
+            let accepted = deliver_direct_reserved(
+                &scheduler,
+                &delivery,
+                &policy,
+                reservation,
+                traffic,
+                natural.as_ref(),
+            )
+            .await
+            .is_ok();
             DirectAttempt {
                 key,
                 ack,
@@ -1832,6 +1850,10 @@ pub(crate) struct PreparedDirect {
     policy: FrwdTargetPolicy,
     durable: bool,
     traffic: gcoms_core::TrafficClass,
+    /// Natural-carrier client captured at preparation time. `None` keeps the
+    /// legacy relay path for this delivery.
+    #[cfg(feature = "experimental-gc2")]
+    natural: Option<std::sync::Arc<gcoms_transport::Tp1Client>>,
 }
 
 pub(crate) fn prepare_direct_record<F>(
@@ -2031,6 +2053,8 @@ where
                 policy: st.frwd_target_policy.clone(),
                 durable,
                 traffic,
+                #[cfg(feature = "experimental-gc2")]
+                natural: st.gc2_carrier_client.clone(),
             });
         }
 
@@ -2142,6 +2166,8 @@ where
             policy,
             durable,
             traffic,
+            #[cfg(feature = "experimental-gc2")]
+            natural: st.gc2_carrier_client.clone(),
         }
     };
     Ok(prepared)
@@ -2151,12 +2177,17 @@ pub(crate) async fn complete_direct_record(
     scheduler: &RelayScheduler,
     prepared: PreparedDirect,
 ) -> Result<[u8; 16], String> {
+    #[cfg(feature = "experimental-gc2")]
+    let natural = prepared.natural.clone();
+    #[cfg(not(feature = "experimental-gc2"))]
+    let natural: Option<std::sync::Arc<gcoms_transport::Tp1Client>> = None;
     let PreparedDirect {
         message_id,
         delivery,
         policy,
         durable,
         traffic,
+        ..
     } = prepared;
     if delivery.cells.is_empty() {
         // Deferred during preparation: there is nothing to dispatch yet. The
@@ -2167,6 +2198,13 @@ pub(crate) async fn complete_direct_record(
         metrics::log_event("first_move_sent", &[]);
     } else {
         metrics::log_event("frame_sent", &[]);
+    }
+    #[cfg(feature = "experimental-gc2")]
+    if let Some(client) = &natural {
+        if let Err(error) = super::gc2_carrier::deliver_all(client, &delivery, traffic).await {
+            metrics::log_event("natural_delivery_deferred", &[("e", error)]);
+        }
+        return Ok(message_id);
     }
     if durable {
         // The API confirms durable local acceptance. Network receipt waits here
@@ -2191,7 +2229,7 @@ pub(crate) async fn complete_direct_record(
             }
         }
     } else {
-        deliver_direct(scheduler, &delivery, &policy, traffic).await?;
+        deliver_direct(scheduler, &delivery, &policy, traffic, natural.as_ref()).await?;
     }
     Ok(message_id)
 }

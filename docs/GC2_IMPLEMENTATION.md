@@ -201,8 +201,12 @@ Retain failures, source/executable/configuration/workload hashes and exact scope
   entry owner under the node task set and retains the ready connector; a wrong
   identity cannot restore another node's directory, and retained GC/1 re-entry
   authorities migrate explicitly through the authenticated private PEX exchange
-  without any implicit conversion. The outbound data path through that connector
-  and production profile selection remain.
+  without any implicit conversion. The carrier profile delivers each session
+  frame as an authenticated natural terminal deposit and drains its own class
+  queues through natural subscriptions; a two-node TLS fixture proves durable
+  applications in both directions, and the legacy relay path remains for
+  sessions that did not migrate. Entry/middle circuits, provisioning
+  advertisement, production selection and SDK/GChat send options remain.
 - Complete GC/2 routing, protected profiles, SDK/GChat profile integration and
   application/privacy/mobile gates: pending. Counter-window flow control, the
   application-send preparation/completion split and authenticated class

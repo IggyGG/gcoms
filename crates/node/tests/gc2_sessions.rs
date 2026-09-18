@@ -9,7 +9,12 @@ use std::{
 };
 
 type Archive = Arc<Mutex<Vec<u8>>>;
-async fn endpoint(seed: u8, archive: Archive, restore: Option<&[u8]>) -> NodeHandle {
+async fn endpoint_with_profile(
+    seed: u8,
+    archive: Archive,
+    restore: Option<&[u8]>,
+    profile: NodeProfile,
+) -> NodeHandle {
     let node = start_persistent_restored(
         NodeConfig {
             seed: [seed; 32],
@@ -17,7 +22,7 @@ async fn endpoint(seed: u8, archive: Archive, restore: Option<&[u8]>) -> NodeHan
             control: None,
             advertise: None,
             inbox_relay: None,
-            profile: NodeProfile::gc2_session_fixture(),
+            profile,
             alias_lifecycle: Default::default(),
         },
         None,
@@ -31,6 +36,10 @@ async fn endpoint(seed: u8, archive: Archive, restore: Option<&[u8]>) -> NodeHan
     .unwrap();
     node.enable_durable_applications().await.unwrap();
     node
+}
+
+async fn endpoint(seed: u8, archive: Archive, restore: Option<&[u8]>) -> NodeHandle {
+    endpoint_with_profile(seed, archive, restore, NodeProfile::gc2_session_fixture()).await
 }
 
 async fn receive(node: &NodeHandle, expected: usize) -> Vec<gcoms_node::node::ApplicationDelivery> {
@@ -126,6 +135,29 @@ async fn gc2_sessions_carry_durable_applications_over_tls_and_resume_after_resta
         .unwrap();
     media(&a, b"volatile after restart").await;
     assert_eq!(a.application_inbox(0, 32).await.unwrap().len(), 1);
+    a.shutdown().await;
+    b.shutdown().await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn gc2_natural_carrier_delivers_durable_applications_both_ways() {
+    let aa = Archive::default();
+    let ba = Archive::default();
+    let a = endpoint_with_profile(71, aa, None, NodeProfile::gc2_carrier_fixture(None, 1)).await;
+    let b = endpoint_with_profile(72, ba, None, NodeProfile::gc2_carrier_fixture(None, 1)).await;
+    let original = b.current_info().await.unwrap();
+    a.send_durable_1to1(&original, b"natural carrier delivery", None)
+        .await
+        .unwrap();
+    let delivered = receive(&b, 1).await;
+    assert_eq!(delivered[0].body, b"natural carrier delivery");
+    receipt(&a, delivered[0].message_id).await;
+    b.send_durable_1to1(&a.info, b"natural reverse", None)
+        .await
+        .unwrap();
+    let reverse = receive(&a, 1).await;
+    assert_eq!(reverse[0].body, b"natural reverse");
+    receipt(&b, reverse[0].message_id).await;
     a.shutdown().await;
     b.shutdown().await;
 }

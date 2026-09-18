@@ -188,6 +188,10 @@ pub struct NodeState {
     /// archived: the startup profile selects the carrier.
     #[cfg(feature = "experimental-gc2")]
     pub(crate) gc2_carrier: Option<std::sync::Arc<gcoms_routing::gc2::owner::ReadyConnector>>,
+    /// Endpoint client shared by background GC/2 delivery and subscriptions.
+    /// Present only while the startup profile selects the natural carrier.
+    #[cfg(feature = "experimental-gc2")]
+    pub(crate) gc2_carrier_client: Option<std::sync::Arc<gcoms_transport::Tp1Client>>,
     #[cfg(feature = "experimental-gc2")]
     pub(super) gc2_receipts: super::gc2_receipts::Ledger,
     #[cfg(feature = "experimental-gc2")]
@@ -307,6 +311,19 @@ pub(crate) fn random_nonzero<const N: usize>() -> [u8; N] {
         if value != [0; N] {
             return value;
         }
+    }
+}
+
+/// Natural-carrier client currently selected by the startup profile, if any.
+pub(crate) fn natural_client(st: &NodeState) -> Option<std::sync::Arc<gcoms_transport::Tp1Client>> {
+    #[cfg(feature = "experimental-gc2")]
+    {
+        st.gc2_carrier_client.clone()
+    }
+    #[cfg(not(feature = "experimental-gc2"))]
+    {
+        let _ = st;
+        None
     }
 }
 

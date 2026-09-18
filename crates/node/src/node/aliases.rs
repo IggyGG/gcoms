@@ -432,7 +432,7 @@ pub(crate) async fn renew_contact_aliases(
     if !changed {
         return Ok(());
     }
-    let (generation, info, deliveries, policy) = {
+    let (generation, info, deliveries, policy, natural) = {
         let mut st = state
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
@@ -442,6 +442,7 @@ pub(crate) async fn renew_contact_aliases(
             st.info.clone(),
             deliveries,
             st.frwd_target_policy.clone(),
+            natural_client(&st),
         )
     };
     let _ = events.send(Ev::IdentityUpdated { info, generation });
@@ -451,6 +452,7 @@ pub(crate) async fn renew_contact_aliases(
             &delivery,
             &policy,
             gcoms_core::TrafficClass::Interactive,
+            natural.as_ref(),
         )
         .await;
     }
@@ -813,6 +815,7 @@ pub(crate) async fn contact_alias_lifecycle_tick(
                             st.info.clone(),
                             deliveries,
                             st.frwd_target_policy.clone(),
+                            natural_client(&st),
                         ))
                     }
                 }
@@ -825,7 +828,7 @@ pub(crate) async fn contact_alias_lifecycle_tick(
             None
         }
     };
-    if let Some((generation, info, deliveries, policy)) = announcement {
+    if let Some((generation, info, deliveries, policy, natural)) = announcement {
         let _ = events.send(Ev::IdentityUpdated { info, generation });
         for delivery in deliveries {
             let _ = deliver_direct(
@@ -833,6 +836,7 @@ pub(crate) async fn contact_alias_lifecycle_tick(
                 &delivery,
                 &policy,
                 gcoms_core::TrafficClass::Interactive,
+                natural.as_ref(),
             )
             .await;
         }
@@ -1081,7 +1085,7 @@ pub(crate) async fn install_inbox_relay(
         return Err("relay requires normal and control aliases".into());
     }
     let provision = consume_provision(scheduler, card).await?;
-    let (info, generation, deliveries, policy) = {
+    let (info, generation, deliveries, policy, natural) = {
         let mut st = state.lock().unwrap_or_else(|p| p.into_inner());
         // Provisioning awaits the network; recheck capacity before mutating the
         // owner record. A routine capacity refusal must not pause the owner.
@@ -1134,6 +1138,7 @@ pub(crate) async fn install_inbox_relay(
             st.local_contact_generation,
             deliveries,
             st.frwd_target_policy.clone(),
+            natural_client(&st),
         )
     };
     let _ = events.send(Ev::IdentityUpdated { info, generation });
@@ -1143,6 +1148,7 @@ pub(crate) async fn install_inbox_relay(
             &delivery,
             &policy,
             gcoms_core::TrafficClass::Interactive,
+            natural.as_ref(),
         )
         .await;
     }

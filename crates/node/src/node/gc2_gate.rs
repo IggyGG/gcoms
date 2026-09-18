@@ -28,7 +28,22 @@ pub(crate) fn dispatch_factory(
                 Some(terminal) => service.gc2_handler_factory_with_terminal(terminal)(),
                 None => service.gc2_handler_factory()(),
             },
-            None => Arc::new(|_path: &str, _registered: bool| Dispatch::Pass),
+            // Without a provisioned relay service the capability roles do not
+            // exist yet, but a composed terminal queue service can still
+            // authenticate its own queue tokens. Unknown paths keep their
+            // legacy handling; nothing is promoted into a role.
+            None => match terminal.clone() {
+                Some(terminal) => Arc::new(move |path: &str, registered: bool| {
+                    if registered {
+                        return Dispatch::Pass;
+                    }
+                    match terminal(path) {
+                        Some(accepted) => Dispatch::Accepted(accepted),
+                        None => Dispatch::Pass,
+                    }
+                }),
+                None => Arc::new(|_path: &str, _registered: bool| Dispatch::Pass),
+            },
         }
     })
 }
@@ -110,5 +125,28 @@ mod tests {
             Dispatch::Accepted(_)
         ));
         assert!(matches!(handler("gc2/other", false), Dispatch::Rejected));
+    }
+
+    #[test]
+    fn terminal_service_serves_without_a_provisioned_relay_service() {
+        use gcoms_transport::server::AcceptedDuplex;
+
+        // A node that serves terminal queues but has not provisioned a relay
+        // service can still authenticate its own queue tokens. Capability
+        // roles do not exist yet, so nothing is promoted into a role.
+        let terminal: DuplexHandler = Arc::new(|path: &str| {
+            (path == "gc2/terminal").then(|| {
+                let accepted: AcceptedDuplex = Box::new(|_body, _respond| Box::pin(async {}));
+                accepted
+            })
+        });
+        let factory = dispatch_factory(Some(runtime()), Some(terminal));
+        let handler = factory();
+        assert!(matches!(
+            handler("gc2/terminal", false),
+            Dispatch::Accepted(_)
+        ));
+        assert!(matches!(handler("gc2/other", false), Dispatch::Pass));
+        assert!(matches!(handler("registered", true), Dispatch::Pass));
     }
 }

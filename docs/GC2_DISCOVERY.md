@@ -164,8 +164,11 @@ the node state. Restoring a directory with a different identity fails closed. Re
 re-entry authorities are migrated explicitly through the authenticated private
 PEX exchange (`refresh_reentry`): the reply must present the same stable
 authority and a valid GC/2 entry, retries are background-paced at a bounded
-count, and a failure never falls back to GC/1. Runtime adoption still needs the
-outbound data path through the ready connector, private
-provisioning/advertisement integration, production profile selection,
-Node/SDK/GChat class and profile propagation, and the application/privacy/device
-gates in [the implementation ledger](GC2_IMPLEMENTATION.md).
+count, and a failure never falls back to GC/1. The explicit carrier profile
+delivers session frames as authenticated natural terminal deposits and drains
+its own class queues through natural subscriptions (direct terminal connections;
+entry/middle circuits remain for the protected profile). Runtime adoption still
+needs private provisioning/advertisement integration, production profile
+selection, Node/SDK/GChat class and profile propagation, and the
+application/privacy/device gates in
+[the implementation ledger](GC2_IMPLEMENTATION.md).

@@ -2980,6 +2980,8 @@ pub(in crate::node) mod tests {
             #[cfg(feature = "experimental-gc2")]
             gc2_carrier: None,
             #[cfg(feature = "experimental-gc2")]
+            gc2_carrier_client: None,
+            #[cfg(feature = "experimental-gc2")]
             retained_direct: std::sync::OnceLock::new(),
             #[cfg(feature = "experimental-gc2")]
             gc2_receipts: gc2_receipts::Ledger::default(),

@@ -130,11 +130,14 @@ by the existing 15 KiB MSG limit, including the maximum PQ epoch header. Unknown
 versions, noncanonical option flags, oversized KEM fields and zero tags fail.
 
 The node's direct-session transactions now carry either an explicit legacy
-session or GC/2 session. `NodeProfile::gc2_session_fixture()` selects GC/2 **peer
-sessions only** in the local fixture. It does not select the natural-cell carrier
-or a protected production profile. The normal production selection stays GC/1.
-GC/2 incoming packets cannot silently establish a legacy session or be restored
-under an unselected profile.
+session or GC/2 session. `NodeProfile::gc2_session_fixture()` selects GC/2
+**peer sessions only** in the local fixture. The carrier profile additionally
+delivers each session frame as an authenticated natural terminal deposit to the
+peer's relay and drains the node's own class queues through natural
+subscriptions; the legacy relay path remains for sessions that did not migrate.
+It does not select a protected production profile. The normal production
+selection stays GC/1. GC/2 incoming packets cannot silently establish a legacy
+session or be restored under an unselected profile.
 
 The GC/2 archive value (`GCPS`, version 2) encrypts the sealed ratchet and private
 flow state together with a random GCM nonce and a separate HKDF key domain. Its
