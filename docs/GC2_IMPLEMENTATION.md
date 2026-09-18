@@ -107,6 +107,12 @@ Retain failures, source/executable/configuration/workload hashes and exact scope
   diagnostics: implemented in the task branch; congestion regression validated
   with a real TLS/H2 data response held open through a rejected control attempt
   and its successful retry.
+- Node-wide endpoint/transit admission, protected cover allowance and deferred
+  relay authorization: implemented; request preparation follows transport
+  admission and retries preserve exact bytes.
+- Explicit natural GC/2 cells and class-authenticated deposit, subscription and
+  forwarding codecs: implemented behind `experimental-gc2`; see
+  [the codec contract](GC2_WIRE.md). No runtime cutover or carrier qualification.
 - Complete counter-window flow control, command preparation/completion split,
   authenticated class propagation, shared GCT2 carrier, protected profiles,
   SDK/GChat profile integration and application/privacy/mobile gates: pending.
