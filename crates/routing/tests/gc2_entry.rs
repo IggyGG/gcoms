@@ -3,6 +3,7 @@ use bytes::Bytes;
 use gcoms_core::{Cell, CellType, TrafficClass};
 use gcoms_routing::{
     gc2::{
+        connector::PreparedConnector,
         entry::{self, EntryCarrier, EntryDescriptor},
         transit::TransitDescriptor,
         CandidateProfile, RecordCodec, RecordKind,
@@ -269,6 +270,65 @@ async fn complete_gc2_circuits_authenticate_all_three_hops_on_one_entry() {
     })
     .await
     .unwrap();
+    fixture.stop().await;
+}
+
+#[tokio::test]
+async fn one_terminal_client_reuses_separate_class_circuits_on_one_entry() {
+    let mut fixture = Fixture::new().await;
+    let middle = fixture.middle().await;
+    let carrier = fixture.carrier().await;
+    let descriptor = middle.gc2_transit_descriptor(now_unix());
+    let client = Tp1Client::with_connector(Arc::new(PreparedConnector::new(
+        carrier.clone(),
+        descriptor.clone(),
+    )))
+    .unwrap();
+    for class in [
+        TrafficClass::Bulk,
+        TrafficClass::Interactive,
+        TrafficClass::Bulk,
+        TrafficClass::Interactive,
+    ] {
+        let cell = Cell::new(CellType::Msg, 0, 0, vec![class as u8; 128]);
+        let outcome = timeout(
+            Duration::from_secs(15),
+            client.post_cell_with_class(
+                fixture.terminal_addr,
+                fixture.terminal_pin,
+                "fixture-echo",
+                Bytes::from(cell.encode_wire().unwrap()),
+                &[],
+                class,
+            ),
+        )
+        .await
+        .unwrap()
+        .unwrap();
+        let gcoms_transport::HopOutcome::Accepted(Some(echo)) = outcome else {
+            panic!("class-routed echo required");
+        };
+        assert_eq!(echo.payload, cell.payload);
+    }
+    assert_eq!(client.pooled_connections().await, 2);
+    assert_eq!(carrier.active_circuits(), 2);
+    assert_eq!(middle.active_circuits(), 2);
+    assert_eq!(fixture.connections.load(Ordering::SeqCst), 1);
+    let forbidden = [(descriptor.addr, descriptor.service_id)];
+    assert!(client
+        .warm_excluding_with_class(
+            fixture.terminal_addr,
+            fixture.terminal_pin,
+            &forbidden,
+            TrafficClass::Bulk
+        )
+        .await
+        .is_err());
+    assert_eq!(
+        carrier.active_circuits(),
+        2,
+        "existing unconstrained pools cannot bypass exclusions"
+    );
     fixture.stop().await;
 }
 

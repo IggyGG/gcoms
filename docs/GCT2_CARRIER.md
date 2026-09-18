@@ -59,6 +59,21 @@ dial a replacement entry in response to a failed route. The existing target
 allowlist and reachability policy apply at each relay. Private descriptor refresh
 and selecting a compatible preconnected entry are still runtime integration work.
 
+`gc2::connector::PreparedConnector` connects TP1 to a ready entry and explicit
+middle descriptor. It declares a permanent traffic-class binding. TP1 partitions
+connection reuse, simultaneous establishment and failed-dial caching by class as
+well as the pinned destination and canonical route exclusions. Explicit bulk
+posts, subscriptions and warmups therefore cannot reuse an interactive circuit,
+or vice versa. Default calls select interactive. A connector declaring this
+binding without implementing class routing fails closed. Legacy connectors retain
+their existing shared pool and four-total/three-bulk finite-request limits.
+
+The two class pools can hold two logical terminal connections per route on one
+physical entry. Each remains subject to its existing finite-request limits and
+the shared entry circuit bound. Performance comparisons must account for both
+logical and physical connections. These APIs do not select a GC/2 node wire mode;
+natural-cell relay transport and application class propagation remain pending.
+
 ## Ownership and resource bounds
 
 The caller owns and continuously polls `entry::run` for a connected period chosen

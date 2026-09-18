@@ -5,6 +5,7 @@ use gcoms_core::TrafficClass;
 use std::{fmt, time::Duration};
 
 pub mod channel;
+pub mod connector;
 pub mod entry;
 pub mod mux;
 pub mod transit;

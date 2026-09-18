@@ -124,6 +124,10 @@ Retain failures, source/executable/configuration/workload hashes and exact scope
   schedule, and the entry owner owns nested drivers. See
   [its exact scope](GCT2_CARRIER.md); private GC/2 discovery, preconnected entry
   selection and runtime adoption remain pending.
+- Class-bound terminal pooling and a prepared GC/2 connector: implemented.
+  Bulk/interactive connections share an entry while keeping their class, pin and
+  route exclusions; default GC/1 pooling is unchanged. Class-aware subscription
+  and warmup APIs are available, with runtime/application propagation pending.
 - Complete counter-window flow control, command preparation/completion split,
   authenticated class propagation, complete GC/2 routing, protected profiles,
   SDK/GChat profile integration and application/privacy/mobile gates: pending.
