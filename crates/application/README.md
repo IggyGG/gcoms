@@ -154,8 +154,10 @@ unscoped application API.
 
 Run `cargo test -p gcoms --test backends -- --test-threads=1` for both backends,
 mixed RPC/messages, invite redemption, restart/replay, credentials, consumer
-leases and Unix bundled daemon startup. The archived external consumer gate uses
+leases and bundled daemon startup on Unix and Windows. The archived external consumer gate uses
 only a renamed `gcoms` dependency, which also checks macro path resolution.
-These are local fixtures; they do not establish live relay reachability or
-Windows/macOS runtime qualification. Release versioning and registry publication
+These are local fixtures; they do not establish live relay reachability. Windows
+execution and the separate public-network probes are recorded in
+[the qualification report](../../docs/APPLICATION_QUALIFICATION.md). macOS is
+unqualified. Release versioning and registry publication
 remain maintainer actions; pre-publication GChat checks use `scripts/check-gchat.py`.

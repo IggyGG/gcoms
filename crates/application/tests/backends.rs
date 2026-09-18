@@ -356,19 +356,41 @@ async fn profile_credentials_capabilities_and_lease_release() {
     task.await.unwrap().unwrap();
 }
 
-#[cfg(unix)]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn bundled_daemon_starts_once_and_attaches() {
-    struct Stop(rustix::process::Pid);
+    struct Stop(u32);
     impl Drop for Stop {
         fn drop(&mut self) {
-            let _ = rustix::process::kill_process(self.0, rustix::process::Signal::TERM);
+            #[cfg(unix)]
+            let _ = rustix::process::kill_process(
+                rustix::process::Pid::from_raw(self.0 as i32).unwrap(),
+                rustix::process::Signal::TERM,
+            );
+            #[cfg(windows)]
+            {
+                use windows_sys::Win32::{
+                    Foundation::CloseHandle,
+                    System::Threading::{OpenProcess, TerminateProcess, PROCESS_TERMINATE},
+                };
+                // SAFETY: the kernel supplied this PID for our private test pipe.
+                // Both profiles are saved and stopped before normal cleanup.
+                unsafe {
+                    let process = OpenProcess(PROCESS_TERMINATE, 0, self.0);
+                    if !process.is_null() {
+                        TerminateProcess(process, 0);
+                        CloseHandle(process);
+                    }
+                }
+            }
         }
     }
     let dir = private_dir();
     let endpoint = dir.path().join("bundle.sock");
     let backend = Backend::Shared {
-        executable: PathBuf::from(env!("CARGO_BIN_EXE_gcomsd")),
+        // Cross-built test paths are rooted without a Windows drive prefix.
+        executable: PathBuf::from(env!("CARGO_BIN_EXE_gcomsd"))
+            .canonicalize()
+            .unwrap(),
         endpoint: endpoint.clone(),
     };
     let first = builder(&dir.path().join("first"), "first", backend.clone(), port())
@@ -378,8 +400,8 @@ async fn bundled_daemon_starts_once_and_attaches() {
     let socket = gcoms::sdk::local::connect(&gcoms::sdk::LocalEndpoint::new(&endpoint))
         .await
         .unwrap();
-    let pid = socket.peer_cred().unwrap().pid().unwrap();
-    let guard = Stop(rustix::process::Pid::from_raw(pid).unwrap());
+    let pid = daemon_pid(&socket);
+    let guard = Stop(pid);
     drop(socket);
     let second = builder(&dir.path().join("second"), "second", backend, port())
         .open()
@@ -388,7 +410,7 @@ async fn bundled_daemon_starts_once_and_attaches() {
     let socket = gcoms::sdk::local::connect(&gcoms::sdk::LocalEndpoint::new(&endpoint))
         .await
         .unwrap();
-    assert_eq!(pid, socket.peer_cred().unwrap().pid().unwrap());
+    assert_eq!(pid, daemon_pid(&socket));
     drop(socket);
     assert_ne!(
         first.identity().safety_number,
@@ -398,12 +420,40 @@ async fn bundled_daemon_starts_once_and_attaches() {
     second.stop_profile().await.unwrap();
     drop(guard);
     tokio::time::timeout(Duration::from_secs(5), async {
-        while endpoint.exists() {
+        while gcoms::sdk::local::connect(&gcoms::sdk::LocalEndpoint::new(&endpoint))
+            .await
+            .is_ok()
+        {
             tokio::time::sleep(Duration::from_millis(20)).await;
         }
     })
     .await
     .unwrap();
+}
+
+fn daemon_pid(socket: &gcoms::sdk::local::ClientStream) -> u32 {
+    #[cfg(unix)]
+    {
+        socket.peer_cred().unwrap().pid().unwrap() as u32
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::io::AsRawHandle;
+        let mut pid = 0;
+        // SAFETY: the live named-pipe client owns the handle, and pid is writable.
+        assert_ne!(
+            unsafe {
+                windows_sys::Win32::System::Pipes::GetNamedPipeServerProcessId(
+                    socket.as_raw_handle(),
+                    &mut pid,
+                )
+            },
+            0,
+            "{}",
+            std::io::Error::last_os_error()
+        );
+        pid
+    }
 }
 
 fn private_dir() -> tempfile::TempDir {

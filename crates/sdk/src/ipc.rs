@@ -537,12 +537,13 @@ struct IpcInner {
     identity: std::sync::OnceLock<Identity>,
     granted: Vec<Capability>,
     event_stream_id: [u8; 16],
-    writer: Mutex<tokio::io::WriteHalf<ClientStream>>,
+    writer: Mutex<Option<tokio::io::WriteHalf<ClientStream>>>,
     pending: Mutex<HashMap<u64, oneshot::Sender<Result<Response, SdkError>>>>,
     events: broadcast::Sender<EventEnvelope>,
     closed: watch::Sender<bool>,
     next_request_id: AtomicU64,
     reader_abort: std::sync::OnceLock<tokio::task::AbortHandle>,
+    reader_task: Mutex<Option<tokio::task::JoinHandle<()>>>,
 }
 
 #[cfg(all(any(unix, windows), feature = "ipc"))]
@@ -557,9 +558,16 @@ impl IpcClient {
         if let Some(reader) = self.0.reader_abort.get() {
             reader.abort();
         }
-        let _ = self.0.writer.lock().await.shutdown().await;
         for (_, sender) in std::mem::take(&mut *self.0.pending.lock().await) {
             let _ = sender.send(Err(SdkError::ConnectionClosed));
+        }
+        // Named-pipe shutdown does not close its handle. Drop both split halves,
+        // even when callers retain client clones, before completing detachment.
+        self.0.writer.lock().await.take();
+        let mut reader = self.0.reader_task.lock().await;
+        if let Some(task) = reader.take() {
+            task.abort();
+            let _ = task.await;
         }
     }
 
@@ -705,12 +713,13 @@ impl IpcClient {
             identity: std::sync::OnceLock::new(),
             granted,
             event_stream_id,
-            writer: Mutex::new(writer),
+            writer: Mutex::new(Some(writer)),
             pending: Mutex::new(HashMap::new()),
             events,
             closed: watch::channel(false).0,
             next_request_id: AtomicU64::new(1),
             reader_abort: std::sync::OnceLock::new(),
+            reader_task: Mutex::new(None),
         });
         let reader_inner = inner.clone();
         let reader_task = tokio::spawn(async move {
@@ -744,6 +753,7 @@ impl IpcClient {
             .reader_abort
             .set(reader_task.abort_handle())
             .expect("IPC reader abort handle initialized once");
+        *inner.reader_task.lock().await = Some(reader_task);
         let client = Self(inner, None);
         let identity = match client.request(Request::Identity).await? {
             Response::Identity(identity) => identity,
@@ -842,7 +852,18 @@ impl IpcClient {
             request_id,
             request: std::mem::replace(&mut *request, Request::Identity),
         }));
-        if let Err(error) = write_frame(&mut *self.0.writer.lock().await, &frame).await {
+        let mut closed = self.0.closed.subscribe();
+        let sent = {
+            let mut writer = self.0.writer.lock().await;
+            match writer.as_mut() {
+                Some(writer) if !*closed.borrow() => tokio::select! {
+                    _ = closed.changed() => Err(SdkError::ConnectionClosed),
+                    result = write_frame(writer, &frame) => result,
+                },
+                _ => Err(SdkError::ConnectionClosed),
+            }
+        };
+        if let Err(error) = sent {
             self.0.pending.lock().await.remove(&request_id);
             return Err(error);
         }

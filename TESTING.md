@@ -52,7 +52,14 @@ Also compile the facade with `--no-default-features --features ipc`,
 `--no-default-features --features embedded`, and
 `--no-default-features --features wasm --target wasm32-unknown-unknown`.
 The isolated archive consumer uses only a renamed `gcoms` dependency.
-These fixtures do not qualify operated-network reachability or native Windows.
+These local fixtures do not qualify operated-network reachability. Linux execution
+alone does not establish Windows runtime behavior.
+
+The [2026-09-18 application qualification](docs/APPLICATION_QUALIFICATION.md)
+records their execution in the private Windows GNU VM, the IPC detach correction,
+full workspace results, original failures and follow-up runs. It separately records
+public bootstrap/TLS probes and the invitation needed to finish authenticated live
+traffic. The historical platform counts below refer to their original sources.
 
 ## Current-source GChat integration and relay research
 
