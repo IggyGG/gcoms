@@ -60,14 +60,14 @@ async fn current_info_stays_responsive_while_admissions_and_sends_are_in_flight(
     // convergence — the historically-blocking path.
     let mut pending = Vec::new();
     for i in 0..8u8 {
-        pending.push(spawn(0x30 + i).await);
+        pending.push(std::sync::Arc::new(spawn(0x30 + i).await));
     }
 
-    // Fire 8 admissions + 4 channel sends + 4 direct sends concurrently. Every
-    // task returns `()`; each admitted member handle lives inside its own task
-    // until its join completes, then drops harmlessly (NodeHandle has no Drop).
+    // Keep every admitted member online until all work completes: later
+    // membership commits require acknowledgments from earlier members too.
     let mut tasks: tokio::task::JoinSet<()> = tokio::task::JoinSet::new();
-    for (i, m) in pending.into_iter().enumerate() {
+    for (i, m) in pending.iter().enumerate() {
+        let m = m.clone();
         let owner = owner.clone();
         tasks.spawn(async move {
             let name = format!("cc{i}");
@@ -77,10 +77,6 @@ async fn current_info_stays_responsive_while_admissions_and_sends_are_in_flight(
             m.join_channel(req, "ops", ChannelVisibility::Private, &welcome)
                 .await
                 .expect("join");
-            // Keep the member responsive briefly so its node isn't torn down
-            // before the owner's roster converges.
-            tokio::time::sleep(std::time::Duration::from_secs(2)).await;
-            m.shutdown().await;
         });
     }
     for i in 0..4u8 {
@@ -123,10 +119,15 @@ async fn current_info_stays_responsive_while_admissions_and_sends_are_in_flight(
     );
 
     // Drain the concurrent work so nothing is left half-done.
-    while (tasks.join_next().await).is_some() {}
+    while let Some(result) = tasks.join_next().await {
+        result.expect("concurrent operation must complete successfully");
+    }
 
     owner.shutdown().await;
     for m in seed_members {
+        m.shutdown().await;
+    }
+    for m in pending {
         m.shutdown().await;
     }
 }

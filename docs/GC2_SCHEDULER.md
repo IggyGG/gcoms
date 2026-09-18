@@ -90,6 +90,15 @@ no contacts, message IDs or payloads and do not change scheduling. Startup work 
 precede counter activation; these snapshots are diagnostics, not a complete
 application-delivery or interface-bandwidth accounting record.
 
+Maintenance batches, subscriptions and commands now own their concurrent futures
+directly. Canceling their parent releases all child references before shutdown
+returns, allowing GChat to reopen the encrypted profile immediately. Invitation
+processing owns at most 64 active redemptions in addition to its bounded inbox;
+successive maintenance ticks cannot accumulate detached workers. The command
+shutdown deadline includes waiting to enqueue the request into a full queue.
+Per-peer/channel command serialization still includes network waits; this is
+resource ownership and shutdown recovery, not the remaining preparation split.
+
 ## Larger useful file chunks
 
 The SDK recommends 11,264 useful bytes, negotiating down to the recipient's chunk

@@ -23,6 +23,7 @@ tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "time",
 tokio-rustls = "0.26"
 rustls = { version = "0.23.45", default-features = false, features = ["aws-lc-rs", "std"] }
 bytes = "1"
+futures-util = { version = "0.3", default-features = false, features = ["std"] }
 rand = "0.8"
 hmac = "0.12"
 sha2 = "0.10"
@@ -47,6 +48,7 @@ libc = "0.2"
 windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Storage_FileSystem"] }
 
 [dev-dependencies]
+tokio = { version = "1", features = ["test-util"] }
 h2 = "0.4"
 http = "1"
 rcgen = { version = "0.13", default-features = false, features = ["aws_lc_rs", "pem"] }

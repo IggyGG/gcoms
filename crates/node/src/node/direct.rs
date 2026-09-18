@@ -710,7 +710,7 @@ pub(crate) fn process_frame(
             }) => {
                 // Owner side. Consume the frame like any reliable direct record
                 // (dedup + session ratchet), then queue the request for async
-                // handling by `invite_tick` (the MLS admit + broadcast + reply
+                // handling by the invite service (the MLS admit + broadcast + reply
                 // cannot run here under the state lock). A duplicate request
                 // that already produced a Welcome is answered idempotently by
                 // the redeem path, so we always queue.

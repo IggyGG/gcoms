@@ -1894,37 +1894,13 @@ pub(crate) async fn redeem_invite_remote(
     }
 }
 
-/// Owner side: drain queued invite-redeem requests and service each one
-/// concurrently, so a channel whose membership is slow to converge cannot block
-/// redemptions for other channels (head-of-line). Correctness of single-use
-/// rests on the `NodeState` lock inside `redeem_invite`, not on ordering, so
-/// concurrent servicing is safe; concurrency is bounded by the inbox cap.
-pub(crate) async fn invite_tick(
-    state: &Arc<Mutex<NodeState>>,
-    scheduler: &RelayScheduler,
-    events: &broadcast::Sender<Ev>,
-) {
-    let requests: Vec<_> = {
-        let mut st = state.lock().unwrap_or_else(|p| p.into_inner());
-        st.invite_redeem_inbox.drain(..).collect()
-    };
-    for request in requests {
-        let state = state.clone();
-        let scheduler = scheduler.clone();
-        let events = events.clone();
-        tokio::spawn(async move {
-            service_one_invite(&state, &scheduler, &events, request).await;
-        });
-    }
-}
-
 /// How long to keep retrying a redemption blocked only by an in-flight
 /// membership change on the same channel, before giving up and telling the
 /// friend. Below the friend-side wait, so a retry can still land in time.
 const INVITE_REDEEM_RETRY_SECS: u64 = 45;
 
 /// Run one queued redemption and reply to the friend with the Welcome or error.
-async fn service_one_invite(
+pub(crate) async fn service_one_invite(
     state: &Arc<Mutex<NodeState>>,
     scheduler: &RelayScheduler,
     events: &broadcast::Sender<Ev>,

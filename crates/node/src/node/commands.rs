@@ -1,6 +1,7 @@
 // Split from the former monolithic node.rs on 2026-09-05; no behaviour change.
 
 use super::*;
+use futures_util::{stream::FuturesUnordered, StreamExt};
 
 // Transport maintenance records must survive a machine backend restart. Only
 // legacy application/chat work needs draining before assigning component scope.
@@ -89,28 +90,22 @@ pub(crate) fn spawn_command_loop(ctx: CommandLoopContext) -> tokio::task::JoinHa
     } = ctx;
     tokio::spawn(async move {
         let serializer = Arc::new(KeyedSerializer::default());
-        let inflight = Arc::new(tokio::sync::Semaphore::new(MAX_INFLIGHT_COMMANDS));
-        let mut spawned = tokio::task::JoinSet::<()>::new();
+        type CommandFuture = std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send>>;
+        let mut spawned = FuturesUnordered::<CommandFuture>::new();
         let env = CmdEnv {
             state: state.clone(),
             scheduler: scheduler.clone(),
             events_tx: events_tx.clone(),
         };
-        // Spawn an awaiting command under its serialisation key. The loop
-        // itself never awaits the command's completion.
+        // Own every command future in the loop. They progress concurrently;
+        // cancellation releases their state references before the loop exits.
         macro_rules! dispatch {
             ($key:expr, $done:ident, |$state:ident, $scheduler:ident, $events:ident| $body:block) => {{
                 let key = $key;
                 let lock = serializer.lock_for(&key);
-                let permit = inflight
-                    .clone()
-                    .acquire_owned()
-                    .await
-                    .expect("command limiter is never closed");
                 let cmd_env = env.clone();
                 let done = $done;
-                spawned.spawn(async move {
-                    let _permit = permit;
+                spawned.push(Box::pin(async move {
                     let _serialized = lock.lock().await;
                     #[allow(unused_variables)]
                     let CmdEnv {
@@ -120,11 +115,17 @@ pub(crate) fn spawn_command_loop(ctx: CommandLoopContext) -> tokio::task::JoinHa
                     } = cmd_env;
                     let result = async move $body.await;
                     let _ = done.send(result);
-                });
-                while spawned.try_join_next().is_some() {}
+                }));
             }};
         }
-        while let Some(cmd) = cmd_rx.recv().await {
+        loop {
+            let cmd = tokio::select! {
+                Some(()) = spawned.next(), if !spawned.is_empty() => continue,
+                cmd = cmd_rx.recv(), if spawned.len() < MAX_INFLIGHT_COMMANDS => {
+                    let Some(cmd) = cmd else { break; };
+                    cmd
+                },
+            };
             match cmd {
                 Cmd::IntermediaryStats { done } => {
                     let st = state.lock().unwrap_or_else(|p| p.into_inner());
@@ -254,10 +255,10 @@ pub(crate) fn spawn_command_loop(ctx: CommandLoopContext) -> tokio::task::JoinHa
                 Cmd::Shutdown { done } => {
                     scheduler.shutdown();
                     let drain = tokio::time::timeout(std::time::Duration::from_secs(2), async {
-                        while spawned.join_next().await.is_some() {}
+                        while spawned.next().await.is_some() {}
                     });
                     if drain.await.is_err() {
-                        spawned.abort_all();
+                        spawned.clear();
                     }
                     let _ = done.send(());
                     break;

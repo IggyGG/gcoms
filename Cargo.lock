@@ -1075,6 +1075,7 @@ dependencies = [
  "argon2",
  "bytes",
  "fs2",
+ "futures-util",
  "gcoms-core",
  "gcoms-crypto",
  "gcoms-gossip",

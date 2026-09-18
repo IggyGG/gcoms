@@ -110,6 +110,9 @@ Retain failures, source/executable/configuration/workload hashes and exact scope
 - Node-wide endpoint/transit admission, protected cover allowance and deferred
   relay authorization: implemented; request preparation follows transport
   admission and retries preserve exact bytes.
+- Owned cancellation for maintenance, subscription and command work, bounded
+  active invitation processing and a shutdown deadline covering command enqueue:
+  implemented. GChat tests immediate profile reopen without an arbitrary sleep.
 - Explicit natural GC/2 cells and class-authenticated deposit, subscription and
   forwarding codecs: implemented behind `experimental-gc2`; see
   [the codec contract](GC2_WIRE.md). No runtime cutover or carrier qualification.

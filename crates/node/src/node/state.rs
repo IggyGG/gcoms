@@ -74,26 +74,16 @@ pub(crate) struct DirectPresenceObservation {
     pub(crate) expires: std::time::Instant,
 }
 
-/// Await a set of independent futures concurrently and collect their
-/// outputs in order. Small enough that pulling in `futures` is not worth it.
+/// Poll child work within its owner. Dropping a maintenance batch must drop
+/// every child immediately, including references to the encrypted state sink.
+/// Detached task cancellation can otherwise retain the profile lock after the
+/// node reports that shutdown has completed.
 pub(crate) async fn futures_join_all<F, T>(futures: impl IntoIterator<Item = F>) -> Vec<T>
 where
     F: std::future::Future<Output = T> + Send + 'static,
     T: Send + 'static,
 {
-    let mut set = tokio::task::JoinSet::new();
-    let mut count = 0usize;
-    for (index, future) in futures.into_iter().enumerate() {
-        set.spawn(async move { (index, future.await) });
-        count += 1;
-    }
-    let mut slots: Vec<Option<T>> = (0..count).map(|_| None).collect();
-    while let Some(joined) = set.join_next().await {
-        if let Ok((index, value)) = joined {
-            slots[index] = Some(value);
-        }
-    }
-    slots.into_iter().flatten().collect()
+    futures_util::future::join_all(futures).await
 }
 
 /// Size of the active intermediary set (SPEC §15 `LANE_SET`).
@@ -199,7 +189,7 @@ pub struct NodeState {
     pub(crate) frwd_target_policy: FrwdTargetPolicy,
     pub(crate) scheduler: RelayScheduler,
     /// Owner side: invite-redeem requests received from friends over sealed
-    /// direct sessions, awaiting async processing by `invite_tick`. Bounded.
+    /// direct sessions, awaiting async processing by the invite service. Bounded.
     pub(crate) invite_redeem_inbox: VecDeque<InviteRedeemRequest>,
     /// Friend side: redemptions this node is waiting on, keyed by the request
     /// message id. The oneshot wakes the `join_with_invite` caller when the
@@ -271,4 +261,28 @@ pub(crate) fn validate_application_size(payload: &[u8]) -> Result<(), String> {
         ));
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod cancellation_tests {
+    use super::futures_join_all;
+    use std::{future::Future, sync::Arc, task::Poll};
+
+    #[tokio::test]
+    async fn canceling_a_batch_drops_child_owners_before_returning() {
+        let owner = Arc::new(());
+        let released = Arc::downgrade(&owner);
+        let mut batch = Box::pin(futures_join_all([async move {
+            let _owner = owner;
+            std::future::pending::<()>().await;
+        }]));
+        std::future::poll_fn(|cx| {
+            assert!(batch.as_mut().poll(cx).is_pending());
+            Poll::Ready(())
+        })
+        .await;
+        drop(batch);
+        // No sleep/yield: cancellation must release the resource synchronously.
+        assert!(released.upgrade().is_none());
+    }
 }
