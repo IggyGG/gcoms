@@ -50,8 +50,11 @@ cover response cannot fill its entire pipeline. Payload admission never borrows
 unused cover credit.
 
 Producer classes rotate, with byte-charged deficit round robin between destination
-queues within a class. This is destination fairness; distinct SDK components
-sharing one destination do not yet have separate authenticated producer IDs.
+queues within a class. A 32-deep bulk backlog cannot delay a late interactive
+job past one bulk quantum, and bulk jobs are skipped entirely while bulk
+admission is closed; control records use the interactive class. This is
+destination fairness; distinct SDK components sharing one destination do not yet
+have separate authenticated producer IDs.
 
 Pipelined fixtures suppress an identical semantic attempt while it is queued or
 running, including across intermediary rerouting. A completed or canceled attempt
