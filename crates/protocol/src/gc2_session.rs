@@ -10,7 +10,7 @@ mod handshake;
 #[cfg(feature = "std")]
 mod storage;
 #[cfg(feature = "std")]
-pub use handshake::{accept, initiate, Accepted, Initiated};
+pub use handshake::{accept, initiate, initiate_recovery, Accepted, Initiated};
 #[cfg(feature = "std")]
 pub use storage::SealedState;
 #[cfg(all(test, feature = "std"))]

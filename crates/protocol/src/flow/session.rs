@@ -307,6 +307,9 @@ pub struct PreparedCredit {
     window: Window,
 }
 impl PreparedCredit {
+    pub fn window(&self) -> &Window {
+        &self.window
+    }
     pub fn private_flow(&self) -> Zeroizing<Vec<u8>> {
         self.window.encode_private()
     }

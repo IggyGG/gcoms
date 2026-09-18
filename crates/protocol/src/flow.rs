@@ -269,6 +269,7 @@ impl Coverage {
 /// be recorded. This cannot be created from a GC/1 session's highest counters.
 #[derive(Clone)]
 pub struct Window {
+    generation: u64,
     session: [u8; 16],
     sent: u64,
     credited: Coverage,
@@ -279,10 +280,17 @@ pub struct Window {
 
 impl Window {
     pub fn new(session: [u8; 16]) -> Result<Self, Error> {
-        if session == [0; 16] {
+        Self::new_generation(session, 1)
+    }
+
+    /// Use only a generation authenticated by the peer setup protocol. Recovery
+    /// must advance the peer's durable generation; a tag alone is insufficient.
+    pub fn new_generation(session: [u8; 16], generation: u64) -> Result<Self, Error> {
+        if session == [0; 16] || generation == 0 {
             return Err(Error::State);
         }
         Ok(Self {
+            generation,
             session,
             sent: 0,
             credited: Coverage::default(),
@@ -290,6 +298,9 @@ impl Window {
             tx: BTreeMap::new(),
             rx: BTreeMap::new(),
         })
+    }
+    pub fn generation(&self) -> u64 {
+        self.generation
     }
     pub fn session(&self) -> &[u8; 16] {
         &self.session
@@ -299,6 +310,9 @@ impl Window {
     }
     pub fn credited_floor(&self) -> u64 {
         self.credited.floor
+    }
+    pub fn is_credited(&self, counter: u64) -> bool {
+        counter != 0 && counter <= self.sent && self.credited.contains(counter)
     }
     pub fn received_floor(&self) -> u64 {
         self.received.floor

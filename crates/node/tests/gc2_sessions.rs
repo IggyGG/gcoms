@@ -77,7 +77,7 @@ async fn gc2_sessions_carry_durable_applications_over_tls_and_resume_after_resta
     );
     receipt(&a, delivered.last().unwrap().message_id).await;
     let saved = ba.lock().unwrap().clone();
-    assert_eq!(&saved[..6], b"GCNSTK");
+    assert_eq!(&saved[..6], b"GCNSTL");
     b.shutdown().await;
     b = endpoint(62, ba, Some(&saved)).await;
     assert_eq!(b.info.identity_pk, original.identity_pk);

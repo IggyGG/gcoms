@@ -42,6 +42,8 @@ mod commands;
 mod direct;
 #[cfg(feature = "experimental-gc2")]
 mod gc2_direct;
+#[cfg(feature = "experimental-gc2")]
+mod gc2_receipts;
 mod peer_session;
 #[cfg(feature = "experimental-gc2")]
 mod retained;
@@ -822,6 +824,8 @@ async fn start_with_tls_policy_control_sink_and_bootstrap(
             gc2_sessions: cfg.profile.gc2_sessions(),
             #[cfg(feature = "experimental-gc2")]
             retained_direct: std::sync::OnceLock::new(),
+            #[cfg(feature = "experimental-gc2")]
+            gc2_receipts: gc2_receipts::Ledger::default(),
             routing: routing.clone(),
             secrets,
             identity_seed: cfg.seed,

@@ -1,6 +1,7 @@
 use super::*;
 
 const MAGIC: &[u8; 5] = b"GCW2\x01";
+const RECOVERY_MAGIC: &[u8; 5] = b"GCW2\x02";
 /// At most 63 retained packets and 63 small receive/credit records.
 pub const MAX_PRIVATE_BYTES: usize = 128 + (MAX_MESSAGE + 43 + 153) * COUNTER_WINDOW as usize;
 
@@ -9,8 +10,15 @@ impl Window {
     /// atomically with the corresponding ratchet and application state.
     pub fn encode_private(&self) -> Zeroizing<Vec<u8>> {
         let mut out = Zeroizing::new(Vec::new());
-        out.extend_from_slice(MAGIC);
+        out.extend_from_slice(if self.generation == 1 {
+            MAGIC
+        } else {
+            RECOVERY_MAGIC
+        });
         out.extend_from_slice(&self.session);
+        if self.generation > 1 {
+            out.extend_from_slice(&self.generation.to_be_bytes());
+        }
         for value in [
             self.sent,
             self.credited.floor,
@@ -51,10 +59,17 @@ impl Window {
             return Err(Error::Length);
         }
         let mut input = Input { bytes, cursor: 0 };
-        if input.take(5)? != MAGIC {
-            return Err(Error::Version);
+        let recovered = match input.take(5)? {
+            value if value == MAGIC => false,
+            value if value == RECOVERY_MAGIC => true,
+            _ => return Err(Error::Version),
+        };
+        let tag = input.array()?;
+        let generation = if recovered { input.u64()? } else { 1 };
+        if recovered && generation < 2 {
+            return Err(Error::State);
         }
-        let mut window = Self::new(input.array()?)?;
+        let mut window = Self::new_generation(tag, generation)?;
         window.sent = input.u64()?;
         window.credited = Coverage {
             floor: input.u64()?,

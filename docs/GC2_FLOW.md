@@ -126,14 +126,16 @@ under an unselected profile.
 The GC/2 archive value (`GCPS`, version 2) encrypts the sealed ratchet and private
 flow state together with a random GCM nonce and a separate HKDF key domain. Its
 authenticated header binds the session tag; the enclosed ratchet also binds the
-machine and peer. Node archive v20 carries this value and retains explicit GC/2
+machine and peer. Node archive v21 carries this value and the logical receipt ledger and retains explicit GC/2
 selection even before any session is created. GC/1 exports keep v19, and existing
 session archives retain their GC/1 interpretation. Switching a live GC/1 session
 archive to the GC/2 fixture is rejected pending authenticated migration. Decoding all
 session candidates and checking duplicate GC/2 tags precede their publication.
 
 Live receive transactions persist credit alongside the application inbox and
-logical ACK. The independent credit dispatcher never reports recipient delivery.
+logical ACK. Expiry is evaluated once per authenticated prepared receive, so
+crossing the flow deadline cannot erase its receipt while the same application
+effect is being committed. The independent credit dispatcher never reports recipient delivery.
 Exact duplicate setup/data packets can reproduce credit after restart without
 repeating application effects. The maintenance owner retries retained ciphertext,
 including logical ACKs, within its existing bounded set of active attempts.
@@ -167,6 +169,53 @@ marking the node's durable state uncertain. A failed durable write still pauses
 publication for restart recovery. GC/2 logical ACKs use the ratchet window for
 repair, eliminating the legacy replay cache's additional ciphertext copy.
 
+## Authenticated session recovery
+
+The signed, encrypted setup has a separate recovery domain and a monotonically
+increasing per-peer generation. Initial setup is generation one. A retained peer
+accepts only a greater recovery generation; equal-generation collisions are
+resolved by identity order only while local initiation remains unconfirmed.
+Established sessions reject another tag at the same generation. Exact setup
+retries reproduce credit. Recovery can also authenticate first contact when the
+original setup never arrived: the same identity, recipient-bundle and signature
+checks apply. A known generation is never forgotten merely because setup timed
+out, including across restart. Checked overflow refuses further recovery.
+
+Maintenance recovers a session at the 24-hour retained-counter horizon, or when
+an unconfirmed setup timed out and live logical work remains. It prepares at most
+one peer per tick and backs off each peer for roughly a minute. It uses existing
+maintenance dispatch, without an application-triggered entry dial. Replacement
+requeues logical records with their IDs, order and deadlines, retires the old wire
+outbox, and saves the new generation before emission. Admission pressure preserves
+the previous candidate; an uncertain recovery save pauses the node until restart.
+The Data timestamp supplies a fixed ten-minute ceiling, so re-encryption cannot
+extend its original lifetime. GC/1 timing remains unchanged.
+
+A consumed inbox entry is insufficient to deduplicate a lost application ACK
+across recovery. The receiver therefore saves a logical receipt alongside each
+GC/2 Data acceptance: peer hash, message ID, record hash, lifetime ceiling, and the
+session tag/counter of its application ACK. Re-encrypting an unacknowledged record
+repeats its ACK without another inbox/event effect; conflicting bytes fail before
+commit. Receipt removal requires authenticated credit covering that application
+ACK, or expiration of the immutable lifetime. A saved local clock floor prevents
+pruned effects becoming live again after a clock correction. This is bounded
+retry deduplication, not a permanent application-level ID registry.
+
+The ledger holds at most 2,048 records globally and 128 per peer, with no premature
+eviction under pressure. Each encoded entry is 112 bytes: at most 224 KiB plus
+49 bytes of sealed-field overhead per checkpoint, independent of body size. Tree
+metadata is additional RAM outside retained-payload admission. No extra receipt
+packet or duplicated message body is added. The ledger is encrypted with a
+separate identity-bound archive context. The private flow format retains its old
+generation-one encoding and uses an explicit version for greater generations.
+
+Historical GC/2 v20 archives lack consumed-ID history. Their restored sessions
+must credit any potentially outstanding application ACK before recovery. A small
+per-peer barrier persists in v21 until that happens; its maximum encoded size is
+448 KiB for 8,192 historical peers. This conservative experimental migration never
+invents history or resets the ratchet. GC/1 archive decoding and v19 exports remain
+compatible; relabeling either an old or new archive is not a migration.
+
 ## Evidence and remaining adoption
 
 The protocol tests exercise authenticated hybrid first moves, a missing counter
@@ -179,17 +228,20 @@ Node integration tests exercise durable inbox acceptance, restart after lost
 setup credit, exact duplicate handling, failed receive persistence, strict archive
 selection, archive tampering, simultaneous initiation, shared retention admission,
 failed-write accounting rollback, budget pressure during restore/materialization,
-and lost logical ACK repair after restart. These use real protocol
+and lost logical ACK repair after restart. Recovery tests cover consumed inbox
+entries, conflicting re-encryption, ambiguous/simultaneous setup, initial packet
+loss, expired setup across restart, uncertain saves, bounded receipt admission,
+old archive barriers, deadline/clock behavior and generation exhaustion. These use real protocol
 cryptography and the node's transaction paths; they do not qualify a deployed
 carrier or production performance.
 
 The TLS integration fixture sends eight 11 KiB durable application bodies,
-waits for application acknowledgment, restarts the receiver from archive v20,
+waits for application acknowledgment, restarts the receiver from archive v21,
 checks the retained inbox IDs, and resumes bidirectional delivery using the
 sender's old contact card. The fixture uses the existing relay carrier and
 compressed local cadence; it is not a GC/2 carrier or performance qualification.
 
-Volatile outgoing media policy, complete control deferral, authenticated session
-recovery after skipped-key expiry, and class/profile propagation remain required.
+Volatile outgoing media policy, complete control deferral, and class/profile
+propagation remain required.
 The full natural-cell routing path, SDK/GChat selection, real-network goodput and
 packet-observation privacy gates remain separate integration/qualification work.

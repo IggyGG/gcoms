@@ -14,8 +14,11 @@ fn gc2_node(seed: u8) -> NodeState {
 
 async fn gc2_restore(node: &NodeState, seed: u8) -> Arc<Mutex<NodeState>> {
     let bytes=encode_state(node).unwrap();
-    assert_eq!(&bytes[..6],MAGIC_V20);
+    assert_eq!(&bytes[..6],MAGIC_V21);
     let mut fresh=gc2_node(seed);
+    // A node restart reopens the existing identity bundle and private keys.
+    fresh.info=node.info.clone();
+    fresh.secrets=node.secrets.clone();
     fresh.scheduler.shutdown();
     fresh.scheduler=node.scheduler.clone();
     let fresh=Arc::new(Mutex::new(fresh));
@@ -234,7 +237,7 @@ async fn gc2_runtime_lost_application_ack_repairs_from_window_after_restart() {
 async fn gc2_runtime_archive_requires_explicit_version_and_authenticates_credit_state() {
     let empty=gc2_node(25);
     let empty_archive=encode_state(&empty).unwrap();
-    assert_eq!(&empty_archive[..6],MAGIC_V20);
+    assert_eq!(&empty_archive[..6],MAGIC_V21);
     let legacy=Arc::new(Mutex::new(state()));
     assert!(decode_state_at_startup(&legacy,&empty.scheduler,&empty_archive).await.unwrap_err().contains("explicit GC/2"));
     legacy.lock().unwrap().scheduler.shutdown();

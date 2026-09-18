@@ -156,6 +156,80 @@ fn setup_authenticates_tag_identity_bundle_and_exact_packet() {
 }
 
 #[test]
+fn recovery_generation_is_signed_encrypted_and_retained_across_restart() {
+    let (alice, ai, akeys) = endpoint(31);
+    let (_, bi, bkeys) = endpoint(32);
+    let mut rng = StdRng::seed_from_u64(17);
+    let initial = initiate(&alice, &ai, &akeys, &bi, now(), &mut rng).unwrap();
+    let initial_accepted = accept(
+        &Packet::decode(&initial.packet).unwrap(),
+        &bi,
+        &bkeys,
+        now(),
+    )
+    .unwrap();
+    assert!(!initial_accepted.recovery);
+    assert_eq!(initial.session.window().generation(), 1);
+    // The original private format remains readable as generation one.
+    let old = initial.session.window().encode_private();
+    assert_eq!(&old[..5], b"GCW2\x01");
+    assert_eq!(
+        crate::flow::Window::decode_private(&old)
+            .unwrap()
+            .generation(),
+        1
+    );
+    for invalid in [0, 1] {
+        assert!(initiate_recovery(&alice, &ai, &akeys, &bi, invalid, now(), &mut rng).is_err());
+    }
+    let recovery = initiate_recovery(&alice, &ai, &akeys, &bi, 2, now(), &mut rng).unwrap();
+    assert_ne!(
+        initial.session.window().session(),
+        recovery.session.window().session()
+    );
+    let accepted = accept(
+        &Packet::decode(&recovery.packet).unwrap(),
+        &bi,
+        &bkeys,
+        now(),
+    )
+    .unwrap();
+    assert!(accepted.recovery);
+    assert_eq!(accepted.peer, ai);
+    assert_eq!(accepted.session.window().generation(), 2);
+    let private = recovery.session.window().encode_private();
+    assert_eq!(&private[..5], b"GCW2\x02");
+    assert_eq!(
+        crate::flow::Window::decode_private(&private)
+            .unwrap()
+            .generation(),
+        2
+    );
+    let mut invalid = private.to_vec();
+    invalid[21..29].copy_from_slice(&1u64.to_be_bytes());
+    assert!(crate::flow::Window::decode_private(&invalid).is_err());
+    let context = context(&bi, recovery.session.window().session());
+    let ratchet = recovery.session.seal_ratchet(&[5; 32], &context).unwrap();
+    let saved = SealedState::seal_parts(
+        recovery.session.window().session(),
+        &ratchet,
+        &private,
+        &[5; 32],
+        &mut rng,
+    )
+    .unwrap();
+    let restored = saved.open(&[5; 32], &context).unwrap();
+    assert_eq!(restored.window().generation(), 2);
+    assert_eq!(
+        restored.window().retries().next().unwrap().2,
+        recovery.packet
+    );
+    let mut changed = recovery.packet.clone();
+    *changed.last_mut().unwrap() ^= 1;
+    assert!(accept(&Packet::decode(&changed).unwrap(), &bi, &bkeys, now()).is_err());
+}
+
+#[test]
 fn staged_ack_cannot_cross_session_restore_or_an_intervening_commit() {
     let (alice, ai, akeys) = endpoint(8);
     let (_, bi, bkeys) = endpoint(9);

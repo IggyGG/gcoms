@@ -8,6 +8,7 @@ use rand_core::{CryptoRng, RngCore};
 use zeroize::Zeroizing;
 
 const HELLO_DOMAIN: &[u8] = b"GC2/peer-session\0";
+const RECOVERY_DOMAIN: &[u8] = b"GC2/peer-recovery\0";
 // ML-DSA-65 signature and the authenticated FirstMove framing. Bound public
 // input before any encoder that stores a variable length in a narrow integer.
 const SIGNATURE_BYTES: usize = 3309;
@@ -19,8 +20,9 @@ const MAX_INFO: usize = MAX_MESSAGE
     - (32 + 2 + 1088 + 12 + 16)
     - (4 + 2 + SIGNATURE_BYTES)
     - crate::flow::RECORD_HEADER
-    - HELLO_DOMAIN.len()
-    - 16;
+    - RECOVERY_DOMAIN.len()
+    - 16
+    - 8;
 
 /// A new candidate, not yet durable or published. Persist its ratchet, flow
 /// window, peer/tag binding and original packet atomically before sending.
@@ -35,6 +37,9 @@ pub struct Accepted {
     pub peer: NodeInfo,
     pub session: CreditedSession,
     pub credit: [u8; CREDIT_BYTES],
+    /// True only for a signed recovery request with generation >= 2. The caller
+    /// must compare generations with its current authenticated peer before use.
+    pub recovery: bool,
 }
 
 fn bundle(info: &NodeInfo, now: u64) -> Result<Bundle, SessionError> {
@@ -67,6 +72,35 @@ pub fn initiate(
     now: u64,
     entropy: &mut (impl RngCore + CryptoRng),
 ) -> Result<Initiated, SessionError> {
+    initiate_generation(identity, own, secrets, peer, 1, now, entropy)
+}
+
+/// Explicit identity-authenticated recovery. The caller persists this candidate
+/// before sending and must never roll back its peer's emitted generation.
+pub fn initiate_recovery(
+    identity: &IdentityKeypair,
+    own: &NodeInfo,
+    secrets: &LocalSecrets,
+    peer: &NodeInfo,
+    generation: u64,
+    now: u64,
+    entropy: &mut (impl RngCore + CryptoRng),
+) -> Result<Initiated, SessionError> {
+    if generation < 2 {
+        return Err(Error::State.into());
+    }
+    initiate_generation(identity, own, secrets, peer, generation, now, entropy)
+}
+
+fn initiate_generation(
+    identity: &IdentityKeypair,
+    own: &NodeInfo,
+    secrets: &LocalSecrets,
+    peer: &NodeInfo,
+    generation: u64,
+    now: u64,
+    entropy: &mut (impl RngCore + CryptoRng),
+) -> Result<Initiated, SessionError> {
     if identity.public_bytes() != own.identity_pk || own.identity_pk == peer.identity_pk {
         return Err(Error::Authentication.into());
     }
@@ -80,8 +114,16 @@ pub fn initiate(
     if tag == [0; 16] {
         return Err(CryptoError::Entropy.into());
     }
-    let mut hello = Zeroizing::new(HELLO_DOMAIN.to_vec());
+    let domain = if generation == 1 {
+        HELLO_DOMAIN
+    } else {
+        RECOVERY_DOMAIN
+    };
+    let mut hello = Zeroizing::new(domain.to_vec());
     hello.extend_from_slice(&tag);
+    if generation > 1 {
+        hello.extend_from_slice(&generation.to_be_bytes());
+    }
     hello.extend_from_slice(&own.public().encode());
     let record = Record::new(Purpose::Control, 0, &hello, entropy)?;
     let (first, mut ratchet) = gcoms_crypto::initiate_authenticated_with_rng_at(
@@ -94,7 +136,7 @@ pub fn initiate(
     )?;
     ratchet.provide_local_kem(secrets.kem_decapsulation_key());
     let packet = encode_first_move(&tag, &first)?;
-    let mut window = Window::new(tag)?;
+    let mut window = Window::new_generation(tag, generation)?;
     window.record_sent(1, &packet, &record, now)?;
     Ok(Initiated {
         session: CreditedSession::from_authenticated(ratchet, window)?,
@@ -117,14 +159,31 @@ pub fn accept(
         gcoms_crypto::split_authenticated_payload(&plain).ok_or(CryptoError::BadEncoding)?;
     let record = Record::decode(signed)?;
     let body = record.body();
-    let info_start = HELLO_DOMAIN.len() + 16;
+    let (domain, recovery) = if body.starts_with(HELLO_DOMAIN) {
+        (HELLO_DOMAIN, false)
+    } else if body.starts_with(RECOVERY_DOMAIN) {
+        (RECOVERY_DOMAIN, true)
+    } else {
+        return Err(Error::Authentication.into());
+    };
+    let tag_end = domain.len() + 16;
     if record.purpose() != Purpose::Control
         || record.not_after() != 0
-        || body.get(..HELLO_DOMAIN.len()) != Some(HELLO_DOMAIN)
-        || body.get(HELLO_DOMAIN.len()..info_start) != Some(packet.tag().as_slice())
+        || body.get(domain.len()..tag_end) != Some(packet.tag().as_slice())
     {
         return Err(Error::Authentication.into());
     }
+    let info_start = tag_end + if recovery { 8 } else { 0 };
+    let generation = if recovery {
+        let bytes = body.get(tag_end..info_start).ok_or(Error::Length)?;
+        let value = u64::from_be_bytes(bytes.try_into().map_err(|_| Error::Length)?);
+        if value < 2 {
+            return Err(Error::State.into());
+        }
+        value
+    } else {
+        1
+    };
     let encoded = body.get(info_start..).ok_or(Error::Length)?;
     let peer = NodeInfo::decode(encoded).ok_or(Error::Length)?;
     if peer.public().encode() != encoded || peer.identity_pk == own.identity_pk {
@@ -142,10 +201,11 @@ pub fn accept(
         return Err(CryptoError::BadSignature.into());
     }
     ratchet.provide_peer_kem(peer_bundle.kem_pub)?;
-    let mut window = Window::new(*packet.tag())?;
+    let mut window = Window::new_generation(*packet.tag(), generation)?;
     window.record_authenticated(1, packet.bytes(), &record)?;
     let credit = window.credit_for_duplicate(1, packet.bytes())?;
     Ok(Accepted {
+        recovery,
         peer,
         session: CreditedSession::from_authenticated(ratchet, window)?,
         credit,

@@ -174,6 +174,8 @@ pub(crate) struct DirectMaintenance {
     active: HashMap<[u8; 32], bool>,
     #[cfg(feature = "experimental-gc2")]
     repair_due: HashMap<[u8; 32], std::time::Instant>,
+    #[cfg(feature = "experimental-gc2")]
+    recovery_due: HashMap<Vec<u8>, std::time::Instant>,
     completions: futures_util::stream::FuturesUnordered<
         futures_util::future::BoxFuture<'static, DirectAttempt>,
     >,
@@ -223,6 +225,37 @@ impl DirectMaintenance {
         let mut st = state.lock().unwrap_or_else(|p| p.into_inner());
         if st.owner_transition_failed {
             return;
+        }
+        #[cfg(feature = "experimental-gc2")]
+        {
+            self.recovery_due
+                .retain(|peer, deadline| st.sessions.contains_key(peer) && *deadline > now);
+            let peer = st.sessions.iter().find_map(|(peer, session)| {
+                let PeerSession::Credited(session) = session else {
+                    return None;
+                };
+                let expired_setup = matches!(st.session_states.get(peer),
+                    Some(DirectSessionState::InitiatedUnconfirmed { expires }) if *expires <= now);
+                let live_pending = st
+                    .pending_1to1
+                    .values()
+                    .any(|p| p.delivery.peer.identity_pk == *peer && p.expires > now);
+                ((session.window().repair_expired(now_unix()) || (expired_setup && live_pending))
+                    && !self.recovery_due.contains_key(peer))
+                .then(|| peer.clone())
+            });
+            if let Some(peer) = peer {
+                self.recovery_due.insert(
+                    peer.clone(),
+                    now + jittered(std::time::Duration::from_secs(60)),
+                );
+                if let Err(error) = super::gc2_direct::recover_peer(&mut st, &peer) {
+                    metrics::log_event("gc2_recovery_wait", &[("e", error)]);
+                }
+                if st.owner_transition_failed {
+                    return;
+                }
+            }
         }
         if let Err(error) = materialize_deferred(&mut st) {
             metrics::log_event("deferred_application_prepare_error", &[("e", error)]);
@@ -370,6 +403,10 @@ pub(crate) fn cleanup_expired_unconfirmed(
     let expired = st
         .session_states
         .iter()
+        // Keep the authenticated generation when setup expires. Maintenance
+        // explicitly recovers it when there is live work; deleting it would
+        // allow stale setup replay or strand a peer whose receipt was lost.
+        .filter(|(peer, _)| st.sessions.get(*peer).is_none_or(|s| s.tag().is_none()))
         .filter_map(|(peer, state)| match state {
             DirectSessionState::InitiatedUnconfirmed { expires } if *expires <= now => {
                 Some(peer.clone())
@@ -569,6 +606,28 @@ pub(crate) fn accept_reliable_direct(
             context,
         )
         .map_err(|error| error.to_string())?;
+    #[cfg(feature = "experimental-gc2")]
+    let receipt = if let (
+        Some(tag),
+        Some(DirectRecord::Data {
+            message_id,
+            sent_ms,
+            ..
+        }),
+    ) = (staged.tag(), decode_direct_record(received.plaintext()))
+    {
+        let counter = gcoms_crypto::Frame::decode(ack.wire())
+            .ok_or("invalid GC/2 acknowledgment frame")?
+            .ctr;
+        Some((
+            message_id,
+            Sha256::digest(received.plaintext()).into(),
+            gc2_receipts::horizon(sent_ms),
+            (*tag, counter),
+        ))
+    } else {
+        None
+    };
     if st.direct_ack_outbox.len() >= 1024 {
         return Err("direct ACK outbox is full".into());
     }
@@ -581,6 +640,16 @@ pub(crate) fn accept_reliable_direct(
             0,
             ack.packet(&st.info.identity_pk)?,
         )],
+    };
+    #[cfg(feature = "experimental-gc2")]
+    let receipt_undo = match receipt {
+        Some((id, hash, horizon, ack)) => {
+            Some(
+                st.gc2_receipts
+                    .stage_data(sender_pk, id, hash, horizon, ack, now_unix())?,
+            )
+        }
+        None => None,
     };
     st.direct_ack_outbox.push_back(delivery.clone());
     let legacy_replay_cache = staged.tag().is_none();
@@ -598,6 +667,10 @@ pub(crate) fn accept_reliable_direct(
         persist_received_direct_transaction(st, sender_pk, ack.sealed_state(), received.credit())
     {
         st.direct_ack_outbox.pop_back();
+        #[cfg(feature = "experimental-gc2")]
+        if let Some(undo) = receipt_undo {
+            st.gc2_receipts.rollback(undo);
+        }
         if legacy_replay_cache {
             st.processed_direct.remove(&frame_key);
             st.processed_direct_order.pop_back();
@@ -699,6 +772,46 @@ pub(crate) fn process_frame(
                 share_presence,
                 body,
             }) => {
+                #[cfg(feature = "experimental-gc2")]
+                let logical_duplicate = if st.sessions[&sender_pk].tag().is_some() {
+                    let horizon = gc2_receipts::horizon(sent_ms);
+                    if horizon <= st.gc2_receipts.now(now_unix()) {
+                        // Preserve counter repair even when the immutable
+                        // logical deadline expired across a session replacement.
+                        if persist_received_direct_transaction(
+                            st,
+                            &sender_pk,
+                            received.sealed_state(),
+                            received.credit(),
+                        )
+                        .is_ok()
+                        {
+                            let _ = st
+                                .sessions
+                                .get_mut(&sender_pk)
+                                .unwrap()
+                                .commit_receive(received);
+                        }
+                        return;
+                    }
+                    match st.gc2_receipts.check(
+                        &sender_pk,
+                        message_id,
+                        Sha256::digest(received.plaintext()).into(),
+                        horizon,
+                        now_unix(),
+                    ) {
+                        Ok(duplicate) => duplicate,
+                        Err(error) => {
+                            metrics::log_event("gc2_logical_record_rejected", &[("e", error)]);
+                            return;
+                        }
+                    }
+                } else {
+                    false
+                };
+                #[cfg(not(feature = "experimental-gc2"))]
+                let logical_duplicate = false;
                 if gcoms_core::is_volatile_application_payload(&body) {
                     metrics::log_event("volatile_contact_on_persistent_transport", &[]);
                     return;
@@ -708,7 +821,7 @@ pub(crate) fn process_frame(
                     st.application_inbox.next_sequence,
                     st.application_inbox.entries.len(),
                 );
-                if durable {
+                if durable && !logical_duplicate {
                     if !cfg!(feature = "client-persist")
                         || st.durable_state_sink.is_none()
                         || !st.durable_applications_enabled
@@ -738,7 +851,7 @@ pub(crate) fn process_frame(
                     metrics::log_event("frame_persist_error", &[("e", error)]);
                     return;
                 }
-                if durable {
+                if durable || logical_duplicate {
                     // Delivered through the persistent cursor API. Volatile
                     // event subscribers cannot accidentally consume this data.
                     return;

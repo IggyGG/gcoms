@@ -133,6 +133,10 @@ impl PreparedSend {
     }
 }
 pub(crate) struct PreparedReceive {
+    // Evaluate application expiry once, after authenticated preparation. Later
+    // receipt hashing and ACK staging must see the same accepted record.
+    #[cfg(feature = "experimental-gc2")]
+    expired: bool,
     inner: Receive,
     sealed: Snapshot,
 }
@@ -148,7 +152,7 @@ impl PreparedReceive {
             #[cfg(feature = "experimental-gc2")]
             Receive::Credited(r) => r
                 .record()
-                .filter(|r| !r.expired(now_unix()))
+                .filter(|_| !self.expired)
                 .map_or(&[], |r| r.body()),
         }
     }
@@ -245,6 +249,12 @@ impl PeerSession {
                     Some(DirectRecord::Data { .. }) => flow::Purpose::Interactive,
                     _ => flow::Purpose::Control,
                 };
+                let deadline = match decode_direct_record(bytes) {
+                    Some(DirectRecord::Data { sent_ms, .. }) => {
+                        deadline.min(gc2_receipts::horizon(sent_ms))
+                    }
+                    _ => deadline,
+                };
                 let record = flow::Record::new(purpose, deadline, bytes, &mut rand::thread_rng())
                     .map_err(flow::SessionError::from)?;
                 let prepared = s.prepare_send(&record, now_unix(), key, context)?;
@@ -285,6 +295,8 @@ impl PeerSession {
                 let p = s.prepare_receive(frame, key, context)?;
                 let sealed = Snapshot::Legacy(p.sealed_state().clone());
                 Ok(PreparedReceive {
+                    #[cfg(feature = "experimental-gc2")]
+                    expired: false,
                     inner: Receive::Legacy(Box::new(p)),
                     sealed,
                 })
@@ -310,7 +322,9 @@ impl PeerSession {
                     },
                     key,
                 )?;
+                let expired = p.record().is_some_and(|record| record.expired(now_unix()));
                 Ok(PreparedReceive {
+                    expired,
                     inner: Receive::Credited(Box::new(p)),
                     sealed,
                 })
@@ -339,6 +353,7 @@ impl PeerSession {
             key,
         )?;
         Ok(PreparedReceive {
+            expired: false,
             inner: Receive::Credited(Box::new(p)),
             sealed,
         })
