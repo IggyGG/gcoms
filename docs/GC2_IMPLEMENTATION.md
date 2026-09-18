@@ -136,7 +136,9 @@ Retain failures, source/executable/configuration/workload hashes and exact scope
   limits. Opaque subscriptions revalidate class, epoch, expiry and queue
   incarnation; queue changes wake waiters without polling. Exact GC/2 retries
   bind all envelope bytes. See [queue lifecycle and costs](GC2_QUEUES.md).
-  Natural-cell server/client runtime adoption remains pending.
+  An owned terminal service and explicit natural-cell client now exercise
+  authenticated deposits/subscriptions through the shared carrier. Production
+  node routing, private discovery and SDK/application adoption remain pending.
 - Complete counter-window flow control, command preparation/completion split,
   authenticated class propagation, complete GC/2 routing, protected profiles,
   SDK/GChat profile integration and application/privacy/mobile gates: pending.

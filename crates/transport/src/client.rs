@@ -14,6 +14,9 @@ use std::sync::{Arc, Weak};
 use tokio::sync::{Mutex, OwnedSemaphorePermit, Semaphore};
 use tokio_rustls::TlsConnector;
 
+#[cfg(feature = "experimental-gc2")]
+pub mod gc2;
+
 pub type Result<T> = std::result::Result<T, Box<dyn Error + Send + Sync>>;
 const REQUEST_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(60);
 /// Idle pull streams are abandoned when no cell arrives for this long.

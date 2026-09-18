@@ -31,3 +31,6 @@ windows-sys = { version = "0.61", features = ["Win32_Networking_WinSock"] }
 tokio = { version = "1", features = ["rt-multi-thread", "net", "macros", "time", "io-util", "test-util"] }
 gcoms-crypto = { version = "0.1.0", path = "../crypto", default-features = false, features = ["tls-pin"] }
 p256 = { version = "0.13.2", features = ["ecdsa", "pkcs8"] }
+
+[features]
+experimental-gc2 = ["gcoms-core/experimental-gc2"]

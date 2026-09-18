@@ -7,6 +7,8 @@ pub mod server;
 pub mod tls;
 pub mod token;
 
+#[cfg(feature = "experimental-gc2")]
+pub use client::gc2;
 pub use client::{CellStream, Tp1Client};
 pub use hop::{HopOutcome, HopReply};
 pub use server::ServerLimits;

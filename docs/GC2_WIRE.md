@@ -19,8 +19,9 @@ its authentication tag.
 
 Every relay payload starts with an explicit traffic class: 0 for interactive,
 1 for bulk. A subscription names exactly one class. A forwarding envelope must
-name the same class as its nested deposit. The relay queue/runtime integration
-that enforces these filters is still pending.
+name the same class as its nested deposit. Experimental
+[relay queues and the terminal service](GC2_QUEUES.md) enforce these filters;
+production node/profile adoption remains pending.
 
 | Envelope | Fields before the authentication tag |
 | --- | --- |
@@ -44,6 +45,6 @@ The tests cover maximum-message forwarding, exact natural lengths, malformed
 headers, class/ciphertext/context tampering, class mismatch, nested expiry,
 destination policy and attempted tag reuse across versions. An experimental
 [shared entry carrier](GCT2_CARRIER.md) now supplies bounded multiplexing; complete
-GC/2 routing, ratchet flow control, runtime class filters, archive migration, SDK/GChat profile
+GC/2 discovery and runtime routing, ratchet flow control, archive migration, SDK/GChat profile
 selection and performance/privacy qualification remain separate work in
 [the implementation ledger](GC2_IMPLEMENTATION.md).
