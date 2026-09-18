@@ -1,10 +1,11 @@
 # Validation
 
-Current work stays in the existing private local Forgejo repositories. Public
-publication is deferred by the owner. Run the build/test and local package-consumer
-checks below. The private candidate gate is documented in [release evidence](docs/RELEASE_EVIDENCE.md).
-Current release qualification targets Linux x86_64 and Windows x86_64 in a VM.
-macOS is unavailable and excluded from this release effort; it is not qualified.
+Current work covers secure connections in GComs and GChat only, in their existing
+private local Forgejo repositories. Validate peer authentication, transport security,
+IPC access controls and connection recovery on Linux and the existing Windows VM.
+macOS is unavailable and excluded. Installer qualification and publication are
+deferred; the broader checks below remain guidance for future release work.
+The private candidate gate is documented in [release evidence](docs/RELEASE_EVIDENCE.md).
 
 Run from the repository root with Rust 1.98, Node 22, npm 11 and Python 3.11+.
 Native builds require the standard C/C++ toolchain used by aws-lc-rs. The public
@@ -88,7 +89,7 @@ pre-publication checks use the documented extracted-package staging.
 
 If macOS support is revisited, bind-based multi-relay fixtures need distinct
 loopback aliases and both Intel and ARM64 native qualification. No Mac access is
-required for the current Linux/Windows release effort.
+required for the current Linux/Windows connection checks.
 
 ## Private Windows VM checks
 
