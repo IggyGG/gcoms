@@ -2,29 +2,52 @@
   "project": "gcoms",
   "channel": "developer-preview",
   "version": "0.1.0",
-  "forgejo_url": null,
-  "companion_url": null,
-  "security_contact": null,
-  "conduct_contact": null,
-  "maintainers": [],
+  "companion_url": "https://github.com/IggyGG/gchat",
+  "security_contact": "iggy@gchat.boo",
+  "conduct_contact": "iggy@gchat.boo",
+  "maintainers": [
+    "IggyGG"
+  ],
   "rights_review": null,
   "operator_acceptance": null,
   "native_qualification": {},
   "publisher_identities": {},
-  "publication_status": "deferred_by_owner",
+  "publication_status": "approved_by_owner",
   "development": {
     "visibility": "private",
     "forgejo_url": "http://127.0.0.1:3300/ghost-local/gcoms",
     "companion_url": "http://127.0.0.1:3300/ghost-local/gchat",
     "git_remote": "ssh://git@ghost-forgejo/ghost-local/gcoms.git",
-    "native_validation_record": "native-validation-2026-09-17.json"
+    "native_validation_record": "native-validation-2026-09-17.json",
+    "authority": "forgejo",
+    "github_role": "public mirror; macOS build workers",
+    "native_hosts": {
+      "linux": {
+        "kind": "forgejo_runner",
+        "architecture": "x86_64"
+      },
+      "windows": {
+        "kind": "virtual_machine",
+        "architecture": "x86_64",
+        "rust_host": "x86_64-pc-windows-msvc"
+      },
+      "macos": {
+        "kind": "github_hosted",
+        "runners": [
+          "macos-15-intel",
+          "macos-15"
+        ],
+        "local_host": "unavailable"
+      }
+    }
   },
   "qualification_targets": [
     "linux-x86_64",
-    "windows-x86_64"
+    "windows-x86_64",
+    "macos-x86_64",
+    "macos-aarch64"
   ],
-  "unqualified_targets": {
-    "macos-x86_64": "Mac unavailable; excluded from current release effort by owner",
-    "macos-aarch64": "Mac unavailable; excluded from current release effort by owner"
-  }
+  "unqualified_targets": {},
+  "public_repository_url": "https://github.com/IggyGG/gcoms",
+  "security_reporting_url": "https://github.com/IggyGG/gcoms/security/advisories/new"
 }

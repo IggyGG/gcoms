@@ -36,7 +36,7 @@ class EvidenceTests(unittest.TestCase):
                       "status": "passed", "source_unchanged": True, "started_at": "2026-09-17T00:00:00Z",
                       "finished_at": "2026-09-18T00:00:01Z", "duration_seconds": 86401,
                       "exit_code": 0, "target": target,
-                      "environment": {"native_target": target, "rust_host": "x86_64-pc-windows-msvc"},
+                      "environment": {"native_target": target, "rust_host": {"macos-x86_64":"x86_64-apple-darwin", "macos-aarch64":"aarch64-apple-darwin"}.get(target, "x86_64-pc-windows-msvc")},
                       "steps": [{"command": ["python3", "scripts/ci.py"], "status": "passed", "exit_code": 0,
                                  "log": self.file(check + ".log", b"test fixture log\n")}],
                       "artifacts": {name: artifact["sha256"] for name, artifact in self.candidate["artifacts"].items()},
@@ -90,12 +90,12 @@ class EvidenceTests(unittest.TestCase):
         self.reports[check]["artifacts"]["gcoms-sdk-0.1.0.crate"] = "f" * 64; self.save(check)
         self.assertTrue(any("stale artifact" in error for error in self.errors()))
 
-    def test_required_target_cannot_be_removed_and_macos_is_not_claimed(self):
-        self.assertFalse(any("macos" in check for check in release.PREFLIGHT))
+    def test_all_signed_platforms_are_required(self):
+        self.assertTrue({"signing.macos", "signing.linux", "signing.windows"} <= release.PREFLIGHT)
         self.candidate["checks"].pop("native.gcoms.windows-x86_64")
         self.assertTrue(any("native.gcoms.windows-x86_64" in error for error in self.errors()))
         self.candidate["targets"].remove("windows-x86_64")
-        self.assertTrue(any("Linux and Windows" in error for error in self.errors()))
+        self.assertTrue(any("Linux, Windows" in error for error in self.errors()))
 
     def test_timeout_zero_tests_and_unexplained_skips_are_rejected(self):
         check = "native.gcoms.windows-x86_64"

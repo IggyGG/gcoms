@@ -5,6 +5,7 @@ documentation = "https://docs.rs/gcoms-file-transfer"
 description = "Durable GC file staging and publication without a network runtime"
 edition.workspace = true
 license.workspace = true
+repository.workspace = true
 rust-version.workspace = true
 version.workspace = true
 publish.workspace = true

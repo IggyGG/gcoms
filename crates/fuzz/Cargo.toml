@@ -5,6 +5,7 @@ documentation = "https://docs.rs/gcoms-fuzz"
 description = "GComs GC/1 hardening: parser fuzzing swarm, RAM-only assertion, flow-shape harness"
 edition.workspace = true
 license.workspace = true
+repository.workspace = true
 rust-version.workspace = true
 version.workspace = true
 publish = false

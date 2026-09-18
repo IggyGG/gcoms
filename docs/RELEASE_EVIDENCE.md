@@ -1,12 +1,13 @@
 # GC/1 developer-preview qualification
 
-The current release effort covers **Linux x86_64 and Windows x86_64**. macOS is
-unavailable and unqualified, by owner decision. Do not attach a Mac installer or
-claim Mac support from historical development builds. This scope applies to both
-GComs and GChat. GC/2 and production security/privacy claims are separate work.
+The release targets are **Linux x86_64, Windows x86_64, macOS x86_64, and macOS
+aarch64**. Windows uses a native MSVC VM; macOS uses GitHub-hosted workers.
+The local Mac is unavailable. Historical results are retained but do not qualify
+new source commits. GC/2 and production security/privacy claims are separate work.
 
-Work remains in the existing private Forgejo repositories. Qualification scripts
-never publish packages, releases or messages. Public publication is deferred.
+Forgejo remains authoritative. GitHub mirrors source and signed release assets.
+These qualification scripts never publish; the separate GChat delivery tooling
+performs publication only after the evidence gate passes.
 
 ## Freeze the inputs
 
@@ -94,7 +95,7 @@ must use disposable isolated runners with no release/signing secrets.
 
 `scripts/release_evidence.py` defines the complete, reviewed check inventory:
 
-- Native GComs and GChat CI on Linux and Windows, with nonzero test counts,
+- Native GComs and GChat CI on Linux, Windows, and both macOS architectures, with nonzero test counts,
   no failed/incomplete harnesses and an explicit inventory of allowed exclusions.
 - Rust and npm archive consumers, GChat through the staged registry, browser
   integration and GChat integration against the candidate inputs.
@@ -132,7 +133,7 @@ rights, operator and maintainer reviews, approved public configuration, Windows
 distribution signing and manifest signature verification. Reviews require retained
 evidence and cannot be manufactured by the command runner. `published` additionally
 requires verification of the actual public Rust/npm packages and GChat downloads.
-The latter stages intentionally remain blocked while publication is deferred.
+The latter stages remain blocked until signing identities, contacts, and actual qualification evidence are configured.
 
 No passing flag in `publication.json`, short smoke run, empty test harness or
 unavailable platform substitutes for the required evidence. Keep unresolved failures

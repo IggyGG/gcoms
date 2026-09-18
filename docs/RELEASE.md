@@ -1,66 +1,34 @@
-# Private development and future release
+# Signed developer-preview releases
 
-## Current stage
+Local Forgejo is authoritative. Public GitHub mirrors are `IggyGG/gcoms` and
+`IggyGG/gchat`; the website remains on its current host and deploys from Forgejo.
+The initial version is 0.1.0, explicitly labeled developer preview.
 
-The owner has chosen the existing private local Forgejo repositories for current
-development: [gcoms](http://127.0.0.1:3300/ghost-local/gcoms) and
-[gchat](http://127.0.0.1:3300/ghost-local/gchat). Public publication is deferred.
-Use the existing `forgejo` remote for commits, reviews and private source delivery.
-Continue local builds and archive-consumer validation without public registries.
+Targets are Linux x86_64, Windows 11 x86_64 with native MSVC, and macOS Apple
+Silicon/Intel on GitHub-hosted runners. Every advertised installer must be signed;
+macOS additionally requires notarization and stapling. The unavailable local Mac
+is not required. A target is qualified only by evidence for its actual release
+source and artifacts, not by historical development builds.
 
-`release/publication.json` records these private endpoints under `development`.
-Its public URL/contact/signing fields remain unset until publication is revisited.
-`scripts/check-release.py --stage candidate` checks private qualification evidence.
-`--stage preflight` adds owner reviews, public identity and Windows distribution
-signing; `--stage published` also requires actual registry/install verification.
-None of these commands publishes. See [candidate evidence](RELEASE_EVIDENCE.md)
-for commands and the Linux/Windows scope. Ordinary development checks remain in
-TESTING.md; a passing build alone does not qualify a release.
+`release/publication.json` records public mirror URLs separately from private
+Forgejo configuration. Public delivery is authorized; signing enrollment, private
+reporting contacts, rights/operator reviews, and qualification results must still
+be supplied and verified. Missing values are not fabricated.
 
-## Future public release
+1. Validate both repositories, source/history inventories, dependencies, licenses,
+   generated APIs, package archives, and external consumers.
+2. Publish inspected GComs Rust/npm packages in dependency order. Verify downloads
+   and clean GChat registry builds; review final lockfiles before freezing source.
+3. Create a new source-bound candidate and complete native, installer, network,
+   fuzz/soak, and signing checks. See [release evidence](RELEASE_EVIDENCE.md).
+4. Verify preflight, create signed annotated tags, and publish the canonical
+   Forgejo releases. Copy identical artifacts and notes to GitHub, then verify
+   their public hashes and installation behavior.
+5. Update GChat's download manifest and deploy its static website from Forgejo.
+   Keep previous versions available for rollback. Never replace published bytes.
 
-The public release unit is GComs source and Rust/npm packages plus the separate
-GChat source and qualified native artifacts. Forgejo is authoritative. A clean
-history preserves source attribution and private originals; it is not a rights or
-secret audit by itself.
-
-## Preparation
-
-1. Run TESTING.md, archive/consumer checks, current advisories and license review.
-2. Review IMPORT.json and NOTICE.md against the retained source history. Confirm
-   distribution rights for code, logos, fonts and bundled data.
-3. Fill release/publication.json with the actual public Forgejo/companion URLs,
-   maintainers and private security/conduct contacts. Update repository metadata,
-   README links and package metadata together.
-4. Qualify exact-source native platforms and the operated network. Record evidence
-   and signing identities; do not substitute private historical performance results.
-5. Validate the candidate bundle with `check-release.py` and the chosen stage.
-   Missing, failed or stale evidence blocks qualification.
-
-## Publication
-
-Create signed, annotated preview tags only after required checks pass. Publish
-Rust crates in dependency order (the package-consumer script prints the set); publish
-`@gcoms/rpc-codegen` and `@gcoms/rpc` from inspected tarballs with declarations and
-licenses. Install from the actual registries in an empty consumer and GChat checkout.
-Then build/sign native GChat artifacts against those registry versions, attach
-checksums/provenance and publish release notes on Forgejo. Keep registry credentials
-in protected release-runner secrets, never in source or untrusted pull-request jobs.
-
-The initial version is 0.1.0, explicitly labeled developer preview. Do not overwrite
-an existing registry version or tag. A bad package needs a new version and advisory
-or deprecation as appropriate; preserve the original artifact and evidence.
-
-## Deferred publication decisions
-
-Public endpoints and contacts, publisher accounts/certificates, distribution rights,
-operator capacity and native acceptance must be supplied/confirmed by the project
-owner. This repository intentionally contains no fabricated publishing identity.
-Tests cannot establish those decisions. Independent crypto/privacy review and
-mobile support remain outside the preview's qualified claims.
-
-Pre-publication application lockfiles can be qualified using
-`scripts/check-registry-consumer.py`. It serves inspected `.crate` archives and
-Cargo-cached third-party packages through a loopback sparse registry, while retaining
-canonical crates.io identities and checksums in the application lockfile. Re-run it
-after changing any package archive; do not publish stale application checksums.
+GChat owns the executable [delivery runbook](https://github.com/IggyGG/gchat/blob/main/docs/PUBLIC_DELIVERY.md)
+and [installation guide](https://github.com/IggyGG/gchat/blob/main/docs/INSTALL.md).
+The candidate, preflight, and published stages remain distinct. Only actual
+passed checks qualify a release; scripts do not convert incomplete work into
+approval or claim an independent security audit.
