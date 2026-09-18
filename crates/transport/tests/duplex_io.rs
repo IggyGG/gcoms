@@ -124,3 +124,27 @@ async fn writes_are_bounded_and_dropping_a_stream_cancels_its_peer() {
     );
     stop(drivers).await;
 }
+
+#[tokio::test]
+async fn reset_is_observable_without_consuming_application_bytes() {
+    let (mut client, mut server, drivers) = pair(65535).await;
+    client.write_all(b"queued application bytes").await.unwrap();
+    std::future::poll_fn(|cx| {
+        assert!(server.poll_reset(cx).is_pending());
+        Poll::Ready(())
+    })
+    .await;
+    let mut bytes = [0; 24];
+    server.read_exact(&mut bytes).await.unwrap();
+    assert_eq!(&bytes, b"queued application bytes");
+    drop(client);
+    let reason = tokio::time::timeout(
+        Duration::from_secs(2),
+        std::future::poll_fn(|cx| server.poll_reset(cx)),
+    )
+    .await
+    .unwrap()
+    .unwrap();
+    assert_eq!(reason, h2::Reason::CANCEL);
+    stop(drivers).await;
+}

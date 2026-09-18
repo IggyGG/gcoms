@@ -119,9 +119,11 @@ Retain failures, source/executable/configuration/workload hashes and exact scope
 - Experimental shared GCT2 entry carrier: implemented with two permanent class
   channels, a shared 16-circuit bound, interactive reservations, fixed interactive
   records and immediately eligible bulk. Real TLS fixtures exercise shared
-  connections, independent entry/terminal pins, class/profile binding and
-  cancellation. See [its exact scope](GCT2_CARRIER.md); complete middle-hop
-  extension and runtime adoption remain pending.
+  connections, independent entry/middle/terminal pins, route exclusions,
+  class/profile binding and cancellation. Middle transit adds no second padding
+  schedule, and the entry owner owns nested drivers. See
+  [its exact scope](GCT2_CARRIER.md); private GC/2 discovery, preconnected entry
+  selection and runtime adoption remain pending.
 - Complete counter-window flow control, command preparation/completion split,
   authenticated class propagation, complete GC/2 routing, protected profiles,
   SDK/GChat profile integration and application/privacy/mobile gates: pending.

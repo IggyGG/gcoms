@@ -32,6 +32,12 @@ impl H2Stream {
             write_closed: false,
         }
     }
+
+    /// Observe peer cancellation while awaiting work that does not otherwise
+    /// read or write this stream (for example an admitted target connection).
+    pub fn poll_reset(&mut self, cx: &mut Context<'_>) -> Poll<Result<h2::Reason, h2::Error>> {
+        self.send.poll_reset(cx)
+    }
 }
 
 impl AsyncRead for H2Stream {

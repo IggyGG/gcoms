@@ -4,6 +4,7 @@ use gcoms_core::{Cell, CellType, TrafficClass};
 use gcoms_routing::{
     gc2::{
         entry::{self, EntryCarrier, EntryDescriptor},
+        transit::TransitDescriptor,
         CandidateProfile, RecordCodec, RecordKind,
     },
     route::now_unix,
@@ -40,6 +41,7 @@ struct Fixture {
     connections: Arc<AtomicUsize>,
     stop: Vec<oneshot::Sender<()>>,
     tasks: JoinSet<()>,
+    carriers: Vec<tokio::task::AbortHandle>,
 }
 
 impl Fixture {
@@ -106,6 +108,7 @@ impl Fixture {
             connections,
             stop,
             tasks,
+            carriers: Vec::new(),
         }
     }
 
@@ -116,7 +119,7 @@ impl Fixture {
             .unwrap();
         socket.set_nodelay(true).unwrap();
         let (tx, rx) = oneshot::channel();
-        self.tasks.spawn(async move {
+        let handle = self.tasks.spawn(async move {
             let _ = entry::run(
                 Box::new(socket),
                 descriptor,
@@ -125,6 +128,7 @@ impl Fixture {
             )
             .await;
         });
+        self.carriers.push(handle);
         timeout(Duration::from_secs(5), rx).await.unwrap().unwrap()
     }
 
@@ -133,6 +137,42 @@ impl Fixture {
             addr: self.terminal_addr,
             service_id: self.terminal_pin,
         }
+    }
+
+    async fn middle(&mut self) -> Arc<RelayService> {
+        let identity = TlsIdentity::generate().unwrap();
+        let server = Tp1Server::bind_with_identity(
+            "127.0.0.84:0".parse().unwrap(),
+            TokenRegistry::new(),
+            Arc::new(|_, _| Ok(None)),
+            Arc::new(|_| None),
+            &identity,
+        )
+        .await
+        .unwrap();
+        let service = RelayService::new(
+            server.local_addr().unwrap(),
+            identity.service_id(),
+            [8; 32],
+            Arc::new(Directory::new()),
+            ServicePolicy {
+                target_allowed: Arc::new(|addr| addr.ip().is_loopback()),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        let server = server.with_duplex_factory(service.gc2_handler_factory());
+        let (tx, rx) = oneshot::channel();
+        self.stop.push(tx);
+        self.tasks.spawn(async move {
+            server
+                .run_until(async {
+                    let _ = rx.await;
+                })
+                .await
+                .unwrap();
+        });
+        service
     }
 
     async fn stop(mut self) {
@@ -146,6 +186,156 @@ impl Fixture {
         .unwrap();
         assert_eq!(self.service.active_circuits(), 0);
     }
+}
+
+struct FullConnector(EntryCarrier, TrafficClass, TransitDescriptor);
+impl Connector for FullConnector {
+    fn connect(&self, addr: SocketAddr, service_id: [u8; 32]) -> ConnectFuture<'_> {
+        Box::pin(async move {
+            self.0
+                .connect_via(self.1, &self.2, &Target::Relay { addr, service_id }, &[])
+                .await
+        })
+    }
+
+    fn connect_excluding<'a>(
+        &'a self,
+        addr: SocketAddr,
+        service_id: [u8; 32],
+        excluded: &'a [(SocketAddr, [u8; 32])],
+    ) -> ConnectFuture<'a> {
+        Box::pin(async move {
+            self.0
+                .connect_via(
+                    self.1,
+                    &self.2,
+                    &Target::Relay { addr, service_id },
+                    excluded,
+                )
+                .await
+        })
+    }
+}
+
+#[tokio::test]
+async fn complete_gc2_circuits_authenticate_all_three_hops_on_one_entry() {
+    let mut fixture = Fixture::new().await;
+    let middle = fixture.middle().await;
+    let carrier = fixture.carrier().await;
+    let descriptor = middle.gc2_transit_descriptor(now_unix());
+    let mut clients = Vec::new();
+    for class in [TrafficClass::Bulk, TrafficClass::Interactive] {
+        let client = Tp1Client::with_connector(Arc::new(FullConnector(
+            carrier.clone(),
+            class,
+            descriptor.clone(),
+        )))
+        .unwrap();
+        let cell = Cell::new(CellType::Msg, 0, 0, vec![21; 12000]);
+        let outcome = timeout(
+            Duration::from_secs(15),
+            client.post_cell_pinned(
+                fixture.terminal_addr,
+                fixture.terminal_pin,
+                "fixture-echo",
+                Bytes::from(cell.encode_wire().unwrap()),
+            ),
+        )
+        .await
+        .unwrap()
+        .unwrap();
+        let gcoms_transport::HopOutcome::Accepted(Some(echo)) = outcome else {
+            panic!("expected three-hop echo");
+        };
+        assert_eq!(echo.payload, cell.payload);
+        clients.push(client);
+    }
+    assert_eq!(fixture.connections.load(Ordering::SeqCst), 1);
+    assert_eq!(carrier.active_circuits(), 2);
+    assert_eq!(middle.active_circuits(), 2);
+    assert!(clients[0]
+        .get_pinned(fixture.terminal_addr, [0xc7; 32], "/")
+        .await
+        .is_err());
+    // Cancel just the root carrier while both relay listeners remain running.
+    fixture.carriers[0].abort();
+    timeout(Duration::from_secs(3), async {
+        while fixture.service.active_circuits() != 0
+            || middle.active_circuits() != 0
+            || carrier.active_circuits() != 0
+        {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .unwrap();
+    fixture.stop().await;
+}
+
+#[tokio::test]
+async fn middle_pin_capability_and_complete_route_exclusions_fail_closed() {
+    let mut fixture = Fixture::new().await;
+    let middle = fixture.middle().await;
+    let carrier = fixture.carrier().await;
+    let descriptor = middle.gc2_transit_descriptor(now_unix());
+    let mut wrong_pin = descriptor.clone();
+    wrong_pin.service_id = [0x44; 32];
+    let mut wrong_role = descriptor.clone();
+    wrong_role.transit_cap = middle.gc2_entry_descriptor(now_unix()).entry_cap;
+    let mut old_cap = descriptor.clone();
+    old_cap.transit_cap = middle.introduction(now_unix()).circuit_cap;
+    for invalid in [wrong_pin, wrong_role, old_cap] {
+        assert!(timeout(
+            Duration::from_secs(3),
+            carrier.connect_via(TrafficClass::Bulk, &invalid, &fixture.target(), &[])
+        )
+        .await
+        .unwrap()
+        .is_err());
+    }
+    for excluded in [
+        (descriptor.addr, [1; 32]),
+        ("127.0.0.98:443".parse().unwrap(), descriptor.service_id),
+        (fixture.service.address(), [2; 32]),
+        (
+            "127.0.0.99:443".parse().unwrap(),
+            fixture.service.gc2_entry_descriptor(now_unix()).service_id,
+        ),
+    ] {
+        assert!(carrier
+            .connect_via(
+                TrafficClass::Interactive,
+                &descriptor,
+                &fixture.target(),
+                &[excluded]
+            )
+            .await
+            .is_err());
+    }
+    for target in [
+        Target::Relay {
+            addr: descriptor.addr,
+            service_id: [3; 32],
+        },
+        Target::Relay {
+            addr: fixture.terminal_addr,
+            service_id: descriptor.service_id,
+        },
+    ] {
+        assert!(carrier
+            .connect_via(TrafficClass::Bulk, &descriptor, &target, &[])
+            .await
+            .is_err());
+    }
+    timeout(Duration::from_secs(3), async {
+        while fixture.service.active_circuits() != 0 || middle.active_circuits() != 0 {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .unwrap();
+    assert_eq!(fixture.connections.load(Ordering::SeqCst), 1);
+    fixture.stop().await;
 }
 
 struct EntryConnector(EntryCarrier, TrafficClass);
@@ -423,7 +613,95 @@ async fn profile_and_class_binding_are_immutable_on_one_connection() {
     )
     .await
     .unwrap();
+    let transit = fixture.service.gc2_transit_descriptor(now_unix());
+    let (reply, mut denied) = sender
+        .send_request(
+            http::Request::builder()
+                .method("POST")
+                .uri(format!(
+                    "https://{}/{}",
+                    transit.addr,
+                    gcoms_transport::encode_b64url(&transit.transit_cap)
+                ))
+                .body(())
+                .unwrap(),
+            false,
+        )
+        .unwrap();
+    assert_eq!(
+        reply.await.unwrap().status(),
+        404,
+        "an entry connection cannot add an unshaped transit path"
+    );
+    denied.send_reset(h2::Reason::CANCEL);
     assert_eq!(fixture.connections.load(Ordering::SeqCst), 1);
     drop((held, bulk, sender));
+    fixture.stop().await;
+}
+
+#[tokio::test]
+async fn malformed_middle_open_is_rejected_before_any_target_dial() {
+    let mut fixture = Fixture::new().await;
+    let middle = fixture.middle().await;
+    let descriptor = middle.gc2_transit_descriptor(now_unix());
+    let observed = tokio::net::TcpListener::bind("127.0.0.85:0").await.unwrap();
+    let target = Target::Relay {
+        addr: observed.local_addr().unwrap(),
+        service_id: [4; 32],
+    }
+    .encode();
+    let mut valid = b"GCX2".to_vec();
+    valid.push(TrafficClass::Bulk as u8);
+    valid.extend_from_slice(&(target.len() as u16).to_be_bytes());
+    valid.extend_from_slice(&target);
+    let mut cases = vec![valid[..3].to_vec(), valid[..valid.len() - 1].to_vec()];
+    for (index, value) in [(3, b'1'), (4, 9), (5, 255), (7, 255)] {
+        let mut malformed = valid.clone();
+        malformed[index] = value;
+        cases.push(malformed);
+    }
+    for malformed in cases {
+        let socket = tokio::net::TcpStream::connect(descriptor.addr)
+            .await
+            .unwrap();
+        let tls = TlsConnector::from(Arc::new(
+            tls::client_config_pinned(descriptor.service_id).unwrap(),
+        ))
+        .connect(tls::server_name_ip(descriptor.addr.ip()), socket)
+        .await
+        .unwrap();
+        let (mut sender, driver) = h2::client::handshake(tls).await.unwrap();
+        fixture.tasks.spawn(async move {
+            let _ = driver.await;
+        });
+        let (reply, send) = sender
+            .send_request(
+                http::Request::builder()
+                    .method("POST")
+                    .uri(format!(
+                        "https://{}/{}",
+                        descriptor.addr,
+                        gcoms_transport::encode_b64url(&descriptor.transit_cap)
+                    ))
+                    .body(())
+                    .unwrap(),
+                false,
+            )
+            .unwrap();
+        let reply = reply.await.unwrap();
+        assert_eq!(reply.status(), 200);
+        let mut wire = H2Stream::new(reply.into_body(), send);
+        wire.write_all(&malformed).await.unwrap();
+        wire.shutdown().await.unwrap();
+        let mut ack = [0; 6];
+        assert!(timeout(Duration::from_secs(2), wire.read_exact(&mut ack))
+            .await
+            .unwrap()
+            .is_err());
+    }
+    assert!(timeout(Duration::from_millis(30), observed.accept())
+        .await
+        .is_err());
+    assert_eq!(middle.active_circuits(), 0);
     fixture.stop().await;
 }

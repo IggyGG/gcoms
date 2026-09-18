@@ -8,11 +8,12 @@ move when data and transport credit are available, without a round timer or idle
 cover. Data never waits for a record to fill.
 
 This is an experimental transport building block, not a node or GChat profile.
-GC/1 remains the default runtime. Complete independently pinned middle-hop
-extension, private GC/2 discovery, authenticated relay queue class enforcement,
+GC/1 remains the default runtime. Independently pinned middle-hop extension now
+works through this entry. Private GC/2 discovery, automatic entry selection,
+authenticated relay queue class enforcement,
 counter-window flow control, SDK/application integration and qualification are
-still pending. In particular, the entry fixture's independently authenticated
-terminal is not evidence of a complete production onion route.
+still pending. Complete entry/middle/terminal circuits pass local fixtures; this
+is not evidence of operated-network or production protocol qualification.
 
 ## Wire and sending behavior
 
@@ -44,11 +45,27 @@ This schedule describes records, not a claim that real network packets reveal
 no chat activity. TLS records, HTTP2 control traffic, congestion and connection
 lifecycle remain part of the packet-level qualification gate.
 
+`EntryCarrier::connect_via` adds an independently pinned TLS/HTTP2 middle hop
+inside a typed entry circuit. Its initial `GCX2` body contains magic (4 bytes),
+class (1), target length (2, network order) and the canonical target (at most
+256 bytes). The reply is `GCX2`, the same class and zero status. Subsequent bytes
+are unpadded, unscheduled terminal traffic inside that middle TLS connection.
+The outer entry alone supplies interactive shaping. The caller independently
+authenticates the terminal; it never inherits the middle's TLS identity.
+
+Before opening a circuit, the API rejects entry/middle/terminal IP or pin overlap
+and checks every supplied route exclusion against both intermediaries. It cannot
+dial a replacement entry in response to a failed route. The existing target
+allowlist and reachability policy apply at each relay. Private descriptor refresh
+and selecting a compatible preconnected entry are still runtime integration work.
+
 ## Ownership and resource bounds
 
 The caller owns and continuously polls `entry::run` for a connected period chosen
 independently of chat. That future owns TLS, outer HTTP2, both channel pumps and
-both inner multiplexor drivers. Canceling it drops the complete tree. The API
+both inner multiplexor drivers. A bounded owned queue also holds nested middle
+connection drivers. Dropping a terminal stream cancels its nested driver;
+canceling the entry owner drops the complete tree. The API
 does not dial, reconnect or silently select another version. The relay listener
 creates connection state after a successful TLS/HTTP2 handshake; a private path
 must still authenticate before entering the service.
@@ -57,6 +74,8 @@ must still authenticate before entering the service.
 | --- | --- |
 | Established class channels | 2 per physical connection |
 | Logical circuits | 16 shared across both classes; at most 15 bulk |
+| Nested middle drivers | At most 16, each retaining a logical circuit permit |
+| Middle targets per nested TLS connection | 1 |
 | Relay circuits | Existing service limit, at most 128; GC/2 bulk leaves one slot |
 | Circuit open operations | 64/second across both class channels |
 | Outer client receive credit | 32 KiB per class, 64 KiB connection |
@@ -82,7 +101,10 @@ not silently reduce padding or select another profile.
 
 The service uses a separate HMAC-derived `ghost.gct2.entry.v2` capability bound to
 its service identity and hourly epoch. GC/1 circuit and re-entry capabilities are
-not accepted. Service target policy, reachability admission and capacity still
+not accepted. Middle transit uses the independent `ghost.gct2.transit.v2` domain.
+A physical connection binds to either entry or transit: possessing both tokens
+cannot add an unshaped path to a protected entry. Service target policy,
+reachability admission and capacity still
 apply. The returned logical stream carries opaque bytes: the next hop requires
 its own TLS pin and capability. Complete route selection must preserve every
 endpoint, terminal and adjacent-hop exclusion before using a shared entry.

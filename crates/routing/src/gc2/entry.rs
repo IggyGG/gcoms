@@ -4,6 +4,7 @@
 use super::{channel, mux, CandidateProfile, RecordCodec, RecordKind, HEADER_LEN};
 use crate::{route::now_unix, wire::Target, Result};
 use bytes::Bytes;
+use futures_util::{stream::FuturesUnordered, StreamExt};
 use gcoms_core::TrafficClass;
 use gcoms_transport::{connector::BoxStream, duplex::H2Stream, server::AcceptedDuplex, tls};
 use std::{
@@ -14,7 +15,7 @@ use std::{
 };
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
-    sync::{oneshot, Semaphore},
+    sync::{mpsc, oneshot, Semaphore},
     time::{timeout, Instant},
 };
 use tokio_rustls::TlsConnector;
@@ -59,11 +60,60 @@ pub struct EntryCarrier {
     bulk: mux::MuxClient,
     descriptor: EntryDescriptor,
     budget: Arc<mux::CircuitBudget>,
+    nested: mpsc::Sender<NestedDriver>,
 }
+
+type NestedDriver = std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send>>;
 
 impl EntryCarrier {
     pub fn active_circuits(&self) -> usize {
         self.budget.active()
+    }
+
+    /// Construct a complete two-relay circuit using this already connected
+    /// entry and an independently pinned middle. No new entry connection or
+    /// profile change is triggered. The caller still authenticates the terminal.
+    pub async fn connect_via(
+        &self,
+        class: TrafficClass,
+        middle: &super::transit::TransitDescriptor,
+        target: &Target,
+        excluded: &[(SocketAddr, [u8; 32])],
+    ) -> Result<BoxStream> {
+        middle.validate()?;
+        if excluded.len() > 64 {
+            return Err("too many GC/2 route exclusions".into());
+        }
+        let entry = (self.descriptor.addr, self.descriptor.service_id);
+        let middle_service = (middle.addr, middle.service_id);
+        let conflict = |a: (SocketAddr, [u8; 32]), b: (SocketAddr, [u8; 32])| {
+            a.0.ip() == b.0.ip() || a.1 == b.1
+        };
+        if conflict(entry, middle_service)
+            || excluded
+                .iter()
+                .any(|excluded| conflict(entry, *excluded) || conflict(middle_service, *excluded))
+            || matches!(target, Target::Relay { addr, service_id }
+                if conflict(entry, (*addr, *service_id)) || conflict(middle_service, (*addr, *service_id)))
+        {
+            return Err("GC/2 route conflicts with an endpoint or adjacent hop".into());
+        }
+        Target::decode(&target.encode())?;
+        let stream = self
+            .open(
+                class,
+                &Target::Relay {
+                    addr: middle.addr,
+                    service_id: middle.service_id,
+                },
+            )
+            .await?;
+        let (terminal, driver) = super::transit::open(stream, middle, target).await?;
+        self.nested
+            .send(driver)
+            .await
+            .map_err(|_| "GC/2 entry owner stopped")?;
+        Ok(terminal)
     }
 
     /// Extend to an adjacent relay. The complete route must be selected with all
@@ -148,17 +198,35 @@ pub async fn run(
                             mux::MuxClient::handshake(chat_io, TrafficClass::Interactive, budget.clone()),
                             mux::MuxClient::handshake(bulk_io, TrafficClass::Bulk, budget.clone()),
                         )?;
-                        let carrier = EntryCarrier { interactive, bulk, descriptor, budget };
+                        let (nested, nested_rx) = mpsc::channel(mux::MAX_CIRCUITS);
+                        let carrier = EntryCarrier { interactive, bulk, descriptor, budget, nested };
                         ready.send(carrier).map_err(|_| "GC/2 entry readiness owner dropped")?;
                         tokio::select! {
                             result = chat_driver => { result?; Err("GC/2 interactive mux ended".into()) },
                             result = bulk_driver => { result?; Err("GC/2 bulk mux ended".into()) },
+                            result = own_nested(nested_rx) => result,
                         }
                     } => result,
                 }
             } => result,
         }
     }).await.map_err(|_| "GC/2 entry lifetime ended")?
+}
+
+async fn own_nested(mut receiver: mpsc::Receiver<NestedDriver>) -> Result<()> {
+    let mut active = FuturesUnordered::new();
+    let mut closed = false;
+    loop {
+        tokio::select! {
+            driver = receiver.recv(), if !closed && active.len() < mux::MAX_CIRCUITS => {
+                match driver { Some(driver) => active.push(driver), None => closed = true }
+            },
+            Some(()) = active.next(), if !active.is_empty() => (),
+            // Dropping application handles must not change the connected cover
+            // period. Only the root owner/lifetime ends the carrier.
+            _ = std::future::pending::<()>() => unreachable!(),
+        }
+    }
 }
 
 async fn open_channel(

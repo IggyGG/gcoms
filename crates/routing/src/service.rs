@@ -170,37 +170,75 @@ impl RelayService {
         }
     }
 
+    #[cfg(feature = "experimental-gc2")]
+    pub fn gc2_transit_descriptor(&self, now: u64) -> crate::gc2::transit::TransitDescriptor {
+        let epoch = now / 3600;
+        let mut hash =
+            Hmac::<Sha256>::new_from_slice(self.secret.as_ref()).expect("fixed HMAC key");
+        hash.update(b"ghost.gct2.transit.v2\0");
+        hash.update(&self.service_id);
+        hash.update(&epoch.to_be_bytes());
+        crate::gc2::transit::TransitDescriptor {
+            addr: self.address(),
+            service_id: self.service_id,
+            transit_cap: hash.finalize().into_bytes().into(),
+            expires_at: (epoch + 1) * 3600,
+        }
+    }
+
+    #[cfg(feature = "experimental-gc2")]
+    fn gc2_target_connector(self: &Arc<Self>) -> crate::gc2::mux::TargetConnector {
+        let service = self.clone();
+        Arc::new(move |target, class| {
+            let service = service.clone();
+            Box::pin(async move {
+                let mut permits = Vec::with_capacity(2);
+                if class == gcoms_core::TrafficClass::Bulk {
+                    permits.push(service.gc2_bulk_slots.clone().try_acquire_owned()?);
+                }
+                permits.push(service.slots.clone().try_acquire_owned()?);
+                let io = service.connect_target(target).await?;
+                Ok(crate::gc2::entry::hold_capacity(io, permits))
+            })
+        })
+    }
+
     /// Attach with `Tp1Server::with_duplex_factory`: each physical connection
     /// gets exactly one class/profile binding and one shared 16-circuit budget.
     #[cfg(feature = "experimental-gc2")]
     pub fn gc2_handler_factory(self: &Arc<Self>) -> gcoms_transport::server::DuplexHandlerFactory {
-        use crate::gc2::{entry, mux};
+        use crate::gc2::{entry, transit};
         let service = self.clone();
         Arc::new(move || {
             let context = Arc::new(entry::ConnectionContext::default());
+            let role = Mutex::new(None);
             let service = service.clone();
             Arc::new(move |path| {
                 let mut cap = gcoms_transport::decode_b64url(path)?;
                 let own = service.gc2_entry_descriptor(now_unix());
-                let authorized = bool::from(cap.as_slice().ct_eq(&own.entry_cap));
+                let middle = service.gc2_transit_descriptor(now_unix());
+                let entry = bool::from(cap.as_slice().ct_eq(&own.entry_cap));
+                let transit = bool::from(cap.as_slice().ct_eq(&middle.transit_cap));
                 zeroize::Zeroize::zeroize(&mut cap);
-                if !authorized {
+                if !entry && !transit {
                     return None;
                 }
-                let service = service.clone();
-                let connect: mux::TargetConnector = Arc::new(move |target, class| {
-                    let service = service.clone();
-                    Box::pin(async move {
-                        let mut permits = Vec::with_capacity(2);
-                        if class == gcoms_core::TrafficClass::Bulk {
-                            permits.push(service.gc2_bulk_slots.clone().try_acquire_owned()?);
-                        }
-                        permits.push(service.slots.clone().try_acquire_owned()?);
-                        let io = service.connect_target(target).await?;
-                        Ok(entry::hold_capacity(io, permits))
-                    })
-                });
-                Some(context.accept(own.expires_at, connect))
+                // Possessing both capabilities cannot add unshaped transit
+                // paths to a connection already bound as a protected entry.
+                let mut selected = role.lock().unwrap_or_else(|p| p.into_inner());
+                if selected.is_some_and(|was_entry| was_entry != entry || !entry) {
+                    return None;
+                }
+                // A nested TLS connection extends exactly one middle target;
+                // only the protected entry role multiplexes circuit opens.
+                *selected = Some(entry);
+                drop(selected);
+                let connect = service.gc2_target_connector();
+                Some(if entry {
+                    context.accept(own.expires_at, connect)
+                } else {
+                    transit::accept(middle.expires_at, connect)
+                })
             })
         })
     }

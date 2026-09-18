@@ -7,6 +7,7 @@ use std::{fmt, time::Duration};
 pub mod channel;
 pub mod entry;
 pub mod mux;
+pub mod transit;
 
 const MAGIC: &[u8; 4] = b"GCT2";
 pub const HEADER_LEN: usize = 9;
