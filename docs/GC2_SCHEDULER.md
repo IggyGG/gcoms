@@ -59,6 +59,20 @@ can be retried with the committed ciphertext. Deduplication includes semantic
 headers and destination authority, not only payload bytes. This is in-flight
 suppression, not a durable-delivery acknowledgment.
 
+Local deposit and forwarding submissions check the inner MSG type, version,
+flags and 15 KiB payload ceiling before creating a lane or reserving resources.
+Malformed work returns `EnqueueError::InvalidCell` and increments the opt-in
+`rejected_invalid` counter; it cannot warm a connection or consume a scheduled
+opportunity. This allocation-free check does not authenticate or prepare a relay
+envelope. Nonces, MACs and expiries still wait for transport admission, and the
+wire encoder retains the same checks.
+
+The 24-node fixture exposed legacy channel maintenance submitting raw PEX cells
+to an MSG-only deposit API. Those submissions now fail before scheduling. The
+producer and its authenticated anti-entropy replacement remain follow-up work;
+this change does not enable plaintext PEX or establish application goodput or
+privacy qualification.
+
 When a pipelined fixture initiates a direct session, later durable applications
 retain their logical records, IDs, ordering and original deadlines until the
 session is confirmed. They consume no ratchet counters while waiting. Ordinary

@@ -284,6 +284,16 @@ impl RelayPush {
         self.msg.is_none()
     }
 
+    /// Checks the opaque inner message's canonical shape and capacity without
+    /// encoding, allocating or generating authority. This is not authentication.
+    /// Callers can reject impossible jobs before opening a transport connection.
+    pub fn validate_message(cell: &Cell) -> Result<(), RelayCodecError> {
+        if cell.cell_type() != Some(CellType::Msg) {
+            return Err(RelayCodecError::InnerNotMsg);
+        }
+        natural_length(cell, MAX_MSG_NATURAL_LEN).map(|_| ())
+    }
+
     pub fn encode_into_cell(
         &self,
         push_cap: &PushCap,
@@ -804,9 +814,7 @@ fn require_outer(cell: &Cell, expected: CellType) -> Result<(), RelayCodecError>
 }
 
 fn encode_msg_natural(cell: &Cell) -> Result<Vec<u8>, RelayCodecError> {
-    if cell.cell_type() != Some(CellType::Msg) {
-        return Err(RelayCodecError::InnerNotMsg);
-    }
+    RelayPush::validate_message(cell)?;
     encode_natural(cell, MAX_MSG_NATURAL_LEN)
 }
 
@@ -816,7 +824,7 @@ fn encode_relay_push_natural(cell: &Cell) -> Result<Vec<u8>, RelayCodecError> {
     encode_natural(cell, MAX_RELAY_PUSH_NATURAL_LEN)
 }
 
-fn encode_natural(cell: &Cell, max_len: usize) -> Result<Vec<u8>, RelayCodecError> {
+fn natural_length(cell: &Cell, max_len: usize) -> Result<usize, RelayCodecError> {
     if cell.version != PROTOCOL_VERSION
         || cell.flags & !0x03 != 0
         || CellType::from_raw(cell.raw_type).is_none()
@@ -826,9 +834,14 @@ fn encode_natural(cell: &Cell, max_len: usize) -> Result<Vec<u8>, RelayCodecErro
     let natural_len = HEADER_LEN
         .checked_add(cell.payload.len())
         .ok_or(RelayCodecError::CellTooLarge)?;
-    if natural_len > max_len {
+    if natural_len > max_len || cell.payload.len() > u16::MAX as usize {
         return Err(RelayCodecError::CellTooLarge);
     }
+    Ok(natural_len)
+}
+
+fn encode_natural(cell: &Cell, max_len: usize) -> Result<Vec<u8>, RelayCodecError> {
+    let natural_len = natural_length(cell, max_len)?;
     let payload_len =
         u16::try_from(cell.payload.len()).map_err(|_| RelayCodecError::CellTooLarge)?;
     let mut encoded = Vec::with_capacity(natural_len);
@@ -1022,6 +1035,48 @@ mod tests {
             not_msg.encode_into_cell(&PUSH_CAP, &RELAY_ID),
             Err(RelayCodecError::InnerNotMsg)
         );
+    }
+
+    #[test]
+    fn message_preflight_matches_encoder_at_type_header_and_capacity_boundaries() {
+        for raw_type in 0..16 {
+            for version in [0, PROTOCOL_VERSION, 2, 15] {
+                for flags in [0, 1, 3, 4, 255] {
+                    let mut cell = Cell::new(CellType::Msg, flags, 65535, vec![7; 128]);
+                    cell.raw_type = raw_type;
+                    cell.version = version;
+                    let preflight = RelayPush::validate_message(&cell);
+                    assert_eq!(
+                        preflight.is_ok(),
+                        raw_type == CellType::Msg as u8
+                            && version == PROTOCOL_VERSION
+                            && flags & !3 == 0,
+                        "{raw_type}/{version}/{flags}"
+                    );
+                    let encoded = RelayPush {
+                        msg: Some(cell),
+                        ..push()
+                    }
+                    .encode_into_cell(&PUSH_CAP, &RELAY_ID)
+                    .map(|_| ());
+                    assert_eq!(preflight, encoded, "{raw_type}/{version}/{flags}");
+                }
+            }
+        }
+        for length in [0, 15_359, 15_360, 15_361, 65_536] {
+            let cell = Cell::new(CellType::Msg, 3, 1, vec![7; length]);
+            assert_eq!(RelayPush::validate_message(&cell).is_ok(), length <= 15_360);
+            let expected = RelayPush::validate_message(&cell);
+            assert_eq!(
+                expected,
+                RelayPush {
+                    msg: Some(cell),
+                    ..push()
+                }
+                .encode_into_cell(&PUSH_CAP, &RELAY_ID)
+                .map(|_| ())
+            );
+        }
     }
 
     #[test]
