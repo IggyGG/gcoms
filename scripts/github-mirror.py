@@ -62,7 +62,9 @@ def main():
     metadata = api('repos/' + repo)
     if metadata['full_name'].lower() != repo.lower() or metadata['private']:
         raise ValueError('destination must be the expected public mirror')
-    environment = dict(os.environ, GIT_TERMINAL_PROMPT='0', GIT_TRACE='0', GIT_TRACE_CURL='0', GIT_CURL_VERBOSE='0')
+    environment = {key: value for key, value in os.environ.items()
+                   if not key.startswith('GIT_TRACE') and key != 'GIT_CURL_VERBOSE'}
+    environment.update(GIT_TERMINAL_PROMPT='0', GIT_TRACE_REDACT='1')
     subprocess.run(['git', '-c', 'credential.helper=', '-c', 'credential.helper=!gh auth git-credential',
                     'push', '--atomic', 'https://github.com/' + repo + '.git', *refs], cwd=ROOT, env=environment, check=True)
     api('repos/' + repo + '/private-vulnerability-reporting', 'PUT')
