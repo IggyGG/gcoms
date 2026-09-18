@@ -2564,6 +2564,7 @@ pub(in crate::node) mod tests {
     include!("persist/machine_scope_tests.rs");
     include!("persist/archive_compat_tests.rs");
     include!("persist/channel_directory_tests.rs");
+    include!("persist/channel_pex_tests.rs");
 
     fn contact(byte: u8) -> AliasContact {
         AliasContact {

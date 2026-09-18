@@ -83,10 +83,14 @@ pub(crate) async fn channel_tick(
                     }
                 }
                 let have = cs.have_list();
-                let payload = crate::channel::encode_pex(chan, &refs, &have);
-                let cell = Cell::new(CellType::Pex, 0, 0, payload);
                 if let Some(r) = cs.resolve(&partner) {
-                    pushes.push((None, r, cell));
+                    match stage_channel_pex(chan, cs, r.pseudonym, &refs, &have) {
+                        Ok((target, cell)) => pushes.push((None, target, cell)),
+                        Err(error) => metrics::log_event(
+                            "chan_pex_prepare_failed",
+                            &[("channel", chan.clone()), ("e", error)],
+                        ),
+                    }
                 }
             }
             if !pushes.is_empty() {
@@ -267,43 +271,80 @@ pub(crate) async fn channel_control_tick(
     .await;
 }
 
-pub(crate) fn handle_pex_cell(state: &Arc<Mutex<NodeState>>, cell: Cell) {
-    let Some((chan, refs, have)) = crate::channel::decode_pex(&cell.payload) else {
-        return;
+/// Pairwise channel encryption keeps targeted maintenance off the shared MLS
+/// sender ratchet. The established roster/directory and AEAD envelope are reused.
+pub(crate) fn stage_channel_pex(
+    chan: &str,
+    cs: &crate::channel::ChannelState,
+    recipient: [u8; 32],
+    refs: &[crate::channel::PeerRef],
+    have: &[[u8; 16]],
+) -> Result<(crate::channel::PeerRef, Cell), String> {
+    if !cs
+        .role
+        .roster_members()
+        .iter()
+        .any(|member| member.pseudonym == recipient)
+    {
+        return Err("PEX recipient is not a current channel member".into());
+    }
+    let mut plaintext = crate::channel::encode_channel_pex(chan, refs, have)
+        .ok_or_else(|| "invalid channel PEX bounds".to_string())?;
+    let sealed = seal_channel_direct(chan, cs, recipient, fresh_msg_id(), &plaintext);
+    plaintext.fill(0);
+    let (route, envelope) = sealed?;
+    let cell = Cell::new(
+        CellType::Msg,
+        0,
+        0,
+        envelope.encode().ok_or("channel PEX envelope too large")?,
+    );
+    cell.encode_wire().map_err(|error| error.to_string())?;
+    Ok((crate::channel::PeerRef::from_route(&route), cell))
+}
+
+fn pex_sender_is_authenticated(
+    cs: &crate::channel::ChannelState,
+    sender: [u8; 32],
+    refs: &[crate::channel::PeerRef],
+) -> bool {
+    refs.first().is_some_and(|target| {
+        target.pseudonym == sender
+            && cs.directory.values().any(|route| {
+                route.pseudonym == sender && crate::channel::PeerRef::from_route(route) == *target
+            })
+    })
+}
+
+pub(crate) fn apply_authenticated_pex(
+    cs: &mut crate::channel::ChannelState,
+    sender: [u8; 32],
+    refs: &[crate::channel::PeerRef],
+    have: &[[u8; 16]],
+) -> bool {
+    let Some(target) = refs.first() else {
+        return false;
     };
-    let peer = refs.first().cloned();
-    let mut st = state.lock().unwrap_or_else(|p| p.into_inner());
-    let node_tag = short_addr_tag(&info_addr(&st.info));
-    let Some(cs) = st.channels.get_mut(&chan) else {
-        return;
-    };
-    for r in &refs {
+    if !pex_sender_is_authenticated(cs, sender, refs) {
+        return false;
+    }
+    for r in refs {
         cs.learn_ref(r);
     }
-    metrics::log_event(
-        "chan_pex_received",
-        &[
-            ("channel", chan.clone()),
-            ("descriptors", refs.len().to_string()),
-            ("have", have.len().to_string()),
-            ("node", node_tag),
-        ],
-    );
-    let my_have: std::collections::HashSet<[u8; 16]> = cs.have_list().into_iter().collect();
     let peer_have: std::collections::HashSet<[u8; 16]> = have.iter().copied().collect();
-    let mut to_send: Vec<([u8; 16], Vec<u8>)> = my_have
-        .iter()
-        .filter(|id| !peer_have.contains(*id))
-        .filter_map(|id| cs.cell_cache.get(id).map(|w| (*id, w.clone())))
+    let mut to_send: Vec<([u8; 16], Vec<u8>)> = cs
+        .have_list()
+        .into_iter()
+        .filter(|id| !peer_have.contains(id))
+        .filter_map(|id| cs.cell_cache.get(&id).map(|wire| (id, wire.clone())))
         .collect();
     to_send.reverse();
     to_send.truncate(2);
-    // Anti-entropy replies leave on the channel tick, not at receive time,
-    // so an observer cannot pair an inbound PEX with an immediate reply.
-    let Some(target) = peer else { return };
+    // Responses stay on the existing channel tick; never reflect immediately.
     for (id, wire) in to_send {
         cs.queue_pull(target.clone(), id, wire);
     }
+    true
 }
 
 pub(crate) fn handle_chan_cell(

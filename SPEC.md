@@ -38,7 +38,7 @@ A cell is a fixed bucket-sized byte array. Multi-byte fields are big endian.
 | Remaining | Variable | Zero padding |
 
 Types are `0` cover, `1` HELLO (reserved runtime role), `2` message,
-`3` alias control, `4` presence, `5` peer exchange, `6` relay subscription,
+`3` alias control, `4` presence, `5` legacy peer exchange, `6` relay subscription,
 `7` relay push, `8` forward and `9` acknowledgement. Other type nibbles are rejected.
 The low-level decoder retains flag bits; dispatchers apply their own message rules.
 
@@ -68,6 +68,16 @@ post-quantum suite profile `0x004F`. Group authentication remains classical Ed25
 The preview must not be described as standardized, universally post-quantum MLS.
 Owner/delegated administration, signed member identities, epoch changes and durable
 state transitions are enforced by the channel/runtime layers.
+
+Channel peer exchange uses the existing authenticated channel-direct MSG envelope
+with plaintext disposition **4**. Disposition **3** remains volatile file-piece
+application traffic. PEX is bounded to 1–8 descriptors and 0–16 have IDs. The first
+descriptor must match the authenticated sender's current directory route; PEX
+cannot create new route authority. It uses pairwise keys without advancing the
+shared MLS ratchet. Raw outer PEX is ignored and relay deposit remains MSG-only.
+Pull replies contain at most two retained ciphertexts on the next channel tick.
+PEX creates no chat event, text ACK or durable archive mutation. Older receivers
+ignore the new disposition. See [the framing repair](docs/CHANNEL_PEX_RELAY_FIX.md).
 
 ## Transport, routing and delivery
 

@@ -1,6 +1,10 @@
 // Split from the former monolithic node.rs on 2026-09-05; no behaviour change.
 
 use super::*;
+
+#[cfg(all(test, feature = "client-persist"))]
+#[path = "channel_application_tests.rs"]
+mod channel_application_tests;
 use futures_util::{stream::FuturesUnordered, StreamExt};
 
 // Transport maintenance records must survive a machine backend restart. Only
@@ -645,9 +649,33 @@ pub(crate) fn spawn_command_loop(ctx: CommandLoopContext) -> tokio::task::JoinHa
                     done,
                 } => {
                     let key = CmdKey::Channel(channel.clone());
-                    dispatch!(key, done, |state, scheduler, events_tx| {
-                        send_channel_direct(&state, &scheduler, &channel, recipient, &text).await
-                    });
+                    if gcoms_core::is_piece_application_payload(&text) {
+                        let lock = serializer.lock_for(&key);
+                        let state = state.clone();
+                        let scheduler = scheduler.clone();
+                        spawned.push(Box::pin(async move {
+                            let prepared = {
+                                let _serialized = lock.lock().await;
+                                prepare_channel_direct(
+                                    &state, &scheduler, &channel, recipient, &text,
+                                )
+                            };
+                            // File cells use independently sealed channel-direct
+                            // envelopes, not a shared ratchet counter. Preserve
+                            // ordered authorization/enqueue, then let other peers
+                            // and membership commands progress during this wait.
+                            let result = match prepared {
+                                Ok(prepared) => prepared.complete(&state).await,
+                                Err(error) => Err(error),
+                            };
+                            let _ = done.send(result);
+                        }));
+                    } else {
+                        dispatch!(key, done, |state, scheduler, events_tx| {
+                            send_channel_direct(&state, &scheduler, &channel, recipient, &text)
+                                .await
+                        });
+                    }
                 }
                 Cmd::RemoveChannelMember {
                     channel,
