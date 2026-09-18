@@ -7,6 +7,16 @@ const ACTIVE_DOWNLOADS: usize = 2;
 const PIPELINE: usize = 4;
 const REQUEST_TIMEOUT: u64 = 30;
 
+/// Local aggregate observations; contains no share, route, or member identifiers.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Diagnostics {
+    pub verified_pieces: u64,
+    pub rejected_pieces: u64,
+    pub retries: u64,
+    pub buffered_bytes: usize,
+    pub pending_pulls: usize,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Peer {
     pub channel: [u8; 32],
@@ -54,6 +64,7 @@ pub struct Engine {
     served: VecDeque<Served>,
     refresh_cursor: usize,
     receipt_cursor: usize,
+    diagnostics: Diagnostics,
 }
 impl Engine {
     pub fn new(cache: Cache) -> Self {
@@ -69,6 +80,7 @@ impl Engine {
             served: VecDeque::new(),
             refresh_cursor: 0,
             receipt_cursor: 0,
+            diagnostics: Diagnostics::default(),
         }
     }
     pub fn set_members(
@@ -409,6 +421,8 @@ impl Engine {
                     || proof.len() > 16
                     || pull.proof.as_ref().is_some_and(|p| p != &proof)
                 {
+                    self.diagnostics.rejected_pieces =
+                        self.diagnostics.rejected_pieces.saturating_add(1);
                     self.pulls.remove(&(id, piece));
                     self.backoff.insert(peer, now + 120);
                     return Err(Error::Invalid("piece response"));
@@ -419,16 +433,28 @@ impl Engine {
                 pull.attempts = 0;
                 if pull.bytes.len() == length {
                     let pull = self.pulls.remove(&(id, piece)).unwrap();
-                    if let Err(error) =
-                        self.cache
-                            .put(id, piece, &pull.bytes, pull.proof.as_ref().unwrap(), now)
-                    {
-                        self.backoff.insert(peer, now + 120);
-                        if matches!(error, Error::Io(_) | Error::Quota) {
-                            self.cache
-                                .failure(id, format!("Could not retain piece: {error}"))?;
+                    let retained = match self.cache.put(
+                        id,
+                        piece,
+                        &pull.bytes,
+                        pull.proof.as_ref().unwrap(),
+                        now,
+                    ) {
+                        Ok(retained) => retained,
+                        Err(error) => {
+                            self.diagnostics.rejected_pieces =
+                                self.diagnostics.rejected_pieces.saturating_add(1);
+                            self.backoff.insert(peer, now + 120);
+                            if matches!(error, Error::Io(_) | Error::Quota) {
+                                self.cache
+                                    .failure(id, format!("Could not retain piece: {error}"))?;
+                            }
+                            return Err(error);
                         }
-                        return Err(error);
+                    };
+                    if retained {
+                        self.diagnostics.verified_pieces =
+                            self.diagnostics.verified_pieces.saturating_add(1);
                     }
                     let state = self.cache.get(id)?;
                     if state.status == Status::Complete {
@@ -572,6 +598,7 @@ impl Engine {
             .map(|(k, _)| *k)
             .collect();
         for (id, piece) in expired {
+            self.diagnostics.retries = self.diagnostics.retries.saturating_add(1);
             let pull = self.pulls.get_mut(&(id, piece)).unwrap();
             if pull.attempts >= 2 {
                 self.backoff.insert(pull.peer, now + 120);
@@ -662,5 +689,12 @@ impl Engine {
                 .iter()
                 .map(|s| s.bytes.capacity())
                 .sum::<usize>()
+    }
+    pub fn diagnostics(&self) -> Diagnostics {
+        Diagnostics {
+            buffered_bytes: self.buffered_bytes(),
+            pending_pulls: self.pulls.len(),
+            ..self.diagnostics
+        }
     }
 }

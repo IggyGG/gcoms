@@ -3,7 +3,7 @@
 mod engine;
 mod protocol;
 mod store;
-pub use engine::{Action, Engine, Peer, View};
+pub use engine::{Action, Diagnostics, Engine, Peer, View};
 pub use protocol::{Manifest, Message, Scope, ShareId, BLOCK_BYTES, CONTENT_TYPE, PIECE_BYTES};
 pub use store::{Cache, CacheConfig, State, Status};
 
