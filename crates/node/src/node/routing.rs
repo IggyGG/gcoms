@@ -253,6 +253,8 @@ impl RoutingRuntime {
             .lock()
             .unwrap_or_else(|p| p.into_inner()) = Some(target.clone());
         let provision_target = self.provision_target.clone();
+        #[cfg(feature = "experimental-gc2")]
+        let provision_seed = seed;
         let mut policy = ServicePolicy {
             catalog_origins: self
                 .catalog_origins
@@ -260,7 +262,7 @@ impl RoutingRuntime {
                 .unwrap_or_else(|p| p.into_inner())
                 .clone(),
             transit_ready: self.automatic_connectivity.then(|| self.published.clone()),
-            provision: Some(Arc::new(move || {
+            provision: Some(Arc::new(move |options: &[u8]| {
                 let target = provision_target
                     .lock()
                     .unwrap_or_else(|p| p.into_inner())
@@ -275,6 +277,25 @@ impl RoutingRuntime {
                     &bundle,
                     false,
                 )?;
+                if options.first() == Some(&gcoms_protocol::proto::PROVISION_OPTION_GC2) {
+                    #[cfg(feature = "experimental-gc2")]
+                    {
+                        let introduction = gcoms_routing::service::gc2_introduction_from(
+                            target.address,
+                            target.relay_service_id,
+                            &provision_seed,
+                            now_unix(),
+                        );
+                        let encoded = introduction.encode().map_err(|error| error.to_string())?;
+                        return card
+                            .encode_private_gc2(&encoded[..])
+                            .ok_or_else(|| "invalid GC/2 advertisement".into());
+                    }
+                    #[cfg(not(feature = "experimental-gc2"))]
+                    {
+                        return Err("GC/2 advertisement is not supported by this build".into());
+                    }
+                }
                 card.encode_private()
                     .ok_or_else(|| "invalid private inbox grant".into())
             })),
@@ -726,14 +747,56 @@ async fn recover_owner(
         .map(|a| (a.contact.target.address, a.contact.target.relay_service_id))
         .into_iter()
         .collect();
+    let options = gc2_provision_options(state);
     let (_, encoded) = runtime
         .discovery
-        .provision(runtime.provision_request, &excluded)
+        .provision(runtime.provision_request, &options, &excluded)
         .await
         .map_err(|e| e.to_string())?;
-    let card = NodeInfo::decode_private(&encoded).ok_or("invalid private inbox response")?;
+    let (card, introduction) =
+        NodeInfo::decode_private_any(&encoded).ok_or("invalid private inbox response")?;
+    install_advertisement(state, introduction.as_deref());
     install_inbox_relay(state, scheduler, events, &card).await
 }
+
+/// GC/2 advertisement request options, or empty when the carrier is not
+/// selected. Version 1 relays ignore the empty options and return v1 cards.
+fn gc2_provision_options(state: &Arc<Mutex<NodeState>>) -> Vec<u8> {
+    #[cfg(feature = "experimental-gc2")]
+    {
+        if state
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .gc2_carrier
+            .is_some()
+        {
+            return vec![gcoms_protocol::proto::PROVISION_OPTION_GC2];
+        }
+        Vec::new()
+    }
+    #[cfg(not(feature = "experimental-gc2"))]
+    {
+        let _ = state;
+        Vec::new()
+    }
+}
+
+/// Install a GC/2 introduction advertised in a private provisioning reply.
+#[cfg(feature = "experimental-gc2")]
+fn install_advertisement(state: &Arc<Mutex<NodeState>>, introduction: Option<&[u8]>) {
+    let Some(bytes) = introduction else { return };
+    let st = state.lock().unwrap_or_else(|p| p.into_inner());
+    let Some(directory) = &st.gc2_carrier_directory else {
+        return;
+    };
+    match super::gc2_bootstrap::install_advertised(directory, bytes) {
+        Ok(count) => metrics::log_event("gc2_advertisement_installed", &[("n", count.to_string())]),
+        Err(error) => metrics::log_event("gc2_advertisement_rejected", &[("e", error)]),
+    }
+}
+
+#[cfg(not(feature = "experimental-gc2"))]
+fn install_advertisement(_state: &Arc<Mutex<NodeState>>, _introduction: Option<&[u8]>) {}
 
 async fn resume_owner(
     state: &Arc<Mutex<NodeState>>,
@@ -758,6 +821,7 @@ async fn resume_owner(
     };
     let initial = consume_provision(scheduler, &card).await;
     let mut authority = current.clone();
+    let options = gc2_provision_options(state);
     if initial.is_err() {
         let relay = runtime
             .discovery
@@ -773,10 +837,13 @@ async fn resume_owner(
             .connect(relay.addr, relay.service_id)
             .await
             .map_err(|e| e.to_string())?;
-        let encoded = gcoms_routing::carrier::provision(stream, &relay, runtime.provision_request)
-            .await
-            .map_err(|e| e.to_string())?;
-        let card = NodeInfo::decode_private(&encoded).ok_or("invalid recovery authority")?;
+        let encoded =
+            gcoms_routing::carrier::provision(stream, &relay, runtime.provision_request, &options)
+                .await
+                .map_err(|e| e.to_string())?;
+        let (card, introduction) =
+            NodeInfo::decode_private_any(&encoded).ok_or("invalid recovery authority")?;
+        install_advertisement(state, introduction.as_deref());
         authority = consume_provision(scheduler, &card).await?;
     }
     #[cfg(feature = "client-persist")]

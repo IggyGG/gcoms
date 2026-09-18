@@ -542,7 +542,7 @@ async fn private_provision_retry_and_public_probe_use_complete_circuits() {
         ServicePolicy {
             carrier: CarrierConfig::fixture(),
             target_allowed: Arc::new(|addr| addr.ip().is_loopback()),
-            provision: Some(Arc::new(move || {
+            provision: Some(Arc::new(move |_options: &[u8]| {
                 counter.fetch_add(1, Ordering::SeqCst);
                 Ok(vec![0x93; 20_000])
             })),
@@ -558,7 +558,7 @@ async fn private_provision_retry_and_public_probe_use_complete_circuits() {
             .connect(relay.addr, relay.service_id)
             .await
             .unwrap();
-        let reply = gcoms_routing::carrier::provision(stream, &relay, [12; 32])
+        let reply = gcoms_routing::carrier::provision(stream, &relay, [12; 32], &[])
             .await
             .unwrap();
         assert_eq!(reply.as_slice(), vec![0x93; 20_000]);

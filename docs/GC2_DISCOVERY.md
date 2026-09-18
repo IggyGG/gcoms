@@ -160,20 +160,21 @@ queue tokens that resolve to a current lease in this node's store.
 `NodeProfile::gc2_carrier_fixture` additionally opens the encrypted GC/2
 directory (or an in-memory one), starts a one-to-three-entry background owner
 whose future is owned by the node task set, and retains the ready connector on
-the node state. Restoring a directory with a different identity fails closed. Retained GC/1
-re-entry authorities are migrated explicitly through the authenticated private
-PEX exchange (`refresh_reentry`): the reply must present the same stable
-authority and a valid GC/2 entry, retries are background-paced at a bounded
-count, and a failure never falls back to GC/1. The explicit carrier profile
-delivers session frames as authenticated natural terminal deposits and drains
-its own class queues through natural subscriptions. Delivery and subscriptions
-prefer the protected client over the ready connector whenever the directory has
-live entries; the direct client only serves bootstrap migration and fixtures
-without a route. An explicit deployment profile
-(`NodeProfile::gc2_carrier_production`, with a compressed qualification
-schedule) selects the protected carrier with production transport behaviour,
-and a GC/2 carrier archive cannot be restored under a GC/1 profile, so a
-restart cannot silently downgrade. Runtime adoption still needs private
-provisioning/advertisement integration, Node/SDK/GChat class and profile
-propagation, and the application/privacy/device gates in
+the node state. Restoring a directory with a different identity fails closed. The explicit
+carrier profile discovers its GC/2 introduction through an opted-in private
+provisioning request: the relay answers with a version-2 private card carrying
+its current GC/2 introduction, and the client installs that introduction as a
+directory seed. The background owner retains and renews it; version 1 cards stay
+byte-identical and un-upgraded clients keep receiving them, so no request ever
+falls back silently. The explicit carrier profile delivers session frames as
+authenticated natural terminal deposits and drains its own class queues through
+natural subscriptions. Delivery and subscriptions prefer the protected client
+over the ready connector whenever the directory has live entries; the direct
+client only serves bootstrap migration and fixtures without a route. An explicit
+deployment profile (`NodeProfile::gc2_carrier_production`, with a compressed
+qualification schedule) selects the protected carrier with production transport
+behaviour, and a GC/2 carrier archive cannot be restored under a GC/1 profile,
+so a restart cannot silently downgrade. Runtime adoption still needs private
+provisioning/advertisement coverage for every relay path, Node/SDK/GChat class
+and profile propagation, and the application/privacy/device gates in
 [the implementation ledger](GC2_IMPLEMENTATION.md).

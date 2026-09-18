@@ -197,6 +197,11 @@ pub struct NodeState {
     /// bootstrap migration and fixtures without a protected route.
     #[cfg(feature = "experimental-gc2")]
     pub(crate) gc2_carrier_route: Option<std::sync::Arc<gcoms_transport::Tp1Client>>,
+    /// Durable GC/2 directory owned by the carrier. Advertised introductions
+    /// from the private provisioning card are installed here.
+    #[cfg(feature = "experimental-gc2")]
+    pub(crate) gc2_carrier_directory:
+        Option<std::sync::Arc<gcoms_routing::gc2::directory::Directory>>,
     #[cfg(feature = "experimental-gc2")]
     pub(super) gc2_receipts: super::gc2_receipts::Ledger,
     #[cfg(feature = "experimental-gc2")]

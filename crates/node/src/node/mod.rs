@@ -43,13 +43,13 @@ mod direct;
 #[cfg(feature = "experimental-gc2")]
 mod gc2_acks;
 #[cfg(feature = "experimental-gc2")]
+mod gc2_bootstrap;
+#[cfg(feature = "experimental-gc2")]
 mod gc2_carrier;
 #[cfg(feature = "experimental-gc2")]
 mod gc2_direct;
 #[cfg(feature = "experimental-gc2")]
 mod gc2_gate;
-#[cfg(feature = "experimental-gc2")]
-mod gc2_migration;
 #[cfg(feature = "experimental-gc2")]
 mod gc2_receipts;
 mod peer_session;
@@ -994,6 +994,8 @@ async fn start_with_tls_policy_control_sink_and_bootstrap(
             #[cfg(feature = "experimental-gc2")]
             gc2_carrier_route: None,
             #[cfg(feature = "experimental-gc2")]
+            gc2_carrier_directory: None,
+            #[cfg(feature = "experimental-gc2")]
             retained_direct: std::sync::OnceLock::new(),
             #[cfg(feature = "experimental-gc2")]
             gc2_receipts: gc2_receipts::Ledger::default(),
@@ -1141,21 +1143,47 @@ async fn start_with_tls_policy_control_sink_and_bootstrap(
                 .map_err(|e| e.to_string())?;
             let route = std::sync::Arc::new(route);
             if let Some(runtime) = routing.clone() {
-                let migration_directory = directory;
-                // Share the endpoint pool: background migration creates no
-                // third data-plane client.
-                let client = client.clone();
+                // Fetch the explicit GC/2 advertisement over the authenticated
+                // private provisioning channel. This allocates nothing on this
+                // node and discards the card's fresh aliases; only the
+                // advertised introduction is installed as a directory seed.
+                let advert_directory = directory.clone();
                 tasks.push(tokio::spawn(async move {
-                    loop {
-                        let installed =
-                            gc2_migration::migrate_once(&migration_directory, &runtime, &client)
-                                .await;
-                        let delay = if installed > 0 {
-                            std::time::Duration::from_secs(300)
-                        } else {
-                            std::time::Duration::from_secs(60)
-                        };
-                        tokio::time::sleep(delay).await;
+                    for attempt in 0..6u32 {
+                        let request_id: [u8; 32] = rand::random();
+                        let options = [gcoms_protocol::proto::PROVISION_OPTION_GC2];
+                        match runtime.discovery.provision(request_id, &options, &[]).await {
+                            Ok((_relay, encoded)) => {
+                                if let Some((_card, Some(introduction))) =
+                                    NodeInfo::decode_private_any(&encoded)
+                                {
+                                    match gc2_bootstrap::install_advertised(
+                                        &advert_directory,
+                                        &introduction,
+                                    ) {
+                                        Ok(count) => {
+                                            metrics::log_event(
+                                                "gc2_advertisement_installed",
+                                                &[("n", count.to_string())],
+                                            );
+                                            return;
+                                        }
+                                        Err(error) => metrics::log_event(
+                                            "gc2_advertisement_rejected",
+                                            &[("e", error)],
+                                        ),
+                                    }
+                                }
+                            }
+                            Err(error) => metrics::log_event(
+                                "gc2_advertisement_deferred",
+                                &[("e", error.to_string())],
+                            ),
+                        }
+                        tokio::time::sleep(std::time::Duration::from_secs(
+                            30 * u64::from(attempt + 1),
+                        ))
+                        .await;
                     }
                 }));
             }
@@ -1168,6 +1196,10 @@ async fn start_with_tls_policy_control_sink_and_bootstrap(
                 .lock()
                 .unwrap_or_else(|p| p.into_inner())
                 .gc2_carrier_route = Some(route);
+            state
+                .lock()
+                .unwrap_or_else(|p| p.into_inner())
+                .gc2_carrier_directory = Some(directory);
             tasks.push(tokio::spawn(async move {
                 if let Err(error) = owner.run().await {
                     metrics::log_event("gc2_carrier_owner_error", &[("e", error.to_string())]);

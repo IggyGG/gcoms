@@ -199,19 +199,20 @@ Retain failures, source/executable/configuration/workload hashes and exact scope
   owned terminal queue service is composed under the same gate. An explicit
   carrier fixture opens the encrypted directory, runs the bounded background
   entry owner under the node task set and retains the ready connector; a wrong
-  identity cannot restore another node's directory, and retained GC/1 re-entry
-  authorities migrate explicitly through the authenticated private PEX exchange
-  without any implicit conversion. The carrier profile delivers each session
-  frame as an authenticated natural terminal deposit and drains its own class
-  queues through natural subscriptions; delivery and subscriptions prefer the
-  protected entry/middle client once the directory has live entries, and a
+  identity cannot restore another node's directory. An opted-in private
+  provisioning request returns a version-2 card carrying the relay's current
+  GC/2 introduction; the client installs it as a directory seed and the owner
+  renews it. Version 1 cards stay byte-identical, so un-upgraded clients are
+  unaffected and nothing falls back silently. The carrier profile delivers each
+  session frame as an authenticated natural terminal deposit and drains its own
+  class queues through natural subscriptions; delivery and subscriptions prefer
+  the protected entry/middle client once the directory has live entries, and a
   two-node TLS fixture proves durable applications in both directions. The
   legacy relay path remains for sessions that did not migrate. An explicit
   deployment profile (`gc2_carrier_production`, or the compressed qualification
   variant) selects the protected carrier with production transport behaviour;
   a GC/2 carrier archive cannot be restored under a GC/1 profile, so a restart
-  cannot silently downgrade. Provisioning advertisement and SDK/GChat selection
-  remain.
+  cannot silently downgrade. SDK/GChat selection and send options remain.
 - Complete GC/2 routing, protected profiles, SDK/GChat profile integration and
   application/privacy/mobile gates: pending. Counter-window flow control, the
   application-send preparation/completion split and authenticated class

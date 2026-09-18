@@ -82,6 +82,7 @@ impl Discovery {
     pub async fn provision(
         &self,
         request_id: [u8; 32],
+        options: &[u8],
         excluded: &[(SocketAddr, [u8; 32])],
     ) -> Result<(Relay, zeroize::Zeroizing<Vec<u8>>)> {
         let mut candidates = self.directory.introductions();
@@ -100,7 +101,7 @@ impl Discovery {
             else {
                 continue;
             };
-            if let Ok(reply) = carrier::provision(stream, &relay, request_id).await {
+            if let Ok(reply) = carrier::provision(stream, &relay, request_id, options).await {
                 return Ok((relay, reply));
             }
         }

@@ -207,14 +207,23 @@ pub const MAX_PROVISION_BYTES: usize = 64 * 1024;
 /// Queue authority is requested only over a complete circuit by the runtime.
 /// The request ID remains stable across a bounded retry so a lost response does
 /// not allocate another inbox. It never contains the client's GC identity.
+/// Bounded trailing options may request later card kinds; a request ID is bound
+/// to its options and is never reused with different ones.
 pub async fn provision(
     io: BoxStream,
     relay: &crate::Relay,
     request_id: [u8; 32],
+    options: &[u8],
 ) -> Result<zeroize::Zeroizing<Vec<u8>>> {
+    if options.len() > 8 {
+        return Err("private provision options exceed the bound".into());
+    }
+    let mut request = Vec::with_capacity(32 + options.len());
+    request.extend_from_slice(&request_id);
+    request.extend_from_slice(options);
     tokio::time::timeout(HANDSHAKE_TIMEOUT, async {
         let (_connection, mut records) =
-            private_request(io, relay, Kind::Provision, &request_id).await?;
+            private_request(io, relay, Kind::Provision, &request).await?;
         let mut out = zeroize::Zeroizing::new(Vec::new());
         let mut total = None;
         loop {
