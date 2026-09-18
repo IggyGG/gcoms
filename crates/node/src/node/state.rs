@@ -192,6 +192,11 @@ pub struct NodeState {
     /// Present only while the startup profile selects the natural carrier.
     #[cfg(feature = "experimental-gc2")]
     pub(crate) gc2_carrier_client: Option<std::sync::Arc<gcoms_transport::Tp1Client>>,
+    /// Protected GC/2 client over the ready connector. Used whenever the
+    /// directory has live entries; the direct client above only serves
+    /// bootstrap migration and fixtures without a protected route.
+    #[cfg(feature = "experimental-gc2")]
+    pub(crate) gc2_carrier_route: Option<std::sync::Arc<gcoms_transport::Tp1Client>>,
     #[cfg(feature = "experimental-gc2")]
     pub(super) gc2_receipts: super::gc2_receipts::Ledger,
     #[cfg(feature = "experimental-gc2")]
@@ -318,13 +323,31 @@ pub(crate) fn random_nonzero<const N: usize>() -> [u8; N] {
 pub(crate) fn natural_client(st: &NodeState) -> Option<std::sync::Arc<gcoms_transport::Tp1Client>> {
     #[cfg(feature = "experimental-gc2")]
     {
-        st.gc2_carrier_client.clone()
+        natural_route_client(st)
     }
     #[cfg(not(feature = "experimental-gc2"))]
     {
         let _ = st;
         None
     }
+}
+
+/// Prefer the protected client once the directory has live entries; the direct
+/// client only serves bootstrap migration and fixtures without a route.
+#[cfg(feature = "experimental-gc2")]
+pub(crate) fn natural_route_client(
+    st: &NodeState,
+) -> Option<std::sync::Arc<gcoms_transport::Tp1Client>> {
+    if let Some(route) = &st.gc2_carrier_route {
+        if st
+            .gc2_carrier
+            .as_ref()
+            .is_some_and(|ready| ready.ready_entries() > 0)
+        {
+            return Some(route.clone());
+        }
+    }
+    st.gc2_carrier_client.clone()
 }
 
 pub(crate) fn validate_application_payload(payload: &[u8]) -> Result<(), String> {

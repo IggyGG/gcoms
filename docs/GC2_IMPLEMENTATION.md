@@ -203,9 +203,10 @@ Retain failures, source/executable/configuration/workload hashes and exact scope
   authorities migrate explicitly through the authenticated private PEX exchange
   without any implicit conversion. The carrier profile delivers each session
   frame as an authenticated natural terminal deposit and drains its own class
-  queues through natural subscriptions; a two-node TLS fixture proves durable
-  applications in both directions, and the legacy relay path remains for
-  sessions that did not migrate. Entry/middle circuits, provisioning
+  queues through natural subscriptions; delivery and subscriptions prefer the
+  protected entry/middle client once the directory has live entries, and a
+  two-node TLS fixture proves durable applications in both directions. The
+  legacy relay path remains for sessions that did not migrate. Provisioning
   advertisement, production selection and SDK/GChat send options remain.
 - Complete GC/2 routing, protected profiles, SDK/GChat profile integration and
   application/privacy/mobile gates: pending. Counter-window flow control, the

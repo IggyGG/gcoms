@@ -911,6 +911,8 @@ async fn start_with_tls_policy_control_sink_and_bootstrap(
             #[cfg(feature = "experimental-gc2")]
             gc2_carrier_client: None,
             #[cfg(feature = "experimental-gc2")]
+            gc2_carrier_route: None,
+            #[cfg(feature = "experimental-gc2")]
             retained_direct: std::sync::OnceLock::new(),
             #[cfg(feature = "experimental-gc2")]
             gc2_receipts: gc2_receipts::Ledger::default(),
@@ -1053,6 +1055,9 @@ async fn start_with_tls_policy_control_sink_and_bootstrap(
                 entries,
             )
             .map_err(|e| e.to_string())?;
+            let route = gcoms_transport::Tp1Client::with_connector(ready.clone())
+                .map_err(|e| e.to_string())?;
+            let route = std::sync::Arc::new(route);
             if let Some(runtime) = routing.clone() {
                 let migration_directory = directory;
                 // Share the endpoint pool: background migration creates no
@@ -1077,6 +1082,10 @@ async fn start_with_tls_policy_control_sink_and_bootstrap(
                 .lock()
                 .unwrap_or_else(|p| p.into_inner())
                 .gc2_carrier_client = Some(client.clone());
+            state
+                .lock()
+                .unwrap_or_else(|p| p.into_inner())
+                .gc2_carrier_route = Some(route);
             tasks.push(tokio::spawn(async move {
                 if let Err(error) = owner.run().await {
                     metrics::log_event("gc2_carrier_owner_error", &[("e", error.to_string())]);
@@ -1118,15 +1127,14 @@ async fn start_with_tls_policy_control_sink_and_bootstrap(
         #[cfg(feature = "experimental-gc2")]
         let workers = {
             let mut workers = workers;
-            if let Some(client) = state
+            if state
                 .lock()
                 .unwrap_or_else(|p| p.into_inner())
                 .gc2_carrier_client
-                .clone()
+                .is_some()
             {
                 workers.push(gc2_carrier::spawn_subscriptions(
                     state.clone(),
-                    client,
                     events_tx.clone(),
                 ));
             }

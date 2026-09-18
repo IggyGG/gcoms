@@ -82,7 +82,6 @@ pub(crate) async fn deliver_all(
 /// cell shape the legacy pump produces so both carriers share one decoder.
 pub(crate) fn spawn_subscriptions(
     state: Arc<Mutex<NodeState>>,
-    client: Arc<Tp1Client>,
     events: broadcast::Sender<Ev>,
 ) -> super::api::ShutdownTask {
     let (stop, mut stopped) = tokio::sync::watch::channel(false);
@@ -101,7 +100,7 @@ pub(crate) fn spawn_subscriptions(
                 },
                 _ = clock.tick() => {},
             }
-            let aliases = {
+            let (aliases, client) = {
                 let st = state
                     .lock()
                     .unwrap_or_else(|poisoned| poisoned.into_inner());
@@ -109,16 +108,20 @@ pub(crate) fn spawn_subscriptions(
                     break;
                 }
                 if super::routing::recovering(&st) {
-                    Vec::new()
+                    (Vec::new(), None)
                 } else {
-                    st.client_relay
+                    let client = natural_route_client(&st);
+                    let aliases = st
+                        .client_relay
                         .aliases
                         .iter()
                         .filter(|alias| owner_alias_receiving(&st, alias))
                         .cloned()
-                        .collect::<Vec<_>>()
+                        .collect::<Vec<_>>();
+                    (aliases, client)
                 }
             };
+            let Some(client) = client else { continue };
             for alias in aliases {
                 for class in [
                     gcoms_core::TrafficClass::Interactive,
