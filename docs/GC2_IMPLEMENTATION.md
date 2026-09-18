@@ -128,6 +128,10 @@ Retain failures, source/executable/configuration/workload hashes and exact scope
   Bulk/interactive connections share an entry while keeping their class, pin and
   route exclusions; default GC/1 pooling is unchanged. Class-aware subscription
   and warmup APIs are available, with runtime/application propagation pending.
+- Replay cleanup skips histories whose earliest expiry is still in the future.
+  Retention deadlines, admission limits and queued messages are unchanged. The
+  reproducible `relay_queue_cost` example measures only local queue-maintenance
+  CPU work; it is not an application throughput or privacy benchmark.
 - Complete counter-window flow control, command preparation/completion split,
   authenticated class propagation, complete GC/2 routing, protected profiles,
   SDK/GChat profile integration and application/privacy/mobile gates: pending.
