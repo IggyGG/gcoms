@@ -98,8 +98,10 @@ control record only if its full route and ciphertext still match the attempt.
 
 Direct maintenance also advances independently of outstanding receipts. Its owner
 retains at most 16 ACK attempts and 48 retry attempts, all submitted through the
-existing scheduler. These owners retain bounded copies of the durable deliveries;
-the scheduler's 8 MiB accounting separately covers its admitted work. Due retries
+existing scheduler. GC/2 session fixtures additionally charge retained direct
+payloads and owned retry copies to the same allowance, with control and dispatch
+headroom; see [retention admission](GC2_FLOW.md#shared-retention-admission). GC/1
+retention behavior remains unchanged. Due retries
 are selected oldest first; only selected attempts
 move their retry timer. Identical committed ciphertext cannot accumulate attempts
 across ticks or intermediary changes. Rewritten ciphertext after session recovery

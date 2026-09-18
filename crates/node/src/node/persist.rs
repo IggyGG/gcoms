@@ -1161,7 +1161,7 @@ fn decode_v2(buf: &[u8], identity_seed: &[u8; 32]) -> Result<Archive, String> {
             match peer_session::Snapshot::from_bytes(encoded.to_vec()).map_err(|_| malformed())? {
                 peer_session::Snapshot::Legacy(sealed) => ArchivedSession::Sealed(sealed),
                 #[cfg(feature = "experimental-gc2")]
-                peer_session::Snapshot::Credited(sealed) if buf.get(..6) == Some(MAGIC_V20) => {
+                peer_session::Snapshot::Credited(sealed, _) if buf.get(..6) == Some(MAGIC_V20) => {
                     ArchivedSession::Credited(sealed)
                 }
                 #[cfg(feature = "experimental-gc2")]
@@ -2494,6 +2494,48 @@ pub(super) async fn decode_state_at_startup(
         }
         restored_sessions.push((peer, session, session_state));
     }
+    // Authenticate remaining fallible input before publishing sessions or
+    // committing their shared resource account.
+    let mut restored_grants = Vec::new();
+    {
+        let wrapping_key = zeroize::Zeroizing::new(direct_session_wrapping_key(&st.identity_seed));
+        let context = forward_grant_context(&st.info.identity_pk)?;
+        let now = now_unix();
+        for sealed in archive.forward_grants {
+            let plain =
+                zeroize::Zeroizing::new(open_bytes(&wrapping_key, &context, &sealed.issued_by)?);
+            let grant = crate::alias::ForwardGrant::decode(&plain).ok_or_else(malformed)?;
+            if grant.expires_at > now && st.frwd_target_policy.permits(&grant.target) {
+                restored_grants.push(grant);
+            }
+        }
+    }
+    #[cfg(feature = "experimental-gc2")]
+    if st.gc2_sessions {
+        if !st.sessions.is_empty()
+            || !st.pending_1to1.is_empty()
+            || !st.direct_ack_outbox.is_empty()
+            || !st.processed_direct.is_empty()
+        {
+            return Err("cannot replace live GC/2 direct state".into());
+        }
+        let mut usage = crate::scheduler::PayloadUsage::default();
+        for (_, session, _) in &restored_sessions {
+            usage.add(session.retained_payload());
+        }
+        for (_, pending) in &pending_direct {
+            usage.add(pending.retained_payload());
+        }
+        for ack in &direct_acks {
+            usage.add(ack.retained_payload());
+        }
+        for (_, processed) in &processed_direct {
+            usage.add(processed.delivery.retained_payload());
+        }
+        if let Some(update) = st.stage_retained_usage(usage, true)? {
+            update.commit();
+        }
+    }
     for (peer, session, session_state) in restored_sessions {
         st.sessions.insert(peer.clone(), session);
         st.session_states.insert(peer, session_state);
@@ -2517,20 +2559,8 @@ pub(super) async fn decode_state_at_startup(
     st.channel_presence_counters.clear();
     st.direct_presence_opt_in = archive.direct_presence_opt_in;
     st.channel_presence_opt_in = archive.channel_presence_opt_in;
-    {
-        let mut wrapping_key = direct_session_wrapping_key(&st.identity_seed);
-        let context = forward_grant_context(&st.info.identity_pk)?;
-        let now = now_unix();
-        for sealed in archive.forward_grants {
-            let plain = open_bytes(&wrapping_key, &context, &sealed.issued_by)?;
-            let Some(grant) = crate::alias::ForwardGrant::decode(&plain) else {
-                return Err(malformed());
-            };
-            if grant.expires_at > now && st.frwd_target_policy.permits(&grant.target) {
-                install_forward_grant(&mut st, grant);
-            }
-        }
-        wrapping_key.fill(0);
+    for grant in restored_grants {
+        install_forward_grant(&mut st, grant);
     }
     for (peer, route, generation) in archive.peer_routes {
         st.peer_routes.insert(peer.clone(), route);
@@ -2856,6 +2886,8 @@ pub(in crate::node) mod tests {
         NodeState {
             #[cfg(feature = "experimental-gc2")]
             gc2_sessions: false,
+            #[cfg(feature = "experimental-gc2")]
+            retained_direct: std::sync::OnceLock::new(),
             routing: None,
             secrets: Arc::new(secrets),
             identity_seed: [0xA5; 32],

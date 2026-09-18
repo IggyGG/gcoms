@@ -78,6 +78,34 @@ pub(crate) async fn deliver_direct(
     delivery: &DirectDelivery,
     policy: &FrwdTargetPolicy,
 ) -> Result<(), String> {
+    let reservation = direct_payload_reservation(scheduler, delivery)?;
+    deliver_direct_reserved(scheduler, delivery, policy, reservation).await
+}
+
+fn direct_payload_reservation(
+    scheduler: &RelayScheduler,
+    delivery: &DirectDelivery,
+) -> Result<Option<crate::scheduler::PayloadReservation>, String> {
+    if delivery.cells.iter().any(|cell| {
+        cell.payload.starts_with(b"GCH2")
+            || cell.payload.starts_with(b"GCM2")
+            || cell.payload.starts_with(b"GCA2")
+    }) {
+        scheduler
+            .retain_attempt_payload(delivery.cells.iter().map(|c| c.payload.len()).sum())
+            .map(Some)
+            .map_err(|e| e.to_string())
+    } else {
+        Ok(None)
+    }
+}
+
+async fn deliver_direct_reserved(
+    scheduler: &RelayScheduler,
+    delivery: &DirectDelivery,
+    policy: &FrwdTargetPolicy,
+    _reservation: Option<crate::scheduler::PayloadReservation>,
+) -> Result<(), String> {
     let destination = delivery.peer.primary().ok_or("peer has no public alias")?;
     for msg in &delivery.cells {
         scheduler
@@ -134,7 +162,7 @@ fn direct_attempt_key(delivery: &DirectDelivery) -> [u8; 32] {
 struct DirectAttempt {
     key: [u8; 32],
     ack: bool,
-    delivery: DirectDelivery,
+    destination: Option<AliasContact>,
     accepted: bool,
 }
 
@@ -162,21 +190,27 @@ impl DirectMaintenance {
         scheduler: &RelayScheduler,
         mut delivery: DirectDelivery,
         ack: bool,
-    ) {
+    ) -> bool {
         let key = direct_attempt_key(&delivery);
+        let Ok(reservation) = direct_payload_reservation(scheduler, &delivery) else {
+            return false;
+        };
         self.active.insert(key, ack);
         reroute_deliveries(st, std::slice::from_mut(&mut delivery));
         let scheduler = scheduler.clone();
         let policy = st.frwd_target_policy.clone();
         self.completions.push(Box::pin(async move {
-            let accepted = deliver_direct(&scheduler, &delivery, &policy).await.is_ok();
+            let accepted = deliver_direct_reserved(&scheduler, &delivery, &policy, reservation)
+                .await
+                .is_ok();
             DirectAttempt {
                 key,
                 ack,
-                delivery,
+                destination: delivery.peer.primary().cloned(),
                 accepted,
             }
         }));
+        true
     }
 
     pub(crate) fn tick(
@@ -200,6 +234,8 @@ impl DirectMaintenance {
             metrics::log_event("session_cleanup_persist_error", &[("e", error)]);
         }
         st.pending_1to1.retain(|_, pending| pending.expires > now);
+        #[cfg(feature = "experimental-gc2")]
+        st.release_removed_direct_payload();
         expire_direct_presence(&mut st, now, events);
         rotate_active_intermediaries(&mut st);
 
@@ -252,9 +288,10 @@ impl DirectMaintenance {
                 }
             }
             for (key, delivery) in repairs {
-                self.repair_due
-                    .insert(key, now + jittered(std::time::Duration::from_secs(60)));
-                self.start(&mut st, scheduler, delivery, false);
+                if self.start(&mut st, scheduler, delivery, false) {
+                    self.repair_due
+                        .insert(key, now + jittered(std::time::Duration::from_secs(60)));
+                }
             }
         }
 
@@ -285,10 +322,16 @@ impl DirectMaintenance {
             {
                 continue;
             }
-            pending.next_attempt = now + jittered(std::time::Duration::from_secs(60));
             let delivery = pending.delivery.clone();
-            self.start(&mut st, scheduler, delivery, false);
-            available -= 1;
+            if self.start(&mut st, scheduler, delivery, false) {
+                st.pending_1to1
+                    .get_mut(&id)
+                    .expect("selected retry")
+                    .next_attempt = now + jittered(std::time::Duration::from_secs(60));
+                available -= 1;
+            } else {
+                break;
+            }
         }
     }
 
@@ -300,23 +343,22 @@ impl DirectMaintenance {
                 return;
             }
             let mut st = state.lock().unwrap_or_else(|p| p.into_inner());
-            let matches = |ack: &DirectDelivery| {
-                ack.peer.identity_pk == attempt.delivery.peer.identity_pk
-                    && ack.cells == attempt.delivery.cells
-            };
+            let matches = |ack: &DirectDelivery| direct_attempt_key(ack) == attempt.key;
             if let Some(index) = st.direct_ack_outbox.iter().position(&matches) {
                 let retained = st.direct_ack_outbox.remove(index).expect("matched ACK");
                 st.direct_ack_outbox.retain(|ack| !matches(ack));
                 let current_destination = select_peer_route(&st, &retained.peer).ok();
                 let accepted_current_route = attempt.accepted
                     && current_destination.as_ref().and_then(NodeInfo::primary)
-                        == attempt.delivery.peer.primary();
+                        == attempt.destination.as_ref();
                 if !accepted_current_route {
                     // Retry on a later tick, behind other waiting ACKs. Keep the
                     // retained contact, which may have renewed during this wait.
                     st.direct_ack_outbox.push_back(retained);
                 }
             }
+            #[cfg(feature = "experimental-gc2")]
+            st.release_removed_direct_payload();
         }
     }
 }
@@ -541,20 +583,25 @@ pub(crate) fn accept_reliable_direct(
         )],
     };
     st.direct_ack_outbox.push_back(delivery.clone());
-    st.processed_direct.insert(
-        frame_key.clone(),
-        ProcessedDirect {
-            frame_hash,
-            delivery: delivery.clone(),
-        },
-    );
-    st.processed_direct_order.push_back(frame_key.clone());
+    let legacy_replay_cache = staged.tag().is_none();
+    if legacy_replay_cache {
+        st.processed_direct.insert(
+            frame_key.clone(),
+            ProcessedDirect {
+                frame_hash,
+                delivery: delivery.clone(),
+            },
+        );
+        st.processed_direct_order.push_back(frame_key.clone());
+    }
     if let Err(error) =
         persist_received_direct_transaction(st, sender_pk, ack.sealed_state(), received.credit())
     {
         st.direct_ack_outbox.pop_back();
-        st.processed_direct.remove(&frame_key);
-        st.processed_direct_order.pop_back();
+        if legacy_replay_cache {
+            st.processed_direct.remove(&frame_key);
+            st.processed_direct_order.pop_back();
+        }
         return Err(error);
     }
     // The state lock spans preparation, durable storage and publication. The
@@ -608,11 +655,6 @@ pub(crate) fn process_frame(
                     .get_mut(&sender_pk)
                     .expect("session prepared above")
                     .commit_receive(received);
-                if let Some(processed) = st.processed_direct.get(&frame_key) {
-                    if processed.frame_hash == frame_hash && st.direct_ack_outbox.len() < 1024 {
-                        st.direct_ack_outbox.push_back(processed.delivery.clone());
-                    }
-                }
             }
         }
         Ok(received) => match decode_direct_record(received.plaintext()) {
@@ -1379,7 +1421,7 @@ pub(crate) fn queue_forward_grant(
             application_event: false,
         },
     );
-    if let Err(error) = persist_direct_transaction(st, peer, prepared.sealed_state()) {
+    if let Err(error) = persist_direct_state(st, Some((peer, prepared.sealed_state())), true) {
         st.pending_1to1.remove(&message_id);
         st.next_direct_sequence = sequence;
         return Err(error);
@@ -1566,6 +1608,7 @@ where
             ));
         }
         let durable = crate::proto::is_durable_direct_data(&direct);
+        let control = direct_control_record(&direct);
         if crate::proto::is_volatile_application(&direct)
             && (!st.sessions.contains_key(&peer.identity_pk)
                 || !matches!(
@@ -1688,7 +1731,7 @@ where
                     application_event,
                 },
             );
-            if let Err(error) = persist_current_direct_state(&st) {
+            if let Err(error) = persist_direct_state(&st, None, control) {
                 st.pending_1to1.remove(&message_id);
                 st.next_direct_sequence = sequence;
                 return Err(error);
@@ -1771,9 +1814,11 @@ where
                 application_event,
             },
         );
-        if let Err(error) =
-            persist_direct_transaction(&st, &peer.identity_pk, prepared.sealed_state())
-        {
+        if let Err(error) = persist_direct_state(
+            &st,
+            Some((&peer.identity_pk, prepared.sealed_state())),
+            control,
+        ) {
             st.pending_1to1.remove(&message_id);
             st.next_direct_sequence = sequence;
             if new_session {
@@ -1829,6 +1874,13 @@ where
         deliver_direct(scheduler, &delivery, &policy).await?;
     }
     Ok(message_id)
+}
+
+fn direct_control_record(record: &[u8]) -> bool {
+    !matches!(
+        decode_direct_record(record),
+        Some(DirectRecord::Data { .. } | DirectRecord::VolatileApplication { .. })
+    )
 }
 
 pub(super) fn materialize_deferred(st: &mut NodeState) -> Result<(), String> {
@@ -1924,19 +1976,45 @@ pub(super) fn materialize_deferred(st: &mut NodeState) -> Result<(), String> {
             .pending_1to1
             .get_mut(&id)
             .expect("selected pending application");
+        #[cfg(feature = "experimental-gc2")]
+        let old_delivery = pending.delivery.clone();
+        #[cfg(feature = "experimental-gc2")]
+        let old_retry = pending.next_attempt;
         pending.delivery = DirectDelivery {
             peer: peer.clone(),
             relay,
             cells,
         };
         pending.next_attempt = now;
-        if let Err(error) =
-            persist_direct_transaction(st, &peer.identity_pk, prepared.sealed_state())
-        {
-            // A sink can fail after writing. Preserve the candidate and stop
-            // publication until restart resolves its durable ratchet outcome.
-            st.pause_failed_owner_transition();
-            return Err(error);
+        match checkpoint_direct_state(
+            st,
+            Some((&peer.identity_pk, prepared.sealed_state())),
+            direct_control_record(&body),
+        ) {
+            Ok(()) => (),
+            #[cfg(feature = "experimental-gc2")]
+            Err(DirectPersistenceError::Admission(_)) => {
+                // Congestion is not a failed write. Restore the deferred record
+                // without advancing its counter, ID, sequence or deadline.
+                let pending = st
+                    .pending_1to1
+                    .get_mut(&id)
+                    .expect("selected deferred record");
+                pending.delivery = old_delivery;
+                pending.next_attempt = old_retry;
+                if new_session {
+                    st.sessions.remove(&peer.identity_pk);
+                    st.session_states.remove(&peer.identity_pk);
+                }
+                break;
+            }
+            #[cfg(feature = "client-persist")]
+            Err(DirectPersistenceError::Storage(error)) => {
+                // A sink can fail after writing. Preserve the candidate and stop
+                // publication until restart resolves its durable ratchet outcome.
+                st.pause_failed_owner_transition();
+                return Err(error);
+            }
         }
         if let Err(error) = st
             .sessions

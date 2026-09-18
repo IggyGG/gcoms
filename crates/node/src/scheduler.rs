@@ -24,6 +24,9 @@ mod pipeline_admission_tests;
 mod pipeline_cover_tests;
 #[cfg(test)]
 mod pipeline_tests;
+pub(crate) use budget::Reservation as PayloadReservation;
+#[cfg(feature = "experimental-gc2")]
+pub(crate) use budget::{PayloadUsage, RetainedAccount, RetainedPriority, RetainedUpdate};
 pub use budget::{ResourceSnapshot, MAX_BYTES as MAX_QUEUED_BYTES, MAX_JOBS as MAX_QUEUED_JOBS};
 
 pub const SLOT_INTERVAL: Duration = Duration::from_secs(3);
@@ -550,6 +553,18 @@ pub struct RelayScheduler {
 }
 
 impl RelayScheduler {
+    #[cfg(feature = "experimental-gc2")]
+    pub(crate) fn retained_account(&self) -> RetainedAccount {
+        self.inner.budget.retained_account()
+    }
+
+    pub(crate) fn retain_attempt_payload(
+        &self,
+        bytes: usize,
+    ) -> Result<PayloadReservation, EnqueueError> {
+        self.inner.budget.reserve(bytes, None)
+    }
+
     pub fn new(client: Arc<Tp1Client>) -> Self {
         Self::with_profile(client, SchedulerProfile::production())
     }

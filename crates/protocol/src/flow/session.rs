@@ -263,6 +263,9 @@ impl PreparedSend {
     pub fn private_flow(&self) -> Zeroizing<Vec<u8>> {
         self.window.encode_private()
     }
+    pub fn cached_payload_count(&self) -> usize {
+        self.window.cached_payload_count()
+    }
     pub fn cached_payload_bytes(&self) -> usize {
         self.window.cached_payload_bytes()
     }
@@ -288,6 +291,12 @@ impl PreparedReceive {
     pub fn private_flow(&self) -> Zeroizing<Vec<u8>> {
         self.window.encode_private()
     }
+    pub fn cached_payload_count(&self) -> usize {
+        self.window.cached_payload_count()
+    }
+    pub fn cached_payload_bytes(&self) -> usize {
+        self.window.cached_payload_bytes()
+    }
     pub fn credit(&self) -> &[u8; CREDIT_BYTES] {
         &self.credit
     }
@@ -300,6 +309,9 @@ pub struct PreparedCredit {
 impl PreparedCredit {
     pub fn private_flow(&self) -> Zeroizing<Vec<u8>> {
         self.window.encode_private()
+    }
+    pub fn cached_payload_count(&self) -> usize {
+        self.window.cached_payload_count()
     }
     pub fn cached_payload_bytes(&self) -> usize {
         self.window.cached_payload_bytes()

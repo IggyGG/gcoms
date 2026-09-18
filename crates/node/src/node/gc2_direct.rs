@@ -53,6 +53,10 @@ pub(super) fn incoming(
                     .seal_ratchet(&wrapping, &context)
                     .map_err(|e| e.to_string())?,
                 &prepared.private_flow(),
+                crate::scheduler::PayloadUsage {
+                    items: prepared.cached_payload_count(),
+                    bytes: prepared.cached_payload_bytes(),
+                },
                 &wrapping,
             )
             .map_err(|e| e.to_string())?;
@@ -137,7 +141,7 @@ fn accept(
         cells: vec![Cell::new(CellType::Msg, 0, 0, accepted.credit.to_vec())],
     });
     st.accepted_first_moves.push_back(hash);
-    if let Err(error) = persist_current_direct_state(st) {
+    if let Err(error) = persist_direct_state(st, None, true) {
         st.direct_ack_outbox.pop_back();
         st.accepted_first_moves.pop_back();
         st.sessions.remove(&pk);

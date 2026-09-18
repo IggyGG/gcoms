@@ -1000,7 +1000,7 @@ pub(crate) fn queue_contact_updates(st: &mut NodeState) -> Result<Vec<DirectDeli
                 application_event: false,
             },
         );
-        if let Err(error) = persist_direct_transaction(st, &peer, prepared.sealed_state()) {
+        if let Err(error) = persist_direct_state(st, Some((&peer, prepared.sealed_state())), true) {
             st.pending_1to1.remove(&message_id);
             st.next_direct_sequence = sequence;
             return Err(error);

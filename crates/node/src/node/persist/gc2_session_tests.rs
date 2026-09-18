@@ -79,16 +79,155 @@ async fn gc2_runtime_failed_receive_write_has_no_application_effect_or_credit() 
     let before=bob.direct_ack_outbox.len();
     let ai=alice.lock().unwrap().info.identity_pk.clone();
     let received=bob.sessions[&ai].recv_ctr();
+    let charged=bob.scheduler.resource_snapshot();
     bob.durable_state_sink=Some(Arc::new(|_|Err("receive failpoint".into())));
     gc2_direct::incoming(&mut bob,&cells[1].payload,&events).unwrap();
     assert_eq!(bob.direct_ack_outbox.len(),before);
     assert!(bob.application_inbox.entries.is_empty());
     assert_eq!(bob.sessions[&ai].recv_ctr(),received);
+    assert_eq!(bob.scheduler.resource_snapshot().bytes,charged.bytes);
+    assert_eq!(bob.scheduler.resource_snapshot().jobs,charged.jobs);
     bob.durable_state_sink=Some(Arc::new(|_|Ok(())));
     gc2_direct::incoming(&mut bob,&cells[1].payload,&events).unwrap();
     assert_eq!(bob.application_inbox.entries.len(),1);
     assert_eq!(bob.sessions[&ai].recv_ctr(),received+1);
     scheduler.shutdown(); bob.scheduler.shutdown();
+}
+
+#[tokio::test]
+async fn gc2_runtime_retained_limit_applies_without_a_durable_sink() {
+    let mut node=gc2_node(41);
+    node.durable_state_sink=None;
+    let scheduler=node.scheduler.clone();
+    let alice=Arc::new(Mutex::new(node));
+    let (events,_)=broadcast::channel(32);
+    let body=vec![0x71;11*1024];
+    let mut blocked=false;
+    for seed in 42..46 {
+        let mut bob=gc2_node(seed);
+        send_direct_record(&alice,&scheduler,&bob.info,None,true,|id,_| Ok(crate::proto::encode_direct_durable_data(id,now_ms(),&body))).await.unwrap();
+        let first=alice.lock().unwrap().pending_1to1.values()
+            .find(|p|p.delivery.peer.identity_pk==bob.info.identity_pk).unwrap().delivery.cells[0].payload.clone();
+        gc2_direct::incoming(&mut bob,&first,&events).unwrap();
+        gc2_direct::incoming(&mut alice.lock().unwrap(),&bob.direct_ack_outbox[0].cells[0].payload,&events).unwrap();
+        for _ in 1..32 {
+            let (pending,sequence,counter)={let a=alice.lock().unwrap();(a.pending_1to1.len(),a.next_direct_sequence,a.sessions[&bob.info.identity_pk].send_ctr())};
+            match send_direct_record(&alice,&scheduler,&bob.info,None,true,|id,_| Ok(crate::proto::encode_direct_durable_data(id,now_ms(),&body))).await {
+                Ok(_) => (),
+                Err(error) => {
+                    assert!(error.contains("direct retained payload admission"),"{error}");
+                    let a=alice.lock().unwrap();
+                    assert_eq!(a.pending_1to1.len(),pending);
+                    assert_eq!(a.next_direct_sequence,sequence);
+                    assert_eq!(a.sessions[&bob.info.identity_pk].send_ctr(),counter);
+                    assert!(!a.owner_transition_failed);
+                    blocked=true;
+                    break;
+                }
+            }
+        }
+        bob.scheduler.shutdown();
+        if blocked {break;}
+    }
+    assert!(blocked,"stalled peers must share one retained-data limit");
+    let a=alice.lock().unwrap();
+    let retained=a.retained_payload(None).unwrap();
+    assert!(retained.bytes > 2*1024*1024 && retained.bytes <= 3*1024*1024);
+    assert!(scheduler.resource_snapshot().bytes >= retained.bytes);
+    assert!(scheduler.combined_resource_snapshot().bytes <= crate::scheduler::MAX_QUEUED_BYTES);
+    drop(a);
+    drop(alice);
+    scheduler.shutdown();
+}
+
+#[tokio::test]
+async fn gc2_runtime_restore_reserves_before_publishing_and_reclaims_on_drop() {
+    let alice=Arc::new(Mutex::new(gc2_node(47)));
+    let bob=gc2_node(48);
+    let scheduler=alice.lock().unwrap().scheduler.clone();
+    send_durable_1to1(&alice,&scheduler,&bob.info,&vec![7;11*1024],None).await.unwrap();
+    let (bytes,expected)={let a=alice.lock().unwrap();(encode_state(&a).unwrap(),a.retained_payload(None).unwrap())};
+    let fresh=Arc::new(Mutex::new(gc2_node(47)));
+    let fresh_scheduler=fresh.lock().unwrap().scheduler.clone();
+    // A queued/live request competes atomically with a cold-restored outbox.
+    let pressure=fresh_scheduler.retain_attempt_payload(7*1024*1024).unwrap();
+    assert!(decode_state_at_startup(&fresh,&fresh_scheduler,&bytes).await.unwrap_err().contains("direct retained payload admission"));
+    assert!(fresh.lock().unwrap().sessions.is_empty());
+    assert!(fresh.lock().unwrap().pending_1to1.is_empty());
+    drop(pressure);
+    decode_state_at_startup(&fresh,&fresh_scheduler,&bytes).await.unwrap();
+    assert_eq!(fresh_scheduler.resource_snapshot().bytes,expected.bytes);
+    assert_eq!(fresh_scheduler.resource_snapshot().jobs,expected.items);
+    assert!(decode_state_at_startup(&fresh,&fresh_scheduler,&bytes).await.unwrap_err().contains("live GC/2"));
+    drop(fresh);
+    assert_eq!(fresh_scheduler.resource_snapshot().bytes,0);
+    assert_eq!(fresh_scheduler.resource_snapshot().jobs,0);
+    scheduler.shutdown();bob.scheduler.shutdown();fresh_scheduler.shutdown();
+}
+
+#[tokio::test]
+async fn gc2_runtime_deferred_materialization_waits_for_budget_without_pausing_node() {
+    let alice=Arc::new(Mutex::new(gc2_node(49)));
+    let mut bob=gc2_node(50);
+    let scheduler=alice.lock().unwrap().scheduler.clone();
+    send_durable_1to1(&alice,&scheduler,&bob.info,b"first",None).await.unwrap();
+    send_durable_1to1(&alice,&scheduler,&bob.info,&vec![3;11*1024],None).await.unwrap();
+    let deferred=*alice.lock().unwrap().pending_1to1.iter().find(|(_,p)|p.delivery.cells.is_empty()).unwrap().0;
+    let (events,_)=broadcast::channel(32);
+    let first=alice.lock().unwrap().pending_1to1.values().find(|p|!p.delivery.cells.is_empty()).unwrap().delivery.cells[0].payload.clone();
+    gc2_direct::incoming(&mut bob,&first,&events).unwrap();
+    let mut a=alice.lock().unwrap();
+    gc2_direct::incoming(&mut a,&bob.direct_ack_outbox[0].cells[0].payload,&events).unwrap();
+    let expires=a.pending_1to1[&deferred].expires;
+    let sequence=a.pending_1to1[&deferred].sequence;
+    let counter=a.sessions[&bob.info.identity_pk].send_ctr();
+    let pressure=scheduler.retain_attempt_payload(7*1024*1024-scheduler.resource_snapshot().bytes).unwrap();
+    materialize_deferred(&mut a).unwrap();
+    assert!(!a.owner_transition_failed);
+    assert!(a.pending_1to1[&deferred].delivery.cells.is_empty());
+    assert_eq!(a.pending_1to1[&deferred].expires,expires);
+    assert_eq!(a.pending_1to1[&deferred].sequence,sequence);
+    assert_eq!(a.sessions[&bob.info.identity_pk].send_ctr(),counter);
+    drop(pressure);
+    materialize_deferred(&mut a).unwrap();
+    assert_eq!(a.pending_1to1[&deferred].delivery.cells.len(),1);
+    assert_eq!(a.sessions[&bob.info.identity_pk].send_ctr(),counter+1);
+    assert_eq!(a.pending_1to1[&deferred].expires,expires);
+    scheduler.shutdown();bob.scheduler.shutdown();
+}
+
+#[tokio::test]
+async fn gc2_runtime_lost_application_ack_repairs_from_window_after_restart() {
+    let alice=Arc::new(Mutex::new(gc2_node(51)));
+    let mut bob=gc2_node(52);
+    let scheduler=alice.lock().unwrap().scheduler.clone();
+    send_durable_1to1(&alice,&scheduler,&bob.info,b"repair one application ACK",None).await.unwrap();
+    let id=*alice.lock().unwrap().pending_1to1.keys().next().unwrap();
+    let cells=alice.lock().unwrap().pending_1to1[&id].delivery.cells.clone();
+    let (events,_)=broadcast::channel(32);
+    for cell in &cells { gc2_direct::incoming(&mut bob,&cell.payload,&events).unwrap(); }
+    assert!(bob.processed_direct.is_empty());
+    let ack=bob.direct_ack_outbox.iter().flat_map(|d|&d.cells).find(|c|c.payload.starts_with(b"GCM2")).unwrap().payload.clone();
+    // The relay accepted these packets, but the peer never received the ACK.
+    bob.direct_ack_outbox.clear();
+    bob.release_removed_direct_payload();
+    let restored=gc2_restore(&bob,52).await;
+    let mut b=restored.lock().unwrap();
+    let mut a=alice.lock().unwrap();
+    let PeerSession::Credited(session)=&b.sessions[&a.info.identity_pk] else {panic!("GC2")};
+    assert!(session.window().retries().any(|(_,_,packet)|packet==ack));
+    gc2_direct::incoming(&mut a,&ack,&events).unwrap();
+    assert!(!a.pending_1to1.contains_key(&id));
+    let credits:Vec<_>=a.direct_ack_outbox.iter().flat_map(|d|d.cells.clone()).collect();
+    for credit in credits {gc2_direct::incoming(&mut b,&credit.payload,&events).unwrap();}
+    let PeerSession::Credited(session)=&b.sessions[&a.info.identity_pk] else {panic!("GC2")};
+    assert_eq!(session.window().cached_payload_bytes(),0);
+    let counter=b.sessions[&a.info.identity_pk].send_ctr();
+    gc2_direct::incoming(&mut b,&cells[1].payload,&events).unwrap();
+    assert_eq!(b.application_inbox.entries.len(),1);
+    assert_eq!(b.sessions[&a.info.identity_pk].send_ctr(),counter);
+    assert!(b.direct_ack_outbox.iter().flat_map(|d|&d.cells).all(|c|c.payload.starts_with(b"GCA2")));
+    scheduler.shutdown();b.scheduler.shutdown();
 }
 
 #[tokio::test]

@@ -99,9 +99,9 @@ Retained packet buffers and secrets are shared between staged candidates and
 zeroized when their last owner drops them.
 
 Each peer retains at most 63 packets and 63 receipt authorities. This is roughly
-one MiB per maximally occupied peer, not a node-wide memory bound. Runtime adoption
-must account retained ciphertext alongside queued/in-flight copies and preserve
-room for repair/control dispatch. Incoming flow state retains hashes and receipt
+one MiB per maximally occupied peer. The node accounts these retained ciphertexts
+alongside pending logical records, queued cells and ACK/credit outboxes in the
+scheduler's shared endpoint/transit budget. Incoming flow state retains hashes and receipt
 secrets, not application plaintext or incoming ciphertext. Outgoing volatile
 traffic needs a separate persistence policy before this path can carry it.
 
@@ -141,6 +141,32 @@ Durable sends defer behind confirmation/counter credit; simultaneous initiation
 keeps logical IDs, order and deadlines. Contact-key updates are staged with the
 post-receive candidate rather than changing live state before persistence.
 
+## Shared retention admission
+
+GC/2 retained direct payloads use at most 4 MiB and 2,048 payload records across
+all peers. Ordinary sends stop growing that account at 3 MiB / 1,536 records;
+control records, receive transactions and counter credit can use the remainder.
+These are sublimits of the existing shared 8 MiB / 4,096 scheduler allowance,
+not additional allowances. Production cover reserves remain separate. At the
+retained ceiling, at least 2 MiB / 1,920 job slots remain available to endpoint
+and transit dispatch, including exact-ciphertext repair. Queued requests may
+still cause earlier backpressure.
+
+Positive account changes reserve capacity atomically before a state write.
+A failed write or canceled update releases that reservation; shrinking an account
+releases capacity only after the write succeeds. RAM-only sessions use the same
+admission. Cold restore derives counts from authenticated session windows and
+outboxes before publishing them. Parsed encrypted snapshots supply no trusted
+resource counts. Metadata, checkpoint scratch and the separately bounded inbox
+are outside this payload accounting; these limits are not an exact RAM ceiling.
+
+Owned retry copies reserve dispatch capacity before their futures can be polled.
+Cancellation releases that capacity immediately. Deferred materialization waits
+for available budget without consuming counters, changing IDs/deadlines or
+marking the node's durable state uncertain. A failed durable write still pauses
+publication for restart recovery. GC/2 logical ACKs use the ratchet window for
+repair, eliminating the legacy replay cache's additional ciphertext copy.
+
 ## Evidence and remaining adoption
 
 The protocol tests exercise authenticated hybrid first moves, a missing counter
@@ -151,7 +177,9 @@ stale/cross-session transactions, application expiry and skipped-key aging.
 
 Node integration tests exercise durable inbox acceptance, restart after lost
 setup credit, exact duplicate handling, failed receive persistence, strict archive
-selection, archive tampering and simultaneous initiation. These use real protocol
+selection, archive tampering, simultaneous initiation, shared retention admission,
+failed-write accounting rollback, budget pressure during restore/materialization,
+and lost logical ACK repair after restart. These use real protocol
 cryptography and the node's transaction paths; they do not qualify a deployed
 carrier or production performance.
 
@@ -161,8 +189,7 @@ checks the retained inbox IDs, and resumes bidirectional delivery using the
 sender's old contact card. The fixture uses the existing relay carrier and
 compressed local cadence; it is not a GC/2 carrier or performance qualification.
 
-Node-wide accounting of retained ciphertext with queued/in-flight copies,
-volatile outgoing media policy, complete control deferral, authenticated session
+Volatile outgoing media policy, complete control deferral, authenticated session
 recovery after skipped-key expiry, and class/profile propagation remain required.
 The full natural-cell routing path, SDK/GChat selection, real-network goodput and
 packet-observation privacy gates remain separate integration/qualification work.

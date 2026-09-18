@@ -303,6 +303,9 @@ impl Window {
     pub fn received_floor(&self) -> u64 {
         self.received.floor
     }
+    pub fn cached_payload_count(&self) -> usize {
+        self.tx.len()
+    }
     pub fn cached_payload_bytes(&self) -> usize {
         self.tx.values().map(|entry| entry.packet.len()).sum()
     }

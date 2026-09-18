@@ -43,6 +43,8 @@ mod direct;
 #[cfg(feature = "experimental-gc2")]
 mod gc2_direct;
 mod peer_session;
+#[cfg(feature = "experimental-gc2")]
+mod retained;
 use peer_session::PeerSession;
 #[cfg(feature = "client-persist")]
 mod persist;
@@ -818,6 +820,8 @@ async fn start_with_tls_policy_control_sink_and_bootstrap(
         let state = Arc::new(Mutex::new(NodeState {
             #[cfg(feature = "experimental-gc2")]
             gc2_sessions: cfg.profile.gc2_sessions(),
+            #[cfg(feature = "experimental-gc2")]
+            retained_direct: std::sync::OnceLock::new(),
             routing: routing.clone(),
             secrets,
             identity_seed: cfg.seed,
@@ -1101,7 +1105,7 @@ fn persist_received_direct_transaction(
     let previous = st
         .session_states
         .insert(peer.to_vec(), DirectSessionState::Established);
-    if let Err(error) = persist_direct_transaction(st, peer, sealed) {
+    if let Err(error) = persist_direct_state(st, Some((peer, sealed)), true) {
         st.direct_ack_outbox.truncate(previous_outbox_len);
         match previous {
             Some(state) => {
@@ -1116,37 +1120,63 @@ fn persist_received_direct_transaction(
     Ok(())
 }
 
-#[cfg(feature = "client-persist")]
-fn persist_direct_transaction(
-    st: &NodeState,
-    peer: &[u8],
-    sealed: &peer_session::Snapshot,
-) -> Result<(), String> {
-    let Some(sink) = &st.durable_state_sink else {
-        return Ok(());
-    };
-    sink(persist::encode_state_with_session(st, peer, sealed)?)
-}
-
-#[cfg(feature = "client-persist")]
 fn persist_current_direct_state(st: &NodeState) -> Result<(), String> {
-    let Some(sink) = &st.durable_state_sink else {
-        return Ok(());
-    };
-    sink(persist::encode_state(st)?)
+    persist_direct_state(st, None, false)
 }
 
-#[cfg(not(feature = "client-persist"))]
-fn persist_direct_transaction(
-    _st: &NodeState,
-    _peer: &[u8],
-    _sealed: &peer_session::Snapshot,
+enum DirectPersistenceError {
+    #[cfg(feature = "experimental-gc2")]
+    Admission(String),
+    #[cfg(feature = "client-persist")]
+    Storage(String),
+}
+
+impl DirectPersistenceError {
+    fn into_string(self) -> String {
+        match self {
+            #[cfg(feature = "experimental-gc2")]
+            Self::Admission(error) => error,
+            #[cfg(feature = "client-persist")]
+            Self::Storage(error) => error,
+        }
+    }
+}
+
+fn persist_direct_state(
+    st: &NodeState,
+    session_override: Option<(&[u8], &peer_session::Snapshot)>,
+    control: bool,
 ) -> Result<(), String> {
-    Ok(())
+    checkpoint_direct_state(st, session_override, control)
+        .map_err(DirectPersistenceError::into_string)
 }
 
-#[cfg(not(feature = "client-persist"))]
-fn persist_current_direct_state(_st: &NodeState) -> Result<(), String> {
+fn checkpoint_direct_state(
+    st: &NodeState,
+    session_override: Option<(&[u8], &peer_session::Snapshot)>,
+    control: bool,
+) -> Result<(), DirectPersistenceError> {
+    #[cfg(feature = "experimental-gc2")]
+    let retained = st
+        .stage_retained(session_override, control)
+        .map_err(DirectPersistenceError::Admission)?;
+    #[cfg(not(feature = "experimental-gc2"))]
+    let _ = control;
+    #[cfg(feature = "client-persist")]
+    if let Some(sink) = &st.durable_state_sink {
+        let bytes = match session_override {
+            Some((peer, sealed)) => persist::encode_state_with_session(st, peer, sealed),
+            None => persist::encode_state(st),
+        }
+        .map_err(DirectPersistenceError::Storage)?;
+        sink(bytes).map_err(DirectPersistenceError::Storage)?;
+    }
+    #[cfg(not(feature = "client-persist"))]
+    let _ = (st, session_override);
+    #[cfg(feature = "experimental-gc2")]
+    if let Some(retained) = retained {
+        retained.commit();
+    }
     Ok(())
 }
 

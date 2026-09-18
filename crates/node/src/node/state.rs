@@ -183,6 +183,8 @@ pub(crate) fn fresh_msg_id() -> [u8; 16] {
 pub struct NodeState {
     #[cfg(feature = "experimental-gc2")]
     pub(crate) gc2_sessions: bool,
+    #[cfg(feature = "experimental-gc2")]
+    pub(crate) retained_direct: std::sync::OnceLock<crate::scheduler::RetainedAccount>,
     pub(crate) routing: Option<Arc<super::routing::RoutingRuntime>>,
     pub(crate) secrets: Arc<LocalSecrets>,
     pub(crate) identity_seed: [u8; 32],

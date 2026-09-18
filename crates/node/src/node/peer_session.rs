@@ -1,5 +1,7 @@
 //! Versioned direct-session transactions shared by live delivery and archives.
 use super::*;
+#[cfg(feature = "experimental-gc2")]
+use crate::scheduler::PayloadUsage;
 use gcoms_crypto::{CryptoError, Frame};
 #[cfg(feature = "experimental-gc2")]
 use gcoms_protocol::{flow, gc2_session};
@@ -46,15 +48,25 @@ impl std::fmt::Display for Error {
 pub(crate) enum Snapshot {
     Legacy(SealedSession),
     #[cfg(feature = "experimental-gc2")]
-    Credited(gc2_session::SealedState),
+    Credited(gc2_session::SealedState, Option<PayloadUsage>),
 }
 impl Snapshot {
+    #[cfg(feature = "experimental-gc2")]
+    pub(crate) fn retained_payload(&self) -> Result<PayloadUsage, String> {
+        match self {
+            Self::Legacy(_) => Ok(PayloadUsage::default()),
+            Self::Credited(_, Some(usage)) => Ok(*usage),
+            Self::Credited(_, None) => {
+                Err("parsed session must be authenticated before accounting".into())
+            }
+        }
+    }
     #[cfg(feature = "client-persist")]
     pub fn as_bytes(&self) -> &[u8] {
         match self {
             Self::Legacy(s) => s.as_bytes(),
             #[cfg(feature = "experimental-gc2")]
-            Self::Credited(s) => s.as_bytes(),
+            Self::Credited(s, _) => s.as_bytes(),
         }
     }
     #[cfg(feature = "client-persist")]
@@ -62,7 +74,10 @@ impl Snapshot {
         if bytes.starts_with(b"GCPS\x02") {
             #[cfg(feature = "experimental-gc2")]
             {
-                return Ok(Self::Credited(gc2_session::SealedState::from_bytes(bytes)?));
+                return Ok(Self::Credited(
+                    gc2_session::SealedState::from_bytes(bytes)?,
+                    None,
+                ));
             }
             #[cfg(not(feature = "experimental-gc2"))]
             {
@@ -76,14 +91,14 @@ impl Snapshot {
         match self {
             Self::Legacy(_) => None,
             #[cfg(feature = "experimental-gc2")]
-            Self::Credited(s) => Some(s.tag()),
+            Self::Credited(s, _) => Some(s.tag()),
         }
     }
     pub fn open(&self, key: &[u8; 32], context: &SessionContext) -> Result<PeerSession, Error> {
         match self {
             Self::Legacy(s) => Ok(PeerSession::Legacy(Session::open_state(s, key, context)?)),
             #[cfg(feature = "experimental-gc2")]
-            Self::Credited(s) => Ok(PeerSession::Credited(s.open(key, context)?)),
+            Self::Credited(s, _) => Ok(PeerSession::Credited(s.open(key, context)?)),
         }
     }
 }
@@ -157,6 +172,16 @@ impl PreparedReceive {
 }
 
 impl PeerSession {
+    #[cfg(feature = "experimental-gc2")]
+    pub(crate) fn retained_payload(&self) -> PayloadUsage {
+        match self {
+            Self::Legacy(_) => PayloadUsage::default(),
+            Self::Credited(s) => PayloadUsage {
+                items: s.window().cached_payload_count(),
+                bytes: s.window().cached_payload_bytes(),
+            },
+        }
+    }
     pub fn tag(&self) -> Option<&[u8; 16]> {
         match self {
             Self::Legacy(_) => None,
@@ -173,6 +198,7 @@ impl PeerSession {
                 s.window().session(),
                 &s.seal_ratchet(key, context)?,
                 &s.window().encode_private(),
+                self.retained_payload(),
                 key,
             ),
         }
@@ -226,6 +252,10 @@ impl PeerSession {
                     s.window().session(),
                     prepared.sealed_ratchet(),
                     &prepared.private_flow(),
+                    PayloadUsage {
+                        items: prepared.cached_payload_count(),
+                        bytes: prepared.cached_payload_bytes(),
+                    },
                     key,
                 )?;
                 Ok(PreparedSend {
@@ -270,7 +300,16 @@ impl PeerSession {
                         &current
                     }
                 };
-                let sealed = seal(s.window().session(), ratchet, &p.private_flow(), key)?;
+                let sealed = seal(
+                    s.window().session(),
+                    ratchet,
+                    &p.private_flow(),
+                    PayloadUsage {
+                        items: p.cached_payload_count(),
+                        bytes: p.cached_payload_bytes(),
+                    },
+                    key,
+                )?;
                 Ok(PreparedReceive {
                     inner: Receive::Credited(Box::new(p)),
                     sealed,
@@ -293,6 +332,10 @@ impl PeerSession {
             s.window().session(),
             &s.seal_ratchet(key, context)?,
             &p.private_flow(),
+            PayloadUsage {
+                items: p.cached_payload_count(),
+                bytes: p.cached_payload_bytes(),
+            },
             key,
         )?;
         Ok(PreparedReceive {
@@ -375,15 +418,13 @@ pub(super) fn seal(
     tag: &[u8; 16],
     ratchet: &SealedSession,
     flow: &[u8],
+    retained: PayloadUsage,
     key: &[u8; 32],
 ) -> Result<Snapshot, Error> {
-    Ok(Snapshot::Credited(gc2_session::SealedState::seal_parts(
-        tag,
-        ratchet,
-        flow,
-        key,
-        &mut rand::thread_rng(),
-    )?))
+    Ok(Snapshot::Credited(
+        gc2_session::SealedState::seal_parts(tag, ratchet, flow, key, &mut rand::thread_rng())?,
+        Some(retained),
+    ))
 }
 
 #[cfg(feature = "experimental-gc2")]

@@ -27,6 +27,33 @@ fn pending(delivery: DirectDelivery, sequence: u64, now: Instant) -> PendingDire
     }
 }
 
+#[cfg(feature = "experimental-gc2")]
+#[tokio::test]
+async fn gc2_owned_retry_copies_are_charged_before_poll_and_released_on_cancel() {
+    let mut node = persist::tests::state();
+    node.gc2_sessions = true;
+    let scheduler = node.scheduler.clone();
+    let mut ack = delivery(&node, 1);
+    ack.cells[0].payload = vec![0; gcoms_protocol::flow::CREDIT_BYTES];
+    ack.cells[0].payload[..4].copy_from_slice(b"GCA2");
+    node.direct_ack_outbox.push_back(ack);
+    persist_current_direct_state(&node).unwrap();
+    let retained = scheduler.resource_snapshot().bytes;
+    assert_eq!(retained, gcoms_protocol::flow::CREDIT_BYTES);
+    let state = Arc::new(Mutex::new(node));
+    let (events, _) = broadcast::channel(4);
+    let mut owner = DirectMaintenance::default();
+    owner.tick(&state, &scheduler, &events);
+    assert_eq!(owner.active.len(), 1);
+    assert_eq!(scheduler.resource_snapshot().bytes, retained * 2);
+    drop(owner);
+    assert_eq!(scheduler.resource_snapshot().bytes, retained);
+    assert_eq!(state.lock().unwrap().direct_ack_outbox.len(), 1);
+    drop(state);
+    assert_eq!(scheduler.resource_snapshot().bytes, 0);
+    scheduler.shutdown();
+}
+
 #[tokio::test]
 async fn bounds_fair_retries_and_ack_archive_survive_owner_cancellation() {
     let mut node = persist::tests::state();

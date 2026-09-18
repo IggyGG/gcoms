@@ -170,8 +170,11 @@ Retain failures, source/executable/configuration/workload hashes and exact scope
   in an explicit local session fixture. Real node transaction tests exercise
   durable application acceptance, independent counter credit, lost setup receipts,
   restart, write failures, duplicate delivery and simultaneous initiation. The
-  fixture still uses the existing relay carrier; production routing, aggregate
-  retained-ciphertext accounting and explicit session recovery remain pending.
+  fixture still uses the existing relay carrier. Retained direct payloads and retry
+  copies now share endpoint/transit admission; staged updates roll back on failed
+  writes, cold restore authenticates before admission, and ordinary producers
+  leave control and dispatch headroom. Production routing and explicit session
+  recovery remain pending.
 - Complete counter-window flow control, command preparation/completion split,
   authenticated class propagation, complete GC/2 routing, protected profiles,
   SDK/GChat profile integration and application/privacy/mobile gates: pending.

@@ -23,6 +23,8 @@ struct State {
     local: [ResourceSnapshot; 2],
     cover_limits: [usize; 2],
     covers: [usize; 2],
+    #[cfg(feature = "experimental-gc2")]
+    retained: PayloadUsage,
 }
 
 #[derive(Clone, Default)]
@@ -31,7 +33,7 @@ pub(super) struct Budget {
     scope: usize,
 }
 
-pub(super) struct Reservation {
+pub(crate) struct Reservation {
     owner: Budget,
     bytes: usize,
     attempt: Option<[u8; 32]>,
@@ -139,7 +141,11 @@ impl Budget {
 
 impl ResourceSnapshot {
     fn add(&mut self, bytes: usize) {
-        self.jobs += 1;
+        self.add_many(1, bytes);
+    }
+
+    fn add_many(&mut self, jobs: usize, bytes: usize) {
+        self.jobs += jobs;
         self.bytes += bytes;
         self.peak_jobs = self.peak_jobs.max(self.jobs);
         self.peak_bytes = self.peak_bytes.max(self.bytes);
@@ -150,6 +156,12 @@ impl ResourceSnapshot {
         self.bytes -= bytes;
     }
 }
+
+#[cfg(feature = "experimental-gc2")]
+#[path = "retained.rs"]
+mod retained;
+#[cfg(feature = "experimental-gc2")]
+pub(crate) use retained::{PayloadUsage, RetainedAccount, RetainedPriority, RetainedUpdate};
 
 impl Drop for Reservation {
     fn drop(&mut self) {
