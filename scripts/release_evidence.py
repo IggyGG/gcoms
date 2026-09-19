@@ -223,6 +223,10 @@ def validate_report(check, report, candidate, base, artifacts):
 def validate_publication(config, project, version):
     require(config.get("project") == project and config.get("version") == version, "publication identity/version mismatch")
     require(config.get("publication_status") == "approved_by_owner", "public publication remains deferred")
+    policy = config.get("signing_policy", "publicly-trusted")
+    require(policy in {"publicly-trusted", "self-signed-preview"}, "unknown signing policy")
+    if policy == "self-signed-preview":
+        require(config.get("channel") == "developer-preview", "self-signed distribution requires preview channel")
     for key in ("public_repository_url", "companion_url"):
         u = urlparse(config.get(key) or "")
         require(u.scheme == "https" and bool(u.hostname) and not u.username and not u.password and u.hostname not in {"localhost", "127.0.0.1", "::1"}, f"missing public {key}")
@@ -280,6 +284,16 @@ def validate(candidate, base, stage="candidate", repositories=None, publication=
             try:
                 require(publication and project in publication, "missing publication configuration")
                 validate_publication(publication[project], project, candidate["version"])
-            except (EvidenceError, ValueError, TypeError, AttributeError) as error:
+                require(candidate.get("signing_policy", "publicly-trusted") == publication[project].get("signing_policy", "publicly-trusted"), "candidate signing policy differs from publication")
+                if project == "gchat" and publication[project].get("signing_policy") == "self-signed-preview":
+                    for platform in ("windows", "macos", "linux"):
+                        report = read_json(file_reference(base, candidate["checks"]["signing." + platform]))
+                        measurements = report.get("measurements", {})
+                        require(measurements.get("signing_policy") == "self-signed-preview", "signing report omits preview policy")
+                        require(measurements.get("public_ca_trust") is False, "self-signed report must not claim public trust")
+                        require(measurements.get("certificate_fingerprint") == publication[project]["publisher_identities"][platform]["certificate_fingerprint"], "signing report uses a different publisher key")
+                        if platform == "macos":
+                            require(measurements.get("apple_notarization") is False, "self-signed macOS report must declare absent notarization")
+            except (EvidenceError, OSError, KeyError, ValueError, TypeError, AttributeError) as error:
                 errors.append(f"{project}: {error}")
     return errors

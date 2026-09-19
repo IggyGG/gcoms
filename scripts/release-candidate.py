@@ -73,6 +73,12 @@ def init(args):
     sources = {project: source_identity(path) for project, path in roots.items()}
     versions = {tomllib.loads((path / "Cargo.toml").read_text())["workspace"]["package"]["version"] for path in roots.values()}
     require(len(versions) == 1, "candidate versions differ")
+    policies = set()
+    for root in roots.values():
+        publication = root / "release/publication.json"
+        config = read_json(publication) if publication.is_file() else {}
+        policies.add(config.get("signing_policy", "publicly-trusted"))
+    require(len(policies) == 1 and policies <= {"publicly-trusted", "self-signed-preview"}, "source signing policies differ or are unknown")
     base = args.output.resolve()
     base.mkdir(parents=True, exist_ok=False)
     (base / "sources").mkdir()
@@ -82,7 +88,7 @@ def init(args):
         require(source_identity(root) == sources[project], "source changed while creating candidate")
         sources[project]["archive"] = reference(base, archive)
     candidate = {"schema_version": 1, "version": versions.pop(), "channel": "developer-preview",
-                 "wire_profile": "GC/1", "created_at": now(), "targets": list(TARGETS),
+                 "wire_profile": "GC/1", "signing_policy": policies.pop(), "created_at": now(), "targets": list(TARGETS),
                  "sources": sources, "artifacts": {}, "checks": {}, "attempts": []}
     write_json(base / "candidate.json", candidate)
     print(base / "candidate.json")

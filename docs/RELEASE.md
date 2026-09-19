@@ -6,14 +6,16 @@ The initial version is 0.1.0, explicitly labeled developer preview.
 
 Targets are Linux x86_64, Windows 11 x86_64 with native MSVC, and macOS Apple
 Silicon/Intel on GitHub-hosted runners. Every advertised installer must be signed;
-macOS additionally requires notarization and stapling. The unavailable local Mac
+The owner selected self-signed **Gh0st** preview signatures. Public CA trust and
+Apple notarization are not claimed; native installer acceptance must include the
+resulting trust prompts. See GChat’s `docs/PREVIEW_SIGNING.md`. The unavailable local Mac
 is not required. A target is qualified only by evidence for its actual release
 source and artifacts, not by historical development builds.
 
 `release/publication.json` records public mirror URLs separately from private
-Forgejo configuration. Public delivery is authorized; signing enrollment, private
-reporting contacts, rights/operator reviews, and qualification results must still
-be supplied and verified. Missing values are not fabricated.
+Forgejo configuration. Public delivery is authorized. Self-signed publisher fingerprints are recorded;
+protected worker provisioning, private reporting contacts, rights/operator
+reviews, and qualification results must still be verified. Missing values are not fabricated.
 
 1. Validate both repositories, source/history inventories, dependencies, licenses,
    generated APIs, package archives, and external consumers.

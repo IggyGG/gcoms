@@ -11,7 +11,22 @@
   "rights_review": null,
   "operator_acceptance": null,
   "native_qualification": {},
-  "publisher_identities": {},
+  "publisher_identities": {
+    "windows": {
+      "name": "Gh0st",
+      "certificate_fingerprint": "A62BFCEE408A5A4C372A6EFFEFD0534F69CFC73A",
+      "certificate_sha256": "278e1a15357b464eac55aa16bb47ffb6e7fbdb0d87179ecb000e09d713766352"
+    },
+    "macos": {
+      "name": "Gh0st",
+      "certificate_fingerprint": "13F505CF5175A8C496D0BB75DF1AA8CE8D2BE942",
+      "certificate_sha256": "8d82f60f90cdeb1b53fbf669f9a91fd9580b13f4601bec9aecc0b8cbc804af59"
+    },
+    "linux": {
+      "name": "Gh0st",
+      "certificate_fingerprint": "F4F6F8550D2AA952A189640D58430838AA3230BB"
+    }
+  },
   "publication_status": "approved_by_owner",
   "development": {
     "visibility": "private",
@@ -49,5 +64,6 @@
   ],
   "unqualified_targets": {},
   "public_repository_url": "https://github.com/IggyGG/gcoms",
-  "security_reporting_url": "https://github.com/IggyGG/gcoms/security/advisories/new"
+  "security_reporting_url": "https://github.com/IggyGG/gcoms/security/advisories/new",
+  "signing_policy": "self-signed-preview"
 }
