@@ -503,14 +503,32 @@ async fn main() -> Result<(), String> {
     let elapsed = bulk_start.elapsed().as_secs_f64();
 
     // Drain the workload before measuring the idle shaping delay, then send a
-    // single message on the established session.
+    // single message on the established session. The gate bounds the *one-way*
+    // intentional shaping delay, so stop the drain task and time arrival at the
+    // peer's durable inbox (send -> persisted) before waiting for the ACK.
     if args.drain_ms > 0 {
         tokio::time::sleep(Duration::from_millis(args.drain_ms)).await;
     }
+    draining.store(false, Ordering::Relaxed);
+    tokio::time::sleep(Duration::from_millis(50)).await;
     let single_start = Instant::now();
     let id = sender
         .send_durable_1to1_tracked(&peer, &chat_body, None)
         .await?;
+    let single_one_way_ms = {
+        let deadline = Instant::now() + args.timeout;
+        let mut arrived = -1.0f64;
+        while Instant::now() < deadline {
+            if let Ok(entries) = recipient.application_inbox(0, 32).await {
+                if entries.iter().any(|entry| entry.message_id == id) {
+                    arrived = single_start.elapsed().as_secs_f64() * 1000.0;
+                    break;
+                }
+            }
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+        arrived
+    };
     let single_delay_ms = match tokio::time::timeout(args.timeout, hub.wait(id)).await {
         Ok(Some(_)) => single_start.elapsed().as_secs_f64() * 1000.0,
         _ => -1.0,
@@ -548,7 +566,7 @@ async fn main() -> Result<(), String> {
     let delivered = drained.load(Ordering::Relaxed);
 
     let record = format!(
-        "{{\"profile\":\"{}\",\"protected\":{},\"entry_connections\":{},\"middle_connections\":{},\"seed\":{},\"chat_count\":{},\"chat_sent\":{},\"chat_p50_ms\":{:.3},\"chat_p95_ms\":{:.3},\"chat_max_ms\":{:.3},\"single_delay_ms\":{:.3},\"bulk_chunk\":{},\"bulk_chunks\":{},\"bulk_acked_bytes\":{},\"bulk_goodput_kib_s\":{:.3},\"failures\":{},\"recipient_drained\":{},\"sender_jobs\":{},\"sender_bytes\":{}}}\n",
+        "{{\"profile\":\"{}\",\"protected\":{},\"entry_connections\":{},\"middle_connections\":{},\"seed\":{},\"chat_count\":{},\"chat_sent\":{},\"chat_p50_ms\":{:.3},\"chat_p95_ms\":{:.3},\"chat_max_ms\":{:.3},\"single_delay_ms\":{:.3},\"single_one_way_ms\":{:.3},\"bulk_chunk\":{},\"bulk_chunks\":{},\"bulk_acked_bytes\":{},\"bulk_goodput_kib_s\":{:.3},\"failures\":{},\"recipient_drained\":{},\"sender_jobs\":{},\"sender_bytes\":{}}}\n",
         args.profile,
         args.protected,
         entry_connections
@@ -566,6 +584,7 @@ async fn main() -> Result<(), String> {
         chat_p95_ms,
         chat_max_ms,
         single_delay_ms,
+        single_one_way_ms,
         args.bulk_chunk,
         bulk_chunks,
         bulk_acked_bytes,
