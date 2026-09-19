@@ -201,13 +201,16 @@ The first two fleet runs on the merged carrier profile. Relays start with
   returned `outcome_unknown: runtime: inbox routing is recovering`. Client
   diagnostics show the carrier scheduler active (`accepted` 3, `dispatched` 3,
   `failed` 3) with zero file blocks. The isolated relay log records
-  `gcnode: network configuration unavailable; maintenance deferred`, because the
-  test relay is given no network document (the harness supplies only private
-  routing bootstrap material).
+  `gcnode: network configuration unavailable; maintenance deferred`, and its
+  metrics record `gc2_advertisement_deferred: no complete circuit to an
+  available inbox service`: without a network document and inter-relay
+  circuits, the test relay cannot advertise a GC/2 introduction, so the client
+  carrier routing never settles.
 
-The next carrier campaign step is to make isolated client routing settle: either
-seed the test fleet with a carrier bootstrap the harness can generate, or run the
-relays and clients with the network configuration they need, without touching
-production identities or the production services. Until that gate passes, the
-standard canary cannot measure file transfer on the carrier profile. Both runs
-cleaned up every host and left production relay state unchanged.
+The next carrier campaign step is to make isolated client routing settle: the
+test relays need GC/2 introductions with complete circuits between them (the
+harness currently supplies only private routing bootstrap material), or a
+carrier bootstrap the harness can generate without production identities. Until
+that gate passes, the standard canary cannot measure file transfer on the
+carrier profile. Both runs cleaned up every host and left production relay state
+unchanged.
