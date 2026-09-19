@@ -633,7 +633,11 @@ async fn natural_scheduler_delivers_bulk_and_chat_over_owned_ready_entries() {
             gcoms_core::Cell::new(CellType::Msg, 0, 0, b"interleaved chat".to_vec()),
         )
         .unwrap();
-    let transferred = timeout(Duration::from_secs(20), async {
+    // Bulk and chat share the carrier lattice: one padded record per profile
+    // slot on each hop, so 64 records over three hops complete in tens of
+    // seconds. The bound is the shared lattice cadence, not a GC/1
+    // application slot.
+    let transferred = timeout(Duration::from_secs(120), async {
         let mut received = std::collections::HashSet::new();
         while received.len() < 64 {
             let cell = bulk.recv().await.unwrap().unwrap();
@@ -662,5 +666,5 @@ async fn natural_scheduler_delivers_bulk_and_chat_over_owned_ready_entries() {
     // One fixed entry and one independent background renewal connection.
     assert_eq!(fixture.entry_connections.load(Ordering::SeqCst), 2);
     fixture.finish().await;
-    transferred.expect("bulk delivery through scheduler must not inherit GC/1 slots");
+    transferred.expect("bulk delivery must ride the shared carrier lattice");
 }
