@@ -186,3 +186,28 @@ subscriptions; the fleet relays and clients build with the carrier profile
 (`--schedule gc2`; GChat `gc2-carrier` with `GC_GC2_CARRIER`). The standard
 canary and every remaining scale/capacity/fault gate still require a passing
 carrier-profile fleet run. See [the integration boundary](GC2_SCHEDULER.md).
+
+## Carrier-profile canaries — 2026-09-19 (runs 11–12)
+
+The first two fleet runs on the merged carrier profile. Relays start with
+`--schedule gc2`; clients run the `gc2-carrier` build with `GC_GC2_CARRIER=true`.
+
+* `files-canary-11`: eight relays ready in 47.7 s. The run aborted at 169 s in
+  client startup: the daemon rejected `GC_GC2_CARRIER=1`, because the flag's
+  boolean environment value must be `true` or `false`. Fixed in
+  `fleet_files_remote.py` and in the release notes. Cleanup completed.
+* `files-canary-12`: eight relays ready in 145.6 s; **two carrier clients were
+  observed for the first time**. The run aborted at 271 s when a client command
+  returned `outcome_unknown: runtime: inbox routing is recovering`. Client
+  diagnostics show the carrier scheduler active (`accepted` 3, `dispatched` 3,
+  `failed` 3) with zero file blocks. The isolated relay log records
+  `gcnode: network configuration unavailable; maintenance deferred`, because the
+  test relay is given no network document (the harness supplies only private
+  routing bootstrap material).
+
+The next carrier campaign step is to make isolated client routing settle: either
+seed the test fleet with a carrier bootstrap the harness can generate, or run the
+relays and clients with the network configuration they need, without touching
+production identities or the production services. Until that gate passes, the
+standard canary cannot measure file transfer on the carrier profile. Both runs
+cleaned up every host and left production relay state unchanged.
