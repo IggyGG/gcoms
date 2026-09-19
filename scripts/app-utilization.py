@@ -1,21 +1,10 @@
 #!/usr/bin/env python3
-"""Run the application-level GC/2 qualification matrix and apply the gates.
+"""Compare application goodput and latency with informative reference thresholds.
 
-This is the item-4 driver for the `app_performance` example. It runs each
-(profile, workload) pair a balanced, predeclared number of times, validates the
-per-run accounting (durable receipts, no failures, bounded latency), and applies
-the acceptance rules:
-
-  * bulk goodput: median GC/2 bulk goodput is at least 20% above GC/1 in the
-    bulk and mixed workloads;
-  * chat p95: median GC/2 chat p95 is at most max(+5%, +20 ms) of GC/1 in the
-    chat and mixed workloads;
-  * shaping delay: median GC/2 single-message delay on an established session
-    is at most 3 s.
-
-The verdict is fail-closed: missing, malformed, or incomplete runs cannot
-qualify, and `--quick` runs are explicitly non-qualifying. The script never
-edits evidence; it writes one JSON report and prints a summary.
+Requires exact durable receipt/byte accounting from the protocol fixture. Missing,
+failed, incomplete or undersized runs are invalid. Valid privacy/performance
+tradeoffs are presented for the owner's decision rather than vetoing release.
+This fixture alone does not qualify an installed GChat client or a deployment.
 """
 import argparse
 import hashlib
@@ -25,6 +14,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
+from privacy_packets import write_new
 
 WORKLOADS = ("chat", "bulk", "mixed")
 PROFILES = ("gc1", "gc2")
@@ -39,14 +29,15 @@ def parse_args():
     parser.add_argument("--binary", type=Path, required=True, help="built app_performance example")
     parser.add_argument("--repeats", type=int, default=5)
     parser.add_argument("--seed", type=int, default=7)
-    parser.add_argument("--chat-count", type=int, default=60)
+    parser.add_argument("--chat-count", type=int, default=100)
     parser.add_argument("--chat-interval-ms", type=int, default=250)
     parser.add_argument("--bulk-bytes", type=int, default=1024 * 1024)
     parser.add_argument("--bulk-chunk", type=int, default=11 * 1024)
     parser.add_argument("--inflight", type=int, default=16)
     parser.add_argument("--timeout", type=int, default=180, help="per-run example timeout (seconds)")
-    parser.add_argument("--cadence", choices=("compressed", "production"), default="compressed")
+    parser.add_argument("--cadence", choices=("compressed", "production"), default="production")
     parser.add_argument("--protected", action="store_true", help="run the GC/2 variant on seeded protected circuits")
+    parser.add_argument("--traffic-profile", default="full/4096/1000")
     parser.add_argument("--quick", action="store_true", help="non-qualifying smoke run")
     parser.add_argument("--report", type=Path, required=True)
     return parser.parse_args()
@@ -56,7 +47,7 @@ def example_command(args, profile, workload):
     command = [str(args.binary), "--profile", profile, "--seed", str(args.seed),
                "--cadence", args.cadence]
     if args.protected and profile == "gc2":
-        command.append("--protected")
+        command += ["--protected", "--traffic-profile", args.traffic_profile]
     if workload in ("chat", "mixed"):
         command += [
             "--chat-count",
@@ -94,10 +85,12 @@ def run_once(args, profile, workload):
                 record = json.loads(line)
             except json.JSONDecodeError:
                 continue
-    if completed.returncode != 0 or record is None:
+    if record is None:
         raise RuntimeError(
             f"{profile}/{workload} exited {completed.returncode}: {completed.stderr.strip()[-400:]}"
         )
+    record["run_returncode"] = completed.returncode
+    record["stderr_tail"] = completed.stderr[-2000:]
     record["elapsed_s"] = elapsed
     return record
 
@@ -105,14 +98,16 @@ def run_once(args, profile, workload):
 def expected_accounting(record, args):
     chat = record["chat_count"]
     chunks = -(-args.bulk_bytes // args.bulk_chunk)
-    expected_receipts = record["chat_sent"] + record["bulk_chunks"] + 1
+    expected_receipts = chat + record["bulk_bytes"] // args.bulk_chunk + int(record["bulk_bytes"] % args.bulk_chunk != 0) + 1
     checks = {
-        "failures": record["failures"] == 0,
-        "receipts": record["recipient_drained"] >= expected_receipts,
+        "failures": record["failures"] == 0 and record.get("run_returncode", 0) == 0,
+        "receipts": record["recipient_drained"] == expected_receipts and record.get("exact_delivery") is True,
+        "persistence": record.get("persistence") == "atomic_fsync_node_archive",
+        "bulk_bytes": record["bulk_acked_bytes"] == record["bulk_bytes"],
         "single": record["single_delay_ms"] > 0,
     }
     if chat:
-        checks["chat_sent"] = record["chat_sent"] == chat
+        checks["chat_sent"] = record["chat_sent"] == chat and record["chat_acked"] == chat
     if record["bulk_chunks"] or (record["bulk_chunk"] and record["bulk_acked_bytes"]):
         checks["bulk_chunks"] = record["bulk_chunks"] == chunks
     return checks, expected_receipts
@@ -206,16 +201,19 @@ def main():
         "maximum_ms": SHAPING_DELAY_MS_MAX,
         "ok": shaping_median is not None and shaping_median <= SHAPING_DELAY_MS_MAX,
     }
-    qualified = not invalid and not args.quick and all(gate["ok"] for gate in gates.values())
+    measurement_valid = not invalid and not args.quick and args.repeats >= 5 and args.chat_count >= 100 and args.bulk_bytes >= 1024 * 1024 and args.cadence == "production" and args.protected
+    reference_thresholds_met = all(gate["ok"] for gate in gates.values())
     reasons = []
     if args.quick:
         reasons.append("quick runs are non-qualifying")
+    if not args.quick and not (args.repeats >= 5 and args.chat_count >= 100 and args.bulk_bytes >= 1024 * 1024 and args.cadence == "production" and args.protected):
+        reasons.append("full comparison requires >=5 repeats, >=100 chats, >=1 MiB, production cadence and protected GC/2")
     if invalid:
         reasons.extend(invalid)
     reasons.extend(name for name, gate in gates.items() if not gate["ok"])
 
     report = {
-        "schema": 1,
+        "schema": 2,
         "kind": "application_utilization_study",
         "quick": args.quick,
         "repeats": repeats,
@@ -239,17 +237,20 @@ def main():
         "medians": medians,
         "gates": gates,
         "invalid": invalid,
-        "qualified": qualified,
+        "measurement_valid": measurement_valid,
+        "reference_thresholds_met": reference_thresholds_met,
+        "reference_thresholds_are_release_veto": False,
+        "release_decision": "pending_owner_review",
+        "scope": "loopback_protocol_fixture",
         "reasons": reasons,
         "runs": runs,
     }
-    args.report.parent.mkdir(parents=True, exist_ok=True)
-    args.report.write_text(json.dumps(report, indent=2) + "\n")
-    print(f"qualified: {qualified}")
+    write_new(args.report, json.dumps(report, indent=2) + "\n")
+    print(f"measurement_valid: {measurement_valid}")
     for reason in reasons:
-        print(f"  not qualified: {reason}")
+        print(f"  observation: {reason}")
     print(f"report: {args.report}")
-    return 0 if qualified else 1
+    return 0 if measurement_valid else 1
 
 
 if __name__ == "__main__":
