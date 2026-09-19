@@ -110,14 +110,19 @@ impl QueueService {
                 let result = UnverifiedPush::parse(cell)
                     .map_err(StoreError::from)
                     .and_then(|push| {
+                        let class = push.class();
                         self.store
                             .lock()
                             .unwrap_or_else(|p| p.into_inner())
                             .authenticate_push_gc2(push, now())
+                            .map(|outcome| (outcome, class))
                     });
                 let reply = match result {
-                    Ok(_) => {
-                        crate::metrics::log_event("gchat_push_accepted", &[]);
+                    Ok((_, class)) => {
+                        crate::metrics::log_event(
+                            "gchat_push_accepted",
+                            &[("class", format!("{class:?}"))],
+                        );
                         Some(HopReply::Accepted)
                     }
                     Err(error) => status(&error),

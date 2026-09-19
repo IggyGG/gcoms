@@ -6,6 +6,7 @@ its identity, or uses production bootstrap grants. Source and tooling changes st
 in the paired GComs/GChat task checkouts. The relays and clients run the fleet
 GChat file carrier profile (wire profile 22), with a fixed interactive schedule,
 bounded unpaced bulk records, authenticated class queues and private routing.
+The isolated relays select this explicitly with `--schedule gchat-files`.
 File activity and approximate volume are observable under this policy. Compressed
 or fixture scheduling is not fleet evidence. Chat privacy remains a separate,
 unqualified gate; successful file exports cannot qualify it.

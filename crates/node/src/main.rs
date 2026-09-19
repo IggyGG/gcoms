@@ -446,7 +446,7 @@ async fn run() -> Result<(), String> {
                 .as_str()
             {
                 "production" => gcoms_node::node::NodeProfile::Production,
-                // The GC/2 carrier is the fleet profile: durable GC/2 directory
+                // The retained full-cover carrier: durable GChat directory
                 // beside the keystore, three background entries, production
                 // transport behaviour. Selected explicitly per unit.
                 #[cfg(feature = "experimental-gc2")]
@@ -469,9 +469,11 @@ async fn run() -> Result<(), String> {
                         lane_seed,
                     ))
                 }
-                other => return Err(format!(
+                other => {
+                    return Err(format!(
                     "unknown --schedule {other:?} (expected production|gc2|gchat-files|compressed)"
-                )),
+                ))
+                }
             };
             let routing = if profile.is_production() {
                 let mut routing = gcoms_node::node::RoutingConfig::from_environment()?;

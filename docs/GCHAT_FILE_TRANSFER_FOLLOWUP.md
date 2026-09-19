@@ -43,6 +43,16 @@ while retaining the interactive schedule and existing resource reservations.
   `verified_sources` observation counts contributors since process startup;
   it is not persisted or inferred from advertised availability.
 
+## Shared protocol integration
+
+The file candidate incorporates protocol commits `4d897cc`, `b8b9d45` and
+`ebd8728`: shared traffic-profile allocation, protected-route retention during
+outages, readiness-triggered retry and exact authenticated queue activation.
+It selects ID 22 (`Interactive`, 4096 bytes/1000 ms) explicitly. The generic
+full-cover constructor and IDs 0–11 keep their existing behavior. GChat's
+protected file profile and the isolated relay harness select the file policy;
+`gcnode --schedule gchat-files` is its explicit relay entry point.
+
 ## Evidence and remaining qualification
 
 Focused tests cover the receipt stall, ambiguous checkpoint errors, framing
@@ -56,6 +66,14 @@ delivers again without inbox recovery (143.88 seconds total).
 Those runs used the superseded local profile-12 candidate. The current candidate
 adopts shared profile ID 22 and its padded Bulk Open; it requires fresh validation.
 These are local integration results, not a GChat file export or fleet result.
+
+The pre-integration implementation (`24bcd44`, paired with GChat `c947b08`)
+passed 824 GComs workspace cases (six ignored) and 151 GChat cases. The shared
+profile integration passes strict workspace Clippy, 72 routing cases and 95
+Python checks. One subsequent node-library run was interrupted by the workstation
+build manager's missing-quota error, without a Rust test failure; its log is
+retained and the current source requires a complete retry. These results do not
+qualify the final fleet binary or replace the current-profile channel test.
 
 Preserve earlier fleet failures, including the current-protocol bootstrap failure
 in `files-canary-12`. Rebuild both repositories together and require the ordinary

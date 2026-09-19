@@ -82,10 +82,11 @@ class propagation remains pending.
 
 ## Ownership and resource bounds
 
-The GChat file-transfer candidate explicitly negotiates profile **12**. Its
+The GChat file-transfer candidate explicitly negotiates profile **22**. Its
 interactive records retain the 4 KiB/one-second lattice; bulk records use their
 natural length (nine-byte header plus declared payload, at most 16 KiB total).
-Bulk has no timer, padding or idle cover record. Its writes await available
+Bulk Data/Close have no padding; the initial authenticated Open retains the
+profile-sized padding. Bulk has no timer or idle cover record. Its writes await available
 transport credit and preserve the circuit, queue and interactive reservations
 below. A bulk cover kind, cross-profile record or oversized length is rejected.
 IDs 0–11 keep their existing encodings. This policy accepts observable file

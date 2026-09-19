@@ -40,11 +40,9 @@ async fn cold_bootstrap_provisions_and_delivers_channel_file_as_authenticated_bu
 }
 
 async fn scenario() {
-    gcoms_node::metrics::init(
-        &std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../target/protocol-plan-channel-files-metrics.jsonl"),
-    )
-    .unwrap();
+    let scratch = tempfile::tempdir().unwrap();
+    let metrics = scratch.path().join("metrics.jsonl");
+    gcoms_node::metrics::init(&metrics).unwrap();
     let mut relays = Vec::new();
     for seed in 71..75 {
         relays.push(
@@ -177,4 +175,23 @@ async fn scenario() {
     for relay in relays {
         relay.shutdown().await;
     }
+    // The terminal observes the class only after authenticating the envelope.
+    // Delivery plus subscribed Bulk inboxes alone would not prove file traffic
+    // actually used its reserved class.
+    tokio::time::timeout(Duration::from_secs(2), async {
+        loop {
+            let accepted = std::fs::read_to_string(&metrics)
+                .unwrap()
+                .lines()
+                .filter_map(|line| serde_json::from_str::<serde_json::Value>(line).ok())
+                .filter(|event| event["event"] == "gchat_push_accepted" && event["class"] == "Bulk")
+                .count();
+            if accepted >= 2 {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .expect("both file sends must reach an authenticated Bulk queue");
 }
