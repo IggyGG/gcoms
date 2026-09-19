@@ -100,7 +100,7 @@ pub(crate) fn spawn_subscriptions(
                 },
                 _ = clock.tick() => {},
             }
-            let (aliases, client) = {
+            let (aliases, client, peers) = {
                 let st = state
                     .lock()
                     .unwrap_or_else(|poisoned| poisoned.into_inner());
@@ -108,7 +108,7 @@ pub(crate) fn spawn_subscriptions(
                     break;
                 }
                 if super::routing::recovering(&st) {
-                    (Vec::new(), None)
+                    (Vec::new(), None, Vec::new())
                 } else {
                     let client = natural_route_client(&st);
                     let aliases = st
@@ -118,10 +118,28 @@ pub(crate) fn spawn_subscriptions(
                         .filter(|alias| owner_alias_receiving(&st, alias))
                         .cloned()
                         .collect::<Vec<_>>();
-                    (aliases, client)
+                    let peers = st
+                        .peer_routes
+                        .values()
+                        .filter_map(|info| {
+                            info.primary()
+                                .map(|alias| (alias.target.address, alias.target.relay_service_id))
+                        })
+                        .collect::<Vec<_>>();
+                    (aliases, client, peers)
                 }
             };
             let Some(client) = client else { continue };
+            // Keep protected circuits to established peers warm: idle periods
+            // then carry the same class-channel schedule as active ones, and
+            // the next delivery reuses an established circuit instead of
+            // paying a fresh entry->middle->terminal setup. A hanging connect
+            // must never stall subscriptions.
+            for (addr, pin) in peers {
+                let _ =
+                    tokio::time::timeout(std::time::Duration::from_secs(5), client.warm(addr, pin))
+                        .await;
+            }
             for alias in aliases {
                 for class in [
                     gcoms_core::TrafficClass::Interactive,
