@@ -45,13 +45,18 @@ def parse_args():
     parser.add_argument("--bulk-chunk", type=int, default=11 * 1024)
     parser.add_argument("--inflight", type=int, default=16)
     parser.add_argument("--timeout", type=int, default=180, help="per-run example timeout (seconds)")
+    parser.add_argument("--cadence", choices=("compressed", "production"), default="compressed")
+    parser.add_argument("--protected", action="store_true", help="run the GC/2 variant on seeded protected circuits")
     parser.add_argument("--quick", action="store_true", help="non-qualifying smoke run")
     parser.add_argument("--report", type=Path, required=True)
     return parser.parse_args()
 
 
 def example_command(args, profile, workload):
-    command = [str(args.binary), "--profile", profile, "--seed", str(args.seed)]
+    command = [str(args.binary), "--profile", profile, "--seed", str(args.seed),
+               "--cadence", args.cadence]
+    if args.protected and profile == "gc2":
+        command.append("--protected")
     if workload in ("chat", "mixed"):
         command += [
             "--chat-count",
@@ -167,6 +172,7 @@ def main():
                 "goodput_kib_s": median([r["bulk_goodput_kib_s"] for r in records if "bulk_chunks" in r and r["bulk_chunks"]]),
                 "chat_p95_ms": median([r["chat_p95_ms"] for r in records if r["chat_count"]]),
                 "single_delay_ms": median([r["single_delay_ms"] for r in records if r["single_delay_ms"] > 0]),
+                "single_one_way_ms": median([r["single_one_way_ms"] for r in records if r.get("single_one_way_ms", 0) > 0]),
             }
 
     gates = {}
@@ -188,7 +194,11 @@ def main():
         )
         ok = baseline is not None and candidate is not None and candidate <= bound
         gates[f"chat_p95_{workload}"] = {"gc1": baseline, "gc2": candidate, "bound": bound, "ok": ok}
-    shaping = [m["single_delay_ms"] for key, m in medians.items() if key.startswith("gc2/")]
+    shaping = [
+        m["single_one_way_ms"] if m.get("single_one_way_ms") else m["single_delay_ms"]
+        for key, m in medians.items()
+        if key.startswith("gc2/")
+    ]
     shaping = [value for value in shaping if value]
     shaping_median = median(shaping)
     gates["shaping_delay"] = {
@@ -217,6 +227,8 @@ def main():
             "bulk_bytes": args.bulk_bytes,
             "bulk_chunk": args.bulk_chunk,
             "inflight": args.inflight,
+            "cadence": args.cadence,
+            "protected": args.protected,
         },
         "acceptance": {
             "bulk_gain": BULK_GAIN,
