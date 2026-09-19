@@ -369,6 +369,15 @@ pub(crate) fn provision_relay(
         let wire = create
             .encode(&target.relay_service_id)
             .map_err(|e| e.to_string())?;
+        // A minted card is only useful when its queue exists. Create the lease
+        // and publish the queue token now, so a later client activation is a
+        // harmless idempotent replay instead of the only path to a live queue.
+        store
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .create_lease(&wire, now)
+            .map_err(|e| e.to_string())?;
+        registry.insert_queue(&encode_b64url(&queue_id));
         let create_path = encode_b64url(&provision.grant.grant_cap);
         registry.insert_post(&create_path);
         create_paths.push(create_path.clone());
@@ -498,8 +507,16 @@ pub(crate) fn build_handlers(
             };
             if operation == OP_CREATE {
                 let queue_token = encode_b64url(&view.queue_id);
-                if !registry_for_cell.insert_queue(&queue_token) {
-                    return Err(QueueReject::Conflict);
+                // A mint-time queue registration (or a replayed activation) is
+                // not a conflict; only a token registered as another kind is.
+                match registry_for_cell.kind(&queue_token) {
+                    Some(gcoms_transport::TokenKind::Queue) => {}
+                    None => {
+                        if !registry_for_cell.insert_queue(&queue_token) {
+                            return Err(QueueReject::Conflict);
+                        }
+                    }
+                    Some(_) => return Err(QueueReject::Conflict),
                 }
                 queue_tokens_for_cell
                     .lock()
