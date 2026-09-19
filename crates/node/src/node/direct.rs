@@ -216,7 +216,7 @@ impl DirectMaintenance {
         let scheduler = scheduler.clone();
         let policy = st.frwd_target_policy.clone();
         #[cfg(feature = "experimental-gc2")]
-        let natural = natural_client(st);
+        let natural = natural_client_for(st, traffic);
         #[cfg(not(feature = "experimental-gc2"))]
         let natural: Option<std::sync::Arc<gcoms_transport::Tp1Client>> = None;
         self.completions.push(Box::pin(async move {
@@ -2096,7 +2096,7 @@ where
                 durable,
                 traffic,
                 #[cfg(feature = "experimental-gc2")]
-                natural: natural_client(&st),
+                natural: natural_client_for(&mut st, traffic),
             });
         }
 
@@ -2209,7 +2209,7 @@ where
             durable,
             traffic,
             #[cfg(feature = "experimental-gc2")]
-            natural: natural_client(&st),
+            natural: natural_client_for(&mut st, traffic),
         }
     };
     Ok(prepared)

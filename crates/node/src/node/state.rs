@@ -197,6 +197,13 @@ pub struct NodeState {
     /// bootstrap migration and fixtures without a protected route.
     #[cfg(feature = "experimental-gc2")]
     pub(crate) gc2_carrier_route: Option<std::sync::Arc<gcoms_transport::Tp1Client>>,
+    /// Parallel protected circuits for bulk records. A single carrier circuit
+    /// carries at most one record per profile period, so bulk stripes over the
+    /// shared entry-circuit bound instead of queueing behind one pipe.
+    #[cfg(feature = "experimental-gc2")]
+    pub(crate) gc2_carrier_bulk_routes: Vec<std::sync::Arc<gcoms_transport::Tp1Client>>,
+    #[cfg(feature = "experimental-gc2")]
+    pub(crate) gc2_carrier_bulk_cursor: usize,
     /// Durable GC/2 directory owned by the carrier. Advertised introductions
     /// from the private provisioning card are installed here.
     #[cfg(feature = "experimental-gc2")]
@@ -351,6 +358,30 @@ pub(crate) fn natural_route_client(
         {
             return Some(route.clone());
         }
+    }
+    st.gc2_carrier_client.clone()
+}
+
+/// Class-aware natural client selection. Bulk records round-robin over the
+/// parallel protected circuits; interactive and control records keep the
+/// single protected client, and unprotected fixtures keep the direct client.
+#[cfg(feature = "experimental-gc2")]
+pub(crate) fn natural_client_for(
+    st: &mut NodeState,
+    class: gcoms_core::TrafficClass,
+) -> Option<std::sync::Arc<gcoms_transport::Tp1Client>> {
+    let protected = st.gc2_carrier_route.is_some()
+        && st
+            .gc2_carrier
+            .as_ref()
+            .is_some_and(|ready| ready.ready_entries() > 0);
+    if protected {
+        if class == gcoms_core::TrafficClass::Bulk && !st.gc2_carrier_bulk_routes.is_empty() {
+            let index = st.gc2_carrier_bulk_cursor % st.gc2_carrier_bulk_routes.len();
+            st.gc2_carrier_bulk_cursor = st.gc2_carrier_bulk_cursor.wrapping_add(1);
+            return Some(st.gc2_carrier_bulk_routes[index].clone());
+        }
+        return st.gc2_carrier_route.clone();
     }
     st.gc2_carrier_client.clone()
 }

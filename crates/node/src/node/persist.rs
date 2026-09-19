@@ -2984,6 +2984,10 @@ pub(in crate::node) mod tests {
             #[cfg(feature = "experimental-gc2")]
             gc2_carrier_route: None,
             #[cfg(feature = "experimental-gc2")]
+            gc2_carrier_bulk_routes: Vec::new(),
+            #[cfg(feature = "experimental-gc2")]
+            gc2_carrier_bulk_cursor: 0,
+            #[cfg(feature = "experimental-gc2")]
             gc2_carrier_directory: None,
             #[cfg(feature = "experimental-gc2")]
             retained_direct: std::sync::OnceLock::new(),

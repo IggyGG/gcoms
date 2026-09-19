@@ -163,6 +163,12 @@ pub struct FixtureProfile {
     pub stream_emit_cover: bool,
 }
 
+/// Parallel protected circuits reserved for bulk records. The entry's shared
+/// circuit bound is larger, so interactive, control and subscriptions keep
+/// headroom.
+#[cfg(feature = "experimental-gc2")]
+const GC2_BULK_CIRCUITS: usize = 8;
+
 impl NodeProfile {
     /// Fast, deterministic fixture with cover disabled.
     pub fn fixture() -> Self {
@@ -1080,6 +1086,10 @@ async fn start_with_tls_policy_control_sink_and_bootstrap(
             #[cfg(feature = "experimental-gc2")]
             gc2_carrier_route: None,
             #[cfg(feature = "experimental-gc2")]
+            gc2_carrier_bulk_routes: Vec::new(),
+            #[cfg(feature = "experimental-gc2")]
+            gc2_carrier_bulk_cursor: 0,
+            #[cfg(feature = "experimental-gc2")]
             gc2_carrier_directory: None,
             #[cfg(feature = "experimental-gc2")]
             retained_direct: std::sync::OnceLock::new(),
@@ -1283,7 +1293,7 @@ async fn start_with_tls_policy_control_sink_and_bootstrap(
                     }
                 }));
             }
-            state.lock().unwrap_or_else(|p| p.into_inner()).gc2_carrier = Some(ready);
+            state.lock().unwrap_or_else(|p| p.into_inner()).gc2_carrier = Some(ready.clone());
             state
                 .lock()
                 .unwrap_or_else(|p| p.into_inner())
@@ -1292,6 +1302,21 @@ async fn start_with_tls_policy_control_sink_and_bootstrap(
                 .lock()
                 .unwrap_or_else(|p| p.into_inner())
                 .gc2_carrier_route = Some(route);
+            // Bulk stripes: one carrier circuit carries at most one record per
+            // profile period, so bulk records round-robin over a small set of
+            // protected circuits inside the entry's shared bound. Interactive
+            // and control traffic keep the single route above.
+            let mut bulk_routes = Vec::with_capacity(GC2_BULK_CIRCUITS);
+            for _ in 0..GC2_BULK_CIRCUITS {
+                bulk_routes.push(std::sync::Arc::new(
+                    gcoms_transport::Tp1Client::with_connector(ready.clone())
+                        .map_err(|e| e.to_string())?,
+                ));
+            }
+            state
+                .lock()
+                .unwrap_or_else(|p| p.into_inner())
+                .gc2_carrier_bulk_routes = bulk_routes;
             state
                 .lock()
                 .unwrap_or_else(|p| p.into_inner())
