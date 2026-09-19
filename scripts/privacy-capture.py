@@ -99,6 +99,20 @@ def main():
                              "bash", "-c", inner],
                             capture_output=True, text=True, timeout=args.timeout + 120)
     finished = time.time()
+    stdout_path = Path(str(record) + ".stdout")
+    stdout_text = stdout_path.read_text() if stdout_path.exists() else ""
+    record_value = None
+    for line in stdout_text.splitlines():
+        line = line.strip()
+        if line.startswith("{") and line.endswith("}"):
+            try:
+                record_value = json.loads(line)
+            except json.JSONDecodeError:
+                pass
+    idle_start = next(
+        (line.split()[1] for line in stdout_text.splitlines() if line.startswith("IDLE_START ")),
+        None,
+    )
     metadata = {
         "workload": args.workload,
         "profile": args.profile,
@@ -114,8 +128,8 @@ def main():
         "stderr_tail": result.stderr[-400:],
         "pcap": pcap.name,
         "pcap_sha256": hashlib.sha256(pcap.read_bytes()).hexdigest() if pcap.exists() else None,
-        "record": json.loads(record.read_text()) if record.exists() else None,
-        "idle_start_epoch": next((line.split()[1] for line in (Path(str(record) + ".stdout").read_text().splitlines() if Path(str(record) + ".stdout").exists() else []) if line.startswith("IDLE_START ")), None),
+        "record": record_value,
+        "idle_start_epoch": idle_start,
     }
     (args.out / f"{stamp}.meta.json").write_text(json.dumps(metadata, indent=2) + "\n")
     print(json.dumps({k: metadata[k] for k in

@@ -203,14 +203,20 @@ def main():
             index = rng.integers(0, len(evaluated), len(evaluated))
             if len(np.unique(y_eval[index])) < 2:
                 continue
-            bootstrap.append(roc_auc(evaluated[index], y_eval[index]))
-        upper = float(np.percentile(bootstrap, 97.5))
+            sample = roc_auc(evaluated[index], y_eval[index])
+            bootstrap.append(max(sample, 1.0 - sample))
+        upper_sep = float(np.percentile(bootstrap, 97.5))
+        # Separability is two-sided: an AUC far below 0.5 is the same signal
+        # with inverted ranking, and the bootstrap is computed per resample.
+        separability = max(float(auc), 1.0 - float(auc))
+        upper = float(np.percentile(bootstrap, 97.5)) if bootstrap else float("nan")
         report["gates"][name] = {
             "auc": float(auc),
-            "bootstrap_upper_97_5": upper,
+            "separability": separability,
+            "separability_upper_97_5": upper_sep,
             "windows_train": int(len(y_train)),
             "windows_eval": int(len(y_eval)),
-            "ok": upper <= 0.55,
+            "ok": upper_sep <= 0.55,
         }
 
     # Independence checks.
