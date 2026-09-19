@@ -223,8 +223,15 @@ Retain failures, source/executable/configuration/workload hashes and exact scope
   `scripts/app-utilization.py`) measures durable chat latency, pipelined 11 KiB
   file-record goodput, single-message shaping delay and exact receipt accounting
   with the predeclared gates above. On the natural-terminal fixture the GC/2
-  variant does not yet meet the bulk/chat gates; the protected-route node
-  fixture is the next integration step.
+  variant does not yet meet the bulk/chat gates; a live protected-route node
+  fixture now seeds real entry and middle relay introductions into the
+  qualification profiles, and a two-node test proves a durable application
+  crossing entry→middle→terminal with relay dispatch counters. Its first
+  measurements show each natural deposit opening a fresh circuit, so chat and
+  bulk stay far outside the item-4 bounds on the protected path (chat p50
+  5.8–16.7 s, single-message 2–9 s, bulk 8.2 KiB/s against 48.2 KiB/s GC/1 on
+  the same fixture); persistent class-channel reuse for deposits is the next
+  integration step.
 - Complete GC/2 routing, protected-route qualification and the privacy/mobile
   gates: pending. Counter-window flow control, the application-send
   preparation/completion split, authenticated class propagation, GChat profile

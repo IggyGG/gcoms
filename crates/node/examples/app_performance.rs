@@ -18,6 +18,8 @@ use futures_util::{stream::FuturesUnordered, StreamExt};
 use gcoms_node::node::{start_persistent_restored, Ev, NodeConfig, NodeProfile};
 use gcoms_node::proto::NodeInfo;
 use gcoms_node::NodeHandle;
+use gcoms_routing::{route::now_unix, Directory, RelayService, ServicePolicy};
+use gcoms_transport::{server::Tp1Server, tls::TlsIdentity, TokenRegistry};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
@@ -25,6 +27,7 @@ use std::time::{Duration, Instant};
 
 struct Args {
     profile: String,
+    protected: bool,
     seed: u64,
     chat_count: usize,
     chat_bytes: usize,
@@ -39,6 +42,7 @@ struct Args {
 fn parse_args() -> Result<Args, String> {
     let mut args = Args {
         profile: "gc1".into(),
+        protected: false,
         seed: 1,
         chat_count: 0,
         chat_bytes: 128,
@@ -54,6 +58,7 @@ fn parse_args() -> Result<Args, String> {
         let mut value = || it.next().ok_or_else(|| format!("missing value for {flag}"));
         match flag.as_str() {
             "--profile" => args.profile = value()?,
+            "--protected" => args.protected = true,
             "--seed" => args.seed = value()?.parse::<u64>().map_err(|e| e.to_string())?,
             "--chat-count" => {
                 args.chat_count = value()?.parse::<usize>().map_err(|e| e.to_string())?
@@ -97,15 +102,91 @@ fn parse_args() -> Result<Args, String> {
     Ok(args)
 }
 
-fn profile(name: &str, seed: u64) -> NodeProfile {
+fn profile(name: &str, seed: u64, introductions: &[Vec<u8>]) -> NodeProfile {
     // Both variants are loopback fixtures: a production-shaped profile has no
     // published inbox without the control plane, so the local carrier fixture
     // exercises the real session/scheduling path. Operated-network runs use the
-    // production profile once a relay card is provisioned.
+    // production profile once a relay card is provisioned. With `--protected`
+    // the fixture is seeded with live entry/middle introductions so the carrier
+    // owner dials real circuits instead of the direct terminal.
     match name {
+        "gc2" if !introductions.is_empty() => {
+            NodeProfile::gc2_carrier_qualification_fixture_seeded(
+                None,
+                2,
+                seed,
+                introductions.to_vec(),
+            )
+        }
         "gc2" => NodeProfile::gc2_carrier_qualification_fixture(None, 2, seed),
         _ => NodeProfile::compressed_production(seed),
     }
+}
+
+/// One loopback relay service with a GC/2 dispatch factory; the returned
+/// counter advances on every dialed circuit.
+async fn start_relay(
+    ip: &str,
+) -> (
+    Arc<RelayService>,
+    Arc<AtomicUsize>,
+    tokio::task::JoinHandle<()>,
+) {
+    let identity = TlsIdentity::generate().expect("relay identity");
+    let server = Tp1Server::bind_with_identity(
+        format!("{ip}:0").parse().unwrap(),
+        TokenRegistry::new(),
+        Arc::new(|_, _| Ok(None)),
+        Arc::new(|_| None),
+        &identity,
+    )
+    .await
+    .expect("relay listener");
+    let service = RelayService::new(
+        server.local_addr().unwrap(),
+        identity.service_id(),
+        [8; 32],
+        Arc::new(Directory::new()),
+        ServicePolicy {
+            carrier: gcoms_routing::carrier::CarrierConfig::fixture(),
+            target_allowed: Arc::new(|addr| addr.ip().is_loopback()),
+            ..Default::default()
+        },
+    )
+    .expect("relay service");
+    let factory = service.gc2_handler_factory();
+    let connections = Arc::new(AtomicUsize::new(0));
+    let counter = connections.clone();
+    let server = server.with_dispatch_factory(Arc::new(move || {
+        counter.fetch_add(1, Ordering::SeqCst);
+        factory()
+    }));
+    let handle = tokio::spawn(async move {
+        let _ = server.run_until(std::future::pending::<()>()).await;
+    });
+    (service, connections, handle)
+}
+
+/// Entry and middle relays plus the encoded introductions for both directories.
+async fn protected_relays() -> (
+    Vec<Vec<u8>>,
+    Arc<AtomicUsize>,
+    Arc<AtomicUsize>,
+    Vec<tokio::task::JoinHandle<()>>,
+) {
+    let (entry, entry_connections, entry_task) = start_relay("127.0.0.86").await;
+    let (middle, middle_connections, middle_task) = start_relay("127.0.0.87").await;
+    let now = now_unix();
+    let introductions = vec![
+        entry.gc2_introduction(now).encode().unwrap().to_vec(),
+        middle.gc2_introduction(now).encode().unwrap().to_vec(),
+    ];
+    (
+        introductions,
+        entry_connections,
+        middle_connections,
+        vec![entry_task, middle_task],
+    )
 }
 
 async fn endpoint(seed: u8, profile: NodeProfile) -> NodeHandle {
@@ -285,8 +366,14 @@ async fn bulk_stream(
 #[tokio::main(flavor = "multi_thread", worker_threads = 4)]
 async fn main() -> Result<(), String> {
     let args = parse_args()?;
-    let recipient = endpoint(0x51, profile(&args.profile, args.seed)).await;
-    let sender = endpoint(0x52, profile(&args.profile, args.seed)).await;
+    let (introductions, entry_connections, middle_connections, _relay_tasks) = if args.protected {
+        let (introductions, entry, middle, tasks) = protected_relays().await;
+        (introductions, Some(entry), Some(middle), tasks)
+    } else {
+        (Vec::new(), None, None, Vec::new())
+    };
+    let recipient = endpoint(0x51, profile(&args.profile, args.seed, &introductions)).await;
+    let sender = endpoint(0x52, profile(&args.profile, args.seed, &introductions)).await;
     let peer = recipient.current_info().await?;
 
     // Consume durable inbox entries like a real application: commit the
@@ -407,8 +494,17 @@ async fn main() -> Result<(), String> {
     let delivered = drained.load(Ordering::Relaxed);
 
     let record = format!(
-        "{{\"profile\":\"{}\",\"seed\":{},\"chat_count\":{},\"chat_sent\":{},\"chat_p50_ms\":{:.3},\"chat_p95_ms\":{:.3},\"chat_max_ms\":{:.3},\"single_delay_ms\":{:.3},\"bulk_chunk\":{},\"bulk_chunks\":{},\"bulk_acked_bytes\":{},\"bulk_goodput_kib_s\":{:.3},\"failures\":{},\"recipient_drained\":{},\"sender_jobs\":{},\"sender_bytes\":{}}}\n",
+        "{{\"profile\":\"{}\",\"protected\":{},\"entry_connections\":{},\"middle_connections\":{},\"seed\":{},\"chat_count\":{},\"chat_sent\":{},\"chat_p50_ms\":{:.3},\"chat_p95_ms\":{:.3},\"chat_max_ms\":{:.3},\"single_delay_ms\":{:.3},\"bulk_chunk\":{},\"bulk_chunks\":{},\"bulk_acked_bytes\":{},\"bulk_goodput_kib_s\":{:.3},\"failures\":{},\"recipient_drained\":{},\"sender_jobs\":{},\"sender_bytes\":{}}}\n",
         args.profile,
+        args.protected,
+        entry_connections
+            .as_ref()
+            .map(|count| count.load(Ordering::SeqCst))
+            .unwrap_or(0),
+        middle_connections
+            .as_ref()
+            .map(|count| count.load(Ordering::SeqCst))
+            .unwrap_or(0),
         args.seed,
         args.chat_count,
         chat_sent,

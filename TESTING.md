@@ -168,3 +168,12 @@ integration step. Durable sends can be tracked end-to-end with
 `NodeHandle::send_durable_1to1_tracked`, whose returned id is the one the
 `Ev::DirectDelivery` receipt carries (covered by
 `tests/gc2_sessions.rs::tracked_durable_sends_return_the_ids_the_receipts_carry`).
+
+The harness also has a protected-route mode: `--protected` starts a real entry
+and middle relay service on distinct loopback addresses and seeds both nodes
+with their introductions, so the carrier owner dials real circuits instead of
+the direct terminal. `tests/gc2_protected_route.rs` proves a durable
+application crosses entry→middle→terminal with dispatch counters. The first
+protected measurements fail the performance bounds (per-deposit circuit
+establishment); the numbers are recorded in `docs/GC2_IMPLEMENTATION.md` and
+`target/gc2-status-20260918.md`.

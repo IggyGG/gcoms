@@ -117,6 +117,9 @@ pub struct Gc2CarrierProfile {
     pub record_len: usize,
     pub period_ms: u16,
     pub scheduler: SchedulerProfile,
+    /// Explicit private introductions for qualification fixtures. Deployment
+    /// profiles leave this empty and use the provisioning advertisement.
+    pub introductions: Vec<Vec<u8>>,
 }
 
 #[derive(Clone, Debug)]
@@ -138,6 +141,11 @@ pub struct FixtureProfile {
     /// Background entry count (one to three). Zero disables the carrier owner.
     #[cfg(feature = "experimental-gc2")]
     pub gc2_entries: usize,
+    /// Explicit private GC/2 introductions installed as directory seeds at
+    /// startup. Fixture/qualification only; deployment uses the authenticated
+    /// provisioning advertisement, and an invalid seed fails closed.
+    #[cfg(feature = "experimental-gc2")]
+    pub gc2_introductions: Vec<Vec<u8>>,
     /// Relay lane and maintenance scheduling.
     pub scheduler: SchedulerProfile,
     /// Permit loopback/private FRWD targets (all fixtures need this).
@@ -160,6 +168,8 @@ impl NodeProfile {
             gc2_directory: None,
             #[cfg(feature = "experimental-gc2")]
             gc2_entries: 0,
+            #[cfg(feature = "experimental-gc2")]
+            gc2_introductions: Vec::new(),
             scheduler: SchedulerProfile::fixture(),
             allow_local_targets: true,
             stream_slot_interval: std::time::Duration::from_millis(10),
@@ -179,6 +189,8 @@ impl NodeProfile {
             gc2_directory: None,
             #[cfg(feature = "experimental-gc2")]
             gc2_entries: 0,
+            #[cfg(feature = "experimental-gc2")]
+            gc2_introductions: Vec::new(),
             scheduler: SchedulerProfile::compressed_production(seed),
             allow_local_targets: true,
             stream_slot_interval: std::time::Duration::from_millis(10),
@@ -239,6 +251,7 @@ impl NodeProfile {
             record_len: 4096,
             period_ms: 1000,
             scheduler: SchedulerProfile::production(),
+            introductions: Vec::new(),
         })
     }
 
@@ -256,6 +269,7 @@ impl NodeProfile {
             record_len: 4096,
             period_ms: 1000,
             scheduler: SchedulerProfile::compressed_production(seed),
+            introductions: Vec::new(),
         })
     }
 
@@ -276,6 +290,25 @@ impl NodeProfile {
         fixture.gc2_gate = true;
         fixture.gc2_directory = directory;
         fixture.gc2_entries = entries;
+        Self::Fixture(fixture)
+    }
+
+    /// Qualification carrier fixture with explicit private introductions
+    /// installed as directory seeds before the owner starts. Used to exercise
+    /// the protected entry/middle circuit without a provisioning control plane.
+    #[cfg(feature = "experimental-gc2")]
+    pub fn gc2_carrier_qualification_fixture_seeded(
+        directory: Option<std::path::PathBuf>,
+        entries: usize,
+        seed: u64,
+        introductions: Vec<Vec<u8>>,
+    ) -> Self {
+        let Self::Fixture(mut fixture) =
+            Self::gc2_carrier_qualification_fixture(directory, entries, seed)
+        else {
+            unreachable!()
+        };
+        fixture.gc2_introductions = introductions;
         Self::Fixture(fixture)
     }
 
@@ -314,6 +347,23 @@ impl NodeProfile {
             )),
             _ => None,
         }
+    }
+
+    /// Explicit private introductions installed as directory seeds at startup.
+    #[cfg(feature = "experimental-gc2")]
+    pub(crate) fn gc2_introductions(&self) -> &[Vec<u8>] {
+        match self {
+            Self::Fixture(fixture) => &fixture.gc2_introductions,
+            Self::Gc2Carrier(carrier) => &carrier.introductions,
+            Self::Production => &[],
+        }
+    }
+
+    /// True when the carrier profile is the loopback fixture variant; its
+    /// in-memory directory must accept loopback introductions.
+    #[cfg(feature = "experimental-gc2")]
+    pub(crate) fn gc2_loopback_fixture(&self) -> bool {
+        matches!(self, Self::Fixture(fixture) if fixture.gc2_entries > 0)
     }
 
     pub(crate) fn scheduler_profile(&self) -> SchedulerProfile {
@@ -1149,8 +1199,18 @@ async fn start_with_tls_policy_control_sink_and_bootstrap(
                         .map_err(|e| e.to_string())?;
                     std::sync::Arc::new(cache.gc2_directory(now_unix()).map_err(|e| e.to_string())?)
                 }
-                None => std::sync::Arc::new(gcoms_routing::gc2::directory::Directory::new()),
+                None => std::sync::Arc::new(if cfg.profile.gc2_loopback_fixture() {
+                    gcoms_routing::gc2::directory::Directory::for_loopback_fixture()
+                } else {
+                    gcoms_routing::gc2::directory::Directory::new()
+                }),
             };
+            // Explicit fixture/qualification seeds are installed before the
+            // owner starts; a malformed or expired seed fails startup closed.
+            for introduction in cfg.profile.gc2_introductions() {
+                gc2_bootstrap::install_advertised(&directory, introduction)
+                    .map_err(|error| format!("invalid GC/2 seed introduction: {error}"))?;
+            }
             let (owner, ready) = gcoms_routing::gc2::owner::EntryOwner::new(
                 directory.clone(),
                 gcoms_routing::gc2::CandidateProfile::new(record_len, period_ms).map_err(|_| {
