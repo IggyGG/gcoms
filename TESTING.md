@@ -169,6 +169,16 @@ integration step. Durable sends can be tracked end-to-end with
 `Ev::DirectDelivery` receipt carries (covered by
 `tests/gc2_sessions.rs::tracked_durable_sends_return_the_ids_the_receipts_carry`).
 
+Cluster execution: `target/cluster-battery/cluster-run.sh` syncs the current
+HEAD into a cluster pod running `registry.triform.cloud/ghost/gcoms-ci:20260919-2`
+(Rust 1.98 baked in, workspace dependencies vendored, so no cluster egress is
+needed) and runs the full Linux battery there, streaming per-step logs and the
+results JSON back under `target/cluster-battery/evidence-<stamp>/`. The image is
+built from `target/cluster-battery/Dockerfile`; the pod excludes the
+policy-protected `triform-1` node. The Forgejo runner fleet registers to
+`forgejo.triform.dev` with generic labels and cannot serve ghost repos; this
+pod-based runner is the working bridge.
+
 The harness also has a protected-route mode: `--protected` starts a real entry
 and middle relay service on distinct loopback addresses and seeds both nodes
 with their introductions, so the carrier owner dials real circuits instead of
