@@ -6,6 +6,7 @@ use crate::lease::{
 use crate::relay::{RelayCodecError, RelaySub, UnauthenticatedRelayPush};
 use gcoms_core::{Cell, HEADER_LEN};
 use rand::{rngs::OsRng, RngCore};
+use sha2::{Digest, Sha256};
 use std::collections::{HashMap, VecDeque};
 use std::error::Error;
 use std::fmt;
@@ -182,6 +183,7 @@ struct ReplayRecord {
 }
 
 struct LeaseRecord {
+    create_digest: [u8; 32],
     queue_id: QueueId,
     epoch: u64,
     expiry: u64,
@@ -476,6 +478,15 @@ impl LeaseStore {
             self.policy(now_unix, self.config.max_lease_lifetime_secs)?,
             self.config.relay_limits,
         )?;
+        // Idempotent replay: a control-plane mint creates the lease up front, so
+        // activating the same card again must return the live lease instead of a
+        // conflict or a consumed-grant error.
+        let create_digest: [u8; 32] = Sha256::digest(wire).into();
+        if let Some(existing) = self.leases.get(&create.queue_id) {
+            if existing.epoch == create.epoch && existing.create_digest == create_digest {
+                return Ok(existing.view());
+            }
+        }
         let grant_id: [u8; 16] = create.grant[33..49]
             .try_into()
             .map_err(|_| StoreError::Unauthorized)?;
@@ -504,6 +515,7 @@ impl LeaseStore {
             gc2_push_binding: None,
         });
         let lease = LeaseRecord {
+            create_digest,
             queue_id: create.queue_id,
             epoch: create.epoch,
             expiry: create.lease_expiry,
@@ -1090,6 +1102,40 @@ mod tests {
             Err(StoreError::GrantConsumed)
         );
         assert_eq!(store.queue_count(NOW), 1);
+    }
+
+    #[test]
+    fn exact_activation_retry_preserves_queue_and_rejects_changed_capabilities() {
+        let capabilities = caps(10);
+        let mut store = store(4, 1024);
+        let provision = create_lease(&mut store, capabilities, 4, 1024);
+        let mut retry = LeaseCreate {
+            queue_id: QUEUE_ID,
+            epoch: EPOCH,
+            lease_expiry: NOW + 300,
+            queue_cells: 4,
+            queue_bytes: 1024,
+            capabilities,
+            nonce: [31; 16],
+            grant: provision.wire,
+        };
+        let wire = retry.encode(&RELAY_ID).unwrap();
+        let before = store.leases[&QUEUE_ID].view();
+        assert_eq!(store.create_lease(&wire, NOW), Ok(before));
+        assert_eq!(store.queue_count(NOW), 1);
+        assert_eq!(store.leases[&QUEUE_ID].replay.len(), 1);
+        retry.capabilities = caps(20);
+        assert_eq!(
+            store.create_lease(&retry.encode(&RELAY_ID).unwrap(), NOW),
+            Err(StoreError::GrantConsumed)
+        );
+        retry.capabilities = capabilities;
+        retry.lease_expiry += 1;
+        assert_eq!(
+            store.create_lease(&retry.encode(&RELAY_ID).unwrap(), NOW),
+            Err(StoreError::GrantConsumed)
+        );
+        assert_eq!(store.leases[&QUEUE_ID].view(), before);
     }
 
     #[test]
