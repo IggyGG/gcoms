@@ -31,6 +31,10 @@ struct Args {
     entries: usize,
     cadence: String,
     drain_ms: u64,
+    idle_ms: u64,
+    skip_single: bool,
+    listen_a: u16,
+    listen_b: u16,
     seed: u64,
     chat_count: usize,
     chat_bytes: usize,
@@ -49,6 +53,10 @@ fn parse_args() -> Result<Args, String> {
         entries: 2,
         cadence: "compressed".into(),
         drain_ms: 5000,
+        idle_ms: 0,
+        skip_single: false,
+        listen_a: 0,
+        listen_b: 0,
         seed: 1,
         chat_count: 0,
         chat_bytes: 128,
@@ -67,6 +75,10 @@ fn parse_args() -> Result<Args, String> {
             "--protected" => args.protected = true,
             "--entries" => args.entries = value()?.parse::<usize>().map_err(|e| e.to_string())?,
             "--drain-ms" => args.drain_ms = value()?.parse::<u64>().map_err(|e| e.to_string())?,
+            "--idle-ms" => args.idle_ms = value()?.parse::<u64>().map_err(|e| e.to_string())?,
+            "--skip-single" => args.skip_single = true,
+            "--listen-a" => args.listen_a = value()?.parse::<u16>().map_err(|e| e.to_string())?,
+            "--listen-b" => args.listen_b = value()?.parse::<u16>().map_err(|e| e.to_string())?,
             "--cadence" => {
                 let cadence = value()?;
                 if !matches!(cadence.as_str(), "compressed" | "production") {
@@ -102,8 +114,8 @@ fn parse_args() -> Result<Args, String> {
     if !matches!(args.profile.as_str(), "gc1" | "gc2") {
         return Err("--profile must be gc1 or gc2".into());
     }
-    if args.chat_count == 0 && args.bulk_bytes == 0 {
-        return Err("nothing to measure: set --chat-count and/or --bulk-bytes".into());
+    if args.chat_count == 0 && args.bulk_bytes == 0 && args.idle_ms == 0 {
+        return Err("nothing to measure: set --chat-count, --bulk-bytes or --idle-ms".into());
     }
     if args.bulk_chunk < 1024 || args.bulk_chunk > 15 * 1024 {
         return Err("--bulk-chunk must be between 1024 and 15360".into());
@@ -219,13 +231,13 @@ async fn protected_relays() -> (
     )
 }
 
-async fn endpoint(seed: u8, profile: NodeProfile) -> NodeHandle {
+async fn endpoint(seed: u8, profile: NodeProfile, listen: std::net::SocketAddr) -> NodeHandle {
     let archive = Arc::new(Mutex::new(Vec::new()));
     let sink_archive = archive.clone();
     let node = start_persistent_restored(
         NodeConfig {
             seed: [seed; 32],
-            listen: "127.0.0.1:0".parse().unwrap(),
+            listen,
             control: None,
             advertise: None,
             inbox_relay: None,
@@ -402,6 +414,8 @@ async fn main() -> Result<(), String> {
     } else {
         (Vec::new(), None, None, Vec::new())
     };
+    let listen_a: std::net::SocketAddr = format!("127.0.0.1:{}", args.listen_a).parse().unwrap();
+    let listen_b: std::net::SocketAddr = format!("127.0.0.1:{}", args.listen_b).parse().unwrap();
     let recipient = endpoint(
         0x51,
         profile(
@@ -411,6 +425,7 @@ async fn main() -> Result<(), String> {
             args.entries,
             &args.cadence,
         ),
+        listen_a,
     )
     .await;
     let sender = endpoint(
@@ -422,8 +437,11 @@ async fn main() -> Result<(), String> {
             args.entries,
             &args.cadence,
         ),
+        listen_b,
     )
     .await;
+    let recipient_addr = recipient.listener_addr();
+    let sender_addr = sender.listener_addr();
     let peer = recipient.current_info().await?;
 
     // Consume durable inbox entries like a real application: commit the
@@ -475,6 +493,9 @@ async fn main() -> Result<(), String> {
         }
     });
 
+    if args.idle_ms > 0 && args.chat_count == 0 && args.bulk_bytes == 0 {
+        tokio::time::sleep(Duration::from_millis(args.idle_ms)).await;
+    }
     let chat_body = vec![0x41; args.chat_bytes];
     let bulk_body = file_record_body(&vec![0x42; args.bulk_chunk]);
     let chat_interval = Duration::from_millis(args.chat_interval_ms);
@@ -502,47 +523,7 @@ async fn main() -> Result<(), String> {
     let (chat, bulk) = tokio::join!(chat, bulk);
     let elapsed = bulk_start.elapsed().as_secs_f64();
 
-    // Drain the workload before measuring the idle shaping delay, then send a
-    // single message on the established session. The gate bounds the *one-way*
-    // intentional shaping delay, so stop the drain task and time arrival at the
-    // peer's durable inbox (send -> persisted) before waiting for the ACK.
-    if args.drain_ms > 0 {
-        tokio::time::sleep(Duration::from_millis(args.drain_ms)).await;
-    }
-    draining.store(false, Ordering::Relaxed);
-    tokio::time::sleep(Duration::from_millis(50)).await;
-    let single_start = Instant::now();
-    let id = sender
-        .send_durable_1to1_tracked(&peer, &chat_body, None)
-        .await?;
-    let (single_one_way_ms, single_arrival) = {
-        let deadline = Instant::now() + args.timeout;
-        let mut arrived = -1.0f64;
-        let mut arrival = None;
-        while Instant::now() < deadline {
-            if let Ok(entries) = recipient.application_inbox(0, 32).await {
-                if let Some(entry) = entries.iter().find(|entry| entry.message_id == id) {
-                    arrived = single_start.elapsed().as_secs_f64() * 1000.0;
-                    arrival = Some((entry.sequence, entry.digest()));
-                    break;
-                }
-            }
-            tokio::time::sleep(Duration::from_millis(5)).await;
-        }
-        (arrived, arrival)
-    };
-    let single_delay_ms = match tokio::time::timeout(args.timeout, hub.wait(id)).await {
-        Ok(Some(_)) => single_start.elapsed().as_secs_f64() * 1000.0,
-        _ => -1.0,
-    };
-    // The drain task is paused for the one-way measurement; commit its receipt
-    // here so run accounting stays exact.
-    if let Some((sequence, digest)) = single_arrival {
-        if recipient.commit_application(sequence, digest).await.is_ok() {
-            drained.fetch_add(1, Ordering::Relaxed);
-        }
-    }
-
+    // Workload results are final once both streams join.
     let (mut chat_latencies, chat_sent, chat_failures) = chat;
     let (bulk_acked_bytes, bulk_chunks, bulk_failures) = bulk;
     let failures = chat_failures + bulk_failures;
@@ -557,8 +538,54 @@ async fn main() -> Result<(), String> {
     };
     let diagnostics = sender.diagnostics();
 
+    // Drain the workload before measuring the idle shaping delay, then send a
+    // single message on the established session. The gate bounds the *one-way*
+    // intentional shaping delay, so stop the drain task and time arrival at the
+    // peer's durable inbox (send -> persisted) before waiting for the ACK.
+    if args.drain_ms > 0 {
+        tokio::time::sleep(Duration::from_millis(args.drain_ms)).await;
+    }
+    draining.store(false, Ordering::Relaxed);
+    tokio::time::sleep(Duration::from_millis(50)).await;
+    let (single_delay_ms, single_one_way_ms) = if args.skip_single {
+        (-1.0, -1.0)
+    } else {
+        let single_start = Instant::now();
+        let id = sender
+            .send_durable_1to1_tracked(&peer, &chat_body, None)
+            .await?;
+        let (one_way, arrival) = {
+            let deadline = Instant::now() + args.timeout;
+            let mut arrived = -1.0f64;
+            let mut arrival = None;
+            while Instant::now() < deadline {
+                if let Ok(entries) = recipient.application_inbox(0, 32).await {
+                    if let Some(entry) = entries.iter().find(|entry| entry.message_id == id) {
+                        arrived = single_start.elapsed().as_secs_f64() * 1000.0;
+                        arrival = Some((entry.sequence, entry.digest()));
+                        break;
+                    }
+                }
+                tokio::time::sleep(Duration::from_millis(5)).await;
+            }
+            (arrived, arrival)
+        };
+        let round_trip = match tokio::time::timeout(args.timeout, hub.wait(id)).await {
+            Ok(Some(_)) => single_start.elapsed().as_secs_f64() * 1000.0,
+            _ => -1.0,
+        };
+        // The drain task is paused for the one-way measurement; commit its
+        // receipt here so run accounting stays exact.
+        if let Some((sequence, digest)) = arrival {
+            if recipient.commit_application(sequence, digest).await.is_ok() {
+                drained.fetch_add(1, Ordering::Relaxed);
+            }
+        }
+        (round_trip, one_way)
+    };
+
     // Wait for the receiver to commit every durable receipt before stopping.
-    let expected_receipts = chat_sent + bulk_chunks + 1; // + the idle single message
+    let expected_receipts = chat_sent + bulk_chunks + usize::from(!args.skip_single);
     for _ in 0..300 {
         if drained.load(Ordering::Relaxed) >= expected_receipts {
             break;
@@ -569,13 +596,12 @@ async fn main() -> Result<(), String> {
     // Both helper tasks may be parked on an idle stream; abort rather than
     // waiting for an event that will never come.
     pumping.store(false, Ordering::Relaxed);
-    draining.store(false, Ordering::Relaxed);
     pump_task.abort();
     drain_task.abort();
     let delivered = drained.load(Ordering::Relaxed);
 
     let record = format!(
-        "{{\"profile\":\"{}\",\"protected\":{},\"entry_connections\":{},\"middle_connections\":{},\"seed\":{},\"chat_count\":{},\"chat_sent\":{},\"chat_p50_ms\":{:.3},\"chat_p95_ms\":{:.3},\"chat_max_ms\":{:.3},\"single_delay_ms\":{:.3},\"single_one_way_ms\":{:.3},\"bulk_chunk\":{},\"bulk_chunks\":{},\"bulk_acked_bytes\":{},\"bulk_goodput_kib_s\":{:.3},\"failures\":{},\"recipient_drained\":{},\"sender_jobs\":{},\"sender_bytes\":{}}}\n",
+        "{{\"profile\":\"{}\",\"protected\":{},\"entry_connections\":{},\"middle_connections\":{},\"seed\":{},\"listen_a\":\"{}\",\"listen_b\":\"{}\",\"chat_count\":{},\"chat_sent\":{},\"chat_p50_ms\":{:.3},\"chat_p95_ms\":{:.3},\"chat_max_ms\":{:.3},\"single_delay_ms\":{:.3},\"single_one_way_ms\":{:.3},\"bulk_chunk\":{},\"bulk_chunks\":{},\"bulk_acked_bytes\":{},\"bulk_goodput_kib_s\":{:.3},\"failures\":{},\"recipient_drained\":{},\"sender_jobs\":{},\"sender_bytes\":{}}}\n",
         args.profile,
         args.protected,
         entry_connections
@@ -587,6 +613,8 @@ async fn main() -> Result<(), String> {
             .map(|count| count.load(Ordering::SeqCst))
             .unwrap_or(0),
         args.seed,
+        recipient_addr,
+        sender_addr,
         args.chat_count,
         chat_sent,
         chat_p50_ms,
