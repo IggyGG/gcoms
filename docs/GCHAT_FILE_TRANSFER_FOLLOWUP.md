@@ -64,16 +64,22 @@ complete cold-start, channel admission and application-delivery scenario).
 The extended scenario also crosses a complete subscription renewal period and
 delivers again without inbox recovery (143.88 seconds total).
 Those runs used the superseded local profile-12 candidate. The current candidate
-adopts shared profile ID 22 and its padded Bulk Open; it requires fresh validation.
+adopts shared profile ID 22 and its padded Bulk Open. The extended scenario
+passed again on this shared profile in 125.94 seconds, including authenticated
+Bulk admission at the terminal for both file sends.
 These are local integration results, not a GChat file export or fleet result.
 
 The pre-integration implementation (`24bcd44`, paired with GChat `c947b08`)
-passed 824 GComs workspace cases (six ignored) and 151 GChat cases. The shared
-profile integration passes strict workspace Clippy, 72 routing cases and 95
-Python checks. One subsequent node-library run was interrupted by the workstation
-build manager's missing-quota error, without a Rust test failure; its log is
-retained and the current source requires a complete retry. These results do not
-qualify the final fleet binary or replace the current-profile channel test.
+passed 824 GComs workspace cases (six ignored). After shared-protocol integration,
+the Rust source at `341b25b` passes strict workspace Clippy, 72 routing cases,
+285 node-library cases (one ignored), ten channel/protected-route/profile cases,
+documentation, minimal core and SDK IPC checks. The paired GChat source at
+`a3c125c` passes strict Clippy and all 151 tests, with both source snapshots
+unchanged during validation. Python validation passes 95 GComs and 36 GChat
+cases; the generated contracts and frontend checks also pass. A node-library
+run interrupted by a workstation missing-quota error is retained and superseded
+by the complete successful retry. Package-archive staging and the final fleet
+binary still require their own qualification.
 
 Preserve earlier fleet failures, including the current-protocol bootstrap failure
 in `files-canary-12`. Rebuild both repositories together and require the ordinary
@@ -104,5 +110,6 @@ seeds, recording all four workloads for each seed with one binary. Then run
 The classifier verifies capture hashes/accounting, observes both relay links,
 retains silent windows, handles AUC ties and bootstraps paired whole runs. Both
 window traffic and connection-count gates must meet the upper bound. It creates
-a separate report and refuses to overwrite one. This application harness is
+a separate diagnostic report and refuses to overwrite one. Its
+`component_gate_passed` result cannot set `release_qualified`, which remains false. This application harness is
 component evidence; final GChat/fleet release qualification remains outstanding.

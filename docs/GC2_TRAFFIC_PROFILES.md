@@ -48,17 +48,17 @@ deferred.
 
 ## Evidence boundaries
 
-The node `app_performance` fixture accepts, for example,
-`--protected --traffic-profile interactive/4096/1000`. It writes atomic disk
-archives, compares exact message IDs and body hashes, counts partial file chunks
-exactly, and reports admission delay separately from receipt delay. Chat arrivals
-are scheduled independently of receipt completion. Failed operations invalidate
-delivery accounting and remain in the report.
+The file candidate's `app_performance` instrument selects ID 22 with
+`--profile gchat-files --protected --cadence production`. Its
+`--measurement-ms` option keeps the connected observation interval fixed across
+idle, chat, bulk and mixed workloads; a workload overrun fails. This is local
+protocol-component evidence. It is not an installed GChat journey or an isolated
+client-interface privacy measurement.
 
-This protocol fixture is not an installed GChat journey. `privacy-capture.py`
-records a pooled loopback fixture and labels it diagnostic; the release classifier
-refuses that scope. Its capture now includes the legacy traffic that entry-only
-historical reports omitted. Qualification still requires separate client
-processes with isolated interface capture, production cadence, fixed warm-up and
-measurement windows, held-out independent runs, exact build provenance, and the
-full application paths described in `GC2_RELEASE_EXECUTION.md`.
+The fleet file harness uses separate relay and GChat processes and requires
+independent exported-file hashes, receiver reopening and observed routing
+readiness. Privacy qualification additionally requires isolated client capture,
+matched bulk workloads with and without chat, independent held-out runs and
+complete build provenance. See the [file-transfer follow-up](GCHAT_FILE_TRANSFER_FOLLOWUP.md)
+for current evidence and remaining gates. Keep historical failed captures and
+reports; no component or file-correctness pass establishes privacy qualification.

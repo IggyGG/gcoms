@@ -3,7 +3,8 @@
 > **Candidate update (2026-09-20).** The current implementation adds explicit
 > GCRB2 provisioning, channel bulk transport, both subscription classes,
 > shared profile 22, pipelined piece requests and retained send ownership. Local node
-> library validation passed 283 tests (one ignored); these results do not
+> library validation passed 285 tests (one ignored), and the profile-22 cold
+> channel/renewal test passed in 125.94 seconds; these results do not
 > qualify the fleet. Runs 11–12 reached the opted-in carrier but failed before
 > a verified file export; all eight hosts were cleaned up. The historical
 > post-merge note below describes the earlier state. See the

@@ -155,7 +155,9 @@ def main():
     parser.add_argument("--train-seeds", required=True, help="comma-separated independent run seeds")
     parser.add_argument("--eval-seeds", required=True)
     args = parser.parse_args()
-    report = {"contract": "gchat-file-profile-22", "qualified": False, "gates": {}}
+    report = {"contract": "gchat-file-profile-22", "scope": "pooled_loopback_entry_links",
+              "diagnostic_only": True, "release_qualified": False,
+              "component_gate_passed": False, "gates": {}}
     try:
         train, evaluation = [list(map(int, value.split(","))) for value in (args.train_seeds, args.eval_seeds)]
         if len(set(train)) != len(train) or len(set(evaluation)) != len(evaluation) or set(train) & set(evaluation):
@@ -168,14 +170,14 @@ def main():
                              np.concatenate([np.full(len(captures[(w, s)][column]), label)
                                              for label, w in enumerate(pair)])) for s in seeds]
                 report["gates"][f"{name}_{scope}"] = evaluate(design(train), design(evaluation))
-        report["qualified"] = all(g["ok"] for g in report["gates"].values())
+        report["component_gate_passed"] = all(g["ok"] for g in report["gates"].values())
     except (ValueError, KeyError, OSError, subprocess.CalledProcessError) as error:
         report["error"] = str(error)
     target = args.out / "privacy-files-report.json"
     with target.open("x") as output:
         output.write(json.dumps(report, indent=2) + "\n")
     print(json.dumps(report, indent=2))
-    return 0 if report["qualified"] else 1
+    return 0 if report["component_gate_passed"] else 1
 
 
 if __name__ == "__main__":
