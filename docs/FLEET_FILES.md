@@ -3,9 +3,10 @@
 This private operator campaign uses the eight recorded Hetzner relay hosts. It
 creates separate test listeners; it never restarts `ghost-relay.service`, modifies
 its identity, or uses production bootstrap grants. Source and tooling changes stay
-in the paired GComs/GChat task checkouts. The current protocol is GC/1 with its
-production scheduler, authentication and routing. Fixtures/compressed scheduling
-are not fleet evidence. GC/2 must have application integration before comparison.
+in the paired GComs/GChat task checkouts. The relays and clients run the fleet
+carrier profile — the single current GC profile, with its shared padded lattice,
+authenticated class queues, authentication and private routing. Compressed or
+fixture scheduling is not fleet evidence.
 
 ## Build and run
 
@@ -114,22 +115,22 @@ addition to passing scenario labels. A 30-minute measured baseline is mandatory,
 as is the full four-hour mixed window. An already complete fixture or two
 advertised sources cannot supply the missing fault evidence.
 
-## GC/1 capacity constraint
+## Carrier lattice capacity
 
-The production scheduler uses three-second slots and a 0.5 emission probability
-per destination lane. File data shares those lanes with protocol work, and each
-block carries at most 11 KiB. A continuously available single-source lane therefore
-has a nominal payload rate of about 1.8 KiB/s before requests, discovery, retries
-and other overhead. At that rate 1 MiB takes about nine minutes and 1 GiB about
-159 hours. These are calculations from the current implementation, not measured
-fleet throughput or guarantees. Multiple sources can contribute separate lanes;
-they do not eliminate the initial distribution cost.
+Both carrier classes ride one fixed padded lattice: one record per profile slot
+per hop, with cover when nothing is queued, so record timing and count do not
+reveal application activity. A record carries at most one 11 KiB block, so a
+single-source transfer over three hops is paced by the profile cadence on each
+hop. Measure the active profile's cadence and per-hop behaviour before setting
+expectations; the fleet campaign uses production transport behaviour, while the
+compressed qualification cadence exists for local fixtures only.
 
 Keep the five-minute small-file and four-hour large-file acceptance gates visible.
 A failure can expose a capacity limit as well as a correctness defect. Do not
-speed up the privacy scheduler, bypass relay authentication, or label a smaller
-diagnostic fixture as large-file qualification. Repeat the same workload after
-the planned protocol improvements have application integration.
+speed up the privacy lattice, bypass relay authentication, or label a smaller
+diagnostic fixture as large-file qualification. Record measured completion
+p50/p95 and goodput, and repeat the same workload after any lattice or
+integration change.
 
 Reports group verified exports by file size and include measured completion p50/p95,
 median goodput, and local file-engine counters. Completion timings start at recorded

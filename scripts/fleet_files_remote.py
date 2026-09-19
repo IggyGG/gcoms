@@ -185,7 +185,8 @@ class Host:
             env.append(f'GC_ROUTING_BOOTSTRAP={self.data}/bootstrap')
         self.service('relay', [node, 'serve', '--keystore', key, '--pass-file', self.data/'passphrase',
                               '--port', str(PORT), '--advertise-addr', f'{self.ip}:{PORT}',
-                              '--control-port', str(CONTROL), '--metrics', self.data/'relay-metrics.jsonl'], env=env)
+                              '--control-port', str(CONTROL), '--schedule', 'gc2',
+                              '--metrics', self.data/'relay-metrics.jsonl'], env=env)
         return {'started': True}
 
     def control(self, command):
@@ -241,7 +242,7 @@ else: raise RuntimeError('control response missing')
                    '--listen', f'127.0.0.1:{24440+slot}', '--advertise', f'127.0.0.1:{24440+slot}',
                    '--inbox-relay-file', folder/'relay.card', '--no-network-bootstrap']
         if not (folder/'profile').exists(): command.append('--create')
-        self.service(f'client{slot}', command, env=[f'GC_ROUTING_BOOTSTRAP={client_bootstrap}', 'GCHAT_FILE_DIAGNOSTICS=1', f'GCHAT_PROTOCOL_METRICS={self.data}/client{slot}-metrics.jsonl'])
+        self.service(f'client{slot}', command, env=[f'GC_ROUTING_BOOTSTRAP={client_bootstrap}', 'GC_GC2_CARRIER=1', 'GCHAT_FILE_DIAGNOSTICS=1', f'GCHAT_PROTOCOL_METRICS={self.data}/client{slot}-metrics.jsonl'])
         probe_unit = self.unit(f'probe{slot}')
         if run(['systemctl','is-active',probe_unit], check=False).returncode:
             sock = folder/'probe.sock'

@@ -46,9 +46,9 @@ def main():
         env = dict(os.environ, CARGO_TARGET_DIR=str(args.target_dir.resolve()))
         env.setdefault('CARGO_BUILD_JOBS', '4')
         commands = [
-            ('gcoms', ['cargo', 'build', '--release', '--offline', '--locked', '-p', 'gcoms-node', '--bin', 'gcnode', '--features', 'client-persist']),
-            ('gchat', ['cargo', 'build', '--release', '--offline', '--config', str(patch), '-p', 'gchat-tui', '--bin', 'gchat']),
-            ('gchat', ['cargo', 'build', '--release', '--offline', '--config', str(patch), '-p', 'gchat-core', '--example', 'fleet_probe']),
+            ('gcoms', ['cargo', 'build', '--release', '--offline', '--locked', '-p', 'gcoms-node', '--bin', 'gcnode', '--features', 'client-persist,experimental-gc2']),
+            ('gchat', ['cargo', 'build', '--release', '--offline', '--config', str(patch), '-p', 'gchat-tui', '--bin', 'gchat', '--features', 'gc2-carrier']),
+            ('gchat', ['cargo', 'build', '--release', '--offline', '--config', str(patch), '-p', 'gchat-core', '--example', 'fleet_probe', '--features', 'gc2-carrier']),
         ]
         for name, command in commands:
             report['commands'].append({'repository': name, 'argv': command})

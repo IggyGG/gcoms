@@ -6,10 +6,20 @@ still misses its five-minute deadline. The 16-client ramp, 56 transfer pairs,
 30-minute baseline, four-hour mixed workload, large files and fault matrix remain
 unexecuted behind that gate. See [the runbook](FLEET_FILES.md) for the exact campaign.
 
+> **Post-merge state (2026-09-19).** The campaign branch is reconciled with trunk
+> `a71db53` and now builds relays and clients with the fleet carrier profile.
+> Runs 01–10 below were measured on the retired legacy schedule with unpaced
+> bulk; they are historical, and no carrier-profile fleet run has been executed
+> yet. Local carrier evidence: the three-hop natural-scheduler regression
+> (`crates/node/tests/gc2_queue_service.rs`) delivers 64 × 11 KiB bulk records
+> plus interleaved chat over the shared padded lattice and passes 7/7 after the
+> merge. The fleet canary and scale gates on the carrier profile remain open.
+
 ## Real fleet observations
 
-All runs used eight isolated GC/1 relay listeners on the recorded Hetzner hosts,
-two application clients, fresh test identities, and the production scheduler.
+All runs used eight isolated test relay listeners on the recorded Hetzner hosts,
+two application clients, fresh test identities, and the retired legacy scheduler
+(the carrier profile had not been integrated at that point).
 Production relay services were not restarted or reconfigured. All ten runs
 reported successful cleanup on every host, including unchanged production
 service state. The final topology passed all 64 test-relay TCP reachability checks;
@@ -55,21 +65,23 @@ exports, missing acceptance, incomplete host coverage and incomplete cleanup.
 
 Run 09 left two findings for follow-up:
 
-* GC/1's production lane rate is incompatible with the planned single-source
-  1 GiB/four-hour target. The runbook records the calculation separately from
-  measured evidence. Receipt timeouts and repeated requests also need a focused
-  queue/admission/retry investigation; raising the acceptance deadline would
-  conceal this failure.
+* The retired legacy lane rate is incompatible with the planned single-source
+  1 GiB/four-hour target. The runbook keeps the capacity discussion separate
+  from measured evidence, and the carrier lattice has a different capacity
+  envelope that the next campaign must measure. Receipt timeouts and repeated
+  requests also need a focused queue/admission/retry investigation; raising the
+  acceptance deadline would conceal this failure.
 * Periodic peer-exchange cells are submitted to a relay path that accepts only
   authenticated MSG payloads, producing `RELAY_PUSH does not contain exactly one
   MSG`. This rejection was traced to `node/channels.rs`; it has not been proven
   to cause the file timeout. Preserve the MSG-only relay boundary when repairing
   peer discovery.
 
-The next qualification step is to resolve the small-file latency/receipt issue,
-then rerun the standard canary and the unchanged scale gates. Compare GC/2 only
-after its application integration is available. These results do not qualify
-GC/2, Windows, desktop attachments, production listeners, or large-file transfers.
+The next qualification step is to rerun the standard canary and the unchanged
+scale gates on the carrier profile, now that this branch carries the carrier
+relay and client builds. These historical results do not qualify the carrier
+profile, Windows, desktop attachments, production listeners, or large-file
+transfers.
 
 ## Validation and retained evidence
 
@@ -102,10 +114,10 @@ included in the source commits.
 
 ## Follow-up before the next fleet candidate — 2026-09-18
 
-The committed GC/2 component branch (`74c783e`) has been merged into this task.
-GC/1 remains the selected Node/GChat fleet profile. GC/2 application adoption is
-still required for the large-file capacity gate; these changes do not constitute
-a new fleet result.
+The carrier component work has been merged into this task and the tree is
+reconciled with trunk `a71db53`. The relay and client builds in this branch run
+the carrier profile; the large-file capacity gate still needs a fleet
+measurement on that profile.
 
 The channel command serializer now releases its lock after file authorization,
 encryption and enqueue, before awaiting hop acceptance. A real TLS/H2 regression
@@ -167,10 +179,10 @@ The file worker's 20-second send timeout cannot distinguish scheduler queue dela
 from a stalled transport response. Subsequent diagnostic builds include the
 existing bounded Node scheduler aggregates alongside file-engine observations.
 
-The latest committed GC/2 component work (`b4a6c26`, including ratchet credit) has
-been merged into this task. An explicit natural scheduler now connects that
-transport to the existing bounded scheduling API. Its three-hop local regression
-checks 64 bulk records of 11 KiB alongside chat and owned subscriptions; it does
-not yet send GChat files or enable GC/2 in Node's default startup. The standard
+The carrier component work is now reconciled with trunk (`a71db53`), including
+the natural scheduler and the GChat carrier selection. Its three-hop local
+regression checks 64 bulk records of 11 KiB alongside chat and owned
+subscriptions; the fleet relays and clients build with the carrier profile
+(`--schedule gc2`; GChat `gc2-carrier` with `GC_GC2_CARRIER`). The standard
 canary and every remaining scale/capacity/fault gate still require a passing
-application deployment. See [the integration boundary](GC2_SCHEDULER.md).
+carrier-profile fleet run. See [the integration boundary](GC2_SCHEDULER.md).

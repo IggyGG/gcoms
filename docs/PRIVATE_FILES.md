@@ -63,11 +63,13 @@ filters the content type before transcript persistence and applies the piece
 state machine in a dedicated worker. Older receivers ignore the new disposition;
 there is no fallback that sends file records as text.
 
-This checkout predates the pending GC/2 traffic-class scheduler. It uses the
-existing GComs data scheduling seam and bounded host admission. Mapping the seam
-to GC/2 Bulk credit and qualifying chat latency under production cover traffic
-remain transport-integration gates, not properties established by fixture tests.
-No cover cadence, routing rule or privacy policy is changed here.
+The transfer service uses the GComs data scheduling seam and bounded host
+admission. On the carrier profile the scheduler maps channel application data to
+the authenticated data class, and both classes then ride the shared padded
+lattice. Qualifying chat latency and file goodput under the deployed lattice, and
+the remaining natural-carrier integration items, are transport gates that fixture
+tests do not establish. No cover cadence, routing rule or privacy policy is
+changed here.
 
 Tests in `crates/file-transfer/tests/swarm.rs` cover sparse recovery, corruption,
 wrong proofs/context, bounded codec input, quota, cancellation, PM scopes, and a

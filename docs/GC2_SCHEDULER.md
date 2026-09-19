@@ -238,7 +238,7 @@ protected connector. Legacy MSG/deposit/forward data cannot use that management
 path. A GC/2 runtime still needs a natural authenticated queue-restoration probe,
 a terminal forwarding service, class propagation into application producers and
 subscription owners, durable profile/bootstrap integration, and explicit
-application compatibility handling before this scheduler can replace GC/1.
+application compatibility handling before general adoption.
 The counter-credit component in [GC2_FLOW.md](GC2_FLOW.md) has its own archive,
 handshake and session-recovery requirements for ratcheted direct traffic.
 
