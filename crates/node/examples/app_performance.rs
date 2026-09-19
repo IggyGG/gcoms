@@ -28,6 +28,7 @@ use std::time::{Duration, Instant};
 struct Args {
     profile: String,
     protected: bool,
+    entries: usize,
     seed: u64,
     chat_count: usize,
     chat_bytes: usize,
@@ -43,6 +44,7 @@ fn parse_args() -> Result<Args, String> {
     let mut args = Args {
         profile: "gc1".into(),
         protected: false,
+        entries: 2,
         seed: 1,
         chat_count: 0,
         chat_bytes: 128,
@@ -59,6 +61,7 @@ fn parse_args() -> Result<Args, String> {
         match flag.as_str() {
             "--profile" => args.profile = value()?,
             "--protected" => args.protected = true,
+            "--entries" => args.entries = value()?.parse::<usize>().map_err(|e| e.to_string())?,
             "--seed" => args.seed = value()?.parse::<u64>().map_err(|e| e.to_string())?,
             "--chat-count" => {
                 args.chat_count = value()?.parse::<usize>().map_err(|e| e.to_string())?
@@ -102,7 +105,7 @@ fn parse_args() -> Result<Args, String> {
     Ok(args)
 }
 
-fn profile(name: &str, seed: u64, introductions: &[Vec<u8>]) -> NodeProfile {
+fn profile(name: &str, seed: u64, introductions: &[Vec<u8>], entries: usize) -> NodeProfile {
     // Both variants are loopback fixtures: a production-shaped profile has no
     // published inbox without the control plane, so the local carrier fixture
     // exercises the real session/scheduling path. Operated-network runs use the
@@ -113,12 +116,12 @@ fn profile(name: &str, seed: u64, introductions: &[Vec<u8>]) -> NodeProfile {
         "gc2" if !introductions.is_empty() => {
             NodeProfile::gc2_carrier_qualification_fixture_seeded(
                 None,
-                2,
+                entries,
                 seed,
                 introductions.to_vec(),
             )
         }
-        "gc2" => NodeProfile::gc2_carrier_qualification_fixture(None, 2, seed),
+        "gc2" => NodeProfile::gc2_carrier_qualification_fixture(None, entries, seed),
         _ => NodeProfile::compressed_production(seed),
     }
 }
@@ -372,8 +375,16 @@ async fn main() -> Result<(), String> {
     } else {
         (Vec::new(), None, None, Vec::new())
     };
-    let recipient = endpoint(0x51, profile(&args.profile, args.seed, &introductions)).await;
-    let sender = endpoint(0x52, profile(&args.profile, args.seed, &introductions)).await;
+    let recipient = endpoint(
+        0x51,
+        profile(&args.profile, args.seed, &introductions, args.entries),
+    )
+    .await;
+    let sender = endpoint(
+        0x52,
+        profile(&args.profile, args.seed, &introductions, args.entries),
+    )
+    .await;
     let peer = recipient.current_info().await?;
 
     // Consume durable inbox entries like a real application: commit the
