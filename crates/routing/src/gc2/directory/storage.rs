@@ -42,7 +42,9 @@ impl Directory {
     /// Exports secret routing state, including retained guards and own-service
     /// exclusions. Encrypt and authenticate the bytes before saving them.
     pub fn encode_private(&self) -> Result<Zeroizing<Vec<u8>>> {
-        self.view.read().unwrap_or_else(|p| p.into_inner()).encode()
+        let view = self.view.read().unwrap_or_else(|p| p.into_inner());
+        self.check_persistence()?;
+        view.encode()
     }
 
     /// Restores production address policy and exact authenticated expiries.

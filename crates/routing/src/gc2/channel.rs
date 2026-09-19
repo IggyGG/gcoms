@@ -180,6 +180,53 @@ mod tests {
         RecordCodec::new(class, CandidateProfile::new(1024, 250).unwrap())
     }
 
+    #[tokio::test(start_paused = true)]
+    async fn file_bulk_is_idle_without_cover_and_uses_available_credit_immediately() {
+        let codec = RecordCodec::new(TrafficClass::Bulk, CandidateProfile::file_transfer());
+        let (mut application, local) = tokio::io::duplex(MAX_RECORD * 4);
+        let (wire, mut observer) = tokio::io::duplex(MAX_RECORD * 4);
+        let origin = Instant::now();
+        let writer = tokio::spawn(write_records(
+            wire,
+            local,
+            codec,
+            origin + Duration::from_secs(1),
+        ));
+        let mut header = [0; HEADER_LEN];
+        assert!(
+            tokio::time::timeout(Duration::from_secs(3), observer.read_exact(&mut header))
+                .await
+                .is_err()
+        );
+        application
+            .write_all(&vec![19; MAX_RECORD * 2])
+            .await
+            .unwrap();
+        application.shutdown().await.unwrap();
+        let ready = Instant::now();
+        let mut received = Vec::new();
+        loop {
+            observer.read_exact(&mut header).await.unwrap();
+            let mut record = vec![0; codec.wire_len(&header).unwrap()];
+            record[..HEADER_LEN].copy_from_slice(&header);
+            observer
+                .read_exact(&mut record[HEADER_LEN..])
+                .await
+                .unwrap();
+            let record = codec.decode(&record).unwrap();
+            if record.kind() == RecordKind::Close {
+                break;
+            }
+            assert_eq!(record.kind(), RecordKind::Data);
+            received.extend_from_slice(record.payload());
+        }
+        assert_eq!(received, vec![19; MAX_RECORD * 2]);
+        assert_eq!(ready.elapsed(), Duration::ZERO);
+        let counts = writer.await.unwrap().unwrap();
+        assert_eq!(counts.records, 4);
+        assert_eq!(counts.wire_bytes, (MAX_RECORD * 2 + HEADER_LEN * 4) as u64);
+    }
+
     async fn trace(burst: bool) -> (Vec<(Duration, usize)>, Vec<u8>) {
         let codec = codec(TrafficClass::Interactive);
         let (mut application, local) = tokio::io::duplex(8192);

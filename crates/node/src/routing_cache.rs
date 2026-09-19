@@ -192,6 +192,55 @@ impl Cache {
         Self::open_format(directory, seed, CacheFormat::Gc2)
     }
 
+    /// Persist explicit policy selection under the existing writer lock. Policy
+    /// changes leave the latest directory, session archive and file cache intact.
+    #[cfg(feature = "experimental-gc2")]
+    pub fn select_gc2_profile(&self, profile: gcoms_routing::gc2::CandidateProfile) -> Result<()> {
+        if self.format != CacheFormat::Gc2 {
+            return Err("GC/2 routing cache required".into());
+        }
+        let path = self.path.with_file_name("carrier-policy.cache");
+        const MAGIC: &[u8] = b"GCCP\x01";
+        let cipher = Aes256Gcm::new_from_slice(self.key.as_slice())?;
+        if let Some(saved) = read_optional(&path, 34)? {
+            if saved.len() != 34 || &saved[..5] != MAGIC {
+                return Err("invalid carrier policy record".into());
+            }
+            let old = cipher
+                .decrypt(
+                    Nonce::from_slice(&saved[5..17]),
+                    Payload {
+                        msg: &saved[17..],
+                        aad: MAGIC,
+                    },
+                )
+                .map_err(|_| "carrier policy authentication failed")?;
+            let id = *old
+                .first()
+                .filter(|_| old.len() == 1)
+                .ok_or("invalid carrier policy")?;
+            gcoms_routing::gc2::CandidateProfile::from_id(id)?;
+            if id == profile.id() {
+                return Ok(());
+            }
+        }
+        let mut nonce = [0; 12];
+        rand::rngs::OsRng.fill_bytes(&mut nonce);
+        let encrypted = cipher
+            .encrypt(
+                Nonce::from_slice(&nonce),
+                Payload {
+                    msg: &[profile.id()],
+                    aad: MAGIC,
+                },
+            )
+            .map_err(|_| "carrier policy encryption failed")?;
+        let mut saved = MAGIC.to_vec();
+        saved.extend_from_slice(&nonce);
+        saved.extend_from_slice(&encrypted);
+        replace(&path, &saved)
+    }
+
     /// Transfers the exclusive writer lock into the directory's checkpoint.
     /// Every published change is encrypted and synced before routing can use it.
     #[cfg(feature = "experimental-gc2")]
@@ -288,6 +337,42 @@ impl RoutingStateStore for Cache {
 
 #[cfg(test)]
 mod tests {
+    #[cfg(feature = "experimental-gc2")]
+    #[test]
+    fn carrier_policy_switch_preserves_latest_directory_and_rejects_tampering() {
+        use gcoms_routing::gc2::CandidateProfile;
+        let dir = tempfile::tempdir().unwrap();
+        make_private(dir.path(), true).unwrap();
+        let cache = Cache::open_gc2(dir.path(), &[47; 32]).unwrap();
+        cache
+            .save_inner(
+                &gcoms_routing::gc2::directory::Directory::new()
+                    .encode_private()
+                    .unwrap(),
+            )
+            .unwrap();
+        let latest = std::fs::read(dir.path().join("routing-gc2.cache")).unwrap();
+        cache
+            .select_gc2_profile(CandidateProfile::file_transfer())
+            .unwrap();
+        cache
+            .select_gc2_profile(CandidateProfile::new(4096, 1000).unwrap())
+            .unwrap();
+        cache
+            .select_gc2_profile(CandidateProfile::file_transfer())
+            .unwrap();
+        assert_eq!(
+            std::fs::read(dir.path().join("routing-gc2.cache")).unwrap(),
+            latest
+        );
+        let policy = dir.path().join("carrier-policy.cache");
+        let mut bytes = std::fs::read(&policy).unwrap();
+        bytes[17] ^= 1;
+        std::fs::write(&policy, bytes).unwrap();
+        assert!(cache
+            .select_gc2_profile(CandidateProfile::file_transfer())
+            .is_err());
+    }
     use super::*;
     #[cfg(feature = "experimental-gc2")]
     #[test]

@@ -979,9 +979,13 @@ dependencies = [
 name = "gcoms-file-transfer"
 version = "0.1.0"
 dependencies = [
+ "aes-gcm",
+ "fs2",
  "gcoms-core",
+ "gcoms-private-fs",
  "hex",
  "hmac 0.12.1",
+ "postcard",
  "rand 0.8.8",
  "serde",
  "serde_json",

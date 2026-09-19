@@ -534,3 +534,137 @@ async fn revoked_subscription_cancels_a_writer_blocked_on_receive_credit() {
     assert!(result.is_ok() || result.unwrap_err().is_cancelled());
     fixture.finish().await;
 }
+/// Real GCT2 entry + middle + TLS/H2 terminal: public scheduler API, separate
+/// authenticated subscriptions, many bulk records and interleaved chat.
+#[tokio::test]
+async fn natural_scheduler_delivers_bulk_and_chat_over_owned_ready_entries() {
+    use gcoms_node::{
+        alias::{AliasContact, OwnedAlias},
+        relay::RelayTarget,
+        scheduler::{ProducerClass, RelayScheduler},
+    };
+    use gcoms_routing::gc2::{
+        directory::{BootstrapBundle, Directory as Gc2Directory},
+        owner::EntryOwner,
+    };
+    let mut fixture = Fixture::new().await;
+    let entry = fixture.relay("127.0.0.88", true).await;
+    let middle = fixture.relay("127.0.0.89", false).await;
+    let now = now_unix();
+    let intro = entry.gc2_introduction(now);
+    let guard = intro.service_id;
+    let directory = Arc::new(Gc2Directory::for_loopback_fixture());
+    directory
+        .remember(
+            &BootstrapBundle {
+                relays: vec![intro, middle.gc2_introduction(now)],
+            },
+            now,
+        )
+        .unwrap();
+    directory.set_guards(vec![guard]).unwrap();
+    let (owner, ready) =
+        EntryOwner::new(directory, CandidateProfile::new(4096, 250).unwrap(), 1).unwrap();
+    let owner = tokio::spawn(owner.run());
+    timeout(Duration::from_secs(15), async {
+        while ready.ready_entries() == 0 || fixture.entry_connections.load(Ordering::SeqCst) < 2 {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .unwrap();
+    let scheduler = RelayScheduler::gc2(ready).unwrap();
+    scheduler.enable_diagnostics();
+    let alias = OwnedAlias {
+        contact: AliasContact {
+            target: RelayTarget {
+                address: fixture.address,
+                relay_service_id: fixture.pin,
+            },
+            queue_id: QUEUE,
+            epoch: 1,
+            push_cap: CAPS.push,
+            expiry: now + 100,
+        },
+        capabilities: CAPS,
+        limits: StoreConfig::default().relay_limits,
+        create_path: String::new(),
+        lease_create: gcoms_core::Cell::new(CellType::RelaySub, 0, 0, vec![]),
+    };
+    let mut chat = timeout(
+        Duration::from_secs(20),
+        scheduler
+            .subscribe_with_class(alias.clone(), I)
+            .unwrap()
+            .completion(),
+    )
+    .await
+    .unwrap()
+    .delivery_stream()
+    .unwrap();
+    let mut bulk = timeout(
+        Duration::from_secs(20),
+        scheduler
+            .subscribe_with_class(alias.clone(), B)
+            .unwrap()
+            .completion(),
+    )
+    .await
+    .unwrap()
+    .delivery_stream()
+    .unwrap();
+    let mut receipts = Vec::new();
+    for marker in 0..64 {
+        receipts.push(
+            scheduler
+                .push_with_class(
+                    ProducerClass::ChannelData,
+                    alias.contact.clone(),
+                    gcoms_core::Cell::new(CellType::Msg, 0, 0, vec![marker; 11 * 1024]),
+                    B,
+                )
+                .unwrap(),
+        );
+    }
+    let text = scheduler
+        .push(
+            ProducerClass::ChannelData,
+            alias.contact.clone(),
+            gcoms_core::Cell::new(CellType::Msg, 0, 0, b"interleaved chat".to_vec()),
+        )
+        .unwrap();
+    // Bulk and chat share the carrier lattice: one padded record per profile
+    // slot on each hop, so 64 records over three hops complete in tens of
+    // seconds. The bound is the shared lattice cadence, not a GC/1
+    // application slot.
+    let transferred = timeout(Duration::from_secs(120), async {
+        let mut received = std::collections::HashSet::new();
+        while received.len() < 64 {
+            let cell = bulk.recv().await.unwrap().unwrap();
+            assert_eq!(cell.version, 2);
+            assert_eq!(cell.payload, vec![cell.payload[0]; 11 * 1024]);
+            assert!(cell.payload[0] < 64);
+            assert!(received.insert(cell.payload[0]));
+        }
+        for receipt in receipts {
+            receipt.completion().await.accepted().unwrap();
+        }
+        text.completion().await.accepted().unwrap();
+        let cell = chat.recv().await.unwrap().unwrap();
+        assert_eq!(cell.version, 2);
+        assert_eq!(cell.payload, b"interleaved chat");
+    })
+    .await;
+    scheduler.shutdown();
+    drop(chat);
+    drop(bulk);
+    owner.abort();
+    assert!(owner.await.unwrap_err().is_cancelled());
+    fixture.inactive().await;
+    assert_eq!(scheduler.resource_snapshot().bytes, 0);
+    assert_eq!(scheduler.diagnostics_snapshot().cover_attempts, 0);
+    // One fixed entry and one independent background renewal connection.
+    assert_eq!(fixture.entry_connections.load(Ordering::SeqCst), 2);
+    fixture.finish().await;
+    transferred.expect("bulk delivery must ride the shared carrier lattice");
+}

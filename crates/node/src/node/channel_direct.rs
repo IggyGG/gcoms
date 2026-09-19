@@ -88,8 +88,8 @@ pub(crate) struct PreparedChannelDirect {
     message_id: [u8; 16],
     route: crate::channel::ChannelRoute,
     cell: Cell,
+    class: ProducerClass,
 }
-
 pub(crate) fn prepare_channel_direct(
     state: &Arc<Mutex<NodeState>>,
     channel: &str,
@@ -97,21 +97,31 @@ pub(crate) fn prepare_channel_direct(
     text: &[u8],
 ) -> Result<PreparedChannelDirect, String> {
     validate_application_payload(text)?;
+    let application = gcoms_core::is_piece_application_payload(text);
     let message_id = fresh_msg_id();
     let mut plaintext = Vec::with_capacity(9 + text.len());
-    plaintext.push(1);
+    plaintext.push(if application { 3 } else { 1 });
     plaintext.extend_from_slice(&now_ms().to_be_bytes());
     plaintext.extend_from_slice(text);
     let envelope_result = {
         let mut state = state
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
-        if state.pending_channel_direct.len() >= 64 {
+        if !application && state.pending_channel_direct.len() >= 64 {
             return Err("too many unacknowledged channel direct messages".into());
         }
         let channel_state = state.channels.get(channel).ok_or("no channel")?;
+        if application
+            && !channel_state
+                .role
+                .roster_members()
+                .iter()
+                .any(|m| m.pseudonym == recipient)
+        {
+            return Err("recipient is not a current channel member".into());
+        }
         let sealed = seal_channel_direct(channel, channel_state, recipient, message_id, &plaintext);
-        if sealed.is_ok() {
+        if !application && sealed.is_ok() {
             state
                 .pending_channel_direct
                 .insert(message_id, (channel.to_string(), recipient));
@@ -123,28 +133,64 @@ pub(crate) fn prepare_channel_direct(
     let payload = envelope
         .encode()
         .ok_or("channel-direct envelope too large")?;
+    let class = if application {
+        ProducerClass::ChannelData
+    } else {
+        ProducerClass::ChannelControl
+    };
     Ok(PreparedChannelDirect {
         message_id,
         route,
         cell: Cell::new(CellType::Msg, 0, 0, payload),
+        class,
     })
 }
 
-pub(crate) async fn complete_channel_direct(
+/// Admission is synchronous and ordered with channel control commands. The
+/// receipt is a separate network wait: piece applications own their retries and
+/// must not hold the channel's completion chain while a peer is unavailable.
+pub(crate) fn enqueue_channel_direct(
     state: &Arc<Mutex<NodeState>>,
     scheduler: &RelayScheduler,
     prepared: PreparedChannelDirect,
-) -> Result<[u8; 16], String> {
+) -> Result<([u8; 16], crate::scheduler::Receipt), String> {
     let PreparedChannelDirect {
         message_id,
         route,
         cell,
+        class,
     } = prepared;
     // The authenticated directory record uses this same FIFO control lane, so
     // a newly admitted recipient learns the sender key before direct traffic.
-    let result = push_ctrl_to_route(scheduler, &route, &cell)
-        .await
-        .map(|_| message_id);
+    let result = scheduler
+        .push_with_class(
+            class,
+            route.control,
+            cell,
+            if class == ProducerClass::ChannelData && scheduler.is_gc2() {
+                gcoms_core::TrafficClass::Bulk
+            } else {
+                gcoms_core::TrafficClass::Interactive
+            },
+        )
+        .map(|receipt| (message_id, receipt))
+        .map_err(|error| error.to_string());
+    if result.is_err() {
+        state
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .pending_channel_direct
+            .remove(&message_id);
+    }
+    result
+}
+
+pub(crate) async fn complete_channel_direct(
+    state: &Arc<Mutex<NodeState>>,
+    admitted: ([u8; 16], crate::scheduler::Receipt),
+) -> Result<[u8; 16], String> {
+    let (message_id, receipt) = admitted;
+    let result = receipt.completion().await.accepted().map(|_| message_id);
     if result.is_err() {
         state
             .lock()
@@ -165,7 +211,8 @@ pub(crate) async fn send_channel_direct(
     text: &[u8],
 ) -> Result<[u8; 16], String> {
     let prepared = prepare_channel_direct(state, channel, recipient, text)?;
-    complete_channel_direct(state, scheduler, prepared).await
+    let admitted = enqueue_channel_direct(state, scheduler, prepared)?;
+    complete_channel_direct(state, admitted).await
 }
 
 pub(crate) fn handle_channel_direct(
@@ -262,6 +309,47 @@ pub(crate) fn handle_channel_direct(
                     ts_unix: sent_ms / 1000,
                     text: plaintext[9..].to_vec(),
                 });
+            }
+        }
+        Some(3)
+            if plaintext.len() >= 9
+                && gcoms_core::is_piece_application_payload(&plaintext[9..]) =>
+        {
+            // No text receipt, retained transcript, or unbounded per-message ACK
+            // map. The piece protocol re-requests missing data and confirms only
+            // verified durable pieces. Authentication and membership are above.
+            let sent_ms = u64::from_be_bytes(plaintext[1..9].try_into().expect("checked length"));
+            let _ = events.send(Ev::ChannelDirectMessage {
+                channel: envelope.channel,
+                sender_member_id: envelope.sender,
+                recipient_member_id: envelope.recipient,
+                msg_id: envelope.message_id,
+                ts_unix: sent_ms / 1000,
+                text: plaintext[9..].to_vec(),
+            });
+        }
+        Some(&crate::channel::CHANNEL_DIRECT_PEX) => {
+            let replay_key = (envelope.sender, envelope.message_id);
+            if !channel.seen_pex.contains(&replay_key) {
+                if let Some((name, refs, have)) = crate::channel::decode_channel_pex(&plaintext) {
+                    if name == envelope.channel
+                        && apply_authenticated_pex(channel, envelope.sender, &refs, &have)
+                    {
+                        channel.seen_pex.push_back(replay_key);
+                        while channel.seen_pex.len() > 1024 {
+                            channel.seen_pex.pop_front();
+                        }
+                        metrics::log_event(
+                            "chan_pex_received",
+                            &[
+                                ("channel", name),
+                                ("descriptors", refs.len().to_string()),
+                                ("have", have.len().to_string()),
+                                ("node", short_addr_tag(&info_addr(&state.info))),
+                            ],
+                        );
+                    }
+                }
             }
         }
         Some(2) if plaintext.len() == 1 => {

@@ -62,6 +62,8 @@ pub struct RoutingConfig {
     /// Full native automatic listener; absent preserves fixed-port behavior.
     pub connectivity: Option<crate::connectivity::ConnectivityConfig>,
     pub bootstrap: Option<BootstrapBundle>,
+    #[cfg(feature = "experimental-gc2")]
+    pub gc2_bootstrap: Option<gcoms_routing::gc2::directory::BootstrapBundle>,
     /// Canonical HTTPS host names; both endpoint and egress enforce this list.
     pub catalog_origins: Vec<String>,
     pub routing_state: Option<Arc<dyn RoutingStateStore>>,
@@ -69,34 +71,51 @@ pub struct RoutingConfig {
 
 impl RoutingConfig {
     pub fn from_environment() -> Result<Self, String> {
-        let bootstrap = match std::env::var_os("GC_ROUTING_BOOTSTRAP") {
-            Some(path) => {
-                let bytes = crate::routing_cache::read_optional(
-                    std::path::Path::new(&path),
-                    gcoms_routing::bootstrap::MAX_BUNDLE_BYTES,
-                )
-                .map_err(|e| format!("cannot read private routing bootstrap: {e}"))?
-                .ok_or("private routing bootstrap is missing")?;
-                Some(BootstrapBundle::decode(&bytes).map_err(|e| e.to_string())?)
+        let mut config = Self::default();
+        if let Some(path) = std::env::var_os("GC_ROUTING_BOOTSTRAP") {
+            let bytes =
+                crate::routing_cache::read_optional(std::path::Path::new(&path), 6 + 8 * 155)
+                    .map_err(|e| format!("cannot read private routing bootstrap: {e}"))?
+                    .ok_or("private routing bootstrap is missing")?;
+            #[cfg(feature = "experimental-gc2")]
+            if bytes.starts_with(b"GCRB\x02") {
+                config.gc2_bootstrap = Some(
+                    gcoms_routing::gc2::directory::BootstrapBundle::decode(&bytes)
+                        .map_err(|e| e.to_string())?,
+                );
+            } else {
+                config.bootstrap =
+                    Some(BootstrapBundle::decode(&bytes).map_err(|e| e.to_string())?);
             }
-            None => None,
-        };
-        let catalog_origins = std::env::var("GC_CATALOG_ORIGINS")
+            #[cfg(not(feature = "experimental-gc2"))]
+            {
+                config.bootstrap =
+                    Some(BootstrapBundle::decode(&bytes).map_err(|e| e.to_string())?);
+            }
+        }
+        config.catalog_origins = std::env::var("GC_CATALOG_ORIGINS")
             .unwrap_or_default()
             .split(',')
             .filter(|s| !s.is_empty())
             .map(str::to_owned)
             .collect();
-        Ok(Self {
-            connectivity: None,
-            bootstrap,
-            catalog_origins,
-            routing_state: None,
-        })
+        Ok(config)
     }
 }
 
+#[cfg(feature = "experimental-gc2")]
+pub(crate) struct Gc2Routing {
+    pub profile_id: u8,
+    pub directory: Arc<gcoms_routing::gc2::directory::Directory>,
+    pub ready: Arc<gcoms_routing::gc2::owner::ReadyConnector>,
+    pub control: Arc<Tp1Client>,
+}
+
 pub(crate) struct RoutingRuntime {
+    #[cfg(feature = "experimental-gc2")]
+    pub gc2: std::sync::OnceLock<Gc2Routing>,
+    #[cfg(feature = "experimental-gc2")]
+    pub gc2_bootstrap: Option<gcoms_routing::gc2::directory::BootstrapBundle>,
     pub discovery: Discovery,
     pub service: Mutex<Option<Arc<RelayService>>>,
     pub catalog_origins: Mutex<Vec<String>>,
@@ -113,6 +132,72 @@ pub(crate) struct RoutingRuntime {
 }
 
 impl RoutingRuntime {
+    async fn provision_inbox(
+        &self,
+        options: &[u8],
+        excluded: &[(SocketAddr, [u8; 32])],
+        target: Option<&RelayTarget>,
+    ) -> Result<zeroize::Zeroizing<Vec<u8>>, String> {
+        #[cfg(feature = "experimental-gc2")]
+        if let Some(current) = self.gc2.get() {
+            use rand::seq::SliceRandom;
+            let mut candidates = current
+                .directory
+                .eligible(excluded, now_unix())
+                .map_err(|e| e.to_string())?;
+            candidates.shuffle(&mut rand::thread_rng());
+            candidates.retain(|relay| {
+                target.is_none_or(|target| {
+                    relay.addr == target.address && relay.service_id == target.relay_service_id
+                })
+            });
+            let mut last = "no ready independent GChat inbox route".to_string();
+            for relay in candidates.into_iter().take(4) {
+                match gcoms_routing::gc2::discovery::provision(
+                    &current.control,
+                    &relay,
+                    self.provision_request,
+                    options,
+                    excluded,
+                )
+                .await
+                {
+                    Ok(reply) => return Ok(reply),
+                    Err(error) => last = error.to_string(),
+                }
+            }
+            return Err(last);
+        }
+        if let Some(target) = target {
+            let relay = self
+                .discovery
+                .directory
+                .introductions()
+                .into_iter()
+                .find(|r| r.addr == target.address && r.service_id == target.relay_service_id)
+                .ok_or("retained service has no fresh introduction")?;
+            let stream = self
+                .discovery
+                .connector
+                .connect(relay.addr, relay.service_id)
+                .await
+                .map_err(|e| e.to_string())?;
+            return gcoms_routing::carrier::provision(
+                stream,
+                &relay,
+                self.provision_request,
+                options,
+            )
+            .await
+            .map_err(|e| e.to_string());
+        }
+        self.discovery
+            .provision(self.provision_request, options, excluded)
+            .await
+            .map(|(_, bytes)| bytes)
+            .map_err(|e| e.to_string())
+    }
+
     pub fn new(
         config: RoutingConfig,
         mut directory: Directory,
@@ -165,6 +250,10 @@ impl RoutingRuntime {
             discovery.install(&bundle).map_err(|e| e.to_string())?;
         }
         Ok(Arc::new(Self {
+            #[cfg(feature = "experimental-gc2")]
+            gc2: std::sync::OnceLock::new(),
+            #[cfg(feature = "experimental-gc2")]
+            gc2_bootstrap: config.gc2_bootstrap,
             discovery,
             service: Mutex::new(None),
             catalog_origins: Mutex::new(config.catalog_origins),
@@ -313,6 +402,13 @@ impl RoutingRuntime {
             policy,
         )
         .map_err(|e| e.to_string())?;
+        #[cfg(feature = "experimental-gc2")]
+        if let Some(bundle) = &self.gc2_bootstrap {
+            service
+                .gc2_directory()
+                .remember(bundle, now_unix())
+                .map_err(|e| e.to_string())?;
+        }
         seed.fill(0);
         let handler = service.handler();
         *self.service.lock().unwrap_or_else(|p| p.into_inner()) = Some(service);
@@ -442,7 +538,10 @@ pub(crate) fn spawn(
         let mut publication_failures = 0u32;
         let mut last_candidate = None;
         loop {
-            let _ = runtime.discovery.refresh().await;
+            let current_protocol = scheduler.is_gc2();
+            if !current_protocol {
+                let _ = runtime.discovery.refresh().await;
+            }
             // Cache and guard changes are sealed even while inboxes are offline.
             {
                 let mut st = state.lock().unwrap_or_else(|p| p.into_inner());
@@ -451,11 +550,11 @@ pub(crate) fn spawn(
                     return;
                 }
             }
-            if runtime.entry.checkpoint().is_err() {
+            if !current_protocol && runtime.entry.checkpoint().is_err() {
                 return;
             }
             if runtime.recovering_owner.load(Ordering::Acquire) {
-                let deadline = if runtime.fixture {
+                let deadline = if runtime.fixture && !current_protocol {
                     std::time::Duration::from_secs(10)
                 } else {
                     std::time::Duration::from_secs(90)
@@ -492,7 +591,7 @@ pub(crate) fn spawn(
                 .unwrap_or_else(|p| p.into_inner())
                 .as_ref()
                 .map(|s| s.introduction(now_unix()));
-            if let Some(own) = introduction {
+            if let Some(own) = introduction.filter(|_| !current_protocol) {
                 if last_candidate != Some(own.addr) {
                     next_publish = std::time::Instant::now();
                     publication_failures = 0;
@@ -748,9 +847,8 @@ async fn recover_owner(
         .into_iter()
         .collect();
     let options = gc2_provision_options(state);
-    let (_, encoded) = runtime
-        .discovery
-        .provision(runtime.provision_request, &options, &excluded)
+    let encoded = runtime
+        .provision_inbox(&options, &excluded, None)
         .await
         .map_err(|e| e.to_string())?;
     let (card, introduction) =
@@ -823,24 +921,9 @@ async fn resume_owner(
     let mut authority = current.clone();
     let options = gc2_provision_options(state);
     if initial.is_err() {
-        let relay = runtime
-            .discovery
-            .directory
-            .introductions()
-            .into_iter()
-            .find(|r| r.addr == target.address && r.service_id == target.relay_service_id)
-            .ok_or("retained service has no fresh introduction")?;
-        use gcoms_transport::connector::Connector;
-        let stream = runtime
-            .discovery
-            .connector
-            .connect(relay.addr, relay.service_id)
-            .await
-            .map_err(|e| e.to_string())?;
-        let encoded =
-            gcoms_routing::carrier::provision(stream, &relay, runtime.provision_request, &options)
-                .await
-                .map_err(|e| e.to_string())?;
+        let encoded = runtime
+            .provision_inbox(&options, &[], Some(&target))
+            .await?;
         let (card, introduction) =
             NodeInfo::decode_private_any(&encoded).ok_or("invalid recovery authority")?;
         install_advertisement(state, introduction.as_deref());

@@ -687,6 +687,27 @@ async fn dispatch(
             // relay introductions, never a user's inbox ownership or identity.
             let st = state.lock().unwrap_or_else(|p| p.into_inner());
             let runtime = st.routing.as_ref().ok_or("routing is not enabled")?;
+            #[cfg(feature = "experimental-gc2")]
+            if req.get("version").and_then(Value::as_u64) == Some(2) {
+                let service = runtime.service.lock().unwrap_or_else(|p| p.into_inner());
+                let service = service.as_ref().ok_or("relay service is not ready")?;
+                let own = service.gc2_introduction(gcoms_routing::route::now_unix());
+                let mut relays = service.gc2_directory().reentry_candidates();
+                relays.retain(|r| r.service_id != own.service_id);
+                relays.insert(0, own);
+                relays.truncate(8);
+                let bundle = gcoms_routing::gc2::directory::BootstrapBundle { relays };
+                return Ok(
+                    json!({"version": 2, "routing_bundle_b64": encode_b64url(&bundle.encode().map_err(|e| e.to_string())?)}),
+                );
+            }
+            if req
+                .get("version")
+                .and_then(Value::as_u64)
+                .is_some_and(|version| version != 1)
+            {
+                return Err("unsupported routing bootstrap version".into());
+            }
             let mut relays = runtime.discovery.directory.reentry_candidates();
             let service = runtime.service.lock().unwrap_or_else(|p| p.into_inner());
             let own = service

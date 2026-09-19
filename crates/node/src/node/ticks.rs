@@ -17,17 +17,18 @@ pub(crate) fn spawn_contact_subscription_pump(
     let (stop, mut stopped) = tokio::sync::watch::channel(false);
     let task = tokio::spawn(async move {
         let mut subscriptions = FuturesUnordered::new();
-        let mut active = HashSet::new();
+        let mut active = HashSet::<([u8; 32], gcoms_core::TrafficClass)>::new();
         let mut clock = tokio::time::interval(poll_interval);
         clock.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
         loop {
             tokio::select! {
                 biased;
                 _ = stopped.changed() => break,
-                Some(queue_id) = subscriptions.next(), if !subscriptions.is_empty() => {
-                    active.remove(&queue_id);
-                    state.lock().unwrap_or_else(|p| p.into_inner())
-                        .subscribed_contact_aliases.remove(&queue_id);
+                Some(key) = subscriptions.next(), if !subscriptions.is_empty() => {
+                    active.remove(&key);
+                    let mut st = state.lock().unwrap_or_else(|p| p.into_inner());
+                    st.subscribed_contact_aliases.remove(&key.0);
+                    st.subscribed_classes.remove(&key);
                     continue;
                 },
                 _ = clock.tick() => {},
@@ -70,27 +71,36 @@ pub(crate) fn spawn_contact_subscription_pump(
                 }
             };
             for alias in aliases {
-                let queue_id = alias.contact.queue_id;
-                if !active.insert(queue_id) {
-                    continue;
-                }
-                let state = state.clone();
-                let scheduler = scheduler.clone();
-                let events = events.clone();
-                subscriptions.push(async move {
-                    if !owner_alias_receiving(&state.lock().unwrap_or_else(|p| p.into_inner()), &alias) { return queue_id; }
-                    let opened = match scheduler.subscribe(alias.clone()) {
-                        Ok(receipt) => receipt.completion().await.stream(),
+                for &traffic in scheduler.subscription_classes() {
+                    let alias = alias.clone();
+                    let queue_id = alias.contact.queue_id;
+                    let key = (queue_id, traffic);
+                    if !active.insert(key) {
+                        continue;
+                    }
+                    let state = state.clone();
+                    let scheduler = scheduler.clone();
+                    let events = events.clone();
+                    subscriptions.push(async move {
+                    if !owner_alias_receiving(&state.lock().unwrap_or_else(|p| p.into_inner()), &alias) { return key; }
+                    let opened = match scheduler.subscribe_with_class(alias.clone(), traffic) {
+                        Ok(receipt) => receipt.completion().await.delivery_stream(),
                         Err(error) => Err(error.to_string()),
                     };
+                    // Accepted natural subscriptions end on a fixed deadline.
+                    // Reopen the same authority first; a failed reopen triggers
+                    // recovery. A normal stream renewal must not reprovision it.
+                    let resubscribe_in_place = scheduler.is_gc2() && opened.is_ok();
                     match opened {
                         Ok(mut stream) => {
-                            if !owner_alias_receiving(&state.lock().unwrap_or_else(|p| p.into_inner()), &alias) { return queue_id; }
-                            state
-                                .lock()
-                                .unwrap_or_else(|poisoned| poisoned.into_inner())
-                                .subscribed_contact_aliases
-                                .insert(queue_id);
+                            if !owner_alias_receiving(&state.lock().unwrap_or_else(|p| p.into_inner()), &alias) { return key; }
+                            {
+                                let mut st = state.lock().unwrap_or_else(|p| p.into_inner());
+                                st.subscribed_classes.insert(key);
+                                if scheduler.subscription_classes().iter().all(|&class| st.subscribed_classes.contains(&(queue_id, class))) {
+                                    st.subscribed_contact_aliases.insert(queue_id);
+                                }
+                            }
                             metrics::log_event("contact_sub_connected", &[]);
                             loop {
                                 tokio::select! {
@@ -107,12 +117,15 @@ pub(crate) fn spawn_contact_subscription_pump(
                         }
                         Err(error) => metrics::log_event("contact_sub_error", &[("e", error)]),
                     }
-                    super::routing::owner_unavailable(&state.lock().unwrap_or_else(|p| p.into_inner()), &alias);
-                    queue_id
+                    if !resubscribe_in_place {
+                        super::routing::owner_unavailable(&state.lock().unwrap_or_else(|p| p.into_inner()), &alias);
+                    }
+                    key
                 });
+                }
             }
         }
-        subscriptions.clear();
+        drop(subscriptions);
     });
     super::api::ShutdownTask { stop, task }
 }
@@ -142,7 +155,7 @@ pub(crate) fn spawn_channel_subscription_pump(
     let (stop, mut stopped) = tokio::sync::watch::channel(false);
     let task = tokio::spawn(async move {
         let mut subscriptions = FuturesUnordered::new();
-        let mut active = std::collections::HashSet::new();
+        let mut active = HashSet::<(String, usize, [u8; 32], gcoms_core::TrafficClass)>::new();
         let mut clock = tokio::time::interval(std::time::Duration::from_millis(500));
         clock.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
         loop {
@@ -151,6 +164,7 @@ pub(crate) fn spawn_channel_subscription_pump(
                 _ = stopped.changed() => break,
                 Some(key) = subscriptions.next(), if !subscriptions.is_empty() => {
                     active.remove(&key);
+                    state.lock().unwrap_or_else(|p| p.into_inner()).subscribed_classes.remove(&(key.2, key.3));
                     continue;
                 },
                 _ = clock.tick() => {},
@@ -187,35 +201,48 @@ pub(crate) fn spawn_channel_subscription_pump(
                     .collect::<Vec<_>>()
             };
             for (key, alias) in aliases {
-                if !active.insert(key.clone()) {
-                    continue;
-                }
-                let state = state.clone();
-                let scheduler = scheduler.clone();
-                let events = events.clone();
-                subscriptions.push(async move {
-                    let stream = match scheduler.subscribe(alias) {
-                        Ok(receipt) => receipt.completion().await.stream(),
-                        Err(error) => Err(error.to_string()),
-                    };
-                    if let Ok(mut stream) = stream {
-                        while let Some(Ok(cell)) = stream.recv().await {
-                            handle_incoming(&state, cell, &events);
+                for &traffic in scheduler.subscription_classes() {
+                    let alias = alias.clone();
+                    let key = (key.0.clone(), key.1, key.2, traffic);
+                    if !active.insert(key.clone()) {
+                        continue;
+                    }
+                    let state = state.clone();
+                    let scheduler = scheduler.clone();
+                    let events = events.clone();
+                    subscriptions.push(async move {
+                        let stream = match scheduler.subscribe_with_class(alias, traffic) {
+                            Ok(receipt) => receipt.completion().await.delivery_stream(),
+                            Err(error) => Err(error.to_string()),
+                        };
+                        let resubscribe_in_place = scheduler.is_gc2() && stream.is_ok();
+                        if let Ok(mut stream) = stream {
+                            state
+                                .lock()
+                                .unwrap_or_else(|p| p.into_inner())
+                                .subscribed_classes
+                                .insert((key.2, key.3));
+                            while let Some(Ok(cell)) = stream.recv().await {
+                                handle_incoming(&state, cell, &events);
+                            }
                         }
-                    }
-                    if let Some(runtime) = &state.lock().unwrap_or_else(|p| p.into_inner()).routing
-                    {
-                        runtime
-                            .channel_ready
-                            .lock()
-                            .unwrap_or_else(|p| p.into_inner())
-                            .remove(&key.0);
-                    }
-                    key
-                });
+                        if !resubscribe_in_place {
+                            if let Some(runtime) =
+                                &state.lock().unwrap_or_else(|p| p.into_inner()).routing
+                            {
+                                runtime
+                                    .channel_ready
+                                    .lock()
+                                    .unwrap_or_else(|p| p.into_inner())
+                                    .remove(&key.0);
+                            }
+                        }
+                        key
+                    });
+                }
             }
         }
-        subscriptions.clear();
+        drop(subscriptions);
     });
     super::api::ShutdownTask { stop, task }
 }
@@ -457,7 +484,7 @@ pub(crate) fn spawn_invite_service_loop(
                 });
             }
         }
-        active.clear();
+        drop(active);
     });
     super::api::ShutdownTask { stop, task }
 }

@@ -14,6 +14,7 @@ and macOS Apple Silicon/Intel. See [release preparation](docs/RELEASE.md).
 
 - [Typed services and addon integration](docs/TYPED_SERVICES.md): shared Rust traits,
   generated clients, TypeScript and Rust/WASM browsers, durable operation handles.
+- [Private piece exchange](docs/PRIVATE_FILES.md): resumable, encrypted multi-source file transfer.
 - [SDK](crates/sdk/README.md): embedded runtime or capability-scoped local IPC.
 - [Runnable addon](examples/typed-addon/README.md): one contract and multiple clients.
 - [Implemented protocol profile](SPEC.md), [architecture](docs/ARCHITECTURE.md),

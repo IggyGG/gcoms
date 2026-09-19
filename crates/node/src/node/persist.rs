@@ -2758,6 +2758,7 @@ pub(in crate::node) mod tests {
     #[cfg(feature = "experimental-gc2")]
     include!("persist/gc2_control_tests.rs");
     include!("persist/channel_directory_tests.rs");
+    include!("persist/channel_pex_tests.rs");
 
     fn contact(byte: u8) -> AliasContact {
         AliasContact {
@@ -3039,6 +3040,7 @@ pub(in crate::node) mod tests {
             owner_clock: Mutex::new(persist::owner_aliases::RestoreClock::fresh().unwrap()),
             draining_contact_aliases: Vec::new(),
             subscribed_contact_aliases: HashSet::new(),
+            subscribed_classes: HashSet::new(),
             #[cfg(feature = "client-persist")]
             owner_alias_origins: HashMap::new(),
             #[cfg(feature = "client-persist")]

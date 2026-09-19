@@ -22,6 +22,8 @@ pub const MAX_RECORD: usize = 16 * 1024;
 const RECORD_LENGTHS: [usize; 3] = [1024, 2048, 4096];
 const PERIODS_MS: [u16; 4] = [250, 500, 1000, 1500];
 const PROFILES_PER_MODE: u8 = 12;
+/// Fixed 4096-byte/1000-ms interactive cover with natural unpaced bulk.
+pub const FILE_TRANSFER_PROFILE: u8 = 22;
 
 /// Explicit experimental traffic policies. Existing IDs 0..12 retain their
 /// full-cover semantics; new modes have distinct authenticated profile IDs.
@@ -85,6 +87,11 @@ impl CandidateProfile {
 
     pub fn id(self) -> u8 {
         self.id
+    }
+    pub fn file_transfer() -> Self {
+        Self {
+            id: FILE_TRANSFER_PROFILE,
+        }
     }
     pub fn with_mode(self, mode: CoverMode) -> Self {
         Self {
@@ -349,6 +356,47 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn file_profile_is_explicit_and_does_not_reinterpret_old_ids() {
+        let profile = CandidateProfile::file_transfer();
+        assert_eq!(CandidateProfile::from_id(22).unwrap(), profile);
+        assert_eq!(profile.record_len(), 4096);
+        assert_eq!(profile.period(), Duration::from_secs(1));
+        let bulk = RecordCodec::new(TrafficClass::Bulk, profile);
+        let interactive = RecordCodec::new(TrafficClass::Interactive, profile);
+        assert!(bulk.encode(RecordKind::Cover, &[]).is_err());
+        assert_eq!(
+            interactive.encode(RecordKind::Cover, &[]).unwrap().len(),
+            4096
+        );
+        for length in [1, 11 * 1024, MAX_RECORD - HEADER_LEN] {
+            let wire = bulk.encode(RecordKind::Data, &vec![17; length]).unwrap();
+            assert_eq!(wire.len(), HEADER_LEN + length);
+            assert_eq!(bulk.decode(&wire).unwrap().payload().len(), length);
+            assert!(interactive.decode(&wire).is_err());
+            let old = RecordCodec::new(
+                TrafficClass::Bulk,
+                CandidateProfile::new(4096, 1000).unwrap(),
+            );
+            assert!(old.decode(&wire).is_err());
+        }
+        assert!(bulk.encode(RecordKind::Data, &vec![0; MAX_RECORD]).is_err());
+        let open = bulk.encode(RecordKind::Open, &[]).unwrap();
+        assert_eq!(open.len(), 4096);
+        assert_eq!(
+            profile,
+            CandidateProfile::new(4096, 1000)
+                .unwrap()
+                .with_mode(CoverMode::Interactive)
+        );
+        assert_eq!(
+            RecordCodec::from_open_header(&open[..HEADER_LEN])
+                .unwrap()
+                .profile(),
+            profile
+        );
     }
 
     #[test]

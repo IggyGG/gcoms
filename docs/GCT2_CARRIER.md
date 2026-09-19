@@ -32,7 +32,7 @@ and GC/1 framing fail closed. An established channel cannot open again.
 | Opaque inner multiplexor bytes | declared length |
 | Zero padding | remainder of fixed record |
 
-Both classes ride one fixed lattice. Each record occupies the selected 1/2/4 KiB
+Profiles 0–11 retain both classes on one fixed lattice. Each record occupies the selected 1/2/4 KiB
 size, and the sender polls already available bytes once at each fixed
 250/500/1,000/1,500 ms opportunity. No data produces cover; no opportunity is
 advanced or added for application arrivals. A blocked write skips elapsed
@@ -81,6 +81,20 @@ natural-cell relay transport is explicit and experimental, while application
 class propagation remains pending.
 
 ## Ownership and resource bounds
+
+The GChat file-transfer candidate explicitly negotiates profile **22**. Its
+interactive records retain the 4 KiB/one-second lattice; bulk records use their
+natural length (nine-byte header plus declared payload, at most 16 KiB total).
+Bulk Data/Close have no padding; the initial authenticated Open retains the
+profile-sized padding. Bulk has no timer or idle cover record. Its writes await available
+transport credit and preserve the circuit, queue and interactive reservations
+below. A bulk cover kind, cross-profile record or oversized length is rejected.
+IDs 0–11 keep their existing encodings. This policy accepts observable file
+activity and approximate volume. It does not claim bulk indistinguishability.
+
+Node/GChat integration and explicit GCRB2 provisioning now exist in the
+[file-transfer candidate](GCHAT_FILE_TRANSFER_FOLLOWUP.md); fleet correctness
+and the revised chat privacy contract remain qualification gates.
 
 The caller owns and continuously polls `entry::run` for a connected period chosen
 independently of chat. That future owns TLS, outer HTTP2, both channel pumps and

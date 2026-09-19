@@ -173,6 +173,7 @@ pub struct UnverifiedPush {
     cell: NaturalCell,
     class: TrafficClass,
     queue_id: QueueId,
+    epoch: u64,
     expiry: u64,
 }
 
@@ -183,6 +184,7 @@ impl UnverifiedPush {
             cell,
             class: parsed.class,
             queue_id: parsed.queue_id,
+            epoch: parsed.epoch,
             expiry: parsed.expiry,
         })
     }
@@ -191,6 +193,9 @@ impl UnverifiedPush {
     }
     pub fn queue_id(&self) -> QueueId {
         self.queue_id
+    }
+    pub fn epoch(&self) -> u64 {
+        self.epoch
     }
     pub fn expiry(&self) -> u64 {
         self.expiry

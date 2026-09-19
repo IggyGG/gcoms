@@ -9,6 +9,66 @@
 
 use super::now_unix;
 use gcoms_routing::gc2::directory::{BootstrapBundle, Directory, Introduction};
+use std::sync::Arc;
+
+pub(crate) struct Prepared {
+    pub directory: Arc<Directory>,
+    pub owner: gcoms_routing::gc2::owner::EntryOwner,
+    pub ready: Arc<gcoms_routing::gc2::owner::ReadyConnector>,
+}
+
+pub(crate) fn prepare(
+    cfg: &super::NodeConfig,
+    runtime: Option<&Arc<super::routing::RoutingRuntime>>,
+) -> Result<Option<Prepared>, String> {
+    let Some((path, entries, _, _, _)) = cfg.profile.gc2_carrier() else {
+        if runtime.is_some_and(|r| r.gc2_bootstrap.is_some()) {
+            return Err("GCRB2 bootstrap requires the GChat carrier profile".into());
+        }
+        return Ok(None);
+    };
+    let profile = cfg.profile.gc2_wire_profile()?;
+    let directory = Arc::new(match path {
+        Some(path) => crate::routing_cache::Cache::open_gc2(path, &cfg.seed)
+            .and_then(|cache| {
+                cache.select_gc2_profile(profile)?;
+                cache.gc2_directory(super::now_unix())
+            })
+            .map_err(|e| e.to_string())?,
+        None if cfg.profile.gc2_loopback_fixture() => Directory::for_loopback_fixture(),
+        None => Directory::new(),
+    });
+    if let Some(bundle) = runtime.and_then(|r| r.gc2_bootstrap.as_ref()) {
+        directory
+            .remember(bundle, super::now_unix())
+            .map_err(|e| e.to_string())?;
+    }
+    for introduction in cfg.profile.gc2_introductions() {
+        install_advertised(&directory, introduction)?;
+    }
+    let (owner, ready) =
+        gcoms_routing::gc2::owner::EntryOwner::new(directory.clone(), profile, entries)
+            .map_err(|e| e.to_string())?;
+    if let Some(runtime) = runtime {
+        let control = Arc::new(
+            gcoms_transport::Tp1Client::with_connector(ready.clone()).map_err(|e| e.to_string())?,
+        );
+        runtime
+            .gc2
+            .set(super::routing::Gc2Routing {
+                profile_id: profile.id(),
+                directory: directory.clone(),
+                ready: ready.clone(),
+                control,
+            })
+            .map_err(|_| "GChat routing already initialized")?;
+    }
+    Ok(Some(Prepared {
+        directory,
+        owner,
+        ready,
+    }))
+}
 
 /// Install one advertised introduction as a canonical directory seed. The
 /// directory's own address policy, expiry and capability validation apply;

@@ -43,6 +43,43 @@ pub(crate) async fn restore_contact_alias(
     if saved.contact.expiry <= now_unix() {
         return Err("prepared channel route expired".into());
     }
+    #[cfg(feature = "experimental-gc2")]
+    if scheduler.is_gc2() {
+        use gcoms_protocol::relay::gc2::{Forward, Push, UnverifiedPush};
+        let expiry = now_unix().saturating_add(60).min(saved.contact.expiry);
+        let push = Push {
+            class: gcoms_core::TrafficClass::Interactive,
+            queue_id: saved.contact.queue_id,
+            epoch: saved.contact.epoch,
+            nonce: random_nonzero(),
+            expiry,
+            msg: None,
+        }
+        .encode(
+            &saved.capabilities.push,
+            &saved.contact.target.relay_service_id,
+        )
+        .map_err(|e| e.to_string())?;
+        let result = scheduler
+            .forward_gc2(Forward {
+                class: gcoms_core::TrafficClass::Interactive,
+                target: saved.contact.target.clone(),
+                expiry,
+                nonce: random_nonzero(),
+                push: Some(UnverifiedPush::parse(push).map_err(|e| e.to_string())?),
+            })
+            .map_err(|e| e.to_string())?
+            .completion()
+            .await
+            .accepted();
+        if result.is_ok() {
+            return Ok(saved.clone());
+        }
+        if saved.contact.target != authority.contact.target {
+            return Err("prepared channel relay is unavailable".into());
+        }
+        return provision_contact_alias(scheduler, authority, Some(saved)).await;
+    }
     let cover = crate::relay::RelayPush::cover(
         saved.contact.queue_id,
         saved.contact.epoch,

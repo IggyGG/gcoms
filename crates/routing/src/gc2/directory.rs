@@ -9,7 +9,10 @@ use crate::{
 use std::{
     fmt,
     net::SocketAddr,
-    sync::{Arc, RwLock},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc, RwLock,
+    },
 };
 use zeroize::{Zeroize, Zeroizing};
 
@@ -186,6 +189,7 @@ pub struct Directory {
     view: RwLock<View>,
     allowed: AddressPolicy,
     checkpoint: Option<Checkpoint>,
+    persistence_failed: AtomicBool,
 }
 impl Default for Directory {
     fn default() -> Self {
@@ -204,6 +208,7 @@ impl Directory {
             view: RwLock::new(View::default()),
             allowed,
             checkpoint: None,
+            persistence_failed: AtomicBool::new(false),
         }
     }
     /// Installs persistence before the directory is shared with a connection
@@ -214,11 +219,24 @@ impl Directory {
         Ok(self)
     }
     fn commit(&self, current: &mut View, next: View) -> Result<()> {
+        self.check_persistence()?;
         if *current != next {
             if let Some(checkpoint) = &self.checkpoint {
-                checkpoint(&next.encode()?)?;
+                if let Err(error) = checkpoint(&next.encode()?) {
+                    // Atomic replacement may have succeeded before directory
+                    // fsync failed. Neither view is safe to use or overwrite
+                    // until the authenticated checkpoint is reloaded.
+                    self.persistence_failed.store(true, Ordering::Release);
+                    return Err(error);
+                }
             }
             *current = next;
+        }
+        Ok(())
+    }
+    pub fn check_persistence(&self) -> Result<()> {
+        if self.persistence_failed.load(Ordering::Acquire) {
+            return Err("GC/2 directory checkpoint failed; authenticated reload required".into());
         }
         Ok(())
     }
@@ -283,6 +301,7 @@ impl Directory {
     /// overlapping candidates return false; persistence failures return errors.
     pub fn retain_guard(&self, pin: [u8; 32]) -> Result<bool> {
         let mut view = self.view.write().unwrap_or_else(|p| p.into_inner());
+        self.check_persistence()?;
         if !view.relays.iter().any(|relay| relay.service_id == pin) {
             return Err("unknown GC/2 guard".into());
         }
@@ -298,11 +317,11 @@ impl Directory {
         Ok(true)
     }
     pub fn guards(&self) -> Vec<[u8; 32]> {
-        self.view
-            .read()
-            .unwrap_or_else(|p| p.into_inner())
-            .guards
-            .clone()
+        let view = self.view.read().unwrap_or_else(|p| p.into_inner());
+        if self.check_persistence().is_err() {
+            return Vec::new();
+        }
+        view.guards.clone()
     }
     /// Validates the complete bundle before changing the view. Expired entries
     /// remain re-entry seeds only; an older reply cannot replace newer authority.
@@ -364,6 +383,7 @@ impl Directory {
             return Err("too many GC/2 route exclusions".into());
         }
         let view = self.view.read().unwrap_or_else(|p| p.into_inner());
+        self.check_persistence()?;
         Ok(view
             .relays
             .iter()
@@ -383,6 +403,9 @@ impl Directory {
     /// retry timing; a data request must not cause direct re-entry.
     pub fn reentry_candidates(&self) -> Vec<Introduction> {
         let view = self.view.read().unwrap_or_else(|p| p.into_inner());
+        if self.check_persistence().is_err() {
+            return Vec::new();
+        }
         let mut relays: Vec<_> = view
             .relays
             .iter()
@@ -569,20 +592,71 @@ mod tests {
                 NOW
             )
             .is_err());
-        assert_eq!(directory.encode_private().unwrap(), before);
+        assert!(directory.encode_private().is_err());
         assert_eq!(*saved.lock().unwrap(), before);
-        // Unchanged state needs no write and does not depend on storage availability.
-        directory.set_guards(vec![[1; 32]]).unwrap();
-        remember(&directory, relay(1));
-        assert!(!directory.retain_guard([1; 32]).unwrap());
+        // Even unchanged state is unsafe after an ambiguous checkpoint error.
+        assert!(directory.set_guards(vec![[1; 32]]).is_err());
+        assert!(directory.retain_guard([1; 32]).is_err());
+        assert!(directory.eligible(&[], NOW).is_err());
+        assert!(directory.guards().is_empty());
+        assert!(directory.reentry_candidates().is_empty());
         assert_eq!(writes.load(Ordering::SeqCst), count);
         fail.store(false, Ordering::SeqCst);
-        assert!(directory.retain_guard([2; 32]).unwrap());
+        assert!(directory.retain_guard([2; 32]).is_err());
         let restarted = restore(&saved.lock().unwrap(), NOW).unwrap();
-        assert_eq!(restarted.guards(), vec![[1; 32], [2; 32]]);
+        assert_eq!(restarted.guards(), vec![[1; 32]]);
+        assert!(restarted.retain_guard([2; 32]).unwrap());
         assert!(Directory::for_loopback_fixture()
             .with_checkpoint(Arc::new(|_| Err("disk failed".into())))
             .is_err());
+    }
+    #[test]
+    fn checkpoint_written_then_error_requires_reload_of_new_authority() {
+        use std::sync::Mutex;
+        let fail = Arc::new(AtomicBool::new(false));
+        let saved = Arc::new(Mutex::new(Zeroizing::new(Vec::new())));
+        let sink = saved.clone();
+        let reject = fail.clone();
+        let directory = Directory::for_loopback_fixture()
+            .with_checkpoint(Arc::new(move |bytes| {
+                *sink.lock().unwrap() = Zeroizing::new(bytes.to_vec());
+                if reject.load(Ordering::SeqCst) {
+                    return Err("fixture rename succeeded but directory fsync failed".into());
+                }
+                Ok(())
+            }))
+            .unwrap();
+        remember(&directory, relay(1));
+        directory.retain_guard([1; 32]).unwrap();
+        let mut renewed = relay(1);
+        renewed.entry_cap = [204; 32];
+        renewed.expires_at += 100;
+        fail.store(true, Ordering::SeqCst);
+        assert!(directory
+            .remember(
+                &BootstrapBundle {
+                    relays: vec![renewed.clone()]
+                },
+                NOW
+            )
+            .is_err());
+        let on_disk = saved.lock().unwrap().clone();
+        fail.store(false, Ordering::SeqCst);
+        assert!(directory
+            .remember(
+                &BootstrapBundle {
+                    relays: vec![relay(1)]
+                },
+                NOW
+            )
+            .is_err());
+        assert!(directory.retain_guard([1; 32]).is_err());
+        assert!(directory.eligible(&[], NOW).is_err());
+        assert!(directory.encode_private().is_err());
+        assert_eq!(*saved.lock().unwrap(), on_disk);
+        let restarted = restore(&on_disk, NOW).unwrap();
+        assert_eq!(restarted.guards(), vec![[1; 32]]);
+        assert_eq!(restarted.eligible(&[], NOW).unwrap(), vec![renewed]);
     }
     #[test]
     fn bundle_is_bounded_canonical_and_version_separated() {

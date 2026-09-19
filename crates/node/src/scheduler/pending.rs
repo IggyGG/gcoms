@@ -7,12 +7,16 @@ pub(super) struct PendingRequest {
     pub token: String,
     pub excluded: Vec<(SocketAddr, [u8; 32])>,
     pub subscription: bool,
+    #[cfg(feature = "experimental-gc2")]
+    pub natural: bool,
     pub make: Box<dyn FnOnce() -> Result<bytes::Bytes, String> + Send>,
 }
 
 impl PendingRequest {
     pub fn semantic(semantic: SemanticJob, round: u16, seed: [u8; 32]) -> Result<Self, String> {
         let (target, token, excluded, subscription) = match &semantic {
+            #[cfg(feature = "experimental-gc2")]
+            SemanticJob::ForwardNatural { .. } => return Err("GC/2 data cannot enter GC/1".into()),
             SemanticJob::Push { contact, .. } => (
                 contact.target.clone(),
                 gcoms_transport::encode_b64url(&contact.queue_id),
@@ -124,6 +128,8 @@ impl PendingRequest {
             token,
             excluded,
             subscription,
+            #[cfg(feature = "experimental-gc2")]
+            natural: false,
             make,
         }
     }

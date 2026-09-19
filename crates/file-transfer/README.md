@@ -9,3 +9,8 @@ The crate documentation is generated from this package's source. Applications
 normally begin with `gcoms-rpc` for typed services or `gcoms-sdk` for messaging.
 Lower layers are implementation components and have no independent stability
 promise during the developer preview.
+
+The additive [private piece exchange](../../docs/PRIVATE_FILES.md) supports
+encrypted sparse caches, independent piece verification, restart, and multiple
+authorized sources. Its state machine is under `gcoms_file_transfer::swarm`;
+the host supplies membership and GComs transport.

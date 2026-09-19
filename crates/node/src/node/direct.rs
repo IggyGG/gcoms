@@ -532,10 +532,6 @@ pub(crate) fn handle_incoming(
         cell.payload.fill(0);
         return;
     }
-    if cell.cell_type() == Some(CellType::Pex) {
-        handle_pex_cell(state, cell);
-        return;
-    }
     if cell.cell_type() != Some(CellType::Msg) {
         return;
     }

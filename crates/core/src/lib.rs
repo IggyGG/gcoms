@@ -85,6 +85,16 @@ pub fn principal_binding_signature_payload(hash: &[u8; 32]) -> alloc::vec::Vec<u
     payload
 }
 
+/// Versioned piece exchange uses a distinct channel application disposition.
+pub const PIECE_CONTENT_TYPE: &str = "application/vnd.gcoms.pieces.v1";
+pub fn is_piece_application_payload(bytes: &[u8]) -> bool {
+    if bytes.len() < 8 || &bytes[..6] != b"GCAPP1" {
+        return false;
+    }
+    let n = u16::from_be_bytes([bytes[6], bytes[7]]) as usize;
+    bytes.get(8..8 + n) == Some(PIECE_CONTENT_TYPE.as_bytes())
+}
+
 #[cfg(test)]
 mod managed_volatile_tests {
     #[test]

@@ -73,6 +73,12 @@ impl NaturalCell {
     pub fn payload(&self) -> &[u8] {
         &self.payload
     }
+    /// Allocated payload storage for bounded queue admission. This includes
+    /// spare capacity retained by a caller-provided buffer.
+    pub fn payload_capacity(&self) -> usize {
+        self.payload.capacity()
+    }
+
     pub fn into_payload(self) -> Vec<u8> {
         self.payload
     }

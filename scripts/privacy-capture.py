@@ -10,6 +10,7 @@ import argparse
 import sys
 from privacy_packets import sha256, write_new
 import json
+import shlex
 import subprocess
 import time
 from pathlib import Path
@@ -22,8 +23,8 @@ def parse_args():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--binary", type=Path, required=True)
     parser.add_argument("--out", type=Path, required=True)
-    parser.add_argument("--workload", choices=("idle", "chat", "bulk", "warm_idle"), required=True)
-    parser.add_argument("--profile", choices=("gc1", "gc2"), default="gc2")
+    parser.add_argument("--workload", choices=("idle", "chat", "bulk", "mixed", "warm_idle"), required=True)
+    parser.add_argument("--profile", choices=("gc1", "gc2", "gchat-files"), default="gc2")
     parser.add_argument("--protected", action="store_true")
     parser.add_argument("--seed", type=int, default=7)
     parser.add_argument("--seconds", type=int, default=30)
@@ -59,8 +60,18 @@ def harness_args(args):
     command += ["--entries", str(args.entries), "--warmup-ms", str(args.warmup_ms)]
     if args.traffic_profile:
         command += ["--traffic-profile", args.traffic_profile]
-    if args.protected and args.profile == "gc2":
+    if args.protected and args.profile in ("gc2", "gchat-files"):
         command.append("--protected")
+    if args.profile == "gchat-files":
+        if not args.protected or args.cadence != "production" or args.workload == "warm_idle":
+            raise ValueError("gchat-files requires protected production cadence and idle/chat/bulk/mixed")
+        command += ["--measurement-ms", str(args.seconds * 1000)]
+        if args.workload in ("chat", "mixed"):
+            command += ["--chat-count", str(max(1, args.bytes // 128)), "--chat-bytes", "128",
+                        "--chat-interval-ms", str(args.chat_interval_ms)]
+        if args.workload in ("bulk", "mixed"):
+            command += ["--bulk-bytes", str(max(1024, args.bytes)), "--bulk-chunk", "1024"]
+        return command
     if args.workload == "idle":
         command += ["--idle-ms", str(args.seconds * 1000)]
     elif args.workload == "warm_idle":
@@ -185,8 +196,10 @@ def main():
                 record = json.loads(line)
             except json.JSONDecodeError:
                 pass
-    marker = "IDLE_START " if args.workload in ("idle", "warm_idle") else "MEASUREMENT_START "
+    marker = "IDLE_START " if args.profile != "gchat-files" and args.workload in ("idle", "warm_idle") else "MEASUREMENT_START "
     start = next((float(line.split()[1]) for line in output.splitlines() if line.startswith(marker)), None)
+    measured_end = next((float(line.split()[1]) for line in output.splitlines()
+                         if line.startswith("MEASUREMENT_END ")), None)
     duration = min(args.seconds, int(worker.get("capture_finished_epoch", finished) - start)) if start else 0
     metadata = {
         "schema": 2, "capture_scope": "pooled_loopback_fixture", "diagnostic_only": True,
@@ -197,6 +210,8 @@ def main():
         "binary_sha256": binary_hash, "capture_script_sha256": sha256(__file__),
         "pcap": paths["pcap"].name, "pcap_sha256": sha256(paths["pcap"]),
         "record": record,
+        "measurement_start_epoch": start, "measurement_end_epoch": measured_end,
+        "chat_interval_ms": args.chat_interval_ms,
         "measurement": {"start_epoch": start, "end_epoch": start + duration} if start and duration > 0 else None,
         "idle_start_epoch": start if marker == "IDLE_START " else None,
         **worker,

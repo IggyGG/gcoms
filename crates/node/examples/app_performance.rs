@@ -36,6 +36,7 @@ struct Args {
     cadence: String,
     drain_ms: u64,
     idle_ms: u64,
+    measurement_ms: u64,
     skip_single: bool,
     listen_a: u16,
     listen_b: u16,
@@ -60,6 +61,7 @@ fn parse_args() -> Result<Args, String> {
         cadence: "compressed".into(),
         drain_ms: 5000,
         idle_ms: 0,
+        measurement_ms: 0,
         skip_single: false,
         listen_a: 0,
         listen_b: 0,
@@ -84,6 +86,9 @@ fn parse_args() -> Result<Args, String> {
             "--entries" => args.entries = value()?.parse::<usize>().map_err(|e| e.to_string())?,
             "--drain-ms" => args.drain_ms = value()?.parse::<u64>().map_err(|e| e.to_string())?,
             "--idle-ms" => args.idle_ms = value()?.parse::<u64>().map_err(|e| e.to_string())?,
+            "--measurement-ms" => {
+                args.measurement_ms = value()?.parse::<u64>().map_err(|e| e.to_string())?
+            }
             "--skip-single" => args.skip_single = true,
             "--listen-a" => args.listen_a = value()?.parse::<u16>().map_err(|e| e.to_string())?,
             "--listen-b" => args.listen_b = value()?.parse::<u16>().map_err(|e| e.to_string())?,
@@ -144,10 +149,14 @@ fn parse_args() -> Result<Args, String> {
             other => return Err(format!("unknown argument {other}")),
         }
     }
-    if !matches!(args.profile.as_str(), "gc1" | "gc2") {
-        return Err("--profile must be gc1 or gc2".into());
+    if !matches!(args.profile.as_str(), "gc1" | "gc2" | "gchat-files") {
+        return Err("--profile must be gc1, gc2 or gchat-files".into());
     }
-    if args.chat_count == 0 && args.bulk_bytes == 0 && args.idle_ms == 0 {
+    if args.profile == "gchat-files" && (!args.protected || args.cadence != "production") {
+        return Err("gchat-files requires --protected --cadence production".into());
+    }
+    if args.chat_count == 0 && args.bulk_bytes == 0 && args.idle_ms == 0 && args.measurement_ms == 0
+    {
         return Err("nothing to measure: set --chat-count, --bulk-bytes or --idle-ms".into());
     }
     if args.bulk_chunk < 1024 || args.bulk_chunk > 15 * 1024 {
@@ -164,8 +173,18 @@ fn parse_args() -> Result<Args, String> {
             "bounded fixture requires <=10000 chats, <=128 MiB bulk and a positive timeout".into(),
         );
     }
-    if args.protected && (args.profile != "gc2" || !(1..=3).contains(&args.entries)) {
+    if args.protected
+        && (!matches!(args.profile.as_str(), "gc2" | "gchat-files")
+            || !(1..=3).contains(&args.entries))
+    {
         return Err("protected fixture requires GC/2 with 1..3 entries".into());
+    }
+    if args.profile == "gchat-files"
+        && args
+            .traffic_profile
+            .is_some_and(|p| p != CandidateProfile::file_transfer())
+    {
+        return Err("gchat-files requires its fixed authenticated traffic profile".into());
     }
     if args.traffic_profile.is_some() && !args.protected {
         return Err("traffic profile comparison requires protected GC/2 circuits".into());
@@ -188,6 +207,19 @@ fn profile(
     // owner dials real circuits instead of the direct terminal.
     let production = cadence == "production";
     match name {
+        "gchat-files" => {
+            let NodeProfile::Fixture(mut fixture) =
+                NodeProfile::gc2_carrier_production_cadence_fixture_seeded(
+                    None,
+                    entries,
+                    introductions.to_vec(),
+                )
+            else {
+                unreachable!()
+            };
+            fixture.gc2_cover_mode = gcoms_routing::gc2::CoverMode::Interactive;
+            NodeProfile::Fixture(fixture)
+        }
         "gc2" if !introductions.is_empty() && production => {
             NodeProfile::gc2_carrier_production_cadence_fixture_seeded(
                 None,
@@ -682,6 +714,7 @@ async fn main() -> Result<(), String> {
     if args.warmup_ms > 0 {
         tokio::time::sleep(Duration::from_millis(args.warmup_ms)).await;
     }
+    let measurement_clock = Instant::now();
     let measure_start = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map_err(|e| e.to_string())?
@@ -710,6 +743,25 @@ async fn main() -> Result<(), String> {
         args.timeout,
     );
     let (chat, bulk) = tokio::join!(chat, bulk);
+    let measurement_overrun = args.measurement_ms > 0
+        && measurement_clock.elapsed() > Duration::from_millis(args.measurement_ms);
+    // Keep complete delivery/failure evidence even when the fixed interval was
+    // exceeded. Such a run must fail instead of being relabeled as a shorter run.
+    let measurement_end = if args.measurement_ms > 0 {
+        tokio::time::sleep(
+            Duration::from_millis(args.measurement_ms).saturating_sub(measurement_clock.elapsed()),
+        )
+        .await;
+        let end = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_err(|e| e.to_string())?
+            .as_secs_f64();
+        println!("MEASUREMENT_END {end:.6}");
+        std::io::stdout().flush().map_err(|e| e.to_string())?;
+        Some(end)
+    } else {
+        None
+    };
 
     // Workload results are final once both streams join.
     let (mut chat_latencies, chat_sent, chat_failures, mut admission_latencies) = chat;
@@ -815,7 +867,9 @@ async fn main() -> Result<(), String> {
         let record = serde_json::json!({
             "schema": 2, "fixture": "loopback_protocol", "persistence": "atomic_fsync_node_archive",
             "profile": args.profile, "protected": args.protected, "cadence": args.cadence,
-            "traffic_profile_id": args.traffic_profile.map(|p| p.id()),
+            "traffic_profile_id": args.traffic_profile
+                .or_else(|| (args.profile == "gchat-files").then(CandidateProfile::file_transfer))
+                .map(|p| p.id()),
             "entry_connections": entry_connections.as_ref().map(|v| v.load(Ordering::SeqCst)).unwrap_or(0),
             "middle_connections": middle_connections.as_ref().map(|v| v.load(Ordering::SeqCst)).unwrap_or(0),
             "seed": args.seed, "listen_a": recipient_addr.to_string(), "listen_b": sender_addr.to_string(),
@@ -832,6 +886,9 @@ async fn main() -> Result<(), String> {
             "requested_receipts": expected_receipts, "exact_delivery": exact_delivery,
             "delivery_errors": evidence.errors,
             "measurement_start_epoch": measure_start,
+            "measurement_end_epoch": measurement_end,
+            "measurement_requested_ms": args.measurement_ms,
+            "measurement_overrun": measurement_overrun,
             "sender_jobs": diagnostics.resources.jobs, "sender_bytes": diagnostics.resources.bytes,
         });
         (record, exact_delivery)
@@ -850,7 +907,11 @@ async fn main() -> Result<(), String> {
     print!("{record}");
     sender.shutdown().await;
     recipient.shutdown().await;
-    if !exact_delivery || failures != 0 || bulk_acked_bytes != args.bulk_bytes {
+    if measurement_overrun
+        || !exact_delivery
+        || failures != 0
+        || bulk_acked_bytes != args.bulk_bytes
+    {
         return Err("incomplete or incorrect durable delivery; retain the failed run".into());
     }
     Ok(())

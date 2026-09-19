@@ -11,6 +11,11 @@ version.workspace = true
 publish.workspace = true
 
 [dependencies]
+gcoms-private-fs = { version = "0.1.0", path = "../private-fs" }
+aes-gcm = "0.10"
+fs2 = "0.4"
+postcard = { version = "1", default-features = false, features = ["alloc"] }
+tempfile = "3"
 gcoms-core = { version = "0.1.0", path = "../core" }
 hex = "0.4"
 rand = "0.8"
@@ -21,8 +26,6 @@ serde_json = "1"
 sha2 = "0.10"
 thiserror = "2"
 
-[dev-dependencies]
-tempfile = "3"
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61", features = ["Win32_Storage_FileSystem"] }

@@ -74,16 +74,35 @@ pub(crate) struct DirectPresenceObservation {
     pub(crate) expires: std::time::Instant,
 }
 
-/// Poll child work within its owner. Dropping a maintenance batch must drop
-/// every child immediately, including references to the encrypted state sink.
-/// Detached task cancellation can otherwise retain the profile lock after the
-/// node reports that shutdown has completed.
+/// Await a set of independent futures concurrently and collect their
+/// outputs in order. Poll in the owning task so cancellation drops all child
+/// futures before releasing the node's persistent state.
 pub(crate) async fn futures_join_all<F, T>(futures: impl IntoIterator<Item = F>) -> Vec<T>
 where
     F: std::future::Future<Output = T> + Send + 'static,
     T: Send + 'static,
 {
-    futures_util::future::join_all(futures).await
+    use std::task::Poll;
+    let mut pending: Vec<_> = futures.into_iter().map(|f| Some(Box::pin(f))).collect();
+    let mut remaining = pending.len();
+    let mut slots: Vec<Option<T>> = (0..remaining).map(|_| None).collect();
+    std::future::poll_fn(|cx| {
+        for (future, slot) in pending.iter_mut().zip(&mut slots) {
+            if let Some(current) = future.as_mut() {
+                if let Poll::Ready(value) = current.as_mut().poll(cx) {
+                    *slot = Some(value);
+                    *future = None;
+                    remaining -= 1;
+                }
+            }
+        }
+        if remaining == 0 {
+            Poll::Ready(slots.iter_mut().map(|slot| slot.take().unwrap()).collect())
+        } else {
+            Poll::Pending
+        }
+    })
+    .await
 }
 
 #[cfg(test)]
@@ -270,6 +289,7 @@ pub struct NodeState {
     pub(crate) owner_alias_renewals: HashMap<[u8; 32], Vec<u8>>,
     pub(crate) draining_contact_aliases: Vec<DrainingContactAliases>,
     pub(crate) subscribed_contact_aliases: HashSet<[u8; 32]>,
+    pub(crate) subscribed_classes: HashSet<([u8; 32], gcoms_core::TrafficClass)>,
     pub(crate) contact_aliases_activated: std::time::Instant,
     pub(crate) frwd_target_policy: FrwdTargetPolicy,
     pub(crate) scheduler: RelayScheduler,

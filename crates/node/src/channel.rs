@@ -15,6 +15,8 @@ pub const CHAN_PRESENCE_LEASE: u8 = 6;
 pub const CHAN_TEXT_WITH_PRESENCE: u8 = 7;
 pub const CHAN_COMMIT_ACK_WITH_PRESENCE: u8 = 8;
 pub const CHAN_TEXT_ACK_WITH_PRESENCE: u8 = 9;
+// 3 is the volatile file-piece application disposition.
+pub const CHANNEL_DIRECT_PEX: u8 = 4;
 pub const CHANNEL_DIR_BATCH_LIMIT: usize = 32;
 const CHANNEL_ROUTE_VERSION: u8 = 2;
 const PEX_VERSION: u8 = 1;
@@ -606,6 +608,7 @@ pub struct ChannelState {
     pub unrouted_ack_order: VecDeque<UnroutedAckKey>,
     pub message_outbox: HashMap<[u8; 16], ChannelMessageOutbox>,
     pub seen_direct: VecDeque<[u8; 16]>,
+    pub seen_pex: VecDeque<([u8; 32], [u8; 16])>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -831,6 +834,7 @@ impl ChannelState {
             unrouted_ack_order: VecDeque::new(),
             message_outbox: HashMap::new(),
             seen_direct: VecDeque::new(),
+            seen_pex: VecDeque::new(),
         }
     }
 
@@ -1228,6 +1232,33 @@ impl PeerRef {
     }
 }
 
+/// PEX uses the established pairwise channel-direct plaintext family, never
+/// the shared MLS application ratchet or a raw relay inner cell.
+pub fn encode_channel_pex(chan: &str, refs: &[PeerRef], have: &[[u8; 16]]) -> Option<Vec<u8>> {
+    if chan.is_empty()
+        || chan.len() > u16::MAX as usize
+        || refs.is_empty()
+        || refs.len() > 8
+        || have.len() > 16
+    {
+        return None;
+    }
+    let mut encoded = vec![CHANNEL_DIRECT_PEX];
+    encoded.extend_from_slice(&encode_pex(chan, refs, have));
+    Some(encoded)
+}
+
+pub fn decode_channel_pex(plaintext: &[u8]) -> Option<(String, Vec<PeerRef>, Vec<[u8; 16]>)> {
+    if plaintext.first() != Some(&CHANNEL_DIRECT_PEX) {
+        return None;
+    }
+    let (channel, refs, have) = decode_pex_bounded(plaintext.get(1..)?, 8, 16)?;
+    if channel.is_empty() || refs.is_empty() {
+        return None;
+    }
+    Some((channel, refs, have))
+}
+
 pub fn encode_pex(chan: &str, refs: &[PeerRef], have: &[[u8; 16]]) -> Vec<u8> {
     let refs = &refs[..refs.len().min(u8::MAX as usize)];
     let have = &have[..have.len().min(u8::MAX as usize)];
@@ -1247,6 +1278,14 @@ pub fn encode_pex(chan: &str, refs: &[PeerRef], have: &[[u8; 16]]) -> Vec<u8> {
 }
 
 pub fn decode_pex(payload: &[u8]) -> Option<(String, Vec<PeerRef>, Vec<[u8; 16]>)> {
+    decode_pex_bounded(payload, u8::MAX as usize, u8::MAX as usize)
+}
+
+fn decode_pex_bounded(
+    payload: &[u8],
+    refs_limit: usize,
+    have_limit: usize,
+) -> Option<(String, Vec<PeerRef>, Vec<[u8; 16]>)> {
     if payload.first() != Some(&PEX_VERSION) {
         return None;
     }
@@ -1256,6 +1295,9 @@ pub fn decode_pex(payload: &[u8]) -> Option<(String, Vec<PeerRef>, Vec<[u8; 16]>
     let chan = String::from_utf8(payload.get(p..p + clen)?.to_vec()).ok()?;
     p += clen;
     let dcount = *payload.get(p)? as usize;
+    if dcount > refs_limit {
+        return None;
+    }
     p += 1;
     let mut refs = Vec::new();
     for _ in 0..dcount {
@@ -1266,6 +1308,9 @@ pub fn decode_pex(payload: &[u8]) -> Option<(String, Vec<PeerRef>, Vec<[u8; 16]>
         refs.push(r);
     }
     let hcount = *payload.get(p)? as usize;
+    if hcount > have_limit {
+        return None;
+    }
     p += 1;
     let mut have = Vec::new();
     for _ in 0..hcount {
@@ -1834,6 +1879,33 @@ mod tests {
         unknown.id = known_id.wrapping_add(1);
         cs.learn_ref(&unknown);
         assert!(cs.resolve(&unknown.id).is_none());
+    }
+
+    #[test]
+    fn encrypted_pex_inner_rejects_missing_oversized_and_noncanonical_fields() {
+        let peer = PeerRef::from_route(&route(33));
+        let encoded = encode_channel_pex("room", std::slice::from_ref(&peer), &[[4; 16]]).unwrap();
+        assert!(
+            matches!(decode_channel_pex(&encoded), Some((channel, refs, have))
+            if channel == "room" && refs == vec![peer.clone()] && have == vec![[4; 16]])
+        );
+        for (channel, refs, have) in [
+            ("", vec![peer.clone()], vec![]),
+            ("room", vec![], vec![]),
+            ("room", vec![peer.clone(); 9], vec![]),
+            ("room", vec![peer.clone()], vec![[4; 16]; 17]),
+        ] {
+            assert!(encode_channel_pex(channel, &refs, &have).is_none());
+            let mut raw = vec![CHANNEL_DIRECT_PEX];
+            raw.extend_from_slice(&encode_pex(channel, &refs, &have));
+            assert!(decode_channel_pex(&raw).is_none());
+        }
+        for end in 0..encoded.len() {
+            assert!(decode_channel_pex(&encoded[..end]).is_none());
+        }
+        let mut trailing = encoded;
+        trailing.push(0);
+        assert!(decode_channel_pex(&trailing).is_none());
     }
 
     #[test]
