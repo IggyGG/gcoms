@@ -481,6 +481,26 @@ impl LeaseStore {
             .map_err(|_| StoreError::Unauthorized)?;
         let grant = self.grants.get(&grant_id).ok_or(StoreError::Unauthorized)?;
         if grant.status == GrantStatus::Consumed {
+            // Lost-reply recovery may replay the exact authenticated creation.
+            // Matching only queue/epoch would authorize changed capabilities or
+            // limits with a consumed grant. Require the complete retained state
+            // and original creation nonce, without changing or extending it.
+            if grant.queue_id == create.queue_id
+                && grant.epoch == create.epoch
+                && grant.expiry > now_unix
+            {
+                if let Some(lease) = self.leases.get(&create.queue_id) {
+                    if lease.epoch == create.epoch
+                        && lease.expiry == create.lease_expiry
+                        && lease.capabilities == create.capabilities
+                        && lease.limits.max_queue_cells == create.queue_cells
+                        && lease.limits.max_queue_bytes == create.queue_bytes
+                        && lease.has_replay(create.epoch, ReplayOperation::Create, &create.nonce)
+                    {
+                        return Ok(lease.view());
+                    }
+                }
+            }
             return Err(StoreError::GrantConsumed);
         }
         if grant.queue_id != create.queue_id
@@ -1090,6 +1110,44 @@ mod tests {
             Err(StoreError::GrantConsumed)
         );
         assert_eq!(store.queue_count(NOW), 1);
+    }
+
+    #[test]
+    fn exact_create_retry_preserves_queue_and_cannot_change_authority() {
+        let capabilities = caps(10);
+        let mut store = store(4, 1024);
+        let provision = create_lease(&mut store, capabilities, 4, 1024);
+        let original = LeaseCreate {
+            queue_id: QUEUE_ID,
+            epoch: EPOCH,
+            lease_expiry: NOW + 300,
+            queue_cells: 4,
+            queue_bytes: 1024,
+            capabilities,
+            nonce: [31; 16],
+            grant: provision.wire,
+        };
+        store
+            .authenticate_push(push_wire(&capabilities, EPOCH, [55; 16], 10, 1), NOW)
+            .unwrap();
+        assert!(store
+            .create_lease(&original.encode(&RELAY_ID).unwrap(), NOW + 1)
+            .is_ok());
+        assert_eq!(store.queue_len(&QUEUE_ID, NOW + 1), 1);
+        for field in 0..5 {
+            let mut changed = original.clone();
+            match field {
+                0 => changed.capabilities = caps(20),
+                1 => changed.queue_cells = 3,
+                2 => changed.queue_bytes = 512,
+                3 => changed.lease_expiry -= 1,
+                _ => changed.nonce = [32; 16],
+            }
+            assert!(store
+                .create_lease(&changed.encode(&RELAY_ID).unwrap(), NOW + 1)
+                .is_err());
+        }
+        assert_eq!(store.queue_len(&QUEUE_ID, NOW + 1), 1);
     }
 
     #[test]

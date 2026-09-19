@@ -1,10 +1,16 @@
 use super::{protocol::*, Cache, Error, Result, State, Status};
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
+use std::sync::{
+    atomic::{AtomicUsize, Ordering},
+    Arc,
+};
 
 const MAX_PEERS: usize = 64;
 const MAX_SOURCES: usize = 4;
 const ACTIVE_DOWNLOADS: usize = 2;
 const PIPELINE: usize = 4;
+pub const BLOCK_WINDOW: usize = 8;
+pub const PAYLOAD_BUDGET: usize = 4 * 1024 * 1024;
 const REQUEST_TIMEOUT: u64 = 30;
 
 /// Local aggregate observations; contains no share, route, or member identifiers.
@@ -17,6 +23,9 @@ pub struct Diagnostics {
     pub retries: u64,
     pub buffered_bytes: usize,
     pub pending_pulls: usize,
+    pub hop_accepted: u64,
+    pub outcome_unknown: u64,
+    pub not_sent: u64,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -24,15 +33,80 @@ pub struct Peer {
     pub channel: [u8; 32],
     pub member: Member,
 }
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct Action {
     pub peer: Peer,
     pub message: Message,
+    _payload: Option<PayloadReservation>,
+}
+#[derive(Clone, Debug)]
+pub struct PayloadReservation(Arc<ReservedPayload>);
+#[derive(Debug)]
+struct ReservedPayload {
+    counter: Arc<AtomicUsize>,
+    bytes: usize,
+}
+impl Drop for ReservedPayload {
+    fn drop(&mut self) {
+        self.counter.fetch_sub(self.bytes, Ordering::AcqRel);
+    }
+}
+#[derive(Clone, Copy, Debug)]
+pub struct SendToken {
+    peer: Peer,
+    id: ShareId,
+    piece: u32,
+    offset: u32,
+    request: [u8; 16],
+}
+#[derive(Clone, Copy, Debug)]
+pub enum SendOutcome {
+    HopAccepted,
+    OutcomeUnknown,
+    DefinitelyNotSent,
+}
+impl Action {
+    pub fn offer(peer: Peer, manifest: Manifest) -> Self {
+        Self {
+            peer,
+            message: Message::Offers {
+                manifests: vec![manifest],
+                next: None,
+            },
+            _payload: None,
+        }
+    }
+    /// Hold through encoding and transport completion. Reservation includes six
+    /// bounded payload copies for the worker, application envelope and transport.
+    pub fn payload_guard(&self) -> Option<PayloadReservation> {
+        self._payload
+            .as_ref()
+            .map(|p| PayloadReservation(p.0.clone()))
+    }
+    pub fn send_token(&self) -> Option<SendToken> {
+        match self.message {
+            Message::Want {
+                id,
+                piece,
+                offset,
+                request,
+            } => Some(SendToken {
+                peer: self.peer,
+                id,
+                piece,
+                offset,
+                request,
+            }),
+            _ => None,
+        }
+    }
 }
 #[derive(Clone, Debug)]
 pub struct View {
     pub state: State,
     pub sources: usize,
+    /// Distinct peers whose pieces were verified during this engine lifetime.
+    pub verified_sources: usize,
     pub waiting_for_peers: bool,
     pub delivered: usize,
 }
@@ -40,9 +114,42 @@ struct Pull {
     peer: Peer,
     request: [u8; 16],
     bytes: Vec<u8>,
+    received: Vec<bool>,
+    outstanding: BTreeMap<usize, BlockAttempt>,
     proof: Option<Vec<Hash>>,
+}
+struct BlockAttempt {
     deadline: u64,
     attempts: u8,
+}
+impl Pull {
+    fn fill_window(&mut self, id: ShareId, piece: u32, out: &mut Vec<Action>) {
+        for block in 0..self.received.len() {
+            if self.outstanding.len() >= BLOCK_WINDOW {
+                break;
+            }
+            if self.received[block] || self.outstanding.contains_key(&block) {
+                continue;
+            }
+            self.outstanding.insert(
+                block,
+                BlockAttempt {
+                    deadline: u64::MAX,
+                    attempts: 0,
+                },
+            );
+            out.push(Action {
+                _payload: None,
+                peer: self.peer,
+                message: Message::Want {
+                    id,
+                    piece,
+                    offset: (block * BLOCK_BYTES) as u32,
+                    request: self.request,
+                },
+            });
+        }
+    }
 }
 struct Served {
     id: ShareId,
@@ -58,6 +165,7 @@ pub struct Engine {
     pub cache: Cache,
     members: BTreeMap<[u8; 32], (Member, BTreeSet<Member>)>,
     sources: BTreeMap<ShareId, BTreeSet<Peer>>,
+    verified_sources: BTreeMap<ShareId, BTreeSet<Peer>>,
     inventories: BTreeMap<(ShareId, Peer), Vec<bool>>,
     pulls: BTreeMap<(ShareId, u32), Pull>,
     backoff: BTreeMap<Peer, u64>,
@@ -67,6 +175,7 @@ pub struct Engine {
     refresh_cursor: usize,
     receipt_cursor: usize,
     diagnostics: Diagnostics,
+    payload_reserved: Arc<AtomicUsize>,
 }
 impl Engine {
     pub fn new(cache: Cache) -> Self {
@@ -74,6 +183,7 @@ impl Engine {
             cache,
             members: BTreeMap::new(),
             sources: BTreeMap::new(),
+            verified_sources: BTreeMap::new(),
             inventories: BTreeMap::new(),
             pulls: BTreeMap::new(),
             backoff: BTreeMap::new(),
@@ -83,6 +193,7 @@ impl Engine {
             refresh_cursor: 0,
             receipt_cursor: 0,
             diagnostics: Diagnostics::default(),
+            payload_reserved: Arc::new(AtomicUsize::new(0)),
         }
     }
     pub fn set_members(
@@ -153,6 +264,10 @@ impl Engine {
                 View {
                     state: state.clone(),
                     sources,
+                    verified_sources: self
+                        .verified_sources
+                        .get(&state.manifest.id)
+                        .map_or(0, BTreeSet::len),
                     waiting_for_peers: state.status == Status::Downloading
                         && !self.pulls.keys().any(|(id, _)| id == &state.manifest.id),
                     delivered: state.completed_by.len(),
@@ -217,11 +332,24 @@ impl Engine {
                         )
                     })
             }),
-            Message::Want { id, .. } | Message::Inventory { id, .. } => {
+            Message::Want {
+                id,
+                piece,
+                offset,
+                request,
+            } => {
                 self.cache.get(*id).is_ok_and(|s| {
                     s.status == Status::Downloading && self.permits(action.peer, &s.manifest.scope)
+                }) && self.pulls.get(&(*id, *piece)).is_some_and(|p| {
+                    p.peer == action.peer
+                        && p.request == *request
+                        && p.outstanding
+                            .contains_key(&(*offset as usize / BLOCK_BYTES))
                 })
             }
+            Message::Inventory { id, .. } => self.cache.get(*id).is_ok_and(|s| {
+                s.status == Status::Downloading && self.permits(action.peer, &s.manifest.scope)
+            }),
             Message::Data { id, .. } | Message::Have { id, .. } => {
                 self.cache.get(*id).is_ok_and(|s| {
                     matches!(s.status, Status::Downloading | Status::Complete)
@@ -272,6 +400,7 @@ impl Engine {
                     None
                 };
                 out.push(Action {
+                    _payload: None,
                     peer,
                     message: Message::Offers {
                         manifests: manifests.into_iter().take(8).collect(),
@@ -290,6 +419,7 @@ impl Engine {
                 }
                 if let Some(after) = next {
                     out.push(Action {
+                        _payload: None,
                         peer,
                         message: Message::Discover { after: Some(after) },
                     });
@@ -310,6 +440,7 @@ impl Engine {
                     vec![false; end - start as usize]
                 };
                 out.push(Action {
+                    _payload: None,
                     peer,
                     message: Message::Have { id, start, pieces },
                 });
@@ -335,6 +466,7 @@ impl Engine {
                     let next = start as usize + pieces.len();
                     if !pieces.is_empty() && next < total {
                         out.push(Action {
+                            _payload: None,
                             peer,
                             message: Message::Inventory {
                                 id,
@@ -358,6 +490,7 @@ impl Engine {
                     && state.have.get(piece as usize).copied().unwrap_or(false);
                 if !available {
                     out.push(Action {
+                        _payload: None,
                         peer,
                         message: Message::Unavailable { id, request },
                     });
@@ -368,10 +501,16 @@ impl Engine {
                     return Err(Error::Invalid("block offset"));
                 }
                 if !self.served.iter().any(|s| s.id == id && s.piece == piece) {
-                    let (proof, bytes) = self.cache.read_piece(id, piece)?;
-                    if self.served.len() == PIPELINE {
+                    while !self.served.is_empty()
+                        && (self.served.len() == PIPELINE
+                            || self.buffered_bytes() + length > PAYLOAD_BUDGET)
+                    {
                         self.served.pop_front();
                     }
+                    if self.buffered_bytes() + length > PAYLOAD_BUDGET {
+                        return Ok(out);
+                    }
+                    let (proof, bytes) = self.cache.read_piece(id, piece)?;
                     self.served.push_back(Served {
                         id,
                         piece,
@@ -379,13 +518,23 @@ impl Engine {
                         bytes,
                     });
                 }
+                let end = (offset as usize + BLOCK_BYTES).min(length);
+                let reserved = (end - offset as usize + 1024) * 6;
+                if self.buffered_bytes() + reserved > PAYLOAD_BUDGET {
+                    return Ok(out);
+                }
+                self.payload_reserved.fetch_add(reserved, Ordering::AcqRel);
+                let reservation = PayloadReservation(Arc::new(ReservedPayload {
+                    counter: self.payload_reserved.clone(),
+                    bytes: reserved,
+                }));
                 let served = self
                     .served
                     .iter()
                     .find(|s| s.id == id && s.piece == piece)
                     .unwrap();
-                let end = (offset as usize + BLOCK_BYTES).min(length);
                 out.push(Action {
+                    _payload: Some(reservation),
                     peer,
                     message: Message::Data {
                         id,
@@ -415,11 +564,16 @@ impl Engine {
                 };
                 if pull.peer != peer
                     || pull.request != request
-                    || pull.bytes.len() != offset as usize
+                    || offset as usize >= length
+                    || !(offset as usize).is_multiple_of(BLOCK_BYTES)
                 {
                     return Ok(out);
                 }
-                if bytes.len() != BLOCK_BYTES.min(length - pull.bytes.len())
+                let block = offset as usize / BLOCK_BYTES;
+                if pull.received[block] || !pull.outstanding.contains_key(&block) {
+                    return Ok(out);
+                }
+                if bytes.len() != BLOCK_BYTES.min(length - offset as usize)
                     || proof.len() > 16
                     || pull.proof.as_ref().is_some_and(|p| p != &proof)
                 {
@@ -436,10 +590,10 @@ impl Engine {
                     .diagnostics
                     .received_bytes
                     .saturating_add(bytes.len() as u64);
-                pull.bytes.extend(bytes);
-                pull.deadline = now + REQUEST_TIMEOUT;
-                pull.attempts = 0;
-                if pull.bytes.len() == length {
+                pull.bytes[offset as usize..offset as usize + bytes.len()].copy_from_slice(&bytes);
+                pull.received[block] = true;
+                pull.outstanding.remove(&block);
+                if pull.received.iter().all(|received| *received) {
                     let pull = self.pulls.remove(&(id, piece)).unwrap();
                     let retained = match self.cache.put(
                         id,
@@ -461,6 +615,10 @@ impl Engine {
                         }
                     };
                     if retained {
+                        let sources = self.verified_sources.entry(id).or_default();
+                        if sources.len() < MAX_PEERS {
+                            sources.insert(peer);
+                        }
                         self.diagnostics.verified_pieces =
                             self.diagnostics.verified_pieces.saturating_add(1);
                     }
@@ -469,6 +627,7 @@ impl Engine {
                         if let Some(sources) = self.sources.get(&id) {
                             for source in sources {
                                 out.push(Action {
+                                    _payload: None,
                                     peer: *source,
                                     message: Message::Complete {
                                         id,
@@ -479,15 +638,7 @@ impl Engine {
                         }
                     }
                 } else {
-                    out.push(Action {
-                        peer,
-                        message: Message::Want {
-                            id,
-                            piece,
-                            offset: pull.bytes.len() as u32,
-                            request,
-                        },
-                    });
+                    pull.fill_window(id, piece, &mut out);
                 }
             }
             Message::Unavailable { id, request } => {
@@ -509,6 +660,8 @@ impl Engine {
     }
     pub fn tick(&mut self, now: u64) -> Result<Vec<Action>> {
         self.cache.expire(now)?;
+        self.verified_sources
+            .retain(|id, _| self.cache.entries().contains_key(id));
         let revoked: Vec<_> = self
             .cache
             .entries()
@@ -548,6 +701,7 @@ impl Engine {
                 if *at <= now && out.len() < 8 {
                     *at = now + 60;
                     out.push(Action {
+                        _payload: None,
                         peer,
                         message: Message::Discover { after: None },
                     });
@@ -574,6 +728,7 @@ impl Engine {
                         for n in 0..MAX_SOURCES.min(peers.len()) {
                             let peer = *peers[(self.refresh_cursor + n) % peers.len()];
                             out.push(Action {
+                                _payload: None,
                                 peer,
                                 message: Message::Inventory { id: *id, start: 0 },
                             });
@@ -582,6 +737,7 @@ impl Engine {
                 } else if state.status == Status::Complete {
                     for peer in sources {
                         completed.push(Action {
+                            _payload: None,
                             peer: *peer,
                             message: Message::Complete {
                                 id: *id,
@@ -593,7 +749,12 @@ impl Engine {
             }
             if !completed.is_empty() {
                 for n in 0..8.min(completed.len()) {
-                    out.push(completed[(self.receipt_cursor + n) % completed.len()].clone());
+                    let action = &completed[(self.receipt_cursor + n) % completed.len()];
+                    out.push(Action {
+                        _payload: None,
+                        peer: action.peer,
+                        message: action.message.clone(),
+                    });
                 }
                 self.receipt_cursor = (self.receipt_cursor + 8) % completed.len();
             }
@@ -602,27 +763,37 @@ impl Engine {
         let expired: Vec<_> = self
             .pulls
             .iter()
-            .filter(|(_, p)| p.deadline <= now)
+            .filter(|(_, p)| p.outstanding.values().any(|block| block.deadline <= now))
             .map(|(k, _)| *k)
             .collect();
         for (id, piece) in expired {
             self.diagnostics.retries = self.diagnostics.retries.saturating_add(1);
             let pull = self.pulls.get_mut(&(id, piece)).unwrap();
-            if pull.attempts >= 2 {
+            if pull
+                .outstanding
+                .values()
+                .any(|block| block.deadline <= now && block.attempts >= 2)
+            {
                 self.backoff.insert(pull.peer, now + 120);
                 self.pulls.remove(&(id, piece));
             } else {
-                pull.attempts += 1;
-                pull.deadline = now + REQUEST_TIMEOUT * (1 << pull.attempts);
-                out.push(Action {
-                    peer: pull.peer,
-                    message: Message::Want {
-                        id,
-                        piece,
-                        offset: pull.bytes.len() as u32,
-                        request: pull.request,
-                    },
-                });
+                for (&block, attempt) in &mut pull.outstanding {
+                    if attempt.deadline > now {
+                        continue;
+                    }
+                    attempt.attempts += 1;
+                    attempt.deadline = u64::MAX; // host owns this queued attempt until completion
+                    out.push(Action {
+                        _payload: None,
+                        peer: pull.peer,
+                        message: Message::Want {
+                            id,
+                            piece,
+                            offset: (block * BLOCK_BYTES) as u32,
+                            request: pull.request,
+                        },
+                    });
+                }
             }
         }
         for (id, state) in self
@@ -662,36 +833,32 @@ impl Engine {
                     .min_by_key(|p| self.pulls.values().filter(|pull| pull.peer == **p).count())
                     .unwrap();
                 let request = rand::random();
-                self.pulls.insert(
-                    (*id, piece),
-                    Pull {
-                        peer,
-                        request,
-                        bytes: Vec::with_capacity(state.manifest.cipher_len(piece)?),
-                        proof: None,
-                        deadline: now + REQUEST_TIMEOUT,
-                        attempts: 0,
-                    },
-                );
-                out.push(Action {
+                let length = state.manifest.cipher_len(piece)?;
+                if self.buffered_bytes() + length > PAYLOAD_BUDGET {
+                    break;
+                }
+                let mut pull = Pull {
                     peer,
-                    message: Message::Want {
-                        id: *id,
-                        piece,
-                        offset: 0,
-                        request,
-                    },
-                });
+                    request,
+                    bytes: vec![0; length],
+                    received: vec![false; length.div_ceil(BLOCK_BYTES)],
+                    outstanding: BTreeMap::new(),
+                    proof: None,
+                };
+                pull.fill_window(*id, piece, &mut out);
+                self.pulls.insert((*id, piece), pull);
             }
         }
         Ok(out)
     }
     /// Payload buffers remain bounded independently of total file sizes.
     pub fn buffered_bytes(&self) -> usize {
-        self.pulls
-            .values()
-            .map(|p| p.bytes.capacity())
-            .sum::<usize>()
+        self.payload_reserved.load(Ordering::Acquire)
+            + self
+                .pulls
+                .values()
+                .map(|p| p.bytes.capacity())
+                .sum::<usize>()
             + self
                 .served
                 .iter()
@@ -703,6 +870,39 @@ impl Engine {
             buffered_bytes: self.buffered_bytes(),
             pending_pulls: self.pulls.len(),
             ..self.diagnostics
+        }
+    }
+
+    /// Call once when a queued Want finishes its real transport attempt, or is
+    /// discarded before sending. A local wrapper timeout is not completion.
+    pub fn send_finished(&mut self, token: Option<SendToken>, outcome: SendOutcome, now: u64) {
+        match outcome {
+            SendOutcome::HopAccepted => {
+                self.diagnostics.hop_accepted = self.diagnostics.hop_accepted.saturating_add(1)
+            }
+            SendOutcome::OutcomeUnknown => {
+                self.diagnostics.outcome_unknown =
+                    self.diagnostics.outcome_unknown.saturating_add(1)
+            }
+            SendOutcome::DefinitelyNotSent => {
+                self.diagnostics.not_sent = self.diagnostics.not_sent.saturating_add(1)
+            }
+        }
+        let Some(token) = token else { return };
+        let Some(pull) = self.pulls.get_mut(&(token.id, token.piece)) else {
+            return;
+        };
+        if pull.peer != token.peer || pull.request != token.request {
+            return;
+        }
+        if let Some(block) = pull
+            .outstanding
+            .get_mut(&(token.offset as usize / BLOCK_BYTES))
+        {
+            block.deadline = match outcome {
+                SendOutcome::DefinitelyNotSent => now,
+                _ => now.saturating_add(REQUEST_TIMEOUT * (1 << block.attempts)),
+            };
         }
     }
 }

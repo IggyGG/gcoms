@@ -214,6 +214,9 @@ pub(crate) fn spawn_command_loop(ctx: CommandLoopContext) -> tokio::task::JoinHa
                     let result = (|| {
                         let st = state.lock().unwrap_or_else(|p| p.into_inner());
                         let runtime = st.routing.as_ref().ok_or("routing is not enabled")?;
+                        if scheduler.is_gc2() {
+                            return Err("GChat carrier requires GCRB2 bootstrap".into());
+                        }
                         runtime
                             .discovery
                             .install(&bundle)
@@ -855,10 +858,21 @@ pub(crate) fn spawn_command_loop(ctx: CommandLoopContext) -> tokio::task::JoinHa
                         complete | {
                             let prepared =
                                 prepare_channel_direct(&state, &channel, recipient, &text)?;
+                            let application = gcoms_core::is_piece_application_payload(&text);
                             let ticket = complete.register();
                             drop(prepare);
-                            let _ticket = ticket.wait().await;
-                            complete_channel_direct(&state, &scheduler, prepared).await
+                            let ticket = ticket.wait().await;
+                            let admitted = enqueue_channel_direct(&state, &scheduler, prepared)?;
+                            // Preserve admission order, but an independent
+                            // piece application's receipt cannot stall the
+                            // channel. Text retains its completion ordering.
+                            let _ticket = if application {
+                                drop(ticket);
+                                None
+                            } else {
+                                Some(ticket)
+                            };
+                            complete_channel_direct(&state, admitted).await
                         }
                     );
                 }

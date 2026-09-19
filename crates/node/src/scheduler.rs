@@ -667,6 +667,17 @@ impl RelayScheduler {
         )
     }
 
+    #[cfg(feature = "experimental-gc2")]
+    pub(crate) fn with_gc2_transit(
+        client: Arc<Tp1Client>,
+        transit: Arc<Tp1Client>,
+    ) -> (Self, Self) {
+        let mut profile = SchedulerProfile::production().with_pipelining();
+        profile.natural = true;
+        profile.emit_cover = false;
+        Self::with_transit(client, transit, profile)
+    }
+
     fn with_budget(
         client: Arc<Tp1Client>,
         profile: SchedulerProfile,
@@ -1055,7 +1066,18 @@ impl RelayScheduler {
         }
         let (done, completion) = oneshot::channel();
         let producer = semantic.producer();
-        let attempt = (self.inner.max_in_flight > 1).then(|| semantic.attempt(producer));
+        let attempt = (self.inner.max_in_flight > 1).then(|| {
+            let attempt = semantic.attempt(producer);
+            if self.is_gc2() {
+                let mut hash = Sha256::new();
+                hash.update(b"gcoms.scheduler.class-attempt.v2\0");
+                hash.update([traffic as u8]);
+                hash.update(attempt);
+                hash.finalize().into()
+            } else {
+                attempt
+            }
+        });
         let reservation = self
             .inner
             .budget

@@ -24,7 +24,7 @@ from fleet_files_remote import IPS, GIB
 ROOT = Path(__file__).resolve().parents[1]
 REQUIRED_CASES = ['coverage', 'boundaries', 'unaccepted', 'pause_resume', 'receiver_restart',
                   'import_resume', 'source_change', 'relay_restart', 'path_outage', 'loss_delay',
-                  'multisource_late_join', 'missing_source', 'corruption', 'disk_full',
+                  'multisource_late_join', 'multisource_simultaneous', 'missing_source', 'corruption', 'disk_full',
                   'quota', 'membership_removal', 'pm_isolation', 'credential_renewal',
                   'archive_reopen', 'chat_mixed', 'large_files']
 
@@ -71,6 +71,8 @@ def analyze(manifest, events):
                 failures.append({'event':'failure','error':'expected export missing','transfer':key,'client':recipient})
             elif t.get('size',0) <= 1024*1024 and state['exported']-state.get('accepted',state['exported']) > 300:
                 failures.append({'event':'failure','error':'small file exceeded five minutes','transfer':key,'client':recipient})
+            elif t.get('size',0) >= GIB and state['exported']-state['accepted'] > 14400:
+                failures.append({'event':'failure','error':'1 GiB file exceeded four hours','transfer':key,'client':recipient})
     windows = {e['name']:e for e in events if e['event']=='window_end'}
     measured = windows.get('mixed',{}).get('duration',0)
     baseline = [e['seconds'] for e in events if e['event']=='chat_ack' and e['phase']=='baseline']
@@ -84,7 +86,9 @@ def analyze(manifest, events):
     cleanup = {e['host']:e for e in events if e['event']=='cleanup'}
     clean = set(cleanup)==set(range(8)) and all(e.get('passed') for e in cleanup.values())
     ready={e['client'] for e in events if e['event']=='client_ready'}
-    traffic={e['host'] for e in events if e['event']=='relay_traffic' and e.get('events',{}).get('sub_attached',0)>0}
+    traffic={e['host'] for e in events if e['event']=='relay_traffic' and e.get('events',{}).get('gchat_sub_attached',0)>0}
+    protocol_ready = {e['client'] for e in events if e['event']=='client_ready' and qualified_transport(e.get('transport', {}))}
+    observed_protocol = ready == protocol_ready and bool(ready)
     diagnostic_clients=set()
     for event in events:
         if event['event']=='relay_traffic':
@@ -97,7 +101,7 @@ def analyze(manifest, events):
     pairs={(t['sender']//2,int(client)//2) for t in transfers.values() if t.get('label','').startswith('coverage-') for client,receipt in t['receivers'].items() if receipt.get('valid')}
     covered=pairs=={(a,b) for a in range(8) for b in range(8) if a!=b}
     partial_cases=('pause_resume','receiver_restart','quota','relay_restart','path_outage','loss_delay')
-    fault_evidence={name:False for name in (*partial_cases,'missing_source','multisource_late_join')}
+    fault_evidence={name:False for name in (*partial_cases,'missing_source','multisource_late_join','multisource_simultaneous')}
     for e in events:
         t=transfers.get(e.get('transfer'),{})
         if e['event']=='fault_precondition' and e.get('name') in partial_cases:
@@ -107,6 +111,12 @@ def analyze(manifest, events):
         if e['event']=='source_unavailable':
             receipt=t.get('receivers',{}).get(str(e.get('client')), {})
             fault_evidence['missing_source'] |= t.get('label')=='missing-source' and e.get('stopped_before_acceptance') is True and e.get('verified_bytes')==0 and receipt.get('valid',False) and receipt['accepted']<=e['elapsed']<receipt['exported']
+        if e['event']=='simultaneous_sources':
+            receipt=t.get('receivers',{}).get(str(e.get('client')), {})
+            fault_evidence['multisource_simultaneous'] |= (
+                t.get('label')=='simultaneous' and e.get('verified_sources',0)>=2
+                and e.get('both_enabled_before_acceptance') is True
+                and receipt.get('valid',False) and receipt['exported']<=e['elapsed'])
     for ident,t in transfers.items():
         parts=[e for e in events if e['event']=='source_contribution' and e.get('transfer')==ident]
         if len(parts)!=2: continue
@@ -123,8 +133,23 @@ def analyze(manifest, events):
             and receipt['accepted']<=first['elapsed']<receipt['exported']<=second['elapsed'])
     complete = manifest['phase']=='campaign' and measured>=14400 and windows.get('baseline',{}).get('duration',0)>=1800 and covered and ready==set(range(16)) and diagnostic_clients==set(range(16)) and traffic==set(range(8)) and corpus and all(v=='pass' for v in cases.values()) and all(fault_evidence.values()) and clean and b95 is not None and m95 is not None
     cross_host=any(t.get('sender') is not None and t['sender']//2!=int(client)//2 and receipt.get('valid') for t in transfers.values() for client,receipt in t['receivers'].items())
-    canary_ok=manifest['phase']=='canary' and len(ready)==2 and cross_host and clean and not failures
-    coverage_ok=manifest['phase']=='coverage' and covered and ready==set(range(16)) and cases['coverage']==cases['boundaries']=='pass' and clean and not failures
+    complete = complete and observed_protocol
+    reopened=any(e['event']=='canary_reopen' and e.get('verified') is True
+                 and e.get('same_instance') is True and e.get('size')==65536
+                 and transfers.get(e.get('transfer'),{}).get('size')==65536
+                 and transfers.get(e.get('transfer'),{}).get('receivers',{}).get(str(e.get('client')),{}).get('valid')
+                 and transfers[e['transfer']].get('sender',-1)//2 != e.get('client',-1)//2
+                 and e.get('elapsed',-1)>=transfers[e['transfer']]['receivers'][str(e['client'])]['exported']
+                 and e.get('sha256')==transfers.get(e.get('transfer'),{}).get('sha256')
+                 for e in events)
+    canary_ok=manifest['phase']=='canary' and len(ready)==2 and observed_protocol and cross_host and reopened and clean and not failures
+    capacity_sizes={t.get('size') for t in transfers.values() if t.get('label','').startswith('capacity-')
+                    and any(r.get('valid') for r in t['receivers'].values())}
+    capacity_ok=(manifest['phase']=='capacity' and len(ready)==2 and observed_protocol and reopened
+                 and capacity_sizes=={4*1024*1024,32*1024*1024,256*1024*1024,GIB}
+                 and windows.get('baseline',{}).get('duration',0)>=300
+                 and b95 is not None and m95 is not None and clean and not failures)
+    coverage_ok=manifest['phase']=='coverage' and covered and ready==set(range(16)) and observed_protocol and cases['coverage']==cases['boundaries']=='pass' and clean and not failures
     timings={}
     for transfer in transfers.values():
         for receipt in transfer['receivers'].values():
@@ -136,9 +161,12 @@ def analyze(manifest, events):
         'goodput_p50_bytes_per_second':percentile([r['goodput_bytes_per_second'] for r in receipts if r['goodput_bytes_per_second'] is not None],.5)}
         for size,receipts in timings.items()}
     return {'schema':1,'verdict':'pass' if complete and not failures else ('fail' if failures else 'incomplete'),
-            'phase_passed':(complete and not failures) or canary_ok or coverage_ok,
+            'phase_passed':(complete and not failures) or canary_ok or capacity_ok or coverage_ok,
             'scope':f"isolated {manifest.get('protocol','GC')} test listeners; {len(ready)} Linux clients observed",
             'observed_clients':len(ready),
+            'protocol_ready_clients':len(protocol_ready),
+            'canary_reopen_verified':reopened,
+            'capacity_sizes_verified':sorted(capacity_sizes),
             'largest_offered_file_bytes':max((t.get('size',0) for t in transfers.values()),default=0),
             'largest_verified_file_bytes':max(map(int,timings),default=0),
             'observed_mixed_seconds':measured,'verified_directed_host_pairs':len(pairs),'cases':cases,'failures':failures,
@@ -147,6 +175,12 @@ def analyze(manifest, events):
             'file_diagnostics_by_host':{str(e['host']):e.get('file_diagnostics',{}) for e in events if e['event']=='relay_traffic'},
             'chat':{'sent':len(sent),'acknowledged':len(acknowledged),
             'baseline_p95_seconds':b95,'mixed_p95_seconds':m95},'cleanup_complete':clean}
+
+def qualified_transport(status):
+    return (status.get('protocol') == 'gchat' and status.get('profile_id') == 12
+            and status.get('bootstrap_version') == 2 and status.get('routing_ready') is True
+            and status.get('ready_entries', 0) > 0 and status.get('usable_terminal_routes', 0) > 0
+            and status.get('interactive_subscriptions', 0) >= 2 and status.get('bulk_subscriptions', 0) >= 2)
 
 class Campaign:
     def __init__(self, directory, manifest):
@@ -288,10 +322,10 @@ class Campaign:
         records=[]
         for item in exports:
             raw=base64.urlsafe_b64decode(item['routing_bundle_b64']+'===')
-            if raw[:5]!=b'GCRB\x01' or raw[5]<1 or len(raw)<129: raise RuntimeError('bad relay bootstrap')
-            records.append(raw[6:129])
-        bundle=base64.b64encode(b'GCRB\x01'+bytes([8])+b''.join(records)).decode()
-        self.manifest['bootstrap_expiry_unix']=max(int.from_bytes(r[115:123],'big') for r in records)
+            if raw[:5]!=b'GCRB\x02' or raw[5]<1 or len(raw)!=6+raw[5]*155: raise RuntimeError('bad GChat relay bootstrap')
+            records.append(raw[6:161])
+        bundle=base64.b64encode(b'GCRB\x02'+bytes([8])+b''.join(records)).decode()
+        self.manifest['bootstrap_expiry_unix']=max(int.from_bytes(r[147:155],'big') for r in records)
         atomic(self.directory/'manifest.json',self.manifest)
         self.parallel([lambda i=i:self.remote(i,'bootstrap',bundle=bundle) for i in range(8)])
         self.parallel([lambda i=i:self.until(lambda:self.remote(i,'control',command='status'),90,'relay restart readiness') for i in range(8)])
@@ -346,7 +380,18 @@ class Campaign:
         self.files(client,'configure',quota_bytes=str(8*GIB),retention_days=7)
         self.clients.append(client)
         with self.lock: self.expected_units.add((client//2,f'client{client%2}'))
-        self.event('client_ready',client=client,inbox_host=relay)
+        status = self.wait_transport(client)
+        self.event('client_ready',client=client,inbox_host=relay,transport=status)
+
+    def wait_transport(self, client):
+        started = time.time()
+        def observation():
+            latest = self.remote(client//2, 'traffic')['file_diagnostics'][str(client%2)].get('latest') or {}
+            status = (latest.get('protocol') or {}).get('transport') or {}
+            if latest.get('unix_seconds', 0) < started or not qualified_transport(status):
+                raise RuntimeError('client has no fresh usable GChat route and both-class subscriptions')
+            return status
+        return self.until(observation, 120, 'GChat transport readiness')
 
     def channel(self, title, members):
         owner=members[0]
@@ -505,8 +550,18 @@ class Campaign:
         self.event('stage',name='two_client_canary')
         for client in (0,8): self.start_client(client)
         channel=self.channel('fleet',[0,8])
-        self.transfer(0,8,65536,channel,'canary')
+        canary=self.transfer(0,8,65536,channel,'canary')
+        before=self.request(8,'snapshot')['snapshot']['instance']['id']
+        self.restart(8)
+        after=self.request(8,'snapshot')['snapshot']['instance']['id']
+        if before!=after: raise RuntimeError('canary reopen changed instance identity')
+        result=self.probe(8,{'action':'export','id':canary['id'],'name':'reopened-'+canary['name'],
+                             'size':canary['size'],'sha256':canary['sha256']})
+        self.event('canary_reopen',transfer=canary['id'],client=8,same_instance=True,**result)
         if self.manifest['phase']=='canary': return
+        if self.manifest['phase']=='capacity':
+            self.capacity(channel)
+            return
         for client in (2,4,6,10,12,14): self.start_client(client)
         for client in (1,3,5,7,9,11,13,15): self.start_client(client)
         for client in self.clients:
@@ -521,6 +576,25 @@ class Campaign:
         if self.manifest['phase']=='coverage': return
         self.chat_window('baseline',1800)
         self.full_campaign(channel)
+
+    def capacity(self, channel):
+        self.channels['loadcapacity']={'id':channel,'members':[0,8]}
+        self.chat_window('baseline',300)
+        for size,timeout in ((4*1024*1024,600),(32*1024*1024,1200),
+                             (256*1024*1024,3600),(GIB,14400)):
+            t=self.prepare_transfer(0,[8],size,channel,f'capacity-{size}')
+            self.accept(t,8)
+            start=time.monotonic(); deadline=start+timeout; next_send=start
+            future=self.jobs.submit(self.finish_transfer,t,8,deadline)
+            while not future.done() and not self.stop.is_set() and time.monotonic()<deadline:
+                now=time.monotonic()
+                self.chat_tick('mixed',send=now>=next_send)
+                if now>=next_send: next_send=now+30
+                self.stop.wait(2)
+            future.result(timeout=120)
+            self.event('capacity_complete',size=size,seconds=time.monotonic()-start)
+        # Drain acknowledgments from the final file interval before cleanup.
+        self.until(lambda:(self.chat_tick('mixed') or all('ack:'+key in self.chat_seen for key in self.chat_pending)),120,'capacity chat drain')
 
     def coverage(self, channel):
         for distance in range(1,8):
@@ -580,6 +654,7 @@ class Campaign:
         self.remote(client//2,'fault',kind='kill_client' if kill else 'stop_client',slot=client%2)
         self.remote(client//2,'client',slot=client%2)
         self.until(lambda:self.request(client,'snapshot'),120,'retained client reopen')
+        self.wait_transport(client)
 
     def expect_error(self, function, text=None):
         try: function()
@@ -670,9 +745,10 @@ class Campaign:
         self.finish_transfer(t,2,time.monotonic()+900)
         self.transfer(10,2,65536,self.channels['fleet']['id'],'after-'+kind)
 
-    def multisource(self):
-        channel=self.channel('recovery',[4,0,8])
-        t=self.prepare_transfer(0,[4,8,12],4*1024*1024,channel,'complementary')
+    def multisource(self, simultaneous=False):
+        label='simultaneous' if simultaneous else 'complementary'
+        channel=self.channel('recovery-'+label,[4,0,8])
+        t=self.prepare_transfer(0,[4,8,12],(32 if simultaneous else 4)*1024*1024,channel,label)
         for client in (4,8):
             self.accept(t,client); self.finish_transfer(t,client,time.monotonic()+900)
         self.remote(0,'fault',kind='stop_client',slot=0)
@@ -683,14 +759,24 @@ class Campaign:
                 retained.append(self.remote(client//2,'cache_fault',slot=client%2,id=t['id'],mode=mode))
                 self.remote(client//2,'client',slot=client%2)
                 self.until(lambda client=client:self.request(client,'snapshot'),120,'seeder reopen')
+                self.wait_transport(client)
             self.event('complementary_pieces',transfer=t['id'],retained=[list(x['pieces']) for x in retained])
             sets=[{int(name.removesuffix('.piece')) for name in row['pieces']} for row in retained]
-            if sets[0]&sets[1] or sets[0]|sets[1]!=set(range(16)) or not all(sets):
+            if sets[0]&sets[1] or sets[0]|sets[1]!=set(range(t['size']//262144)) or not all(sets):
                 raise RuntimeError('seeds are not a complete complementary partition')
             for client in (4,8):
                 if self.info(client,t['id'])['state']!='paused':
                     raise RuntimeError('pruned seed resumed before late join')
             invite=self.invitation(4,channel); self.submit(12,f'/join {invite} c12')
+            if simultaneous:
+                for client in (4,8): self.activate(t,client,'resume')
+                self.accept(t,12)
+                self.finish_transfer(t,12,time.monotonic()+900)
+                count=int(self.info(12,t['id']).get('verified_sources',0))
+                if count<2: raise RuntimeError('simultaneous run did not verify pieces from both sources')
+                self.event('simultaneous_sources',transfer=t['id'],client=12,
+                           verified_sources=count,both_enabled_before_acceptance=True)
+                return
             self.accept(t,12)
             # Expose each disjoint inventory alone. Neither seed can repair
             # itself from the other before contributing to the late receiver.
@@ -797,7 +883,9 @@ class Campaign:
                ('source_change',self.source_change),('relay_restart',self.relay_restart),
                ('path_outage',lambda:self.network_fault('blackhole',60)),
                ('loss_delay',lambda:self.network_fault('netem',900)),
-               ('multisource_late_join',self.multisource),('missing_source',self.missing_source),
+               ('multisource_late_join',self.multisource),
+               ('multisource_simultaneous',lambda:self.multisource(simultaneous=True)),
+               ('missing_source',self.missing_source),
                ('corruption',self.corruption),('disk_full',self.disk_full),('quota',self.quota),
                ('membership_removal',self.membership),('pm_isolation',self.pm)]
         for name, operation in cases:
@@ -852,7 +940,7 @@ def main():
     start.add_argument('--build',type=Path,required=True)
     start.add_argument('--output',type=Path,required=True)
     start.add_argument('--run-id',default='ff-'+time.strftime('%Y%m%d-%H%M%S'))
-    start.add_argument('--phase',choices=('canary','coverage','campaign'),default='campaign')
+    start.add_argument('--phase',choices=('canary','capacity','coverage','campaign'),default='campaign')
     for command in ('analyze','cleanup'):
         item=sub.add_parser(command); item.add_argument('--output',type=Path,required=True)
     args=parser.parse_args()
@@ -872,7 +960,7 @@ def main():
     (directory/'tools').mkdir()
     for name in ('fleet_files.py','fleet_files_remote.py'):
         shutil.copy2(ROOT/'scripts'/name,directory/'tools'/name)
-    manifest={'schema':1,'run_id':args.run_id,'phase':args.phase,'protocol':'GC','schedule':'gc2','profile':'carrier',
+    manifest={'schema':1,'run_id':args.run_id,'phase':args.phase,'protocol':'GChat','schedule':'gc2','profile':'file-transfer-12',
               'clients':16,'soak_seconds':14400,'large_sizes':[256*1024*1024,GIB],
               'coordinator_sha256':sha(Path(__file__)),'started_unix':time.time()}
     atomic(directory/'manifest.json',manifest)

@@ -4,9 +4,11 @@ This private operator campaign uses the eight recorded Hetzner relay hosts. It
 creates separate test listeners; it never restarts `ghost-relay.service`, modifies
 its identity, or uses production bootstrap grants. Source and tooling changes stay
 in the paired GComs/GChat task checkouts. The relays and clients run the fleet
-carrier profile — the single current GC profile, with its shared padded lattice,
-authenticated class queues, authentication and private routing. Compressed or
-fixture scheduling is not fleet evidence.
+GChat file carrier profile (wire profile 12), with a fixed interactive schedule,
+bounded unpaced bulk records, authenticated class queues and private routing.
+File activity and approximate volume are observable under this policy. Compressed
+or fixture scheduling is not fleet evidence. Chat privacy remains a separate,
+unqualified gate; successful file exports cannot qualify it.
 
 ## Build and run
 
@@ -18,6 +20,10 @@ python3 -m unittest discover -s scripts/tests -p fleet_files_test.py
 python3 scripts/fleet_files.py run --build target/fleet-build-01 \
   --output test-evidence/files-canary-01 --phase canary
 python3 scripts/fleet_files.py run --build target/fleet-build-01 \
+  --output test-evidence/files-capacity-01 --phase capacity
+python3 scripts/fleet_files.py run --build target/fleet-build-01 \
+  --output test-evidence/files-coverage-01 --phase coverage
+python3 scripts/fleet_files.py run --build target/fleet-build-01 \
   --output test-evidence/files-campaign-01 --phase campaign
 ```
 
@@ -27,6 +33,13 @@ either source changes during compilation. Remote executables are hashed again.
 The native `fleet_probe` example uses GChat's ordinary owner IPC and bounded file
 I/O. Source data is generated only on senders; independent exported-file hashes
 are mandatory. Native paths never travel over the file protocol.
+
+Each phase starts with the 64 KiB cross-host canary, then reopens its receiver and
+checks another export hash and retained instance identity. Capacity adds a
+five-minute chat baseline and sequential 4 MiB, 32 MiB, 256 MiB and 1 GiB files
+with chat. A 1 GiB export must finish within four hours of acceptance. Coverage
+and the full campaign retain their separate ramp and directed-pair requirements.
+Only the complete campaign can produce a fleet qualification verdict.
 
 SSH uses the existing verified host keys and batch authentication to the recorded
 numeric addresses. Each host needs root operator access, systemd, Python 3,
@@ -115,22 +128,32 @@ addition to passing scenario labels. A 30-minute measured baseline is mandatory,
 as is the full four-hour mixed window. An already complete fixture or two
 advertised sources cannot supply the missing fault evidence.
 
-## Carrier lattice capacity
+## Carrier policy and readiness
 
-Both carrier classes ride one fixed padded lattice: one record per profile slot
-per hop, with cover when nothing is queued, so record timing and count do not
-reveal application activity. A record carries at most one 11 KiB block, so a
-single-source transfer over three hops is paced by the profile cadence on each
-hop. Measure the active profile's cadence and per-hop behaviour before setting
-expectations; the fleet campaign uses production transport behaviour, while the
-compressed qualification cadence exists for local fixtures only.
+GCRB2 introductions must be exported explicitly and installed before the owner
+can establish routes. GCRB1 authority is not converted or tried as a fallback.
+Profile 12 retains 4 KiB/one-second interactive records and permits bulk records
+up to 16 KiB as congestion-controlled transport credit becomes available. Bulk
+has no idle cover. IDs 0–11 retain their original fixed schedules. The selected
+policy is authenticated in `carrier-policy.cache`; switching policy must keep
+the latest routing directory, session archive and file cache in place.
 
-Keep the five-minute small-file and four-hour large-file acceptance gates visible.
-A failure can expose a capacity limit as well as a correctness defect. Do not
-speed up the privacy lattice, bypass relay authentication, or label a smaller
-diagnostic fixture as large-file qualification. Record measured completion
-p50/p95 and goodput, and repeat the same workload after any lattice or
-integration change.
+The harness waits for fresh local observations of profile 12, bootstrap version
+2, ready entries, a usable independent inbox route, and both authenticated
+subscription classes. IPC or TCP reachability alone cannot pass readiness.
+Relay coverage uses natural subscription observations. Admission, hop receipts,
+verified durable pieces, whole-file verification and independent export hashes
+are distinct evidence; only the final exported bytes establish transfer success.
+
+The piece engine requests up to eight blocks per piece, four pieces per download
+and two downloads. It accepts bounded out-of-order blocks and retries missing
+offsets. Its 4 MiB payload allowance includes reservations for queued outgoing
+payload copies. A twenty-second local receipt observation retains the active
+transport future; it cannot trigger overlapping retries.
+
+The five-minute small-file and four-hour 1 GiB gates are unchanged. Measure actual
+goodput with chat and repeat the full workload after integration changes. Smaller
+fixtures and extrapolated capacity do not qualify the 1 GiB gate.
 
 Reports group verified exports by file size and include measured completion p50/p95,
 median goodput, and local file-engine counters. Completion timings start at recorded

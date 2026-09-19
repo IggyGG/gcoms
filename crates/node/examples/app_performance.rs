@@ -32,6 +32,7 @@ struct Args {
     cadence: String,
     drain_ms: u64,
     idle_ms: u64,
+    measurement_ms: u64,
     skip_single: bool,
     listen_a: u16,
     listen_b: u16,
@@ -54,6 +55,7 @@ fn parse_args() -> Result<Args, String> {
         cadence: "compressed".into(),
         drain_ms: 5000,
         idle_ms: 0,
+        measurement_ms: 0,
         skip_single: false,
         listen_a: 0,
         listen_b: 0,
@@ -76,6 +78,9 @@ fn parse_args() -> Result<Args, String> {
             "--entries" => args.entries = value()?.parse::<usize>().map_err(|e| e.to_string())?,
             "--drain-ms" => args.drain_ms = value()?.parse::<u64>().map_err(|e| e.to_string())?,
             "--idle-ms" => args.idle_ms = value()?.parse::<u64>().map_err(|e| e.to_string())?,
+            "--measurement-ms" => {
+                args.measurement_ms = value()?.parse::<u64>().map_err(|e| e.to_string())?
+            }
             "--skip-single" => args.skip_single = true,
             "--listen-a" => args.listen_a = value()?.parse::<u16>().map_err(|e| e.to_string())?,
             "--listen-b" => args.listen_b = value()?.parse::<u16>().map_err(|e| e.to_string())?,
@@ -111,10 +116,14 @@ fn parse_args() -> Result<Args, String> {
             other => return Err(format!("unknown argument {other}")),
         }
     }
-    if !matches!(args.profile.as_str(), "gc1" | "gc2") {
-        return Err("--profile must be gc1 or gc2".into());
+    if !matches!(args.profile.as_str(), "gc1" | "gc2" | "gchat-files") {
+        return Err("--profile must be gc1, gc2 or gchat-files".into());
     }
-    if args.chat_count == 0 && args.bulk_bytes == 0 && args.idle_ms == 0 {
+    if args.profile == "gchat-files" && (!args.protected || args.cadence != "production") {
+        return Err("gchat-files requires --protected --cadence production".into());
+    }
+    if args.chat_count == 0 && args.bulk_bytes == 0 && args.idle_ms == 0 && args.measurement_ms == 0
+    {
         return Err("nothing to measure: set --chat-count, --bulk-bytes or --idle-ms".into());
     }
     if args.bulk_chunk < 1024 || args.bulk_chunk > 15 * 1024 {
@@ -144,6 +153,19 @@ fn profile(
     // owner dials real circuits instead of the direct terminal.
     let production = cadence == "production";
     match name {
+        "gchat-files" => {
+            let NodeProfile::Fixture(mut fixture) =
+                NodeProfile::gc2_carrier_production_cadence_fixture_seeded(
+                    None,
+                    entries,
+                    introductions.to_vec(),
+                )
+            else {
+                unreachable!()
+            };
+            fixture.gc2_unpaced_bulk = true;
+            NodeProfile::Fixture(fixture)
+        }
         "gc2" if !introductions.is_empty() && production => {
             NodeProfile::gc2_carrier_production_cadence_fixture_seeded(
                 None,
@@ -523,6 +545,18 @@ async fn main() -> Result<(), String> {
     let bulk_body = file_record_body(&vec![0x42; args.bulk_chunk]);
     let chat_interval = Duration::from_millis(args.chat_interval_ms);
     let bulk_total = args.bulk_bytes.div_ceil(args.bulk_chunk);
+    if args.measurement_ms > 0 {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap();
+        println!(
+            "MEASUREMENT_START {}.{:06}",
+            now.as_secs(),
+            now.subsec_micros()
+        );
+        use std::io::Write;
+        std::io::stdout().flush().unwrap();
+    }
     let bulk_start = Instant::now();
     let chat = chat_stream(
         &sender,
@@ -545,6 +579,21 @@ async fn main() -> Result<(), String> {
     );
     let (chat, bulk) = tokio::join!(chat, bulk);
     let elapsed = bulk_start.elapsed().as_secs_f64();
+    if args.measurement_ms > 0 {
+        let duration = Duration::from_millis(args.measurement_ms);
+        if bulk_start.elapsed() > duration {
+            panic!("workload exceeded the fixed measurement interval");
+        }
+        tokio::time::sleep(duration.saturating_sub(bulk_start.elapsed())).await;
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap();
+        println!(
+            "MEASUREMENT_END {}.{:06}",
+            now.as_secs(),
+            now.subsec_micros()
+        );
+    }
 
     // Workload results are final once both streams join.
     let (mut chat_latencies, chat_sent, chat_failures) = chat;

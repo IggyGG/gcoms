@@ -105,10 +105,12 @@ pub struct RelayService {
     catalog_origins: Mutex<Vec<String>>,
 }
 
+type CachedProvision = (Instant, Zeroizing<Vec<u8>>, Zeroizing<Vec<u8>>);
+
 struct PrivateState {
     window: Instant,
     operations: usize,
-    provisions: HashMap<[u8; 32], (Instant, Zeroizing<Vec<u8>>)>,
+    provisions: HashMap<[u8; 32], CachedProvision>,
 }
 
 impl PrivateState {
@@ -246,7 +248,7 @@ impl RelayService {
     ) -> Result<()> {
         use crate::gc2::{
             directory::{BootstrapBundle, MAX_INTRODUCTIONS},
-            discovery::REQUEST,
+            discovery::{PROVISION, REQUEST},
         };
         use gcoms_core::{gc2::NaturalCell, CellType, HEADER_LEN};
         use gcoms_transport::{gc2::status_cell, hop::HopReply};
@@ -259,24 +261,26 @@ impl RelayService {
                 .admit()
                 .is_ok();
         let cell = if admitted {
-            let bytes =
-                gcoms_transport::server::read_body(&mut body, HEADER_LEN + REQUEST.len()).await?;
+            let bytes = gcoms_transport::server::read_body(&mut body, HEADER_LEN + 44).await?;
             let request = NaturalCell::decode(&bytes)?;
-            if request.kind() != CellType::Pex
-                || request.flags() != 0
-                || request.payload() != REQUEST
-            {
+            if request.kind() != CellType::Pex || request.flags() != 0 {
                 return Err("invalid GC/2 private discovery request".into());
             }
-            let now = now_unix();
-            let own = self.gc2_introduction(now);
-            let mut relays = self
-                .gc2_directory
-                .eligible(&[(own.addr, own.service_id)], now)?;
-            relays.shuffle(&mut rand::thread_rng());
-            relays.truncate(MAX_INTRODUCTIONS - 1);
-            relays.insert(0, own);
-            let bytes = BootstrapBundle { relays }.encode()?;
+            let bytes = if request.payload() == REQUEST {
+                let now = now_unix();
+                let own = self.gc2_introduction(now);
+                let mut relays = self
+                    .gc2_directory
+                    .eligible(&[(own.addr, own.service_id)], now)?;
+                relays.shuffle(&mut rand::thread_rng());
+                relays.truncate(MAX_INTRODUCTIONS - 1);
+                relays.insert(0, own);
+                BootstrapBundle { relays }.encode()?
+            } else if let Some(payload) = request.payload().strip_prefix(PROVISION) {
+                self.provision_reply(payload)?
+            } else {
+                return Err("unknown GC/2 private control request".into());
+            };
             NaturalCell::new(CellType::Pex, 0, bytes.to_vec())?
         } else {
             status_cell(HopReply::Overloaded)
@@ -599,11 +603,7 @@ impl RelayService {
         carrier::send_record(&mut send, Kind::Introductions, &payload, true).await
     }
 
-    async fn provision(
-        &self,
-        payload: &[u8],
-        mut response: h2::server::SendResponse<bytes::Bytes>,
-    ) -> Result<()> {
+    fn provision_reply(&self, payload: &[u8]) -> Result<Zeroizing<Vec<u8>>> {
         // `request_id || options`: version 1 clients send exactly the 32-byte
         // request ID; later clients may append bounded request options. A
         // request ID is bound to its options; clients never reuse one with a
@@ -620,8 +620,11 @@ impl RelayService {
             let mut state = self.private.lock().unwrap_or_else(|p| p.into_inner());
             state
                 .provisions
-                .retain(|_, (at, _)| at.elapsed() < Duration::from_secs(120));
-            if let Some((_, reply)) = state.provisions.get(&id) {
+                .retain(|_, (at, _, _)| at.elapsed() < Duration::from_secs(120));
+            if let Some((_, previous_options, reply)) = state.provisions.get(&id) {
+                if previous_options.as_slice() != options {
+                    return Err("private request ID reused with different options".into());
+                }
                 reply.clone()
             } else {
                 state.admit()?;
@@ -637,10 +640,26 @@ impl RelayService {
                 if reply.is_empty() || reply.len() > carrier::MAX_PROVISION_BYTES {
                     return Err("private provision exceeds bounds".into());
                 }
-                state.provisions.insert(id, (Instant::now(), reply.clone()));
+                state.provisions.insert(
+                    id,
+                    (
+                        Instant::now(),
+                        Zeroizing::new(options.to_vec()),
+                        reply.clone(),
+                    ),
+                );
                 reply
             }
         };
+        Ok(reply)
+    }
+
+    async fn provision(
+        &self,
+        payload: &[u8],
+        mut response: h2::server::SendResponse<bytes::Bytes>,
+    ) -> Result<()> {
+        let reply = self.provision_reply(payload)?;
         let headers = http::Response::builder()
             .status(200)
             .header("content-type", "application/octet-stream")

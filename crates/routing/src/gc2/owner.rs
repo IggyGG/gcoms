@@ -68,6 +68,10 @@ pub struct ReadyConnector {
     state: Arc<ReadyState>,
 }
 impl ReadyConnector {
+    /// Read-only route eligibility; does not dial, open a circuit or wake the owner.
+    pub fn can_route(&self, terminal: (SocketAddr, [u8; 32])) -> bool {
+        self.select(terminal, &[]).is_ok()
+    }
     /// Local aggregate only; this is not a promise that a particular excluded
     /// terminal has an independent, fresh route through the current set.
     pub fn ready_entries(&self) -> usize {
@@ -231,6 +235,7 @@ impl EntryOwner {
     // Pick guards without any application event. Never rotate retained guards
     // merely because they are expired or a connection attempt failed.
     fn retain_guards(&self) -> Result<()> {
+        self.directory.check_persistence()?;
         let mut candidates = self.directory.reentry_candidates();
         candidates.shuffle(&mut rand::thread_rng());
         for candidate in candidates {

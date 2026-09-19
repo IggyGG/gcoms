@@ -116,7 +116,10 @@ impl QueueService {
                             .authenticate_push_gc2(push, now())
                     });
                 let reply = match result {
-                    Ok(_) => Some(HopReply::Accepted),
+                    Ok(_) => {
+                        crate::metrics::log_event("gchat_push_accepted", &[]);
+                        Some(HopReply::Accepted)
+                    }
                     Err(error) => status(&error),
                 };
                 reply_or_reject(&mut respond, reply).await;
@@ -149,6 +152,10 @@ impl QueueService {
                 };
                 let mut io = H2Stream::new(body, send);
                 self.active.fetch_add(1, Ordering::AcqRel);
+                crate::metrics::log_event(
+                    "gchat_sub_attached",
+                    &[("class", format!("{:?}", handle.class()))],
+                );
                 let _active = Active(self.active.clone());
                 let _ = tokio::time::timeout_at(deadline, async {
                     // read_body already consumed EOF. Record that half-close in

@@ -146,11 +146,14 @@ pub(crate) fn prepare_channel_direct(
     })
 }
 
-pub(crate) async fn complete_channel_direct(
+/// Admission is synchronous and ordered with channel control commands. The
+/// receipt is a separate network wait: piece applications own their retries and
+/// must not hold the channel's completion chain while a peer is unavailable.
+pub(crate) fn enqueue_channel_direct(
     state: &Arc<Mutex<NodeState>>,
     scheduler: &RelayScheduler,
     prepared: PreparedChannelDirect,
-) -> Result<[u8; 16], String> {
+) -> Result<([u8; 16], crate::scheduler::Receipt), String> {
     let PreparedChannelDirect {
         message_id,
         route,
@@ -160,12 +163,34 @@ pub(crate) async fn complete_channel_direct(
     // The authenticated directory record uses this same FIFO control lane, so
     // a newly admitted recipient learns the sender key before direct traffic.
     let result = scheduler
-        .push(class, route.control, cell)
-        .map_err(|error| error.to_string())?
-        .completion()
-        .await
-        .accepted()
-        .map(|_| message_id);
+        .push_with_class(
+            class,
+            route.control,
+            cell,
+            if class == ProducerClass::ChannelData && scheduler.is_gc2() {
+                gcoms_core::TrafficClass::Bulk
+            } else {
+                gcoms_core::TrafficClass::Interactive
+            },
+        )
+        .map(|receipt| (message_id, receipt))
+        .map_err(|error| error.to_string());
+    if result.is_err() {
+        state
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .pending_channel_direct
+            .remove(&message_id);
+    }
+    result
+}
+
+pub(crate) async fn complete_channel_direct(
+    state: &Arc<Mutex<NodeState>>,
+    admitted: ([u8; 16], crate::scheduler::Receipt),
+) -> Result<[u8; 16], String> {
+    let (message_id, receipt) = admitted;
+    let result = receipt.completion().await.accepted().map(|_| message_id);
     if result.is_err() {
         state
             .lock()
@@ -186,7 +211,8 @@ pub(crate) async fn send_channel_direct(
     text: &[u8],
 ) -> Result<[u8; 16], String> {
     let prepared = prepare_channel_direct(state, channel, recipient, text)?;
-    complete_channel_direct(state, scheduler, prepared).await
+    let admitted = enqueue_channel_direct(state, scheduler, prepared)?;
+    complete_channel_direct(state, admitted).await
 }
 
 pub(crate) fn handle_channel_direct(

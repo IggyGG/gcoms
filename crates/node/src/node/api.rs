@@ -423,6 +423,7 @@ pub(crate) struct ShutdownTask {
 /// Local aggregate counters only; no contacts, message IDs or payloads.
 #[derive(Debug, serde::Serialize)]
 pub struct NodeDiagnostics {
+    pub transport: TransportStatus,
     /// Shared node allowance; do not sum the independent local peak values.
     pub resources: crate::scheduler::ResourceSnapshot,
     pub client: crate::scheduler::diagnostics::SchedulerSnapshot,
@@ -431,8 +432,25 @@ pub struct NodeDiagnostics {
     pub relay_resources: crate::scheduler::ResourceSnapshot,
 }
 
+/// Local readiness and class counts. No private addresses, tokens or identities.
+#[derive(Debug, Default, serde::Serialize)]
+pub struct TransportStatus {
+    pub protocol: &'static str,
+    pub profile_id: Option<u8>,
+    pub bootstrap_version: Option<u8>,
+    pub ready_entries: usize,
+    pub usable_terminal_routes: usize,
+    pub interactive_subscriptions: usize,
+    pub bulk_subscriptions: usize,
+    pub routing_ready: bool,
+    pub recovering_inbox: bool,
+    pub owned_aliases: usize,
+    pub subscribed_owned_aliases: usize,
+}
+
 #[derive(Clone)]
 pub struct NodeHandle {
+    pub(crate) state: std::sync::Weak<Mutex<NodeState>>,
     pub(crate) listener_addr: SocketAddr,
     pub(crate) connectivity: Arc<tokio::sync::Mutex<Option<crate::connectivity::RuntimeTask>>>,
     pub(crate) routing: Option<Arc<super::routing::RoutingRuntime>>,
@@ -459,12 +477,105 @@ impl NodeHandle {
     /// Approximate during concurrent updates; quiesce before reconciling counts.
     pub fn diagnostics(&self) -> NodeDiagnostics {
         NodeDiagnostics {
+            transport: self.transport_status(),
             resources: self.scheduler.combined_resource_snapshot(),
             client: self.scheduler.diagnostics_snapshot(),
             relay: self.transit_scheduler.diagnostics_snapshot(),
             client_resources: self.scheduler.resource_snapshot(),
             relay_resources: self.transit_scheduler.resource_snapshot(),
         }
+    }
+
+    pub fn transport_status(&self) -> TransportStatus {
+        let mut result = TransportStatus {
+            protocol: if self.scheduler.is_gc2() {
+                "gchat"
+            } else {
+                "legacy"
+            },
+            ..Default::default()
+        };
+        let Some(state) = self.state.upgrade() else {
+            return result;
+        };
+        let st = state.lock().unwrap_or_else(|p| p.into_inner());
+        result.recovering_inbox = super::routing::recovering(&st);
+        result.owned_aliases = st.client_relay.aliases.len();
+        result.subscribed_owned_aliases = st
+            .client_relay
+            .aliases
+            .iter()
+            .filter(|a| st.subscribed_contact_aliases.contains(&a.contact.queue_id))
+            .count();
+        result.interactive_subscriptions = st
+            .subscribed_classes
+            .iter()
+            .filter(|(_, class)| *class == gcoms_core::TrafficClass::Interactive)
+            .count();
+        result.bulk_subscriptions = st
+            .subscribed_classes
+            .iter()
+            .filter(|(_, class)| *class == gcoms_core::TrafficClass::Bulk)
+            .count();
+        #[cfg(feature = "experimental-gc2")]
+        if let Some(current) = st.routing.as_ref().and_then(|r| r.gc2.get()) {
+            result.profile_id = Some(current.profile_id);
+            result.bootstrap_version = Some(2);
+            result.ready_entries = current.ready.ready_entries();
+            let terminals: HashSet<_> = st
+                .client_relay
+                .aliases
+                .iter()
+                .map(|a| (a.contact.target.address, a.contact.target.relay_service_id))
+                .collect();
+            result.usable_terminal_routes = terminals
+                .into_iter()
+                .filter(|&terminal| current.ready.can_route(terminal))
+                .count();
+        }
+        result.routing_ready = !super::routing::recovering(&st)
+            && !st.owner_transition_failed
+            && st.client_relay.aliases.len() >= 2
+            && st
+                .client_relay
+                .aliases
+                .iter()
+                .all(|a| st.subscribed_contact_aliases.contains(&a.contact.queue_id))
+            && (!self.scheduler.is_gc2() || result.usable_terminal_routes > 0);
+        result
+    }
+
+    #[cfg(feature = "experimental-gc2")]
+    pub fn gc2_relay_introduction(
+        &self,
+    ) -> Result<gcoms_routing::gc2::directory::Introduction, String> {
+        let runtime = self.routing.as_ref().ok_or("routing not enabled")?;
+        let guard = runtime.service.lock().unwrap_or_else(|p| p.into_inner());
+        Ok(guard
+            .as_ref()
+            .ok_or("relay service not ready")?
+            .gc2_introduction(now_unix()))
+    }
+
+    #[cfg(feature = "experimental-gc2")]
+    pub fn install_gc2_routing_bootstrap(
+        &self,
+        bundle: &gcoms_routing::gc2::directory::BootstrapBundle,
+    ) -> Result<(), String> {
+        let runtime = self.routing.as_ref().ok_or("routing not enabled")?;
+        let current = runtime.gc2.get().ok_or("GChat carrier not selected")?;
+        current
+            .directory
+            .remember(bundle, now_unix())
+            .map_err(|e| e.to_string())?;
+        let guard = runtime.service.lock().unwrap_or_else(|p| p.into_inner());
+        guard
+            .as_ref()
+            .ok_or("relay service not ready")?
+            .gc2_directory()
+            .remember(bundle, now_unix())
+            .map_err(|e| e.to_string())?;
+        Ok(())
     }
 
     /// The socket actually owned by this runtime, including an OS-assigned port.

@@ -8,10 +8,21 @@ from unittest.mock import patch
 
 SCRIPTS=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(SCRIPTS))
-from fleet_files import analyze, Campaign
+from fleet_files import analyze, Campaign, qualified_transport
 from fleet_files_remote import Host, IPS
 
 class EvidenceTests(unittest.TestCase):
+    def transport(self):
+        return {'protocol':'gchat', 'profile_id':12, 'bootstrap_version':2,
+                'routing_ready':True, 'ready_entries':2, 'usable_terminal_routes':1,
+                'interactive_subscriptions':2, 'bulk_subscriptions':2}
+
+    def test_ipc_or_entry_readiness_cannot_substitute_for_usable_protocol(self):
+        status = self.transport()
+        self.assertTrue(qualified_transport(status))
+        for key, value in [('profile_id',10), ('bootstrap_version',1), ('routing_ready',False),
+                           ('ready_entries',0), ('usable_terminal_routes',0), ('bulk_subscriptions',0)]:
+            self.assertFalse(qualified_transport(dict(status, **{key:value})))
     def transfer(self):
         return [{'event':'transfer','transfer':'a','elapsed':0,'size':4,'sha256':'abcd','expected_receivers':[1]},
                 {'event':'accepted','transfer':'a','client':1,'elapsed':1}]
@@ -76,12 +87,19 @@ class EvidenceTests(unittest.TestCase):
         self.assertEqual(report['verdict'],'fail')
 
     def test_canary_is_not_fleet_qualification(self):
-        events=self.transfer()+[{'event':'export_verified','transfer':'a','client':1,'elapsed':3,'verified':True,'size':4,'sha256':'abcd'}]
+        events=self.transfer()+[{'event':'export_verified','transfer':'a','client':1,'elapsed':3,'verified':True,'size':65536,'sha256':'abcd'}]
+        events[0]['size']=65536
         events[0]['sender']=2
         events += [{'event':'cleanup','host':i,'passed':True} for i in range(8)]
-        events += [{'event':'client_ready','client':i} for i in (2,1)]
+        events += [{'event':'client_ready','client':i,'transport':self.transport()} for i in (2,1)]
+        self.assertFalse(analyze({'phase':'canary'},events)['phase_passed'])
+        events += [{'event':'canary_reopen','transfer':'a','client':1,'elapsed':4,'verified':True,
+                    'size':65536,'sha256':'abcd','same_instance':True}]
         report=analyze({'phase':'canary'},events)
         self.assertEqual(report['verdict'],'incomplete'); self.assertTrue(report['phase_passed'])
+        for event in events:
+            event.pop('transport', None)
+        self.assertFalse(analyze({'phase':'canary'}, events)['phase_passed'])
 
     def test_case_labels_cannot_replace_directed_pair_evidence(self):
         events=[{'event':'case','name':name,'result':'pass'} for name in ('coverage','boundaries')]
@@ -120,7 +138,7 @@ class EvidenceTests(unittest.TestCase):
             self.assertEqual(report['fault_evidence']['multisource_late_join'],expected)
 
     def test_generic_partial_progress_cannot_replace_specialized_source_evidence(self):
-        for name in ('missing_source','multisource_late_join'):
+        for name in ('missing_source','multisource_late_join','multisource_simultaneous'):
             transfer=self.transfer()
             transfer[0]['label']=name
             partial={'event':'fault_precondition','name':name,'transfer':'a','client':1,
@@ -129,6 +147,25 @@ class EvidenceTests(unittest.TestCase):
                       'verified':True,'size':4,'sha256':'abcd'}
             report=analyze({'phase':'campaign'},transfer+[partial,exported])
             self.assertFalse(report['fault_evidence'][name])
+
+    def test_simultaneous_sources_require_verified_contributors(self):
+        transfer=self.transfer(); transfer[0]['label']='simultaneous'
+        export={'event':'export_verified','transfer':'a','client':1,'elapsed':3,
+                'verified':True,'size':4,'sha256':'abcd'}
+        event={'event':'simultaneous_sources','transfer':'a','client':1,'elapsed':4,
+               'both_enabled_before_acceptance':True,'verified_sources':2}
+        for changed, expected in (({},True),({'verified_sources':1},False),
+                                   ({'both_enabled_before_acceptance':False},False),({'elapsed':2},False)):
+            self.assertEqual(analyze({'phase':'campaign'},transfer+[export,dict(event,**changed)])
+                             ['fault_evidence']['multisource_simultaneous'],expected)
+
+    def test_one_gib_deadline_is_an_export_gate(self):
+        transfer=self.transfer(); transfer[0]['size']=1024**3
+        for elapsed,expected in ((14401,False),(14402,True)):
+            export={'event':'export_verified','transfer':'a','client':1,'elapsed':elapsed,
+                    'verified':True,'size':1024**3,'sha256':'abcd'}
+            errors=analyze({'phase':'campaign'},transfer+[export])['failures']
+            self.assertEqual(any(e['error']=='1 GiB file exceeded four hours' for e in errors),expected)
 
 class ScenarioTests(unittest.TestCase):
     def setUp(self):
@@ -211,7 +248,7 @@ class ScenarioTests(unittest.TestCase):
              patch.object(c,'remote',side_effect=remote),patch.object(c,'request',return_value=True), \
              patch.object(c,'info',side_effect=info),patch.object(c,'files',side_effect=files), \
              patch.object(c,'activate',side_effect=activate),patch.object(c,'invitation',return_value='invite'), \
-             patch.object(c,'submit'):
+             patch.object(c,'submit'),patch.object(c,'wait_transport'):
             c.multisource()
         self.assertFalse(seed_stopped)
         self.assertEqual([e['source'] for e in c.events if e['event']=='source_contribution'],[4,8])

@@ -49,6 +49,8 @@ mod gc2_carrier;
 #[cfg(feature = "experimental-gc2")]
 mod gc2_direct;
 #[cfg(feature = "experimental-gc2")]
+mod gc2_forward;
+#[cfg(feature = "experimental-gc2")]
 mod gc2_gate;
 #[cfg(feature = "experimental-gc2")]
 mod gc2_receipts;
@@ -116,6 +118,7 @@ pub struct Gc2CarrierProfile {
     pub entries: usize,
     pub record_len: usize,
     pub period_ms: u16,
+    pub unpaced_bulk: bool,
     pub scheduler: SchedulerProfile,
     /// Explicit private introductions for qualification fixtures. Deployment
     /// profiles leave this empty and use the provisioning advertisement.
@@ -153,6 +156,8 @@ pub struct FixtureProfile {
     pub gc2_carrier_record_len: usize,
     #[cfg(feature = "experimental-gc2")]
     pub gc2_carrier_period_ms: u16,
+    #[cfg(feature = "experimental-gc2")]
+    pub gc2_unpaced_bulk: bool,
     /// Relay lane and maintenance scheduling.
     pub scheduler: SchedulerProfile,
     /// Permit loopback/private FRWD targets (all fixtures need this).
@@ -187,6 +192,8 @@ impl NodeProfile {
             gc2_carrier_record_len: 4096,
             #[cfg(feature = "experimental-gc2")]
             gc2_carrier_period_ms: 1000,
+            #[cfg(feature = "experimental-gc2")]
+            gc2_unpaced_bulk: false,
             scheduler: SchedulerProfile::fixture(),
             allow_local_targets: true,
             stream_slot_interval: std::time::Duration::from_millis(10),
@@ -212,6 +219,8 @@ impl NodeProfile {
             gc2_carrier_record_len: 4096,
             #[cfg(feature = "experimental-gc2")]
             gc2_carrier_period_ms: 1000,
+            #[cfg(feature = "experimental-gc2")]
+            gc2_unpaced_bulk: false,
             scheduler: SchedulerProfile::compressed_production(seed),
             allow_local_targets: true,
             stream_slot_interval: std::time::Duration::from_millis(10),
@@ -239,6 +248,8 @@ impl NodeProfile {
             gc2_carrier_record_len: 4096,
             #[cfg(feature = "experimental-gc2")]
             gc2_carrier_period_ms: 1000,
+            #[cfg(feature = "experimental-gc2")]
+            gc2_unpaced_bulk: false,
             scheduler: SchedulerProfile::production(),
             allow_local_targets: true,
             stream_slot_interval: std::time::Duration::from_secs(3),
@@ -298,6 +309,7 @@ impl NodeProfile {
             entries,
             record_len: 4096,
             period_ms: 1000,
+            unpaced_bulk: true,
             scheduler: SchedulerProfile::production(),
             introductions: Vec::new(),
         })
@@ -316,6 +328,7 @@ impl NodeProfile {
             entries,
             record_len: 4096,
             period_ms: 1000,
+            unpaced_bulk: false,
             scheduler: SchedulerProfile::compressed_production(seed),
             introductions: Vec::new(),
         })
@@ -339,6 +352,18 @@ impl NodeProfile {
         fixture.gc2_directory = directory;
         fixture.gc2_entries = entries;
         fixture.gc2_carrier_period_ms = 250;
+        Self::Fixture(fixture)
+    }
+
+    /// Explicit loopback fixture for the negotiated production file policy.
+    #[cfg(feature = "experimental-gc2")]
+    pub fn gchat_file_transfer_fixture(entries: usize, seed: u64) -> Self {
+        let Self::Fixture(mut fixture) =
+            Self::gc2_carrier_qualification_fixture(None, entries, seed)
+        else {
+            unreachable!()
+        };
+        fixture.gc2_unpaced_bulk = true;
         Self::Fixture(fixture)
     }
 
@@ -416,6 +441,18 @@ impl NodeProfile {
             )),
             _ => None,
         }
+    }
+
+    #[cfg(feature = "experimental-gc2")]
+    fn gc2_wire_profile(&self) -> Result<gcoms_routing::gc2::CandidateProfile, String> {
+        if matches!(self, Self::Gc2Carrier(profile) if profile.unpaced_bulk)
+            || matches!(self, Self::Fixture(profile) if profile.gc2_unpaced_bulk)
+        {
+            return Ok(gcoms_routing::gc2::CandidateProfile::file_transfer());
+        }
+        let (_, _, record_len, period_ms) =
+            self.gc2_carrier().ok_or("GChat carrier not selected")?;
+        gcoms_routing::gc2::CandidateProfile::new(record_len, period_ms).map_err(|e| e.to_string())
     }
 
     /// Explicit private introductions installed as directory seeds at startup.
@@ -828,6 +865,17 @@ async fn start_with_tls_policy_control_sink_and_bootstrap(
         None => None,
     };
     let connectivity = routing_config.as_ref().and_then(|r| r.connectivity.clone());
+    #[cfg(feature = "experimental-gc2")]
+    if cfg.profile.gc2_carrier().is_some()
+        && routing_config
+            .as_ref()
+            .is_some_and(|config| config.bootstrap.is_some())
+    {
+        return Err(
+            "GChat carrier requires explicit GCRB2 bootstrap; legacy authority cannot be converted"
+                .into(),
+        );
+    }
     let routing = if let Some(config) = routing_config {
         #[cfg(feature = "client-persist")]
         let directory = match initial_state {
@@ -939,8 +987,14 @@ async fn start_with_tls_policy_control_sink_and_bootstrap(
             .map(|r| r.published.clone()),
         ..Default::default()
     }));
+    #[cfg(feature = "experimental-gc2")]
+    let prepared_gc2 = gc2_bootstrap::prepare(&cfg, routing.as_ref())?;
     let client = Arc::new(
         match &routing {
+            #[cfg(feature = "experimental-gc2")]
+            Some(runtime) if runtime.gc2.get().is_some() => {
+                Tp1Client::with_connector(runtime.gc2.get().expect("selected").ready.clone())
+            }
             Some(runtime) => Tp1Client::with_connector(runtime.discovery.connector.clone()),
             None => Tp1Client::new(),
         }
@@ -949,8 +1003,18 @@ async fn start_with_tls_policy_control_sink_and_bootstrap(
     // Transit carries only already authorized relay jobs. It must never invoke
     // the endpoint's onion connector and recursively build another circuit.
     let transit_client = Arc::new(Tp1Client::new().map_err(|e| e.to_string())?);
-    let (scheduler, transit_scheduler) =
-        RelayScheduler::with_transit(client.clone(), transit_client, scheduler_profile.clone());
+    let (scheduler, transit_scheduler) = {
+        #[cfg(feature = "experimental-gc2")]
+        if routing.as_ref().is_some_and(|r| r.gc2.get().is_some()) {
+            RelayScheduler::with_gc2_transit(client.clone(), transit_client)
+        } else {
+            RelayScheduler::with_transit(client.clone(), transit_client, scheduler_profile.clone())
+        }
+        #[cfg(not(feature = "experimental-gc2"))]
+        {
+            RelayScheduler::with_transit(client.clone(), transit_client, scheduler_profile.clone())
+        }
+    };
     let (on_cell, on_queue_cell, on_stream) = relay_service::build_handlers(
         &leases,
         &registry,
@@ -981,7 +1045,17 @@ async fn start_with_tls_policy_control_sink_and_bootstrap(
         // Compose the owned terminal queue service under the same role gate.
         // Its handler only accepts authenticated queue tokens that resolve to a
         // current lease in this node's store.
-        let terminal = Some(crate::gc2::QueueService::new(leases.clone()).handler());
+        let queues = crate::gc2::QueueService::new(leases.clone()).handler();
+        let forwards = gc2_forward::handler(
+            authorities.clone(),
+            transit_scheduler.clone(),
+            service_id,
+            frwd_target_policy.clone(),
+        );
+        let terminal: Option<gcoms_transport::server::DuplexHandler> =
+            Some(Arc::new(move |path| {
+                queues(path).or_else(|| forwards(path))
+            }));
         server.with_dispatch_factory(gc2_gate::dispatch_factory(routing.clone(), terminal))
     } else {
         server
@@ -991,6 +1065,13 @@ async fn start_with_tls_policy_control_sink_and_bootstrap(
         address: cfg.advertise.unwrap_or(local_addr),
         relay_service_id: service_id,
     };
+    #[cfg(feature = "experimental-gc2")]
+    if let Some(prepared) = &prepared_gc2 {
+        prepared
+            .directory
+            .set_own_services(vec![(relay_target.address, relay_target.relay_service_id)])
+            .map_err(|e| e.to_string())?;
+    }
     let server = if let Some(runtime) = &routing {
         server.with_duplex(runtime.attach(
             &tls_identity,
@@ -1189,6 +1270,7 @@ async fn start_with_tls_policy_control_sink_and_bootstrap(
             owner_clock: Mutex::new(persist::owner_aliases::RestoreClock::fresh()?),
             draining_contact_aliases: Vec::new(),
             subscribed_contact_aliases: HashSet::new(),
+            subscribed_classes: HashSet::new(),
             #[cfg(feature = "client-persist")]
             owner_alias_origins: HashMap::new(),
             #[cfg(feature = "client-persist")]
@@ -1265,81 +1347,15 @@ async fn start_with_tls_policy_control_sink_and_bootstrap(
         initialized?;
 
         #[cfg(feature = "experimental-gc2")]
-        if let Some((directory_path, entries, record_len, period_ms)) = cfg.profile.gc2_carrier() {
-            let directory = match directory_path {
-                Some(path) => {
-                    let cache = crate::routing_cache::Cache::open_gc2(path, &cfg.seed)
-                        .map_err(|e| e.to_string())?;
-                    std::sync::Arc::new(cache.gc2_directory(now_unix()).map_err(|e| e.to_string())?)
-                }
-                None => std::sync::Arc::new(if cfg.profile.gc2_loopback_fixture() {
-                    gcoms_routing::gc2::directory::Directory::for_loopback_fixture()
-                } else {
-                    gcoms_routing::gc2::directory::Directory::new()
-                }),
-            };
-            // Explicit fixture/qualification seeds are installed before the
-            // owner starts; a malformed or expired seed fails startup closed.
-            for introduction in cfg.profile.gc2_introductions() {
-                gc2_bootstrap::install_advertised(&directory, introduction)
-                    .map_err(|error| format!("invalid GC/2 seed introduction: {error}"))?;
-            }
-            let (owner, ready) = gcoms_routing::gc2::owner::EntryOwner::new(
-                directory.clone(),
-                gcoms_routing::gc2::CandidateProfile::new(record_len, period_ms).map_err(|_| {
-                    format!("invalid GC/2 candidate profile {record_len}/{period_ms}")
-                })?,
-                entries,
-            )
-            .map_err(|e| e.to_string())?;
+        if let Some(gc2_bootstrap::Prepared {
+            directory,
+            owner,
+            ready,
+        }) = prepared_gc2
+        {
             let route = gcoms_transport::Tp1Client::with_connector(ready.clone())
                 .map_err(|e| e.to_string())?;
             let route = std::sync::Arc::new(route);
-            if let Some(runtime) = routing.clone() {
-                // Fetch the explicit GC/2 advertisement over the authenticated
-                // private provisioning channel. This allocates nothing on this
-                // node and discards the card's fresh aliases; only the
-                // advertised introduction is installed as a directory seed.
-                let advert_directory = directory.clone();
-                tasks.push(tokio::spawn(async move {
-                    for attempt in 0..6u32 {
-                        let request_id: [u8; 32] = rand::random();
-                        let options = [gcoms_protocol::proto::PROVISION_OPTION_GC2];
-                        match runtime.discovery.provision(request_id, &options, &[]).await {
-                            Ok((_relay, encoded)) => {
-                                if let Some((_card, Some(introduction))) =
-                                    NodeInfo::decode_private_any(&encoded)
-                                {
-                                    match gc2_bootstrap::install_advertised(
-                                        &advert_directory,
-                                        &introduction,
-                                    ) {
-                                        Ok(count) => {
-                                            metrics::log_event(
-                                                "gc2_advertisement_installed",
-                                                &[("n", count.to_string())],
-                                            );
-                                            return;
-                                        }
-                                        Err(error) => metrics::log_event(
-                                            "gc2_advertisement_rejected",
-                                            &[("e", error)],
-                                        ),
-                                    }
-                                }
-                            }
-                            Err(error) => metrics::log_event(
-                                "gc2_advertisement_deferred",
-                                &[("e", error.to_string())],
-                            ),
-                        }
-                        tokio::time::sleep(std::time::Duration::from_secs(
-                            30 * u64::from(attempt + 1),
-                        ))
-                        .await;
-                    }
-                }));
-            }
             state.lock().unwrap_or_else(|p| p.into_inner()).gc2_carrier = Some(ready.clone());
             state
                 .lock()
@@ -1409,11 +1425,12 @@ async fn start_with_tls_policy_control_sink_and_bootstrap(
         #[cfg(feature = "experimental-gc2")]
         let workers = {
             let mut workers = workers;
-            if state
-                .lock()
-                .unwrap_or_else(|p| p.into_inner())
-                .gc2_carrier_client
-                .is_some()
+            if !scheduler.is_gc2()
+                && state
+                    .lock()
+                    .unwrap_or_else(|p| p.into_inner())
+                    .gc2_carrier_client
+                    .is_some()
             {
                 workers.push(gc2_carrier::spawn_subscriptions(
                     state.clone(),
@@ -1505,6 +1522,7 @@ async fn start_with_tls_policy_control_sink_and_bootstrap(
             _ => None,
         };
         Ok(NodeHandle {
+            state: Arc::downgrade(&state),
             listener_addr: local_addr,
             connectivity: Arc::new(tokio::sync::Mutex::new(connectivity_task)),
             routing,

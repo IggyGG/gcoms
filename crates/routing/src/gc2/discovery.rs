@@ -11,6 +11,45 @@ use std::net::SocketAddr;
 use zeroize::Zeroizing;
 
 pub(crate) const REQUEST: &[u8; 4] = b"GCD2";
+pub(crate) const PROVISION: &[u8; 4] = b"GCP2";
+
+/// Request inbox authority through an existing protected route. Use a client
+/// dedicated to the control role; it must not share terminal connections.
+pub async fn provision(
+    client: &Tp1Client,
+    relay: &Introduction,
+    request_id: [u8; 32],
+    options: &[u8],
+    excluded: &[(SocketAddr, [u8; 32])],
+) -> Result<Zeroizing<Vec<u8>>> {
+    relay.entry(now_unix())?;
+    if request_id == [0; 32] || options.len() > 8 || excluded.len() > 64 {
+        return Err("invalid GC/2 provisioning request".into());
+    }
+    let token = Zeroizing::new(gcoms_transport::encode_b64url(&relay.reentry_cap));
+    let mut payload = PROVISION.to_vec();
+    payload.extend_from_slice(&request_id);
+    payload.extend_from_slice(options);
+    let outcome = client
+        .post_natural_prepared(
+            NaturalRoute {
+                addr: relay.addr,
+                service_id: relay.service_id,
+                token: &token,
+                excluded,
+                class: TrafficClass::Interactive,
+            },
+            || Ok(NaturalCell::new(CellType::Pex, 0, payload)?),
+        )
+        .await?;
+    let NaturalOutcome::Accepted(Some(cell)) = outcome else {
+        return Err("GC/2 inbox provisioning refused".into());
+    };
+    if cell.kind() != CellType::Pex || cell.flags() != 0 || cell.payload().is_empty() {
+        return Err("invalid GC/2 inbox provisioning response".into());
+    }
+    Ok(Zeroizing::new(cell.into_payload()))
+}
 
 /// Renew even an expired introduction using its independent, stable re-entry
 /// capability. The caller must validate address policy before connecting and

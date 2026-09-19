@@ -195,7 +195,7 @@ class Host:
             raise ValueError('unsupported control command')
         script = '''import json,socket,sys
 s=socket.create_connection(('127.0.0.1',29443),timeout=30)
-s.sendall((json.dumps({'id':1,'cmd':sys.argv[1]})+'\\n').encode())
+s.sendall((json.dumps({'id':1,'cmd':sys.argv[1], 'version':2})+'\\n').encode())
 f=s.makefile('rb')
 for _ in range(64):
  line=f.readline(1048577)
@@ -213,7 +213,7 @@ else: raise RuntimeError('control response missing')
     def bootstrap(self, encoded):
         self.owned()
         raw = base64.b64decode(encoded, validate=True)
-        if not 6 < len(raw) < 16384 or raw[:5] != b'GCRB\x01':
+        if raw[:6] != b'GCRB\x02\x08' or len(raw) != 6 + 8 * 155:
             raise ValueError('invalid private bootstrap')
         fd = os.open(self.data/'bootstrap', os.O_WRONLY|os.O_CREAT|os.O_EXCL, 0o600)
         with os.fdopen(fd, 'wb') as stream: stream.write(raw)
@@ -233,9 +233,10 @@ else: raise RuntimeError('control response missing')
         client_bootstrap=folder/'bootstrap'
         if not client_bootstrap.exists():
             bundle=(self.data/'bootstrap').read_bytes()
-            if bundle[:6]!=b'GCRB\x01\x08' or len(bundle)!=990: raise ValueError('expected eight isolated introductions')
-            records=[bundle[6+i*123:6+(i+1)*123] for i in range(8) if i!=self.index]
-            client_bootstrap.write_bytes(b'GCRB\x01'+bytes([7])+b''.join(records))
+            if bundle[:6]!=b'GCRB\x02\x08' or len(bundle)!=1246: raise ValueError('expected eight isolated GChat introductions')
+            records=[bundle[6+i*155:6+(i+1)*155] for i in range(8) if i!=self.index]
+            client_bootstrap.write_bytes(b'GCRB\x02'+bytes([7])+b''.join(records))
+            os.chmod(client_bootstrap, 0o600)
         command = [self.root/'bin/gchat', 'daemon', '--home', folder,
                    '--store', folder/'profile', '--chat-archive', folder/'archive',
                    '--socket', folder/'protocol.sock', '--passphrase-file', self.data/'passphrase',
@@ -424,6 +425,7 @@ with ThreadPoolExecutor(max_workers=8) as pool:
                         except ValueError: continue
                         if value.get('event')=='file_diagnostics': samples.append(value)
             diagnostics[str(slot)]={'samples':len(samples),
+                'latest': samples[-1] if samples else None,
                 'max_buffered_bytes':max((v['buffered_bytes'] for v in samples),default=0),
                 'max_pending_pulls':max((v['pending_pulls'] for v in samples),default=0),
                 'max_pending_actions':max((v['pending_actions'] for v in samples),default=0)}
@@ -433,11 +435,13 @@ with ThreadPoolExecutor(max_workers=8) as pool:
             for sample in samples:
                 counters=processes.setdefault(sample['pid'],{})
                 for key in ('verified_pieces','rejected_pieces','retries','received_blocks',
-                            'received_bytes','send_failures','send_timeouts'):
+                            'received_bytes','send_failures','send_timeouts',
+                            'hop_accepted','outcome_unknown','not_sent'):
                     counters[key]=max(counters.get(key,0),sample.get(key,0))
             diagnostics[str(slot)]['counters']={key:sum(p.get(key,0) for p in processes.values())
                 for key in ('verified_pieces','rejected_pieces','retries','received_blocks',
-                            'received_bytes','send_failures','send_timeouts')}
+                            'received_bytes','send_failures','send_timeouts',
+                            'hop_accepted','outcome_unknown','not_sent')}
         return {'events':dict(counts),'file_diagnostics':diagnostics}
 
 def main(request):

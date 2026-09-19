@@ -289,6 +289,7 @@ pub struct NodeState {
     pub(crate) owner_alias_renewals: HashMap<[u8; 32], Vec<u8>>,
     pub(crate) draining_contact_aliases: Vec<DrainingContactAliases>,
     pub(crate) subscribed_contact_aliases: HashSet<[u8; 32]>,
+    pub(crate) subscribed_classes: HashSet<([u8; 32], gcoms_core::TrafficClass)>,
     pub(crate) contact_aliases_activated: std::time::Instant,
     pub(crate) frwd_target_policy: FrwdTargetPolicy,
     pub(crate) scheduler: RelayScheduler,

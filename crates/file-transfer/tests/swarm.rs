@@ -224,6 +224,7 @@ fn private_multisource_late_join_after_sender_leaves_and_both_seeders_restart() 
         }
         let mut iterations = 0;
         while let Some((from, action)) = queue.pop_front() {
+            engines[from].send_finished(action.send_token(), SendOutcome::HopAccepted, now);
             iterations += 1;
             assert!(iterations < 10000);
             let to = action.peer.member[0] as usize - 2;
@@ -265,6 +266,15 @@ fn private_multisource_late_join_after_sender_leaves_and_both_seeders_restart() 
     }
     assert!(accepted);
     assert_eq!(delivered_sources.len(), 2);
+    assert_eq!(
+        engines[2]
+            .views()
+            .iter()
+            .find(|v| v.state.manifest.id == m.id)
+            .unwrap()
+            .verified_sources,
+        2
+    );
     let mut out = Vec::new();
     engines[2].cache.export(m.id, &mut out).unwrap();
     assert_eq!(out, input(5 * PIECE_BYTES + 17));
@@ -279,6 +289,145 @@ fn private_multisource_late_join_after_sender_leaves_and_both_seeders_restart() 
             400
         )
         .is_err());
+}
+
+#[test]
+fn block_window_reorders_deduplicates_and_retries_only_missing_offsets_after_send_completion() {
+    let source_dir = temp();
+    let receiver_dir = temp();
+    let mut source_cache = cache(source_dir.path());
+    let manifest = imported(&mut source_cache, PIECE_BYTES);
+    let mut source = Engine::new(source_cache);
+    let mut receiver = Engine::new(cache(receiver_dir.path()));
+    source.set_members(CH, [1; 32], [[1; 32], [2; 32]]);
+    receiver.set_members(CH, [2; 32], [[1; 32], [2; 32]]);
+    let peer = Peer {
+        channel: CH,
+        member: [1; 32],
+    };
+    let target = Peer {
+        channel: CH,
+        member: [2; 32],
+    };
+    receiver
+        .receive(
+            peer,
+            Message::Offers {
+                manifests: vec![manifest.clone()],
+                next: None,
+            },
+            1,
+        )
+        .unwrap();
+    receiver.accept(manifest.id, 1).unwrap();
+    receiver
+        .receive(
+            peer,
+            Message::Have {
+                id: manifest.id,
+                start: 0,
+                pieces: vec![true],
+            },
+            1,
+        )
+        .unwrap();
+    let mut wants: Vec<_> = receiver
+        .tick(2)
+        .unwrap()
+        .into_iter()
+        .filter(|a| matches!(a.message, Message::Want { .. }))
+        .collect();
+    assert_eq!(wants.len(), BLOCK_WINDOW);
+    // A delayed local receipt cannot cause overlapping attempts.
+    assert!(!receiver
+        .tick(100)
+        .unwrap()
+        .iter()
+        .any(|a| matches!(a.message, Message::Want { .. })));
+    for action in &wants {
+        receiver.send_finished(action.send_token(), SendOutcome::HopAccepted, 100);
+    }
+    let first = wants.remove(0);
+    let mut next = VecDeque::new();
+    for action in wants.into_iter().rev() {
+        let data = source
+            .receive(target, action.message, 101)
+            .unwrap()
+            .pop()
+            .unwrap();
+        let duplicate = data.message.clone();
+        next.extend(receiver.receive(peer, data.message, 101).unwrap());
+        assert!(receiver.receive(peer, duplicate, 101).unwrap().is_empty());
+    }
+    let retries: Vec<_> = receiver
+        .tick(130)
+        .unwrap()
+        .into_iter()
+        .filter(|a| matches!(a.message, Message::Want { .. }))
+        .collect();
+    assert_eq!(retries.len(), 1);
+    assert!(matches!(
+        retries[0].message,
+        Message::Want { offset: 0, .. }
+    ));
+    assert_eq!(
+        receiver.diagnostics().received_blocks,
+        (BLOCK_WINDOW - 1) as u64
+    );
+    next.push_back(first); // an original late response remains valid
+    while let Some(action) = next.pop_front() {
+        if !matches!(action.message, Message::Want { .. }) {
+            continue;
+        }
+        receiver.send_finished(action.send_token(), SendOutcome::HopAccepted, 131);
+        for data in source.receive(target, action.message, 131).unwrap() {
+            next.extend(receiver.receive(peer, data.message, 131).unwrap());
+        }
+    }
+    assert_eq!(
+        receiver.cache.get(manifest.id).unwrap().status,
+        Status::Complete
+    );
+    let mut exported = Vec::new();
+    receiver.cache.export(manifest.id, &mut exported).unwrap();
+    assert_eq!(exported, input(PIECE_BYTES));
+}
+
+#[test]
+fn queued_payload_copies_are_reserved_before_allocation_and_released_on_drop() {
+    let dir = temp();
+    let mut source_cache = cache(dir.path());
+    let manifest = imported(&mut source_cache, PIECE_BYTES);
+    let mut source = Engine::new(source_cache);
+    source.set_members(CH, [1; 32], [[1; 32], [2; 32]]);
+    let peer = Peer {
+        channel: CH,
+        member: [2; 32],
+    };
+    let want = || Message::Want {
+        id: manifest.id,
+        piece: 0,
+        offset: 0,
+        request: [9; 16],
+    };
+    let mut pending = Vec::new();
+    loop {
+        let actions = source.receive(peer, want(), 2).unwrap();
+        if actions.is_empty() {
+            break;
+        }
+        pending.extend(actions);
+        assert!(source.buffered_bytes() <= PAYLOAD_BUDGET);
+        assert!(pending.len() < 128);
+    }
+    assert!(!pending.is_empty());
+    let guards: Vec<_> = pending.iter().filter_map(Action::payload_guard).collect();
+    let reserved = source.buffered_bytes();
+    drop(pending);
+    assert_eq!(source.buffered_bytes(), reserved);
+    drop(guards);
+    assert!(source.buffered_bytes() < reserved);
+    assert_eq!(source.receive(peer, want(), 3).unwrap().len(), 1);
 }
 #[test]
 fn pm_scope_does_not_expand_to_channel_members() {

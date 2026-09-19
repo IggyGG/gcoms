@@ -241,6 +241,56 @@ mod tests {
     use gcoms_core::CellType;
     use gcoms_transport::{server::Tp1Server, tls::TlsIdentity, TokenRegistry};
 
+    #[tokio::test]
+    async fn subscription_attempts_are_independent_per_authenticated_class() {
+        let (_, ready) = gcoms_routing::gc2::owner::EntryOwner::new(
+            Arc::new(gcoms_routing::gc2::directory::Directory::for_loopback_fixture()),
+            gcoms_routing::gc2::CandidateProfile::file_transfer(),
+            1,
+        )
+        .unwrap();
+        let scheduler = RelayScheduler::gc2(ready).unwrap();
+        let alias = OwnedAlias {
+            contact: AliasContact {
+                target: RelayTarget {
+                    address: "127.0.0.1:1".parse().unwrap(),
+                    relay_service_id: [2; 32],
+                },
+                queue_id: [3; 32],
+                epoch: 4,
+                push_cap: [5; 32],
+                expiry: now_unix() + 300,
+            },
+            capabilities: crate::lease::Capabilities {
+                push: [5; 32],
+                sub: [6; 32],
+                admin: [7; 32],
+            },
+            limits: crate::lease::LeaseLimits {
+                max_queue_cells: 4,
+                max_queue_bytes: 65536,
+            },
+            create_path: "create".into(),
+            lease_create: Cell::new(CellType::RelaySub, 0, 0, Vec::new()),
+        };
+        let interactive = scheduler
+            .subscribe_with_class(alias.clone(), TrafficClass::Interactive)
+            .unwrap();
+        let bulk = scheduler
+            .subscribe_with_class(alias.clone(), TrafficClass::Bulk)
+            .unwrap();
+        assert!(matches!(
+            scheduler.subscribe_with_class(alias, TrafficClass::Bulk),
+            Err(EnqueueError::Pending)
+        ));
+        scheduler.shutdown();
+        assert!(matches!(
+            interactive.completion().await,
+            JobResult::Shutdown
+        ));
+        assert!(matches!(bulk.completion().await, JobResult::Shutdown));
+    }
+
     #[test]
     fn natural_authorization_waits_for_admission_and_legacy_data_has_no_fallback() {
         let contact = AliasContact {

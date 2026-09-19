@@ -21,6 +21,9 @@ pub const HEADER_LEN: usize = 9;
 pub const MAX_RECORD: usize = 16 * 1024;
 const RECORD_LENGTHS: [usize; 3] = [1024, 2048, 4096];
 const PERIODS_MS: [u16; 4] = [250, 500, 1000, 1500];
+/// Explicitly negotiated policy: fixed 4 KiB/1 s interactive carrier, bounded
+/// natural bulk records with transport backpressure and no idle bulk cover.
+pub const FILE_TRANSFER_PROFILE: u8 = 12;
 
 /// Preserve the fractional second at an absolute credential deadline. Invalid
 /// timestamps and expired authority have no remaining lifetime.
@@ -64,7 +67,8 @@ impl CandidateProfile {
     }
 
     pub fn from_id(id: u8) -> Result<Self, RecordError> {
-        if usize::from(id) < RECORD_LENGTHS.len() * PERIODS_MS.len() {
+        if usize::from(id) < RECORD_LENGTHS.len() * PERIODS_MS.len() || id == FILE_TRANSFER_PROFILE
+        {
             Ok(Self { id })
         } else {
             Err(RecordError::Profile)
@@ -74,18 +78,31 @@ impl CandidateProfile {
     pub fn id(self) -> u8 {
         self.id
     }
+    pub fn file_transfer() -> Self {
+        Self {
+            id: FILE_TRANSFER_PROFILE,
+        }
+    }
+    pub fn unpaced_bulk(self) -> bool {
+        self.id == FILE_TRANSFER_PROFILE
+    }
     pub fn record_len(self) -> usize {
+        if self.unpaced_bulk() {
+            return 4096;
+        }
         RECORD_LENGTHS[usize::from(self.id) / 4]
     }
     pub fn period(self) -> Duration {
+        if self.unpaced_bulk() {
+            return Duration::from_secs(1);
+        }
         Duration::from_millis(u64::from(PERIODS_MS[usize::from(self.id) % 4]))
     }
 
     /// Two directions of one continuously connected carrier for exactly 30 days.
     /// Excludes TLS/HTTP2/TCP overhead, retransmission and additional bulk bytes.
     pub fn duplex_record_bytes_30_days(self) -> u64 {
-        self.record_len() as u64 * 2 * 30 * 24 * 60 * 60 * 1000
-            / u64::from(PERIODS_MS[usize::from(self.id) % 4])
+        self.record_len() as u64 * 2 * 30 * 24 * 60 * 60 * 1000 / self.period().as_millis() as u64
     }
 }
 
@@ -156,7 +173,14 @@ impl RecordCodec {
         self.profile
     }
     pub fn payload_limit(self) -> usize {
-        self.profile.record_len() - HEADER_LEN
+        if self.unpaced_bulk() {
+            MAX_RECORD - HEADER_LEN
+        } else {
+            self.profile.record_len() - HEADER_LEN
+        }
+    }
+    pub fn unpaced_bulk(self) -> bool {
+        self.class == TrafficClass::Bulk && self.profile.unpaced_bulk()
     }
 
     /// Select a channel only from its canonical initial Open header. The full
@@ -209,7 +233,14 @@ impl RecordCodec {
         }
         // Every class is padded to the profile record bound so record sizes
         // never reveal whether a slot carried data or cover.
-        let wire_len = self.profile.record_len();
+        if self.unpaced_bulk() && kind == RecordKind::Cover {
+            return Err(RecordError::Kind);
+        }
+        let wire_len = if self.unpaced_bulk() {
+            HEADER_LEN + payload_len
+        } else {
+            self.profile.record_len()
+        };
         Ok((kind, payload_len, wire_len))
     }
 
@@ -264,6 +295,38 @@ impl RecordCodec {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn file_profile_is_explicit_and_does_not_reinterpret_old_ids() {
+        let profile = CandidateProfile::file_transfer();
+        assert_eq!(CandidateProfile::from_id(12).unwrap(), profile);
+        assert_eq!(profile.record_len(), 4096);
+        assert_eq!(profile.period(), Duration::from_secs(1));
+        let bulk = RecordCodec::new(TrafficClass::Bulk, profile);
+        let interactive = RecordCodec::new(TrafficClass::Interactive, profile);
+        assert!(bulk.encode(RecordKind::Cover, &[]).is_err());
+        assert_eq!(
+            interactive.encode(RecordKind::Cover, &[]).unwrap().len(),
+            4096
+        );
+        for length in [1, 11 * 1024, MAX_RECORD - HEADER_LEN] {
+            let wire = bulk.encode(RecordKind::Data, &vec![17; length]).unwrap();
+            assert_eq!(wire.len(), HEADER_LEN + length);
+            assert_eq!(bulk.decode(&wire).unwrap().payload().len(), length);
+            assert!(interactive.decode(&wire).is_err());
+            let old = RecordCodec::new(
+                TrafficClass::Bulk,
+                CandidateProfile::new(4096, 1000).unwrap(),
+            );
+            assert!(old.decode(&wire).is_err());
+        }
+        assert!(bulk.encode(RecordKind::Data, &vec![0; MAX_RECORD]).is_err());
+        let open = bulk.encode(RecordKind::Open, &[]).unwrap();
+        assert_eq!(
+            RecordCodec::from_open_header(&open).unwrap().profile(),
+            profile
+        );
+    }
 
     #[test]
     fn authority_expiry_does_not_round_up_or_revive_invalid_timestamps() {
@@ -336,7 +399,7 @@ mod tests {
                 .encode(RecordKind::Data, &vec![0; bulk.payload_limit() + 1])
                 .is_err());
         }
-        assert_eq!(CandidateProfile::from_id(12), Err(RecordError::Profile));
+        assert_eq!(CandidateProfile::from_id(13), Err(RecordError::Profile));
         assert_eq!(CandidateProfile::new(4096, 0), Err(RecordError::Profile));
         assert_eq!(
             CandidateProfile::new(16384, 1000),

@@ -148,6 +148,31 @@ impl ProvisionAuthorities {
         );
     }
 
+    #[cfg(feature = "experimental-gc2")]
+    pub(crate) fn permits_gc2_frwd(
+        &self,
+        path: &str,
+        key: &[u8; 32],
+        forward: &gcoms_protocol::relay::gc2::Forward,
+        now: u64,
+    ) -> bool {
+        let Some(entry) = self.frwd.get(path) else {
+            return false;
+        };
+        if &entry.hop_key != key || entry.expires_at.is_some_and(|expiry| expiry <= now) {
+            return false;
+        }
+        let (Some(destinations), Some(push)) = (&entry.destinations, &forward.push) else {
+            return true;
+        };
+        destinations.iter().any(|a| {
+            a.expiry > now
+                && a.target == forward.target
+                && a.queue_id == push.queue_id()
+                && a.epoch == push.epoch()
+        })
+    }
+
     // Extend lifetime only after the authenticated work has entered its
     // bounded scheduler lane. The expected key prevents a stale lookup from
     // touching a replacement entry at the same path.

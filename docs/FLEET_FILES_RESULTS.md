@@ -1,5 +1,14 @@
 # Fleet file-transfer findings — 2026-09-18
 
+> **Candidate update (2026-09-20).** The current implementation adds explicit
+> GCRB2 provisioning, channel bulk transport, both subscription classes,
+> profile 12, pipelined piece requests and retained send ownership. Local node
+> library validation passed 283 tests (one ignored); these results do not
+> qualify the fleet. Runs 11–12 reached the opted-in carrier but failed before
+> a verified file export; all eight hosts were cleaned up. The historical
+> post-merge note below describes the earlier state. See the
+> [implementation and remaining gates](GCHAT_FILE_TRANSFER_FOLLOWUP.md).
+
 **Full fleet qualification has not passed.** The harness is implemented and the
 file worker liveness defect is fixed, but the standard 64 KiB cross-host canary
 still misses its five-minute deadline. The 16-client ramp, 56 transfer pairs,
