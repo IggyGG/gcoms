@@ -562,8 +562,15 @@ async fn main() -> Result<(), String> {
     let diagnostics = sender.diagnostics();
 
     // An explicit idle phase runs after the workload so captures can compare
-    // ongoing activity with idle periods that follow it on warm circuits.
+    // ongoing activity with idle periods that follow it on warm circuits. The
+    // marker lets a capture drop everything before the idle window.
     if args.idle_ms > 0 {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default();
+        println!("IDLE_START {}.{:06}", now.as_secs(), now.subsec_micros());
+        use std::io::Write;
+        let _ = std::io::stdout().flush();
         tokio::time::sleep(Duration::from_millis(args.idle_ms)).await;
     }
     // Drain the workload before measuring the idle shaping delay, then send a

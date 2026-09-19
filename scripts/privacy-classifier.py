@@ -158,7 +158,11 @@ def main():
                     rows = [row for row in rows if row[1] == port or row[2] == port]
                 except (IndexError, ValueError):
                     pass
-        if args.skip_seconds > 0 and rows:
+        idle_start = meta.get("idle_start_epoch")
+        if idle_start:
+            cutoff = float(idle_start)
+            rows = [row for row in rows if row[0] >= cutoff]
+        elif args.skip_seconds > 0 and rows:
             cutoff = rows[0][0] + args.skip_seconds
             rows = [row for row in rows if row[0] >= cutoff]
         captures[(meta["workload"], meta["seed"])] = rows

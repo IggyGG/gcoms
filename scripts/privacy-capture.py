@@ -92,7 +92,7 @@ def main():
         f"tcpdump -i lo -s 96 -B 4096 --time-stamp-precision=micro -w {pcap} tcp & "
         "TPID=$!; sleep 2; "
         + " ".join(json.dumps(part) if " " in part else part for part in command)
-        + f" > {record} 2>/dev/null; RC=$?; kill -INT $TPID; wait $TPID 2>/dev/null || true; exit $RC"
+        + f" > {record}.stdout 2>/dev/null; RC=$?; kill -INT $TPID; wait $TPID 2>/dev/null || true; exit $RC"
     )
     started = time.time()
     result = subprocess.run(["sudo", "-n", "unshare", "-n", "--",
@@ -115,6 +115,7 @@ def main():
         "pcap": pcap.name,
         "pcap_sha256": hashlib.sha256(pcap.read_bytes()).hexdigest() if pcap.exists() else None,
         "record": json.loads(record.read_text()) if record.exists() else None,
+        "idle_start_epoch": next((line.split()[1] for line in (Path(str(record) + ".stdout").read_text().splitlines() if Path(str(record) + ".stdout").exists() else []) if line.startswith("IDLE_START ")), None),
     }
     (args.out / f"{stamp}.meta.json").write_text(json.dumps(metadata, indent=2) + "\n")
     print(json.dumps({k: metadata[k] for k in
