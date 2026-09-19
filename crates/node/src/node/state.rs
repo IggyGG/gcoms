@@ -211,9 +211,9 @@ pub struct NodeState {
     /// Present only while the startup profile selects the natural carrier.
     #[cfg(feature = "experimental-gc2")]
     pub(crate) gc2_carrier_client: Option<std::sync::Arc<gcoms_transport::Tp1Client>>,
-    /// Protected GC/2 client over the ready connector. Used whenever the
-    /// directory has live entries; the direct client above only serves
-    /// bootstrap migration and fixtures without a protected route.
+    /// Protected GC/2 client over the ready connector. Used throughout the
+    /// selected protected profile, including when no entry is ready. The other
+    /// client is used only by explicitly unprotected fixtures.
     #[cfg(feature = "experimental-gc2")]
     pub(crate) gc2_carrier_route: Option<std::sync::Arc<gcoms_transport::Tp1Client>>,
     /// Parallel protected circuits for bulk records. A single carrier circuit
@@ -364,20 +364,16 @@ pub(crate) fn natural_client(st: &NodeState) -> Option<std::sync::Arc<gcoms_tran
     }
 }
 
-/// Prefer the protected client once the directory has live entries; the direct
-/// client only serves bootstrap migration and fixtures without a route.
+/// Selecting GC/2 protection is a lifetime decision, independent of readiness.
+/// Keep the protected connector during startup/outages: it reports unavailable
+/// routes without dialing a terminal or falling back to another carrier. Only
+/// explicitly unprotected fixtures have no protected connector.
 #[cfg(feature = "experimental-gc2")]
 pub(crate) fn natural_route_client(
     st: &NodeState,
 ) -> Option<std::sync::Arc<gcoms_transport::Tp1Client>> {
     if let Some(route) = &st.gc2_carrier_route {
-        if st
-            .gc2_carrier
-            .as_ref()
-            .is_some_and(|ready| ready.ready_entries() > 0)
-        {
-            return Some(route.clone());
-        }
+        return Some(route.clone());
     }
     st.gc2_carrier_client.clone()
 }
@@ -390,11 +386,7 @@ pub(crate) fn natural_client_for(
     st: &mut NodeState,
     class: gcoms_core::TrafficClass,
 ) -> Option<std::sync::Arc<gcoms_transport::Tp1Client>> {
-    let protected = st.gc2_carrier_route.is_some()
-        && st
-            .gc2_carrier
-            .as_ref()
-            .is_some_and(|ready| ready.ready_entries() > 0);
+    let protected = st.gc2_carrier_route.is_some();
     if protected {
         if class == gcoms_core::TrafficClass::Bulk && !st.gc2_carrier_bulk_routes.is_empty() {
             let index = st.gc2_carrier_bulk_cursor % st.gc2_carrier_bulk_routes.len();

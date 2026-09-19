@@ -184,6 +184,8 @@ struct DirectAttempt {
 pub(crate) struct DirectMaintenance {
     active: HashMap<[u8; 32], bool>,
     #[cfg(feature = "experimental-gc2")]
+    ready_revision: u64,
+    #[cfg(feature = "experimental-gc2")]
     repair_due: HashMap<[u8; 32], std::time::Instant>,
     #[cfg(feature = "experimental-gc2")]
     recovery_due: HashMap<Vec<u8>, std::time::Instant>,
@@ -208,17 +210,20 @@ impl DirectMaintenance {
         ack: bool,
     ) -> bool {
         let key = direct_attempt_key(&delivery);
-        let Ok(reservation) = direct_payload_reservation(scheduler, &delivery) else {
-            return false;
+        #[cfg(feature = "experimental-gc2")]
+        let natural = natural_client_for(st, traffic);
+        #[cfg(not(feature = "experimental-gc2"))]
+        let natural: Option<std::sync::Arc<gcoms_transport::Tp1Client>> = None;
+        // This charges retained ciphertext copies, not a legacy network slot.
+        // Protected carrier attempts must keep the same memory accounting.
+        let reservation = match direct_payload_reservation(scheduler, &delivery) {
+            Ok(reservation) => reservation,
+            Err(_) => return false,
         };
         self.active.insert(key, ack);
         reroute_deliveries(st, std::slice::from_mut(&mut delivery));
         let scheduler = scheduler.clone();
         let policy = st.frwd_target_policy.clone();
-        #[cfg(feature = "experimental-gc2")]
-        let natural = natural_client_for(st, traffic);
-        #[cfg(not(feature = "experimental-gc2"))]
-        let natural: Option<std::sync::Arc<gcoms_transport::Tp1Client>> = None;
         self.completions.push(Box::pin(async move {
             let accepted = deliver_direct_reserved(
                 &scheduler,
@@ -250,6 +255,21 @@ impl DirectMaintenance {
         let mut st = state.lock().unwrap_or_else(|p| p.into_inner());
         if st.owner_transition_failed {
             return;
+        }
+        #[cfg(feature = "experimental-gc2")]
+        if let Some(connector) = &st.gc2_carrier {
+            let revision = connector.readiness_revision();
+            if revision != self.ready_revision {
+                self.ready_revision = revision;
+                if connector.ready_entries() > 0 {
+                    // A fixed entry became usable. Retry already durable work
+                    // through it on this tick, still within the bounded owner
+                    // budget. Never wake an entry or dial a direct fallback.
+                    for pending in st.pending_1to1.values_mut() {
+                        pending.next_attempt = pending.next_attempt.min(now);
+                    }
+                }
+            }
         }
         #[cfg(feature = "experimental-gc2")]
         {
