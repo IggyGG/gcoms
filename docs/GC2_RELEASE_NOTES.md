@@ -85,7 +85,7 @@ from a pre-carrier backup.
 - **Default builds are unchanged.** The carrier lives behind the `gc2-carrier`
   feature (`gchat-core`), which forwards `gcoms-node/experimental-gc2`.
 - **Enabling it is explicit:** build with `--features gc2-carrier`, then run
-  with `--gc2-carrier` or `GC_GC2_CARRIER=1` on the daemon or the TUI
+  with `--gc2-carrier` or `GC_GC2_CARRIER=true` on the daemon or the TUI
   (`--local-fixture` cannot be combined with it). Without the feature, selecting
   the flag fails with a clear error instead of falling back.
 - **What a carrier-enabled client gets:** its sessions can use the protected
