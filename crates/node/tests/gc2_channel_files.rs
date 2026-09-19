@@ -141,7 +141,7 @@ async fn scenario() {
     let status = receiver.transport_status();
     assert_eq!(status.protocol, "gchat");
     assert_eq!(status.bootstrap_version, Some(2));
-    assert_eq!(status.profile_id, Some(12));
+    assert_eq!(status.profile_id, Some(22));
     assert!(status.bulk_subscriptions >= 4, "{status:?}");
     assert!(status.usable_terminal_routes > 0);
     // Cross a complete subscription lifetime without reprovisioning healthy

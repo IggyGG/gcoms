@@ -13,7 +13,7 @@ from fleet_files_remote import Host, IPS
 
 class EvidenceTests(unittest.TestCase):
     def transport(self):
-        return {'protocol':'gchat', 'profile_id':12, 'bootstrap_version':2,
+        return {'protocol':'gchat', 'profile_id':22, 'bootstrap_version':2,
                 'routing_ready':True, 'ready_entries':2, 'usable_terminal_routes':1,
                 'interactive_subscriptions':2, 'bulk_subscriptions':2}
 

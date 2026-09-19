@@ -21,7 +21,7 @@ pub(crate) fn prepare(
     cfg: &super::NodeConfig,
     runtime: Option<&Arc<super::routing::RoutingRuntime>>,
 ) -> Result<Option<Prepared>, String> {
-    let Some((path, entries, _, _)) = cfg.profile.gc2_carrier() else {
+    let Some((path, entries, _, _, _)) = cfg.profile.gc2_carrier() else {
         if runtime.is_some_and(|r| r.gc2_bootstrap.is_some()) {
             return Err("GCRB2 bootstrap requires the GChat carrier profile".into());
         }

@@ -21,9 +21,20 @@ pub const HEADER_LEN: usize = 9;
 pub const MAX_RECORD: usize = 16 * 1024;
 const RECORD_LENGTHS: [usize; 3] = [1024, 2048, 4096];
 const PERIODS_MS: [u16; 4] = [250, 500, 1000, 1500];
-/// Explicitly negotiated policy: fixed 4 KiB/1 s interactive carrier, bounded
-/// natural bulk records with transport backpressure and no idle bulk cover.
-pub const FILE_TRANSFER_PROFILE: u8 = 12;
+const PROFILES_PER_MODE: u8 = 12;
+/// Fixed 4096-byte/1000-ms interactive cover with natural unpaced bulk.
+pub const FILE_TRANSFER_PROFILE: u8 = 22;
+
+/// Explicit experimental traffic policies. Existing IDs 0..12 retain their
+/// full-cover semantics; new modes have distinct authenticated profile IDs.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[repr(u8)]
+pub enum CoverMode {
+    #[default]
+    Full = 0,
+    Interactive = 1,
+    InteractiveJitter = 2,
+}
 
 /// Preserve the fractional second at an absolute credential deadline. Invalid
 /// timestamps and expired authority have no remaining lifetime.
@@ -67,8 +78,7 @@ impl CandidateProfile {
     }
 
     pub fn from_id(id: u8) -> Result<Self, RecordError> {
-        if usize::from(id) < RECORD_LENGTHS.len() * PERIODS_MS.len() || id == FILE_TRANSFER_PROFILE
-        {
+        if id < PROFILES_PER_MODE * 3 {
             Ok(Self { id })
         } else {
             Err(RecordError::Profile)
@@ -83,26 +93,39 @@ impl CandidateProfile {
             id: FILE_TRANSFER_PROFILE,
         }
     }
-    pub fn unpaced_bulk(self) -> bool {
-        self.id == FILE_TRANSFER_PROFILE
+    pub fn with_mode(self, mode: CoverMode) -> Self {
+        Self {
+            id: self.id % PROFILES_PER_MODE + mode as u8 * PROFILES_PER_MODE,
+        }
+    }
+    pub fn mode(self) -> CoverMode {
+        match self.id / PROFILES_PER_MODE {
+            0 => CoverMode::Full,
+            1 => CoverMode::Interactive,
+            _ => CoverMode::InteractiveJitter,
+        }
     }
     pub fn record_len(self) -> usize {
-        if self.unpaced_bulk() {
-            return 4096;
-        }
-        RECORD_LENGTHS[usize::from(self.id) / 4]
+        RECORD_LENGTHS[usize::from(self.id % PROFILES_PER_MODE) / 4]
     }
     pub fn period(self) -> Duration {
-        if self.unpaced_bulk() {
-            return Duration::from_secs(1);
-        }
         Duration::from_millis(u64::from(PERIODS_MS[usize::from(self.id) % 4]))
     }
 
-    /// Two directions of one continuously connected carrier for exactly 30 days.
+    /// Two directions of one continuously covered class channel for 30 days.
     /// Excludes TLS/HTTP2/TCP overhead, retransmission and additional bulk bytes.
     pub fn duplex_record_bytes_30_days(self) -> u64 {
-        self.record_len() as u64 * 2 * 30 * 24 * 60 * 60 * 1000 / self.period().as_millis() as u64
+        self.record_len() as u64 * 2 * 30 * 24 * 60 * 60 * 1000
+            / u64::from(PERIODS_MS[usize::from(self.id) % 4])
+    }
+
+    /// Record-layer idle cost across every selected entry and covered class.
+    /// Excludes connection setup, TLS/H2/TCP overhead and retransmissions.
+    pub fn duplex_idle_bytes_30_days(self, entries: usize) -> u64 {
+        let classes = if self.mode() == CoverMode::Full { 2 } else { 1 };
+        self.duplex_record_bytes_30_days()
+            .saturating_mul(classes)
+            .saturating_mul(entries as u64)
     }
 }
 
@@ -173,14 +196,14 @@ impl RecordCodec {
         self.profile
     }
     pub fn payload_limit(self) -> usize {
-        if self.unpaced_bulk() {
+        if self.unshaped_bulk() {
             MAX_RECORD - HEADER_LEN
         } else {
             self.profile.record_len() - HEADER_LEN
         }
     }
-    pub fn unpaced_bulk(self) -> bool {
-        self.class == TrafficClass::Bulk && self.profile.unpaced_bulk()
+    pub fn unshaped_bulk(self) -> bool {
+        self.class == TrafficClass::Bulk && self.profile.mode() != CoverMode::Full
     }
 
     /// Select a channel only from its canonical initial Open header. The full
@@ -231,13 +254,12 @@ impl RecordCodec {
         if payload_len > self.payload_limit() || !valid_payload {
             return Err(RecordError::Length);
         }
-        // Every class is padded to the profile record bound so record sizes
-        // never reveal whether a slot carried data or cover.
-        if self.unpaced_bulk() && kind == RecordKind::Cover {
-            return Err(RecordError::Kind);
-        }
-        let wire_len = if self.unpaced_bulk() {
-            HEADER_LEN + payload_len
+        let wire_len = if self.unshaped_bulk() {
+            match kind {
+                RecordKind::Cover => return Err(RecordError::Kind),
+                RecordKind::Open => self.profile.record_len(),
+                RecordKind::Data | RecordKind::Close => HEADER_LEN + payload_len,
+            }
         } else {
             self.profile.record_len()
         };
@@ -297,9 +319,49 @@ mod tests {
     use super::*;
 
     #[test]
+    fn experimental_modes_use_distinct_ids_and_bounded_bulk_frames() {
+        for old_id in 0..12 {
+            let legacy = CandidateProfile::from_id(old_id).unwrap();
+            assert_eq!(legacy.mode(), CoverMode::Full);
+            for mode in [CoverMode::Interactive, CoverMode::InteractiveJitter] {
+                let profile = legacy.with_mode(mode);
+                assert_ne!(profile.id(), old_id);
+                assert_eq!(CandidateProfile::from_id(profile.id()).unwrap(), profile);
+                assert_eq!(profile.with_mode(CoverMode::Full), legacy);
+                let bulk = RecordCodec::new(TrafficClass::Bulk, profile);
+                let data = vec![42; MAX_RECORD - HEADER_LEN];
+                let wire = bulk.encode(RecordKind::Data, &data).unwrap();
+                assert_eq!(wire.len(), MAX_RECORD);
+                assert_eq!(bulk.decode(&wire).unwrap().payload(), data);
+                assert_eq!(
+                    bulk.encode(RecordKind::Data, &vec![42; MAX_RECORD]),
+                    Err(RecordError::Length)
+                );
+                assert_eq!(bulk.encode(RecordKind::Cover, &[]), Err(RecordError::Kind));
+                assert_eq!(
+                    bulk.encode(RecordKind::Close, &[]).unwrap().len(),
+                    HEADER_LEN
+                );
+                assert!(RecordCodec::new(TrafficClass::Bulk, legacy)
+                    .decode(&wire)
+                    .is_err());
+                let chat = RecordCodec::new(TrafficClass::Interactive, profile);
+                assert_eq!(
+                    chat.encode(RecordKind::Data, &[1]).unwrap().len(),
+                    profile.record_len()
+                );
+                assert_eq!(
+                    profile.duplex_idle_bytes_30_days(2) * 2,
+                    legacy.duplex_idle_bytes_30_days(2)
+                );
+            }
+        }
+    }
+
+    #[test]
     fn file_profile_is_explicit_and_does_not_reinterpret_old_ids() {
         let profile = CandidateProfile::file_transfer();
-        assert_eq!(CandidateProfile::from_id(12).unwrap(), profile);
+        assert_eq!(CandidateProfile::from_id(22).unwrap(), profile);
         assert_eq!(profile.record_len(), 4096);
         assert_eq!(profile.period(), Duration::from_secs(1));
         let bulk = RecordCodec::new(TrafficClass::Bulk, profile);
@@ -322,8 +384,17 @@ mod tests {
         }
         assert!(bulk.encode(RecordKind::Data, &vec![0; MAX_RECORD]).is_err());
         let open = bulk.encode(RecordKind::Open, &[]).unwrap();
+        assert_eq!(open.len(), 4096);
         assert_eq!(
-            RecordCodec::from_open_header(&open).unwrap().profile(),
+            profile,
+            CandidateProfile::new(4096, 1000)
+                .unwrap()
+                .with_mode(CoverMode::Interactive)
+        );
+        assert_eq!(
+            RecordCodec::from_open_header(&open[..HEADER_LEN])
+                .unwrap()
+                .profile(),
             profile
         );
     }
@@ -399,7 +470,7 @@ mod tests {
                 .encode(RecordKind::Data, &vec![0; bulk.payload_limit() + 1])
                 .is_err());
         }
-        assert_eq!(CandidateProfile::from_id(13), Err(RecordError::Profile));
+        assert_eq!(CandidateProfile::from_id(36), Err(RecordError::Profile));
         assert_eq!(CandidateProfile::new(4096, 0), Err(RecordError::Profile));
         assert_eq!(
             CandidateProfile::new(16384, 1000),

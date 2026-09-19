@@ -177,7 +177,7 @@ def analyze(manifest, events):
             'baseline_p95_seconds':b95,'mixed_p95_seconds':m95},'cleanup_complete':clean}
 
 def qualified_transport(status):
-    return (status.get('protocol') == 'gchat' and status.get('profile_id') == 12
+    return (status.get('protocol') == 'gchat' and status.get('profile_id') == 22
             and status.get('bootstrap_version') == 2 and status.get('routing_ready') is True
             and status.get('ready_entries', 0) > 0 and status.get('usable_terminal_routes', 0) > 0
             and status.get('interactive_subscriptions', 0) >= 2 and status.get('bulk_subscriptions', 0) >= 2)
@@ -960,7 +960,7 @@ def main():
     (directory/'tools').mkdir()
     for name in ('fleet_files.py','fleet_files_remote.py'):
         shutil.copy2(ROOT/'scripts'/name,directory/'tools'/name)
-    manifest={'schema':1,'run_id':args.run_id,'phase':args.phase,'protocol':'GChat','schedule':'gc2','profile':'file-transfer-12',
+    manifest={'schema':1,'run_id':args.run_id,'phase':args.phase,'protocol':'GChat','schedule':'gchat-files','profile':'file-transfer-22',
               'clients':16,'soak_seconds':14400,'large_sizes':[256*1024*1024,GIB],
               'coordinator_sha256':sha(Path(__file__)),'started_unix':time.time()}
     atomic(directory/'manifest.json',manifest)

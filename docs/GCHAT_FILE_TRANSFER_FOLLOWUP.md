@@ -7,7 +7,7 @@ The existing file format, cryptographic domains and wire magic remain unchanged.
 The accepted capacity target is an actual 1 GiB transfer within four hours. The
 previous two-entry 4 KiB/second bulk lattice could carry at most about 8 KiB/s
 before framing and routing overhead. Pipelining alone could not meet that target.
-Wire profile 12 therefore explicitly permits observable bulk activity and volume,
+Wire profile 22 therefore explicitly permits observable bulk activity and volume,
 while retaining the interactive schedule and existing resource reservations.
 
 ## Implemented candidate
@@ -23,7 +23,7 @@ while retaining the interactive schedule and existing resource reservations.
 - Queue creation accepts an exact authenticated retry after a lost receipt;
   changed nonce, limits, expiry or capabilities cannot reuse a consumed grant.
   Channel recovery probes use the selected natural envelope.
-- Profile 12 has fixed 4 KiB/one-second interactive records and natural bulk
+- Profile 22 has fixed 4 KiB/one-second interactive records and natural bulk
   records bounded at 16 KiB. Old IDs retain their schedules. Policy changes
   preserve the latest private state instead of restoring an older archive.
 - Piece requests use an eight-block window, bounded reassembly and missing-offset
@@ -53,6 +53,8 @@ the retained compressed profile and then with profile 12 (74.73 seconds for the
 complete cold-start, channel admission and application-delivery scenario).
 The extended scenario also crosses a complete subscription renewal period and
 delivers again without inbox recovery (143.88 seconds total).
+Those runs used the superseded local profile-12 candidate. The current candidate
+adopts shared profile ID 22 and its padded Bulk Open; it requires fresh validation.
 These are local integration results, not a GChat file export or fleet result.
 
 Preserve earlier fleet failures, including the current-protocol bootstrap failure

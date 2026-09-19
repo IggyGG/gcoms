@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Profile 12 privacy gate: idle/chat and identical bulk with/without chat.
+"""Profile 22 privacy gate: idle/chat and identical bulk with/without chat.
 
 Run-independent training and evaluation, with paired-run cluster bootstrap.
 File activity and approximate volume are observable; chat privacy remains gated.
@@ -155,7 +155,7 @@ def main():
     parser.add_argument("--train-seeds", required=True, help="comma-separated independent run seeds")
     parser.add_argument("--eval-seeds", required=True)
     args = parser.parse_args()
-    report = {"contract": "gchat-file-profile-12", "qualified": False, "gates": {}}
+    report = {"contract": "gchat-file-profile-22", "qualified": False, "gates": {}}
     try:
         train, evaluation = [list(map(int, value.split(","))) for value in (args.train_seeds, args.eval_seeds)]
         if len(set(train)) != len(train) or len(set(evaluation)) != len(evaluation) or set(train) & set(evaluation):

@@ -185,7 +185,7 @@ class Host:
             env.append(f'GC_ROUTING_BOOTSTRAP={self.data}/bootstrap')
         self.service('relay', [node, 'serve', '--keystore', key, '--pass-file', self.data/'passphrase',
                               '--port', str(PORT), '--advertise-addr', f'{self.ip}:{PORT}',
-                              '--control-port', str(CONTROL), '--schedule', 'gc2',
+                              '--control-port', str(CONTROL), '--schedule', 'gchat-files',
                               '--metrics', self.data/'relay-metrics.jsonl'], env=env)
         return {'started': True}
 

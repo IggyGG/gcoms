@@ -4,7 +4,7 @@ This private operator campaign uses the eight recorded Hetzner relay hosts. It
 creates separate test listeners; it never restarts `ghost-relay.service`, modifies
 its identity, or uses production bootstrap grants. Source and tooling changes stay
 in the paired GComs/GChat task checkouts. The relays and clients run the fleet
-GChat file carrier profile (wire profile 12), with a fixed interactive schedule,
+GChat file carrier profile (wire profile 22), with a fixed interactive schedule,
 bounded unpaced bulk records, authenticated class queues and private routing.
 File activity and approximate volume are observable under this policy. Compressed
 or fixture scheduling is not fleet evidence. Chat privacy remains a separate,
@@ -132,13 +132,13 @@ advertised sources cannot supply the missing fault evidence.
 
 GCRB2 introductions must be exported explicitly and installed before the owner
 can establish routes. GCRB1 authority is not converted or tried as a fallback.
-Profile 12 retains 4 KiB/one-second interactive records and permits bulk records
+Profile 22 retains 4 KiB/one-second interactive records and permits bulk records
 up to 16 KiB as congestion-controlled transport credit becomes available. Bulk
 has no idle cover. IDs 0–11 retain their original fixed schedules. The selected
 policy is authenticated in `carrier-policy.cache`; switching policy must keep
 the latest routing directory, session archive and file cache in place.
 
-The harness waits for fresh local observations of profile 12, bootstrap version
+The harness waits for fresh local observations of profile 22, bootstrap version
 2, ready entries, a usable independent inbox route, and both authenticated
 subscription classes. IPC or TCP reachability alone cannot pass readiness.
 Relay coverage uses natural subscription observations. Admission, hop receipts,

@@ -163,7 +163,7 @@ fn profile(
             else {
                 unreachable!()
             };
-            fixture.gc2_unpaced_bulk = true;
+            fixture.gc2_cover_mode = gcoms_routing::gc2::CoverMode::Interactive;
             NodeProfile::Fixture(fixture)
         }
         "gc2" if !introductions.is_empty() && production => {
