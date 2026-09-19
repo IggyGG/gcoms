@@ -143,6 +143,10 @@ reported separately from full qualification. Completion flags, expected runtime,
 or planned cases alone cannot pass. Missing exports/ACKs fail; missing scenarios,
 relay coverage, diagnostics or runtime remain incomplete. `GCHAT_FILE_DIAGNOSTICS=1`
 adds local five-second aggregates without contacts, file IDs, keys or payloads.
+Embedded clients include scheduler admission, dispatch, latency and resource
+aggregates in the private diagnostic log. Reports count observed ready clients
+and distinguish the largest offered fixture from the largest verified export;
+planned 16-client/1-GiB coverage does not appear as observed scope.
 
 A complete pass requires all planned cases, all expected byte-identical exports,
 four measured hours, every client/relay, bounded resources, verified cleanup,

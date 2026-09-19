@@ -137,7 +137,10 @@ def analyze(manifest, events):
         for size,receipts in timings.items()}
     return {'schema':1,'verdict':'pass' if complete and not failures else ('fail' if failures else 'incomplete'),
             'phase_passed':(complete and not failures) or canary_ok or coverage_ok,
-            'scope':'isolated GC/1 test listeners; 16 Linux clients; up to 1 GiB',
+            'scope':f"isolated {manifest.get('protocol','GC/1')} test listeners; {len(ready)} Linux clients observed",
+            'observed_clients':len(ready),
+            'largest_offered_file_bytes':max((t.get('size',0) for t in transfers.values()),default=0),
+            'largest_verified_file_bytes':max(map(int,timings),default=0),
             'observed_mixed_seconds':measured,'verified_directed_host_pairs':len(pairs),'cases':cases,'failures':failures,
             'fault_evidence':fault_evidence,
             'transfers':transfers,'file_metrics_by_size':file_metrics,

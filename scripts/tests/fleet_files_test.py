@@ -22,6 +22,18 @@ class EvidenceTests(unittest.TestCase):
         self.assertEqual(report['verdict'],'fail')
         self.assertIn('expected export missing',[e['error'] for e in report['failures']])
 
+    def test_scope_reports_observed_clients_and_distinguishes_offers_from_exports(self):
+        manifest={'phase':'canary','clients':16,'large_sizes':[1024**3]}
+        events=self.transfer()+[{'event':'client_ready','client':i} for i in (0,8)]
+        report=analyze(manifest,events)
+        self.assertEqual(report['observed_clients'],2)
+        self.assertIn('2 Linux clients observed',report['scope'])
+        self.assertEqual(report['largest_offered_file_bytes'],4)
+        self.assertEqual(report['largest_verified_file_bytes'],0)
+        events.append({'event':'export_verified','transfer':'a','client':1,'elapsed':3,
+                       'verified':True,'size':4,'sha256':'abcd'})
+        self.assertEqual(analyze(manifest,events)['largest_verified_file_bytes'],4)
+
     def test_wrong_hash_or_size_fails(self):
         for size,digest in ((3,'abcd'),(4,'other')):
             events=self.transfer()+[{'event':'export_verified','transfer':'a','client':1,'elapsed':3,'verified':True,'size':size,'sha256':digest}]

@@ -15,6 +15,8 @@ use std::time::Duration;
 use tokio::sync::{oneshot, watch, Notify};
 
 mod budget;
+#[cfg(feature = "experimental-gc2")]
+mod gc2;
 mod pending;
 use pending::PendingRequest;
 pub mod diagnostics;
@@ -95,6 +97,7 @@ pub struct SchedulerProfile {
     deterministic_seed: Option<u64>,
     connect_retry_base: Duration,
     max_in_flight: usize,
+    natural: bool,
 }
 
 impl SchedulerProfile {
@@ -109,6 +112,7 @@ impl SchedulerProfile {
             deterministic_seed: None,
             connect_retry_base: Duration::from_millis(500),
             max_in_flight: 1,
+            natural: false,
         }
     }
 
@@ -123,6 +127,7 @@ impl SchedulerProfile {
             deterministic_seed: None,
             connect_retry_base: Duration::from_millis(1),
             max_in_flight: 1,
+            natural: false,
         }
     }
 
@@ -138,6 +143,7 @@ impl SchedulerProfile {
             deterministic_seed: Some(seed),
             connect_retry_base: Duration::from_millis(5),
             max_in_flight: 1,
+            natural: false,
         }
     }
 
@@ -207,6 +213,8 @@ impl Receipt {
 pub enum JobResult {
     HopAccepted(bytes::Bytes),
     Stream(CellStream),
+    #[cfg(feature = "experimental-gc2")]
+    NaturalStream(gcoms_transport::gc2::NaturalStream),
     Failed(String),
     Shutdown,
 }
@@ -215,6 +223,8 @@ impl JobResult {
     pub fn state(&self) -> CompletionState {
         match self {
             Self::HopAccepted(_) | Self::Stream(_) => CompletionState::HopAccepted,
+            #[cfg(feature = "experimental-gc2")]
+            Self::NaturalStream(_) => CompletionState::HopAccepted,
             Self::Failed(_) => CompletionState::Failed,
             Self::Shutdown => CompletionState::Shutdown,
         }
@@ -226,15 +236,52 @@ impl JobResult {
             Self::Failed(error) => Err(error),
             Self::Shutdown => Err("relay scheduler shut down".into()),
             Self::Stream(_) => Err("unexpected stream completion".into()),
+            #[cfg(feature = "experimental-gc2")]
+            Self::NaturalStream(_) => Err("unexpected natural stream completion".into()),
+        }
+    }
+
+    /// Receive semantic MSGs from the explicitly selected wire codec.
+    pub fn delivery_stream(self) -> Result<DeliveryStream, String> {
+        match self {
+            #[cfg(feature = "experimental-gc2")]
+            Self::NaturalStream(stream) => Ok(DeliveryStream::Natural(stream)),
+            other => other.stream().map(DeliveryStream::Legacy),
         }
     }
 
     pub fn stream(self) -> Result<CellStream, String> {
         match self {
             Self::Stream(stream) => Ok(stream),
+            #[cfg(feature = "experimental-gc2")]
+            Self::NaturalStream(_) => Err("GC/2 requires delivery_stream".into()),
             Self::Failed(error) => Err(error),
             Self::Shutdown => Err("relay scheduler shut down".into()),
             Self::HopAccepted(_) => Err("unexpected finite completion".into()),
+        }
+    }
+}
+
+/// The natural wire is validated before conversion to the node's semantic Cell
+/// representation. There is no cross-version decoding or transport fallback.
+pub enum DeliveryStream {
+    Legacy(CellStream),
+    #[cfg(feature = "experimental-gc2")]
+    Natural(gcoms_transport::gc2::NaturalStream),
+}
+
+impl DeliveryStream {
+    pub async fn recv(&mut self) -> Option<gcoms_transport::client::Result<Cell>> {
+        match self {
+            Self::Legacy(stream) => stream.recv().await,
+            #[cfg(feature = "experimental-gc2")]
+            Self::Natural(stream) => stream.recv().await.map(|result| {
+                result.map(|cell| {
+                    let mut semantic = Cell::new(cell.kind(), cell.flags(), 0, cell.into_payload());
+                    semantic.version = gcoms_core::gc2::VERSION;
+                    semantic
+                })
+            }),
         }
     }
 }
@@ -245,6 +292,7 @@ struct LaneKey {
     service_id: [u8; 32],
     token: String,
     administrative: bool,
+    natural_class: Option<TrafficClass>,
 }
 
 enum SemanticJob {
@@ -261,6 +309,11 @@ enum SemanticJob {
     Forward {
         target: RelayTarget,
         push: UnauthenticatedRelayPush,
+    },
+    #[cfg(feature = "experimental-gc2")]
+    ForwardNatural {
+        target: RelayTarget,
+        push: gcoms_protocol::relay::gc2::UnverifiedPush,
     },
     AdminPost {
         target: RelayTarget,
@@ -293,6 +346,7 @@ impl LaneAuth {
                 service_id: contact.target.relay_service_id,
                 token: gcoms_transport::encode_b64url(&contact.queue_id),
                 administrative: false,
+                natural_class: None,
             },
             Self::Frwd { relay, .. } => {
                 let target = relay
@@ -308,6 +362,7 @@ impl LaneAuth {
                     service_id: target.relay_service_id,
                     token: relay.frwd_path.clone(),
                     administrative: false,
+                    natural_class: None,
                 }
             }
         }
@@ -537,6 +592,7 @@ struct Inner {
     diagnostics: diagnostics::Diagnostics,
     budget: budget::Budget,
     max_in_flight: usize,
+    natural: bool,
 }
 
 #[derive(Clone)]
@@ -547,6 +603,29 @@ pub struct RelayScheduler {
 impl RelayScheduler {
     pub fn new(client: Arc<Tp1Client>) -> Self {
         Self::with_profile(client, SchedulerProfile::production())
+    }
+
+    /// Experimental natural-cell scheduler. Only an existing-entry connector can
+    /// construct it; application requests cannot open a new physical entry.
+    #[cfg(feature = "experimental-gc2")]
+    pub fn gc2(connector: Arc<gcoms_routing::gc2::owner::ReadyConnector>) -> Result<Self, String> {
+        let client = Arc::new(Tp1Client::with_connector(connector).map_err(|e| e.to_string())?);
+        let mut profile = SchedulerProfile::production().with_pipelining();
+        profile.natural = true;
+        profile.emit_cover = false;
+        Ok(Self::with_profile(client, profile))
+    }
+
+    pub fn is_gc2(&self) -> bool {
+        self.inner.natural
+    }
+
+    pub fn subscription_classes(&self) -> &'static [TrafficClass] {
+        if self.is_gc2() {
+            &[TrafficClass::Interactive, TrafficClass::Bulk]
+        } else {
+            &[TrafficClass::Interactive]
+        }
     }
 
     pub(crate) fn with_profile(client: Arc<Tp1Client>, profile: SchedulerProfile) -> Self {
@@ -588,6 +667,7 @@ impl RelayScheduler {
                 diagnostics: diagnostics::Diagnostics::default(),
                 budget,
                 max_in_flight: profile.max_in_flight,
+                natural: profile.natural,
             }),
         };
         // The idle-lane sweeper needs a runtime; a scheduler built outside
@@ -647,13 +727,24 @@ impl RelayScheduler {
         contact: AliasContact,
         inner: Cell,
     ) -> Result<Receipt, EnqueueError> {
+        self.push_with_class(class, contact, inner, TrafficClass::Interactive)
+    }
+
+    pub fn push_with_class(
+        &self,
+        class: ProducerClass,
+        contact: AliasContact,
+        inner: Cell,
+        traffic: TrafficClass,
+    ) -> Result<Receipt, EnqueueError> {
         let key = LaneKey {
             address: contact.target.address,
             service_id: contact.target.relay_service_id,
             token: gcoms_transport::encode_b64url(&contact.queue_id),
             administrative: false,
+            natural_class: None,
         };
-        self.enqueue(key, class, SemanticJob::Push { contact, inner })
+        self.enqueue_with_class(key, class, SemanticJob::Push { contact, inner }, traffic)
     }
 
     pub fn frwd(
@@ -695,6 +786,7 @@ impl RelayScheduler {
             service_id: target.relay_service_id,
             token: relay.frwd_path.clone(),
             administrative: false,
+            natural_class: None,
         };
         self.enqueue_with_class(
             key,
@@ -720,6 +812,7 @@ impl RelayScheduler {
             service_id: frwd.target.relay_service_id,
             token,
             administrative: false,
+            natural_class: None,
         };
         self.enqueue(
             key,
@@ -728,6 +821,38 @@ impl RelayScheduler {
                 target: frwd.target,
                 push,
             },
+        )
+    }
+
+    /// Forward authenticated GC/2 work while retaining its exact destination
+    /// envelope and class. GC/1 schedulers reject this explicit operation.
+    #[cfg(feature = "experimental-gc2")]
+    pub fn forward_gc2(
+        &self,
+        forward: gcoms_protocol::relay::gc2::Forward,
+    ) -> Result<Receipt, EnqueueError> {
+        if !self.is_gc2() {
+            return Err(EnqueueError::Shutdown);
+        }
+        let push = forward.push.ok_or(EnqueueError::Shutdown)?;
+        if push.class() != forward.class {
+            return Err(EnqueueError::Shutdown);
+        }
+        let key = LaneKey {
+            address: forward.target.address,
+            service_id: forward.target.relay_service_id,
+            token: crate::gc2::queue_token(&push.queue_id()),
+            administrative: false,
+            natural_class: None,
+        };
+        self.enqueue_with_class(
+            key,
+            ProducerClass::Forward,
+            SemanticJob::ForwardNatural {
+                target: forward.target,
+                push,
+            },
+            forward.class,
         )
     }
 
@@ -742,6 +867,7 @@ impl RelayScheduler {
             service_id: target.relay_service_id,
             token: token.clone(),
             administrative: true,
+            natural_class: None,
         };
         self.enqueue(
             key,
@@ -755,16 +881,29 @@ impl RelayScheduler {
     }
 
     pub fn subscribe(&self, alias: OwnedAlias) -> Result<Receipt, EnqueueError> {
+        self.subscribe_with_class(alias, TrafficClass::Interactive)
+    }
+
+    pub fn subscribe_with_class(
+        &self,
+        alias: OwnedAlias,
+        traffic: TrafficClass,
+    ) -> Result<Receipt, EnqueueError> {
+        if !self.is_gc2() && traffic != TrafficClass::Interactive {
+            return Err(EnqueueError::Shutdown);
+        }
         let key = LaneKey {
             address: alias.contact.target.address,
             service_id: alias.contact.target.relay_service_id,
             token: gcoms_transport::encode_b64url(&alias.contact.queue_id),
             administrative: true,
+            natural_class: None,
         };
-        self.enqueue(
+        self.enqueue_with_class(
             key,
             ProducerClass::Administration,
             SemanticJob::Subscribe(Box::new(alias)),
+            traffic,
         )
     }
 
@@ -772,27 +911,33 @@ impl RelayScheduler {
     /// immediately. Idempotent. `pinned` lanes are exempt from the idle
     /// sweep and must be closed explicitly.
     pub fn open_lane(&self, auth: LaneAuth, pinned: bool) -> Result<(), EnqueueError> {
-        let key = auth.key();
-        let lane = self.lane_for(&key, Some(auth))?;
-        lane.pinned
-            .fetch_or(pinned, std::sync::atomic::Ordering::AcqRel);
+        for traffic in self.subscription_classes() {
+            let mut key = auth.key();
+            key.natural_class = self.is_gc2().then_some(*traffic);
+            let lane = self.lane_for(&key, Some(auth.clone()))?;
+            lane.pinned
+                .fetch_or(pinned, std::sync::atomic::Ordering::AcqRel);
+        }
         Ok(())
     }
 
     /// Close the lane for `auth`: queued jobs fail with `Shutdown`, the
     /// worker stops, and no further cover is emitted toward that hop.
     pub fn close_lane(&self, auth: &LaneAuth) {
-        let key = auth.key();
-        let lane = self
-            .inner
-            .lanes
-            .lock()
-            .unwrap_or_else(|p| p.into_inner())
-            .remove(&key);
-        if let Some(lane) = lane {
-            lane.closing
-                .store(true, std::sync::atomic::Ordering::Release);
-            lane.notify.notify_one();
+        for traffic in self.subscription_classes() {
+            let mut key = auth.key();
+            key.natural_class = self.is_gc2().then_some(*traffic);
+            let lane = self
+                .inner
+                .lanes
+                .lock()
+                .unwrap_or_else(|p| p.into_inner())
+                .remove(&key);
+            if let Some(lane) = lane {
+                lane.closing
+                    .store(true, std::sync::atomic::Ordering::Release);
+                lane.notify.notify_one();
+            }
         }
     }
 
@@ -851,11 +996,12 @@ impl RelayScheduler {
 
     fn enqueue_with_class(
         &self,
-        key: LaneKey,
+        mut key: LaneKey,
         class: ProducerClass,
         semantic: SemanticJob,
         traffic: TrafficClass,
     ) -> Result<Receipt, EnqueueError> {
+        key.natural_class = self.is_gc2().then_some(traffic);
         let auth = semantic.lane_auth();
         let lane = self.lane_for(&key, auth).inspect_err(|error| {
             let d = &self.inner.diagnostics;
@@ -966,6 +1112,11 @@ impl SemanticJob {
                 hash.update(target.relay_service_id);
                 hash.update(push.queue_id());
             }
+            #[cfg(feature = "experimental-gc2")]
+            Self::ForwardNatural { target, push } => {
+                hash.update(target.relay_service_id);
+                hash.update(push.queue_id());
+            }
             Self::AdminPost { target, token, .. } => {
                 hash.update(target.relay_service_id);
                 hash.update(token.as_bytes());
@@ -982,6 +1133,8 @@ impl SemanticJob {
         match self {
             Self::Push { inner, .. } | Self::Frwd { inner, .. } => &inner.payload,
             Self::Forward { push, .. } => &push.as_cell().payload,
+            #[cfg(feature = "experimental-gc2")]
+            Self::ForwardNatural { push, .. } => push.as_cell().payload(),
             Self::AdminPost { cell, .. } => &cell.payload,
             Self::Subscribe(alias) => &alias.capabilities.sub,
         }
@@ -997,12 +1150,16 @@ impl SemanticJob {
             Self::Forward { .. } => 2,
             Self::AdminPost { .. } => 3,
             Self::Subscribe(_) => 4,
+            #[cfg(feature = "experimental-gc2")]
+            Self::ForwardNatural { .. } => 5,
         }]);
         let cell = match self {
             Self::Push { inner, .. } | Self::Frwd { inner, .. } => Some(inner),
             Self::Forward { push, .. } => Some(push.as_cell()),
             Self::AdminPost { cell, .. } => Some(cell),
             Self::Subscribe(_) => None,
+            #[cfg(feature = "experimental-gc2")]
+            Self::ForwardNatural { .. } => None,
         };
         if let Some(cell) = cell {
             hash.update([cell.version, cell.raw_type, cell.flags]);
@@ -1058,6 +1215,8 @@ impl SemanticJob {
             Self::Forward { push, .. } => push.as_cell().payload.capacity(),
             Self::AdminPost { cell, .. } => cell.payload.capacity(),
             Self::Subscribe(_) => 32,
+            #[cfg(feature = "experimental-gc2")]
+            Self::ForwardNatural { push, .. } => push.as_cell().payload_capacity(),
         };
         // Retain credit for the encoded wire buffer as well as queued payload
         // and copied authority. Credit is held through the response.
@@ -1086,6 +1245,8 @@ impl SemanticJob {
             // Forwarded jobs and administrative posts carry no authority we
             // may reuse for cover.
             Self::Forward { .. } | Self::AdminPost { .. } | Self::Subscribe(_) => None,
+            #[cfg(feature = "experimental-gc2")]
+            Self::ForwardNatural { .. } => None,
         }
     }
 }
@@ -1135,9 +1296,12 @@ fn spawn_lane(
         };
         let warm = tokio::time::timeout(
             Duration::from_secs(60),
-            inner
-                .client
-                .warm_excluding(key.address, key.service_id, &excluded),
+            inner.client.warm_excluding_with_class(
+                key.address,
+                key.service_id,
+                &excluded,
+                key.natural_class.unwrap_or(TrafficClass::Interactive),
+            ),
         );
         tokio::pin!(warm);
         loop {
@@ -1162,6 +1326,10 @@ fn spawn_lane(
             if *shutdown.borrow() || lane.closing.load(std::sync::atomic::Ordering::Acquire) {
                 break;
             }
+            let ready = inner.natural
+                && running.len() < inner.max_in_flight
+                && (key.natural_class != Some(TrafficClass::Bulk) || bulk_running < 3)
+                && lane.queue.lock().unwrap_or_else(|p| p.into_inner()).len != 0;
             let mut opportunity = false;
             let mut job = None;
             tokio::select! {
@@ -1178,7 +1346,11 @@ fn spawn_lane(
                     }
                 },
                 _ = lane.notify.notified() => {},
-                _ = clock.tick() => {
+                _ = async {}, if ready => {
+                    opportunity = true;
+                    job = lane.queue.lock().unwrap_or_else(|p| p.into_inner()).pop_eligible(bulk_running < 3);
+                },
+                _ = clock.tick(), if !inner.natural => {
                     round = round.wrapping_add(1);
                     if !key.administrative { inner.diagnostics.increment(&inner.diagnostics.data_ticks); }
                     if !key.administrative && !schedule_rng.gen_bool(inner.emission_probability) {
@@ -1198,9 +1370,11 @@ fn spawn_lane(
                 }
                 inner.diagnostics.increment(&inner.diagnostics.dispatched);
                 (
-                    PendingRequest::semantic(
+                    prepare_pending(
                         job.semantic,
                         round,
+                        job.traffic,
+                        inner.natural,
                         random_nonzero_with(&mut request_rng),
                     ),
                     job.traffic,
@@ -1293,18 +1467,38 @@ fn is_unsent_connect_error(error: &str) -> bool {
 /// before giving the job up.
 const CONNECT_RETRY_ATTEMPTS: u32 = 4;
 
+fn prepare_pending(
+    semantic: SemanticJob,
+    round: u16,
+    traffic: TrafficClass,
+    natural: bool,
+    seed: [u8; 32],
+) -> Result<PendingRequest, String> {
+    #[cfg(feature = "experimental-gc2")]
+    if natural {
+        return PendingRequest::natural(semantic, traffic, seed);
+    }
+    let _ = (natural, traffic);
+    PendingRequest::semantic(semantic, round, seed)
+}
+
 async fn send_request(
     client: &Tp1Client,
     request: PendingRequest,
     retry_base: Duration,
     traffic: TrafficClass,
 ) -> JobResult {
+    #[cfg(feature = "experimental-gc2")]
+    if request.natural {
+        return gc2::send(client, request, retry_base, traffic).await;
+    }
     let PendingRequest {
         target,
         token,
         excluded,
         subscription,
         make,
+        ..
     } = request;
     let mut make = Some(make);
     let mut wire: Option<bytes::Bytes> = None;
@@ -1382,6 +1576,8 @@ fn ensure_live_authority(expiry: u64) -> Result<(), String> {
 
 fn prepare(semantic: SemanticJob, round: u16, rng: &mut StdRng) -> Result<Request, String> {
     match semantic {
+        #[cfg(feature = "experimental-gc2")]
+        SemanticJob::ForwardNatural { .. } => Err("GC/2 data cannot enter GC/1".into()),
         SemanticJob::Push { contact, inner } => {
             ensure_live_authority(contact.expiry)?;
             let push = RelayPush {
@@ -1555,7 +1751,7 @@ mod tests {
         }
     }
 
-    fn forwarded(marker: u8) -> Frwd {
+    pub(super) fn forwarded(marker: u8) -> Frwd {
         let target = RelayTarget {
             address: "192.0.2.1:443".parse().unwrap(),
             relay_service_id: [1; 32],

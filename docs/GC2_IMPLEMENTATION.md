@@ -168,6 +168,11 @@ Retain failures, source/executable/configuration/workload hashes and exact scope
   The session wrapper stages crypto and flow state together and rejects stale
   or cross-session commits. See [the transaction and adoption contract](GC2_FLOW.md).
   Node archive/resource integration and explicit session recovery remain pending.
+- The experimental natural-cell scheduler now accepts only a background-owned
+  ready connector, binds lanes and subscriptions to traffic class, and dispatches
+  bounded work without an extra GC/1 inner cover clock. A real three-hop test
+  checks bulk records and interleaved chat. Application adoption is still pending;
+  see [the scheduler boundary](GC2_SCHEDULER.md).
 - Complete runtime counter-window integration, general command preparation/completion split,
   authenticated class propagation, complete GC/2 routing, protected profiles,
   SDK/GChat profile integration and application/privacy/mobile gates: pending.

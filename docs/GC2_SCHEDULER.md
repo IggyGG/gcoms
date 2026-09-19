@@ -74,7 +74,8 @@ that understands the current archive. No identity or journal reset is required.
 Still required before enabling pipelining in production: counter-window flow
 control covering ACK/control traffic, removal of command-level network waits,
 component fairness and the application-level comparison in the implementation
-ledger. The local scheduling `TrafficClass` is not yet an authenticated wire field.
+ledger. The production GC/1 scheduling `TrafficClass` is not an authenticated wire field.
+The experimental natural scheduler described below authenticates this class.
 
 Channel data and control recovery now have independent maintenance loops. A data
 batch can wait for up to 120 seconds; it no longer postpones the next retry of a
@@ -114,8 +115,9 @@ returns, allowing GChat to reopen the encrypted profile immediately. Invitation
 processing owns at most 64 active redemptions in addition to its bounded inbox;
 successive maintenance ticks cannot accumulate detached workers. The command
 shutdown deadline includes waiting to enqueue the request into a full queue.
-Per-peer/channel command serialization still includes network waits; this is
-resource ownership and shutdown recovery, not the remaining preparation split.
+Ordinary per-peer and text-channel serialization still includes network waits.
+File application commands now release the channel lock after authorization,
+encryption and enqueue, before waiting for hop acceptance.
 
 ## Larger useful file chunks
 
@@ -166,3 +168,57 @@ Useful data replaces some padding. Additional connections and bulk traffic add
 cost. These are arithmetic budgets, not measured bills or mobile energy results.
 The candidates still exceed the advisory 1 GB desktop / 250 MB mobile targets;
 neither exceeding a target nor OS suspension silently changes the privacy policy.
+
+## Natural GC/2 dispatch
+
+`RelayScheduler::gc2` requires a `ReadyConnector` from the background entry owner.
+It sends natural GC/2 relay envelopes over that protected connector. It does not
+select or dial physical entries. Ordinary Node/GChat construction still selects
+GC/1; this component does not enable a GC/2 application profile.
+
+The scheduler keeps separate lanes for authenticated interactive and bulk
+classes, including connection warmup and subscriptions. Explicit
+`push_with_class`, `frwd_with_class`, `forward_gc2` and `subscribe_with_class`
+operations preserve that class through deferred authorization and transport
+admission. Bulk forwarding retains the destination's exact authenticated push.
+A subscription drains only its selected class.
+
+Dispatch follows available bounded capacity. GC/2 adds neither GC/1's three-second
+application slots nor inner cover deposits. The owned GCT2 carrier remains the
+traffic-protection boundary, including its fixed interactive schedule. Each lane
+has at most four in-flight jobs, with at most three bulk jobs. Queue and in-flight
+reservations share the scheduler's existing eight-MiB/4096-job limits. Retained
+buffer capacity counts even when its logical payload is small. This is not yet
+node-wide adoption: client and authorized-transit schedulers must use a shared
+budget when a runtime enables both.
+
+Authorization is encoded after terminal connection/request admission. Exact
+prepared bytes survive transport retries; retries do not mint another nonce or
+extend expiry. Hop acceptance requires the explicit status response. It does not
+prove recipient receipt, piece verification, persistence or file export.
+
+`delivery_stream` validates the selected wire codec before returning a semantic
+MSG to the application. Natural messages retain version 2 in that representation;
+there is no GC/1 wire-decoder fallback. The legacy `stream` API rejects a natural
+stream. Shutdown cancels queued and running scheduler jobs; the receiving runtime
+must own and drop its returned subscription streams.
+
+Lease management retains its explicit legacy `RELAY_SUB` envelope over the same
+protected connector. Legacy MSG/deposit/forward data cannot use that management
+path. A GC/2 runtime still needs a natural authenticated queue-restoration probe,
+a terminal forwarding service, class propagation into application producers and
+subscription owners, durable profile/bootstrap integration, and explicit
+application compatibility handling before this scheduler can replace GC/1.
+The counter-credit component in [GC2_FLOW.md](GC2_FLOW.md) has its own archive,
+handshake and session-recovery requirements for ratcheted direct traffic.
+
+### Natural scheduler validation
+
+A real TLS/H2 regression uses the public scheduler with an owned GCT2 entry,
+independent middle relay and authenticated terminal queue. It checks byte equality
+for 64 bulk records of 11 KiB and interleaved chat, both class subscriptions,
+absence of inner cover, fixed entry/control connection count, released memory and
+owned shutdown. It is local transport evidence, not file-application or fleet
+qualification. The focused unit cases also reject expired authority at admission,
+legacy data fallback, unexpected replies presented as acceptance and oversized
+retained buffer capacity. Existing GC/1 scheduler regressions remain required.

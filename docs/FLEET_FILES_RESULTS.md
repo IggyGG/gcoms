@@ -10,7 +10,7 @@ unexecuted behind that gate. See [the runbook](FLEET_FILES.md) for the exact cam
 
 All runs used eight isolated GC/1 relay listeners on the recorded Hetzner hosts,
 two application clients, fresh test identities, and the production scheduler.
-Production relay services were not restarted or reconfigured. All nine runs
+Production relay services were not restarted or reconfigured. All ten runs
 reported successful cleanup on every host, including unchanged production
 service state. The final topology passed all 64 test-relay TCP reachability checks;
 this is transport reachability evidence, not 56 verified file-transfer pairs.
@@ -22,6 +22,7 @@ this is transport reachability evidence, not 56 verified file-transfer pairs.
 | `files-canary-07` | 64 KiB | Worker remained responsive; transfer deadline still failed |
 | `files-canary-08` | 1 KiB diagnostic | Independent SHA-256 export passed, 134.073 seconds after acceptance |
 | `files-canary-09` | 64 KiB, added counters | Transfer deadline failed; no verified piece or export |
+| `files-canary-10` | 64 KiB, worker/serializer/PEX fixes | Transfer deadline failed; no received block, verified piece or export |
 
 Run 08 used an explicitly reduced fixture in its retained coordinator copy. Its
 `phase_passed` is true, while its qualification verdict remains `incomplete`.
@@ -82,7 +83,7 @@ inventory, protocol vectors and formatting checks passed. This is Linux evidence
 Evidence is retained locally under this GComs task checkout and excluded from
 commits:
 
-* `test-evidence/files-canary-01` through `files-canary-09`: manifests, exact
+* `test-evidence/files-canary-01` through `files-canary-10`: manifests, exact
   coordinator/worker copies, events, private host archives and original reports.
 * Runs 07–09 also have `report-current-analyzer.json`; original reports remain
   intact. Run 09 has `diagnostics-summary.json` bound to its host archive hashes.
@@ -145,3 +146,31 @@ formatting, eight independent cell vectors, source inventory and research import
 checks also passed during this follow-up. Logs remain under `target/` and the
 source-check report directory. No further fleet campaign has run at this point;
 the latest standard canary remains the failed run 09 above.
+
+
+## Canary 10 and natural-scheduler integration
+
+Canary 10 used the unchanged-source release receipt in `target/fleet-build-07`.
+Both clients were ready, and the receiver accepted the 64 KiB offer. It missed
+the unchanged 300-second completion gate. Final diagnostics recorded zero
+received blocks and zero verified pieces, with eight sender send timeouts.
+Receiver errors during cleanup are not evidence of failures during the transfer.
+All eight cleanup observations passed, including unchanged production services.
+The new report analyzer records two observed clients, 65,536 offered bytes and
+zero verified file bytes. The original report remains intact; the corrected scope
+is in `report-current-analyzer.json`.
+
+Both clients now received authenticated channel PEX (11 and 12 observations),
+with no former MSG-framing refusal in their metrics. This confirms the PEX repair
+on the fleet and also shows that it did not resolve the file-transfer failure.
+The file worker's 20-second send timeout cannot distinguish scheduler queue delay
+from a stalled transport response. Subsequent diagnostic builds include the
+existing bounded Node scheduler aggregates alongside file-engine observations.
+
+The latest committed GC/2 component work (`b4a6c26`, including ratchet credit) has
+been merged into this task. An explicit natural scheduler now connects that
+transport to the existing bounded scheduling API. Its three-hop local regression
+checks 64 bulk records of 11 KiB alongside chat and owned subscriptions; it does
+not yet send GChat files or enable GC/2 in Node's default startup. The standard
+canary and every remaining scale/capacity/fault gate still require a passing
+application deployment. See [the integration boundary](GC2_SCHEDULER.md).
