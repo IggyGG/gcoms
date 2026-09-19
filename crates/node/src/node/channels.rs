@@ -1526,7 +1526,7 @@ fn stage_admission_locked(
     }))
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "client-persist"))]
 pub(crate) fn stage_recovery_admission_fixture(
     cs: &mut crate::channel::ChannelState,
     channel: &str,
@@ -2019,33 +2019,43 @@ pub(crate) async fn service_one_invite(
     }
 }
 
+#[cfg(test)]
+#[allow(dead_code)]
 pub(crate) async fn send_channel_text(
     state: &Arc<Mutex<NodeState>>,
     scheduler: &RelayScheduler,
     channel: &str,
     text: &[u8],
 ) -> Result<(), String> {
-    send_channel_text_inner(state, scheduler, channel, text, false)
-        .await
-        .map(|_| ())
+    let prepared = prepare_channel_text(state, channel, text, false)?;
+    complete_channel_text(scheduler, prepared).await.map(|_| ())
 }
 
+#[cfg(test)]
+#[allow(dead_code)]
 pub(crate) async fn send_channel_text_tracked(
     state: &Arc<Mutex<NodeState>>,
     scheduler: &RelayScheduler,
     channel: &str,
     text: &[u8],
 ) -> Result<[u8; 16], String> {
-    send_channel_text_inner(state, scheduler, channel, text, true).await
+    let prepared = prepare_channel_text(state, channel, text, true)?;
+    complete_channel_text(scheduler, prepared).await
 }
 
-async fn send_channel_text_inner(
+pub(crate) struct PreparedChannelText {
+    wire: Vec<u8>,
+    id: [u8; 16],
+    channel: String,
+    targets: Vec<crate::channel::PeerRef>,
+}
+
+pub(crate) fn prepare_channel_text(
     state: &Arc<Mutex<NodeState>>,
-    scheduler: &RelayScheduler,
     channel: &str,
     text: &[u8],
     tracked: bool,
-) -> Result<[u8; 16], String> {
+) -> Result<PreparedChannelText, String> {
     validate_application_payload(text)?;
     let (wire, id, targets) = {
         let mut st = state.lock().unwrap_or_else(|p| p.into_inner());
@@ -2153,11 +2163,29 @@ async fn send_channel_text_inner(
         st.last_channel_send = Some((channel.to_string(), wire.clone()));
         (wire, id, targets)
     };
+    Ok(PreparedChannelText {
+        wire,
+        id,
+        channel: channel.to_string(),
+        targets,
+    })
+}
+
+pub(crate) async fn complete_channel_text(
+    scheduler: &RelayScheduler,
+    prepared: PreparedChannelText,
+) -> Result<[u8; 16], String> {
+    let PreparedChannelText {
+        wire,
+        id,
+        channel,
+        targets,
+    } = prepared;
     let cell = Cell::new(
         CellType::Msg,
         0,
         0,
-        crate::proto::encode_chan(channel, &wire),
+        crate::proto::encode_chan(&channel, &wire),
     );
     let mut sent = 0;
     let mut failures = 0;
@@ -2171,7 +2199,7 @@ async fn send_channel_text_inner(
     metrics::log_event(
         "chan_text_sent",
         &[
-            ("channel", channel.to_string()),
+            ("channel", channel.clone()),
             ("targets", sent.to_string()),
             ("msg", encode_b64url(&id)),
         ],

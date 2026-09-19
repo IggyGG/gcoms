@@ -86,28 +86,12 @@ pub(crate) fn seal_channel_direct(
 
 pub(crate) struct PreparedChannelDirect {
     message_id: [u8; 16],
-    receipt: crate::scheduler::Receipt,
+    route: crate::channel::ChannelRoute,
+    cell: Cell,
+    class: ProducerClass,
 }
-
-impl PreparedChannelDirect {
-    pub(crate) async fn complete(self, state: &Arc<Mutex<NodeState>>) -> Result<[u8; 16], String> {
-        let result = self.receipt.completion().await.accepted();
-        if result.is_err() {
-            state
-                .lock()
-                .unwrap_or_else(|poisoned| poisoned.into_inner())
-                .pending_channel_direct
-                .remove(&self.message_id);
-        }
-        result.map(|_| self.message_id)
-    }
-}
-
-/// Authorize, seal and enqueue while the command's channel ordering lock is held.
-/// The resulting receipt owns no channel lock and still means hop acceptance only.
 pub(crate) fn prepare_channel_direct(
     state: &Arc<Mutex<NodeState>>,
-    scheduler: &RelayScheduler,
     channel: &str,
     recipient: [u8; 32],
     text: &[u8],
@@ -146,25 +130,42 @@ pub(crate) fn prepare_channel_direct(
     };
     plaintext.fill(0);
     let (route, envelope) = envelope_result?;
-    let result = (|| {
-        let payload = envelope
-            .encode()
-            .ok_or("channel-direct envelope too large")?;
-        // Keep the same FIFO destination as authenticated directory records.
-        let cell = Cell::new(CellType::Msg, 0, 0, payload);
-        let class = if application {
-            ProducerClass::ChannelData
-        } else {
-            ProducerClass::ChannelControl
-        };
-        let receipt = scheduler
-            .push(class, route.control, cell)
-            .map_err(|error| error.to_string())?;
-        Ok(PreparedChannelDirect {
-            message_id,
-            receipt,
-        })
-    })();
+    let payload = envelope
+        .encode()
+        .ok_or("channel-direct envelope too large")?;
+    let class = if application {
+        ProducerClass::ChannelData
+    } else {
+        ProducerClass::ChannelControl
+    };
+    Ok(PreparedChannelDirect {
+        message_id,
+        route,
+        cell: Cell::new(CellType::Msg, 0, 0, payload),
+        class,
+    })
+}
+
+pub(crate) async fn complete_channel_direct(
+    state: &Arc<Mutex<NodeState>>,
+    scheduler: &RelayScheduler,
+    prepared: PreparedChannelDirect,
+) -> Result<[u8; 16], String> {
+    let PreparedChannelDirect {
+        message_id,
+        route,
+        cell,
+        class,
+    } = prepared;
+    // The authenticated directory record uses this same FIFO control lane, so
+    // a newly admitted recipient learns the sender key before direct traffic.
+    let result = scheduler
+        .push(class, route.control, cell)
+        .map_err(|error| error.to_string())?
+        .completion()
+        .await
+        .accepted()
+        .map(|_| message_id);
     if result.is_err() {
         state
             .lock()
@@ -175,6 +176,8 @@ pub(crate) fn prepare_channel_direct(
     result
 }
 
+#[cfg(test)]
+#[allow(dead_code)]
 pub(crate) async fn send_channel_direct(
     state: &Arc<Mutex<NodeState>>,
     scheduler: &RelayScheduler,
@@ -182,9 +185,8 @@ pub(crate) async fn send_channel_direct(
     recipient: [u8; 32],
     text: &[u8],
 ) -> Result<[u8; 16], String> {
-    prepare_channel_direct(state, scheduler, channel, recipient, text)?
-        .complete(state)
-        .await
+    let prepared = prepare_channel_direct(state, channel, recipient, text)?;
+    complete_channel_direct(state, scheduler, prepared).await
 }
 
 pub(crate) fn handle_channel_direct(

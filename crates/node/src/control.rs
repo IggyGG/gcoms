@@ -578,6 +578,7 @@ async fn dispatch(
                     peer: Box::new(peer),
                     text,
                     via: Box::new(via),
+                    class: None,
                     done,
                 })
                 .await

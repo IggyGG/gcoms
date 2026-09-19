@@ -26,6 +26,9 @@ mod pipeline_admission_tests;
 mod pipeline_cover_tests;
 #[cfg(test)]
 mod pipeline_tests;
+pub(crate) use budget::Reservation as PayloadReservation;
+#[cfg(feature = "experimental-gc2")]
+pub(crate) use budget::{PayloadUsage, RetainedAccount, RetainedPriority, RetainedUpdate};
 pub use budget::{ResourceSnapshot, MAX_BYTES as MAX_QUEUED_BYTES, MAX_JOBS as MAX_QUEUED_JOBS};
 
 pub const SLOT_INTERVAL: Duration = Duration::from_secs(3);
@@ -84,6 +87,7 @@ pub enum EnqueueError {
     Full,
     Pending,
     Shutdown,
+    InvalidCell,
 }
 
 #[derive(Clone, Debug)]
@@ -179,6 +183,10 @@ impl fmt::Display for EnqueueError {
             Self::Full => write!(f, "relay lane queue is full"),
             Self::Pending => write!(f, "the same ciphertext already has an active relay attempt"),
             Self::Shutdown => write!(f, "relay scheduler is shut down"),
+            Self::InvalidCell => write!(
+                f,
+                "relay job requires a canonical MSG within the size limit"
+            ),
         }
     }
 }
@@ -601,6 +609,18 @@ pub struct RelayScheduler {
 }
 
 impl RelayScheduler {
+    #[cfg(feature = "experimental-gc2")]
+    pub(crate) fn retained_account(&self) -> RetainedAccount {
+        self.inner.budget.retained_account()
+    }
+
+    pub(crate) fn retain_attempt_payload(
+        &self,
+        bytes: usize,
+    ) -> Result<PayloadReservation, EnqueueError> {
+        self.inner.budget.reserve(bytes, None)
+    }
+
     pub fn new(client: Arc<Tp1Client>) -> Self {
         Self::with_profile(client, SchedulerProfile::production())
     }
@@ -1001,6 +1021,17 @@ impl RelayScheduler {
         semantic: SemanticJob,
         traffic: TrafficClass,
     ) -> Result<Receipt, EnqueueError> {
+        // Shape validation needs no authority, nonce or ciphertext preparation.
+        // Invalid local work must not create a lane, warm a connection, reserve
+        // budget or consume a scheduled opportunity before it can be rejected.
+        if let SemanticJob::Push { inner, .. } | SemanticJob::Frwd { inner, .. } = &semantic {
+            if RelayPush::validate_message(inner).is_err() {
+                self.inner
+                    .diagnostics
+                    .increment(&self.inner.diagnostics.rejected_invalid);
+                return Err(EnqueueError::InvalidCell);
+            }
+        }
         key.natural_class = self.is_gc2().then_some(traffic);
         let auth = semantic.lane_auth();
         let lane = self.lane_for(&key, auth).inspect_err(|error| {
@@ -1009,6 +1040,7 @@ impl RelayScheduler {
                 EnqueueError::Full => &d.rejected_full,
                 EnqueueError::Pending => &d.rejected_pending,
                 EnqueueError::Shutdown => &d.rejected_shutdown,
+                EnqueueError::InvalidCell => &d.rejected_invalid,
             });
         })?;
         // Keep the final shutdown check and push under the same queue lock so
@@ -1034,6 +1066,7 @@ impl RelayScheduler {
                     EnqueueError::Full => &d.rejected_full,
                     EnqueueError::Pending => &d.rejected_pending,
                     EnqueueError::Shutdown => &d.rejected_shutdown,
+                    EnqueueError::InvalidCell => &d.rejected_invalid,
                 });
             })?;
         let queued = queue.push(
@@ -1716,6 +1749,127 @@ fn now_unix() -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test(start_paused = true)]
+    async fn invalid_messages_cannot_open_lanes_spend_budget_or_reach_the_dialer() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        struct CountDial {
+            attempts: AtomicUsize,
+            entered: Notify,
+        }
+        impl gcoms_transport::connector::Connector for CountDial {
+            fn connect(
+                &self,
+                _: SocketAddr,
+                _: [u8; 32],
+            ) -> gcoms_transport::connector::ConnectFuture<'_> {
+                Box::pin(async move {
+                    self.attempts.fetch_add(1, Ordering::SeqCst);
+                    self.entered.notify_one();
+                    std::future::pending().await
+                })
+            }
+        }
+        let dial = Arc::new(CountDial {
+            attempts: AtomicUsize::new(0),
+            entered: Notify::new(),
+        });
+        let scheduler = RelayScheduler::with_profile(
+            Arc::new(Tp1Client::with_connector(dial.clone()).unwrap()),
+            SchedulerProfile::fixture(),
+        );
+        scheduler.enable_diagnostics();
+        let contact = AliasContact {
+            target: RelayTarget {
+                address: "192.0.2.1:443".parse().unwrap(),
+                relay_service_id: [1; 32],
+            },
+            queue_id: [2; 32],
+            epoch: 1,
+            push_cap: [3; 32],
+            expiry: u64::MAX,
+        };
+        let relay = RelayProvision {
+            aliases: vec![OwnedAlias {
+                contact: contact.clone(),
+                capabilities: crate::lease::Capabilities {
+                    push: [3; 32],
+                    sub: [4; 32],
+                    admin: [5; 32],
+                },
+                limits: crate::lease::LeaseLimits {
+                    max_queue_cells: 4,
+                    max_queue_bytes: 65536,
+                },
+                create_path: "create".into(),
+                lease_create: Cell::new(CellType::RelaySub, 0, 0, Vec::new()),
+            }],
+            frwd_path: "frwd".into(),
+            hop_key: [6; 32],
+        };
+        let mut wrong_version = Cell::new(CellType::Msg, 0, 0, vec![1]);
+        wrong_version.version = 2;
+        for cell in [
+            Cell::new(CellType::Pex, 0, 0, vec![1; 128]),
+            Cell::new(CellType::Msg, 4, 0, vec![1]),
+            Cell::new(CellType::Msg, 0, 0, vec![1; 15361]),
+            wrong_version,
+        ] {
+            assert!(matches!(
+                scheduler.push(ProducerClass::ChannelData, contact.clone(), cell.clone()),
+                Err(EnqueueError::InvalidCell)
+            ));
+            assert!(matches!(
+                scheduler.frwd_with_class(
+                    ProducerClass::Direct,
+                    relay.clone(),
+                    contact.clone(),
+                    cell,
+                    FrwdTargetPolicy::new(true),
+                    TrafficClass::Bulk
+                ),
+                Err(EnqueueError::InvalidCell)
+            ));
+        }
+        tokio::time::advance(Duration::from_secs(3600)).await;
+        tokio::task::yield_now().await;
+        assert_eq!(dial.attempts.load(Ordering::SeqCst), 0);
+        assert_eq!(scheduler.lane_count(), 0);
+        let resources = scheduler.combined_resource_snapshot();
+        assert_eq!(
+            (
+                resources.jobs,
+                resources.bytes,
+                resources.peak_jobs,
+                resources.peak_bytes
+            ),
+            (0, 0, 0, 0)
+        );
+        let diagnostics = scheduler.diagnostics_snapshot();
+        assert_eq!(diagnostics.rejected_invalid, 8);
+        assert_eq!(
+            (
+                diagnostics.accepted,
+                diagnostics.dispatched,
+                diagnostics.cover_attempts
+            ),
+            (0, 0, 0)
+        );
+        // A subsequent valid message still creates and warms its ordinary lane.
+        let valid = scheduler
+            .push(
+                ProducerClass::Direct,
+                contact,
+                Cell::new(CellType::Msg, 0, 0, vec![1; 15360]),
+            )
+            .unwrap();
+        tokio::time::timeout(Duration::from_secs(1), dial.entered.notified())
+            .await
+            .unwrap();
+        assert_eq!(dial.attempts.load(Ordering::SeqCst), 1);
+        scheduler.shutdown();
+        assert_eq!(valid.completion().await.state(), CompletionState::Shutdown);
+    }
 
     #[tokio::test]
     async fn shutdown_releases_receipts_while_connection_warming_is_pending() {

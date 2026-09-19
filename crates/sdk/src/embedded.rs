@@ -311,6 +311,25 @@ impl GcClient for EmbeddedClient {
             .map_err(SdkError::Runtime)
     }
 
+    async fn submit_durable_opaque_class(
+        &self,
+        recipient: &ContactCard,
+        content_type: &str,
+        body: &[u8],
+        class: gcoms_core::TrafficClass,
+    ) -> Result<(), SdkError> {
+        let peer = Self::parse_card(recipient)?;
+        let encoded = crate::ApplicationMessage {
+            content_type: content_type.into(),
+            body: body.to_vec(),
+        }
+        .encode()?;
+        self.node
+            .send_durable_1to1_class(&peer, &encoded, None, Some(class))
+            .await
+            .map_err(SdkError::Runtime)
+    }
+
     async fn submit_local_component(&self, wire: &[u8]) -> Result<(), SdkError> {
         self.node
             .submit_local_component(wire)

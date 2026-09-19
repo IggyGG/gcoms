@@ -50,14 +50,31 @@ cover response cannot fill its entire pipeline. Payload admission never borrows
 unused cover credit.
 
 Producer classes rotate, with byte-charged deficit round robin between destination
-queues within a class. This is destination fairness; distinct SDK components
-sharing one destination do not yet have separate authenticated producer IDs.
+queues within a class. A 32-deep bulk backlog cannot delay a late interactive
+job past one bulk quantum, and bulk jobs are skipped entirely while bulk
+admission is closed; control records use the interactive class. This is
+destination fairness; distinct SDK components sharing one destination do not yet
+have separate authenticated producer IDs.
 
 Pipelined fixtures suppress an identical semantic attempt while it is queued or
 running, including across intermediary rerouting. A completed or canceled attempt
 can be retried with the committed ciphertext. Deduplication includes semantic
 headers and destination authority, not only payload bytes. This is in-flight
 suppression, not a durable-delivery acknowledgment.
+
+Local deposit and forwarding submissions check the inner MSG type, version,
+flags and 15 KiB payload ceiling before creating a lane or reserving resources.
+Malformed work returns `EnqueueError::InvalidCell` and increments the opt-in
+`rejected_invalid` counter; it cannot warm a connection or consume a scheduled
+opportunity. This allocation-free check does not authenticate or prepare a relay
+envelope. Nonces, MACs and expiries still wait for transport admission, and the
+wire encoder retains the same checks.
+
+The 24-node fixture exposed legacy channel maintenance submitting raw PEX cells
+to an MSG-only deposit API. Those submissions now fail before scheduling. The
+producer and its authenticated anti-entropy replacement remain follow-up work;
+this change does not enable plaintext PEX or establish application goodput or
+privacy qualification.
 
 When a pipelined fixture initiates a direct session, later durable applications
 retain their logical records, IDs, ordering and original deadlines until the
@@ -71,11 +88,18 @@ covered, including both historical v16 grammars, retained channel grants, machin
 scope and owner aliases. Older binaries must reject v19; rollback must use a build
 that understands the current archive. No identity or journal reset is required.
 
-Still required before enabling pipelining in production: counter-window flow
-control covering ACK/control traffic, removal of command-level network waits,
+Still required before enabling pipelining in production: the remaining
+control-plane command waits (invite, membership, replay and recovery),
 component fairness and the application-level comparison in the implementation
-ledger. The production GC/1 scheduling `TrafficClass` is not an authenticated wire field.
-The experimental natural scheduler described below authenticates this class.
+ledger. Counter-window flow control covering ACK/control traffic and the
+application send paths' command-level network waits are implemented. Durable
+file records are classified as bulk from their authenticated component kind and
+use the existing bulk admission (at most three concurrent bulk jobs per pooled
+connection); chat, acknowledgements, presence and contact updates stay
+interactive. The class remains a local scheduling property on the legacy
+carrier; the experimental GC/2 natural wire authenticates it separately. The
+local scheduling `TrafficClass` is not yet an authenticated wire field on the
+legacy carrier.
 
 Channel data and control recovery now have independent maintenance loops. A data
 batch can wait for up to 120 seconds; it no longer postpones the next retry of a
@@ -85,8 +109,10 @@ control record only if its full route and ciphertext still match the attempt.
 
 Direct maintenance also advances independently of outstanding receipts. Its owner
 retains at most 16 ACK attempts and 48 retry attempts, all submitted through the
-existing scheduler. These owners retain bounded copies of the durable deliveries;
-the scheduler's 8 MiB accounting separately covers its admitted work. Due retries
+existing scheduler. GC/2 session fixtures additionally charge retained direct
+payloads and owned retry copies to the same allowance, with control and dispatch
+headroom; see [retention admission](GC2_FLOW.md#shared-retention-admission). GC/1
+retention behavior remains unchanged. Due retries
 are selected oldest first; only selected attempts
 move their retry timer. Identical committed ciphertext cannot accumulate attempts
 across ticks or intermediary changes. Rewritten ciphertext after session recovery
@@ -115,9 +141,13 @@ returns, allowing GChat to reopen the encrypted profile immediately. Invitation
 processing owns at most 64 active redemptions in addition to its bounded inbox;
 successive maintenance ticks cannot accumulate detached workers. The command
 shutdown deadline includes waiting to enqueue the request into a full queue.
-Ordinary per-peer and text-channel serialization still includes network waits.
-File application commands now release the channel lock after authorization,
-encryption and enqueue, before waiting for hop acceptance.
+Application sends now split preparation from completion. Preparation
+(validation, identities, ratchet/MLS state, durable commit) runs under the
+per-peer or per-channel preparation lock; completion (scheduler admission and
+hop acceptance) runs after that lock is released, in a FIFO completion chain,
+so wire and result order still match preparation order and cancellation
+releases the successor. Invite, membership, replay and recovery commands still
+hold their key across network waits.
 
 ## Larger useful file chunks
 

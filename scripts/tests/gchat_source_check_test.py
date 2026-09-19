@@ -105,7 +105,11 @@ class SourceCheckTest(unittest.TestCase):
         if subprocess.run(['cargo', 'clippy', '--version'], stdout=subprocess.DEVNULL,
                           stderr=subprocess.DEVNULL).returncode:
             self.skipTest('Clippy is unavailable')
-        with tempfile.TemporaryDirectory() as temp:
+        # Build outputs belong on the project's build filesystem. A small
+        # tmpfs can never satisfy workstation free-space reservations.
+        scratch = check.ROOT / 'target' / 'gchat-checker-tests'
+        scratch.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(dir=scratch) as temp:
             protocol = self.repository(Path(temp) / 'gcoms')
             chat = self.repository(Path(temp) / 'gchat')
             (protocol / 'Cargo.toml').write_text(
@@ -131,6 +135,13 @@ class SourceCheckTest(unittest.TestCase):
                     return 'fixture-revision\n'
                 return original_output(args, **kwargs)
             target = Path(temp) / 'results'
+            # A retained cache may live elsewhere; Cargo must declare its real
+            # output path to the workstation build manager.
+            if os.name != 'nt':
+                target.mkdir()
+                cache = Path(temp) / 'retained-cache'
+                cache.mkdir()
+                (target / 'build').symlink_to(cache, target_is_directory=True)
             argv = ['check-gchat.py', '--gchat', str(chat), '--action', 'clippy',
                     '--offline', '--target-dir', str(target)]
             with patch.object(check, 'ROOT', protocol), patch('sys.argv', argv), \

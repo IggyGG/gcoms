@@ -31,8 +31,10 @@ pub const COUNTER_WINDOW: u64 = gcoms_crypto::session::MAX_SKIP as u64 - 1;
 pub const INTERACTIVE_WINDOW: u64 = COUNTER_WINDOW - 8;
 pub const BULK_WINDOW: u64 = INTERACTIVE_WINDOW - 8;
 pub const RECORD_HEADER: usize = 4 + 1 + 8 + 32 + 2;
-pub const MAX_RECORD_BODY: usize =
-    MAX_MESSAGE - gcoms_crypto::session::MAX_FRAME_OVERHEAD - RECORD_HEADER;
+pub const MAX_RECORD_BODY: usize = MAX_MESSAGE
+    - crate::gc2_session::SESSION_HEADER
+    - gcoms_crypto::session::MAX_FRAME_OVERHEAD
+    - RECORD_HEADER;
 pub const CREDIT_BYTES: usize = 4 + 16 + 16 + 12 + 16 + 16;
 const RECORD_MAGIC: &[u8; 4] = b"GCF2";
 const CREDIT_MAGIC: &[u8; 4] = b"GCA2";
@@ -133,6 +135,9 @@ impl Record {
     pub fn body(&self) -> &[u8] {
         &self.body
     }
+    pub fn not_after(&self) -> u64 {
+        self.not_after
+    }
     /// Expiry suppresses application effects, not counter repair. Even an
     /// expired authenticated frame must advance and persist the receive window.
     pub fn expired(&self, now_unix: u64) -> bool {
@@ -210,6 +215,8 @@ struct Sent {
     packet: Arc<Zeroizing<Vec<u8>>>,
     purpose: Purpose,
     sent_unix: u64,
+    // Exact repair bytes live in RAM; private archives retain only authority.
+    volatile: bool,
 }
 
 #[derive(Clone)]
@@ -264,6 +271,7 @@ impl Coverage {
 /// be recorded. This cannot be created from a GC/1 session's highest counters.
 #[derive(Clone)]
 pub struct Window {
+    generation: u64,
     session: [u8; 16],
     sent: u64,
     credited: Coverage,
@@ -274,10 +282,17 @@ pub struct Window {
 
 impl Window {
     pub fn new(session: [u8; 16]) -> Result<Self, Error> {
-        if session == [0; 16] {
+        Self::new_generation(session, 1)
+    }
+
+    /// Use only a generation authenticated by the peer setup protocol. Recovery
+    /// must advance the peer's durable generation; a tag alone is insufficient.
+    pub fn new_generation(session: [u8; 16], generation: u64) -> Result<Self, Error> {
+        if session == [0; 16] || generation == 0 {
             return Err(Error::State);
         }
         Ok(Self {
+            generation,
             session,
             sent: 0,
             credited: Coverage::default(),
@@ -285,6 +300,9 @@ impl Window {
             tx: BTreeMap::new(),
             rx: BTreeMap::new(),
         })
+    }
+    pub fn generation(&self) -> u64 {
+        self.generation
     }
     pub fn session(&self) -> &[u8; 16] {
         &self.session
@@ -295,8 +313,17 @@ impl Window {
     pub fn credited_floor(&self) -> u64 {
         self.credited.floor
     }
+    pub fn is_credited(&self, counter: u64) -> bool {
+        counter != 0 && counter <= self.sent && self.credited.contains(counter)
+    }
     pub fn received_floor(&self) -> u64 {
         self.received.floor
+    }
+    pub fn cached_payload_count(&self) -> usize {
+        self.tx
+            .values()
+            .filter(|entry| !entry.packet.is_empty())
+            .count()
     }
     pub fn cached_payload_bytes(&self) -> usize {
         self.tx.values().map(|entry| entry.packet.len()).sum()
@@ -312,6 +339,20 @@ impl Window {
         self.oldest_uncredited_unix().is_some_and(|oldest| {
             now_unix.saturating_sub(oldest) >= gcoms_crypto::session::SKIP_KEY_TTL.as_secs()
         })
+    }
+
+    /// A restart cannot reconstruct uncredited RAM-only ciphertext. A selective
+    /// authenticated receipt is sufficient to prove that such a counter needs
+    /// no repair; otherwise replace the session before consuming another counter.
+    pub fn recovery_required(&self, now_unix: u64) -> bool {
+        self.repair_expired(now_unix)
+            || self.tx.iter().any(|(counter, entry)| {
+                entry.volatile && entry.packet.is_empty() && !self.credited.contains(*counter)
+            })
+    }
+
+    pub fn has_volatile_counters(&self) -> bool {
+        self.tx.values().any(|entry| entry.volatile)
     }
 
     /// Check before preparing or consuming the next ratchet counter.
@@ -357,6 +398,7 @@ impl Window {
                 packet: Arc::new(Zeroizing::new(packet.to_vec())),
                 purpose: record.purpose,
                 sent_unix,
+                volatile: false,
             },
         );
         self.sent = counter;
@@ -488,7 +530,9 @@ impl Window {
     pub fn retries(&self) -> impl Iterator<Item = (u64, Purpose, &[u8])> {
         self.tx
             .iter()
-            .filter(|(counter, _)| !self.credited.contains(**counter))
+            .filter(|(counter, entry)| {
+                !self.credited.contains(**counter) && !entry.packet.is_empty()
+            })
             .map(|(counter, entry)| (*counter, entry.purpose, entry.packet.as_slice()))
     }
 }

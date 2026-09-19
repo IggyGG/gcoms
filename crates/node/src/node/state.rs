@@ -200,13 +200,45 @@ pub(crate) fn fresh_msg_id() -> [u8; 16] {
 }
 
 pub struct NodeState {
+    #[cfg(feature = "experimental-gc2")]
+    pub(crate) gc2_sessions: bool,
+    /// Retained GC/2 carrier readiness. The background owner future is owned by
+    /// the node task set; this handle only opens circuits through it. Not
+    /// archived: the startup profile selects the carrier.
+    #[cfg(feature = "experimental-gc2")]
+    pub(crate) gc2_carrier: Option<std::sync::Arc<gcoms_routing::gc2::owner::ReadyConnector>>,
+    /// Endpoint client shared by background GC/2 delivery and subscriptions.
+    /// Present only while the startup profile selects the natural carrier.
+    #[cfg(feature = "experimental-gc2")]
+    pub(crate) gc2_carrier_client: Option<std::sync::Arc<gcoms_transport::Tp1Client>>,
+    /// Protected GC/2 client over the ready connector. Used whenever the
+    /// directory has live entries; the direct client above only serves
+    /// bootstrap migration and fixtures without a protected route.
+    #[cfg(feature = "experimental-gc2")]
+    pub(crate) gc2_carrier_route: Option<std::sync::Arc<gcoms_transport::Tp1Client>>,
+    /// Parallel protected circuits for bulk records. A single carrier circuit
+    /// carries at most one record per profile period, so bulk stripes over the
+    /// shared entry-circuit bound instead of queueing behind one pipe.
+    #[cfg(feature = "experimental-gc2")]
+    pub(crate) gc2_carrier_bulk_routes: Vec<std::sync::Arc<gcoms_transport::Tp1Client>>,
+    #[cfg(feature = "experimental-gc2")]
+    pub(crate) gc2_carrier_bulk_cursor: usize,
+    /// Durable GC/2 directory owned by the carrier. Advertised introductions
+    /// from the private provisioning card are installed here.
+    #[cfg(feature = "experimental-gc2")]
+    pub(crate) gc2_carrier_directory:
+        Option<std::sync::Arc<gcoms_routing::gc2::directory::Directory>>,
+    #[cfg(feature = "experimental-gc2")]
+    pub(super) gc2_receipts: super::gc2_receipts::Ledger,
+    #[cfg(feature = "experimental-gc2")]
+    pub(crate) retained_direct: std::sync::OnceLock<crate::scheduler::RetainedAccount>,
     pub(crate) routing: Option<Arc<super::routing::RoutingRuntime>>,
     pub(crate) secrets: Arc<LocalSecrets>,
     pub(crate) identity_seed: [u8; 32],
     #[cfg(feature = "client-persist")]
     pub(crate) sealed_tls_identity: Vec<u8>,
     pub(crate) info: NodeInfo,
-    pub(crate) sessions: HashMap<Vec<u8>, Session>,
+    pub(crate) sessions: HashMap<Vec<u8>, PeerSession>,
     pub(crate) session_states: HashMap<Vec<u8>, DirectSessionState>,
     pub(crate) peer_routes: HashMap<Vec<u8>, NodeInfo>,
     pub(crate) peer_route_generations: HashMap<Vec<u8>, u64>,
@@ -316,6 +348,61 @@ pub(crate) fn random_nonzero<const N: usize>() -> [u8; N] {
             return value;
         }
     }
+}
+
+/// Natural-carrier client currently selected by the startup profile, if any.
+pub(crate) fn natural_client(st: &NodeState) -> Option<std::sync::Arc<gcoms_transport::Tp1Client>> {
+    #[cfg(feature = "experimental-gc2")]
+    {
+        natural_route_client(st)
+    }
+    #[cfg(not(feature = "experimental-gc2"))]
+    {
+        let _ = st;
+        None
+    }
+}
+
+/// Prefer the protected client once the directory has live entries; the direct
+/// client only serves bootstrap migration and fixtures without a route.
+#[cfg(feature = "experimental-gc2")]
+pub(crate) fn natural_route_client(
+    st: &NodeState,
+) -> Option<std::sync::Arc<gcoms_transport::Tp1Client>> {
+    if let Some(route) = &st.gc2_carrier_route {
+        if st
+            .gc2_carrier
+            .as_ref()
+            .is_some_and(|ready| ready.ready_entries() > 0)
+        {
+            return Some(route.clone());
+        }
+    }
+    st.gc2_carrier_client.clone()
+}
+
+/// Class-aware natural client selection. Bulk records round-robin over the
+/// parallel protected circuits; interactive and control records keep the
+/// single protected client, and unprotected fixtures keep the direct client.
+#[cfg(feature = "experimental-gc2")]
+pub(crate) fn natural_client_for(
+    st: &mut NodeState,
+    class: gcoms_core::TrafficClass,
+) -> Option<std::sync::Arc<gcoms_transport::Tp1Client>> {
+    let protected = st.gc2_carrier_route.is_some()
+        && st
+            .gc2_carrier
+            .as_ref()
+            .is_some_and(|ready| ready.ready_entries() > 0);
+    if protected {
+        if class == gcoms_core::TrafficClass::Bulk && !st.gc2_carrier_bulk_routes.is_empty() {
+            let index = st.gc2_carrier_bulk_cursor % st.gc2_carrier_bulk_routes.len();
+            st.gc2_carrier_bulk_cursor = st.gc2_carrier_bulk_cursor.wrapping_add(1);
+            return Some(st.gc2_carrier_bulk_routes[index].clone());
+        }
+        return st.gc2_carrier_route.clone();
+    }
+    st.gc2_carrier_client.clone()
 }
 
 pub(crate) fn validate_application_payload(payload: &[u8]) -> Result<(), String> {

@@ -1,0 +1,152 @@
+//! Late-bound GC/2 role gate for a listener that may later act as a relay.
+//!
+//! The listener is built before owner provisioning creates the relay service,
+//! so the gate is resolved per connection: until this node provides a relay
+//! service every path passes through unchanged, and afterwards the capability
+//! gate fixes entry, transit, control or terminal before any registered
+//! endpoint can run. The gate never falls back to GC/1 within a connection.
+#![cfg(feature = "experimental-gc2")]
+
+use super::routing::RoutingRuntime;
+use gcoms_transport::server::{Dispatch, DispatchHandlerFactory, DuplexHandler};
+use std::sync::Arc;
+
+pub(crate) fn dispatch_factory(
+    runtime: Option<Arc<RoutingRuntime>>,
+    terminal: Option<DuplexHandler>,
+) -> DispatchHandlerFactory {
+    Arc::new(move || {
+        let service = runtime.as_ref().and_then(|runtime| {
+            runtime
+                .service
+                .lock()
+                .unwrap_or_else(|p| p.into_inner())
+                .clone()
+        });
+        match service {
+            Some(service) => match terminal.clone() {
+                Some(terminal) => service.gc2_handler_factory_with_terminal(terminal)(),
+                None => service.gc2_handler_factory()(),
+            },
+            // Without a provisioned relay service the capability roles do not
+            // exist yet, but a composed terminal queue service can still
+            // authenticate its own queue tokens. Unknown paths keep their
+            // legacy handling; nothing is promoted into a role.
+            None => match terminal.clone() {
+                Some(terminal) => Arc::new(move |path: &str, registered: bool| {
+                    if registered {
+                        return Dispatch::Pass;
+                    }
+                    match terminal(path) {
+                        Some(accepted) => Dispatch::Accepted(accepted),
+                        None => Dispatch::Pass,
+                    }
+                }),
+                None => Arc::new(|_path: &str, _registered: bool| Dispatch::Pass),
+            },
+        }
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::node::RoutingConfig;
+    use gcoms_routing::service::{RelayService, ServicePolicy};
+    use gcoms_routing::Directory;
+
+    fn runtime() -> Arc<RoutingRuntime> {
+        RoutingRuntime::new(RoutingConfig::default(), Directory::new(), true).unwrap()
+    }
+
+    #[test]
+    fn gate_passes_every_path_until_a_relay_service_is_provisioned() {
+        let factory = dispatch_factory(Some(runtime()), None);
+        let handler = factory();
+        assert!(matches!(handler("unknown", false), Dispatch::Pass));
+        assert!(matches!(handler("registered", true), Dispatch::Pass));
+    }
+
+    #[test]
+    fn gate_rejects_unknown_paths_once_a_relay_service_exists() {
+        let runtime = runtime();
+        let directory = Arc::new(Directory::new());
+        let service = RelayService::new(
+            "127.0.0.1:443".parse().unwrap(),
+            [9; 32],
+            [7; 32],
+            directory,
+            ServicePolicy::default(),
+        )
+        .unwrap();
+        *runtime.service.lock().unwrap_or_else(|p| p.into_inner()) = Some(service);
+        let factory = dispatch_factory(Some(runtime), None);
+        let handler = factory();
+        assert!(matches!(
+            handler("not-a-capability", false),
+            Dispatch::Rejected
+        ));
+        // A registered private path still passes to its normal envelope checks.
+        assert!(matches!(handler("registered", true), Dispatch::Pass));
+    }
+
+    #[test]
+    fn gate_without_a_runtime_is_a_pass_through() {
+        let factory = dispatch_factory(None, None);
+        let handler = factory();
+        assert!(matches!(handler("unknown", false), Dispatch::Pass));
+    }
+
+    #[test]
+    fn gate_offers_unknown_paths_to_the_terminal_service() {
+        use gcoms_transport::server::AcceptedDuplex;
+
+        let runtime = runtime();
+        let directory = Arc::new(Directory::new());
+        let service = RelayService::new(
+            "127.0.0.1:443".parse().unwrap(),
+            [9; 32],
+            [7; 32],
+            directory,
+            ServicePolicy::default(),
+        )
+        .unwrap();
+        *runtime.service.lock().unwrap_or_else(|p| p.into_inner()) = Some(service);
+        let terminal: DuplexHandler = Arc::new(|path: &str| {
+            (path == "gc2/terminal").then(|| {
+                let accepted: AcceptedDuplex = Box::new(|_body, _respond| Box::pin(async {}));
+                accepted
+            })
+        });
+        let factory = dispatch_factory(Some(runtime), Some(terminal));
+        let handler = factory();
+        assert!(matches!(
+            handler("gc2/terminal", false),
+            Dispatch::Accepted(_)
+        ));
+        assert!(matches!(handler("gc2/other", false), Dispatch::Rejected));
+    }
+
+    #[test]
+    fn terminal_service_serves_without_a_provisioned_relay_service() {
+        use gcoms_transport::server::AcceptedDuplex;
+
+        // A node that serves terminal queues but has not provisioned a relay
+        // service can still authenticate its own queue tokens. Capability
+        // roles do not exist yet, so nothing is promoted into a role.
+        let terminal: DuplexHandler = Arc::new(|path: &str| {
+            (path == "gc2/terminal").then(|| {
+                let accepted: AcceptedDuplex = Box::new(|_body, _respond| Box::pin(async {}));
+                accepted
+            })
+        });
+        let factory = dispatch_factory(Some(runtime()), Some(terminal));
+        let handler = factory();
+        assert!(matches!(
+            handler("gc2/terminal", false),
+            Dispatch::Accepted(_)
+        ));
+        assert!(matches!(handler("gc2/other", false), Dispatch::Pass));
+        assert!(matches!(handler("registered", true), Dispatch::Pass));
+    }
+}

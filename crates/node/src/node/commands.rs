@@ -57,14 +57,64 @@ const MAX_INFLIGHT_COMMANDS: usize = 64;
 
 #[derive(Default)]
 struct KeyedSerializer {
-    locks: Mutex<HashMap<CmdKey, Arc<tokio::sync::Mutex<()>>>>,
+    locks: Mutex<HashMap<CmdKey, KeyLocks>>,
+}
+
+/// Per-key scheduling locks. `prepare` serializes preparation; the completion
+/// chain preserves wire/result order even though completion runs after the
+/// preparation lock is released.
+#[derive(Clone, Default)]
+struct KeyLocks {
+    prepare: Arc<tokio::sync::Mutex<()>>,
+    completion: CompletionHandle,
+}
+
+/// FIFO completion chain: registering under the preparation lock keeps ticket
+/// order equal to preparation order. A command holds its ticket (and therefore
+/// keeps its successor waiting) until its completion future ends, including on
+/// cancellation.
+#[derive(Clone, Default)]
+struct CompletionHandle {
+    tail: Arc<Mutex<Option<tokio::sync::oneshot::Receiver<()>>>>,
+}
+
+struct CompletionTicket {
+    previous: Option<tokio::sync::oneshot::Receiver<()>>,
+    _mine: Option<tokio::sync::oneshot::Sender<()>>,
+}
+
+impl CompletionHandle {
+    fn register(&self) -> CompletionTicket {
+        let (sender, receiver) = tokio::sync::oneshot::channel();
+        let previous = self
+            .tail
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .replace(receiver);
+        CompletionTicket {
+            previous,
+            _mine: Some(sender),
+        }
+    }
+}
+
+impl CompletionTicket {
+    /// Wait for the predecessor's completion. Dropping the ticket (normal end
+    /// or cancellation) releases the successor.
+    async fn wait(mut self) -> Self {
+        if let Some(previous) = self.previous.take() {
+            let _ = previous.await;
+        }
+        self
+    }
 }
 
 impl KeyedSerializer {
-    fn lock_for(&self, key: &CmdKey) -> Arc<tokio::sync::Mutex<()>> {
+    fn locks_for(&self, key: &CmdKey) -> KeyLocks {
         let mut locks = self.locks.lock().unwrap_or_else(|p| p.into_inner());
-        // Prune keys nobody holds any more.
-        locks.retain(|_, lock| Arc::strong_count(lock) > 1);
+        // Prune keys nobody holds any more. An entry is only pruned when no
+        // command holds its preparation lock or completion chain.
+        locks.retain(|_, locks| Arc::strong_count(&locks.prepare) > 1);
         locks.entry(key.clone()).or_default().clone()
     }
 }
@@ -106,17 +156,36 @@ pub(crate) fn spawn_command_loop(ctx: CommandLoopContext) -> tokio::task::JoinHa
         macro_rules! dispatch {
             ($key:expr, $done:ident, |$state:ident, $scheduler:ident, $events:ident| $body:block) => {{
                 let key = $key;
-                let lock = serializer.lock_for(&key);
+                let locks = serializer.locks_for(&key);
                 let cmd_env = env.clone();
                 let done = $done;
                 spawned.push(Box::pin(async move {
-                    let _serialized = lock.lock().await;
+                    let _prepare = locks.prepare.lock().await;
+                    let _ticket = locks.completion.register().wait().await;
                     #[allow(unused_variables)]
                     let CmdEnv {
                         state: $state,
                         scheduler: $scheduler,
                         events_tx: $events,
                     } = cmd_env;
+                    let result = async move $body.await;
+                    let _ = done.send(result);
+                }));
+            }};
+            ($key:expr, $done:ident, split |$state:ident, $scheduler:ident, $events:ident, $prepare:ident, $complete:ident| $body:block) => {{
+                let key = $key;
+                let locks = serializer.locks_for(&key);
+                let cmd_env = env.clone();
+                let done = $done;
+                spawned.push(Box::pin(async move {
+                    #[allow(unused_variables)]
+                    let CmdEnv {
+                        state: $state,
+                        scheduler: $scheduler,
+                        events_tx: $events,
+                    } = cmd_env;
+                    let $complete = locks.completion.clone();
+                    let $prepare = locks.prepare.lock().await;
                     let result = async move $body.await;
                     let _ = done.send(result);
                 }));
@@ -269,36 +338,83 @@ pub(crate) fn spawn_command_loop(ctx: CommandLoopContext) -> tokio::task::JoinHa
                 }
                 Cmd::SendVolatileApplication { peer, body, done } => {
                     let key = CmdKey::Peer(peer.identity_pk.clone());
-                    dispatch!(key, done, |state, scheduler, events_tx| {
-                        send_volatile_application(&state, &scheduler, &peer, &body).await
-                    });
+                    dispatch!(
+                        key,
+                        done,
+                        split | state,
+                        scheduler,
+                        events_tx,
+                        prepare,
+                        complete | {
+                            let prepared = prepare_volatile_application(&state, &peer, &body)?;
+                            let ticket = complete.register();
+                            drop(prepare);
+                            let _ticket = ticket.wait().await;
+                            complete_direct_record(&scheduler, prepared)
+                                .await
+                                .map(|_| ())
+                        }
+                    );
                 }
                 Cmd::Send1to1 {
                     durable,
                     peer,
                     text,
                     via,
+                    class,
                     done,
                 } => {
                     let key = CmdKey::Peer(peer.identity_pk.clone());
-                    dispatch!(key, done, |state, scheduler, events_tx| {
-                        if durable {
-                            send_durable_1to1(&state, &scheduler, &peer, &text, *via).await
-                        } else {
-                            send_1to1(&state, &scheduler, &peer, &text, *via).await
+                    dispatch!(
+                        key,
+                        done,
+                        split | state,
+                        scheduler,
+                        events_tx,
+                        prepare,
+                        complete | {
+                            let prepared = if durable {
+                                prepare_durable_1to1_class(&state, &peer, &text, *via, class)?
+                            } else {
+                                prepare_1to1_class(&state, &peer, &text, *via, class)?
+                            };
+                            let ticket = complete.register();
+                            drop(prepare);
+                            let _ticket = ticket.wait().await;
+                            complete_direct_record(&scheduler, prepared)
+                                .await
+                                .map(|_| ())
                         }
-                    });
+                    );
                 }
                 Cmd::Send1to1Tracked {
+                    durable,
                     peer,
                     text,
                     via,
+                    class,
                     done,
                 } => {
                     let key = CmdKey::Peer(peer.identity_pk.clone());
-                    dispatch!(key, done, |state, scheduler, events_tx| {
-                        send_1to1_tracked(&state, &scheduler, &peer, &text, *via).await
-                    });
+                    dispatch!(
+                        key,
+                        done,
+                        split | state,
+                        scheduler,
+                        events_tx,
+                        prepare,
+                        complete | {
+                            let prepared = if durable {
+                                prepare_durable_1to1_class(&state, &peer, &text, *via, class)?
+                            } else {
+                                prepare_tracked_1to1_class(&state, &peer, &text, *via, class)?
+                            };
+                            let ticket = complete.register();
+                            drop(prepare);
+                            let _ticket = ticket.wait().await;
+                            complete_direct_record(&scheduler, prepared).await
+                        }
+                    );
                 }
                 Cmd::SendDirectPresence {
                     peer,
@@ -308,10 +424,24 @@ pub(crate) fn spawn_command_loop(ctx: CommandLoopContext) -> tokio::task::JoinHa
                     done,
                 } => {
                     let key = CmdKey::Peer(peer.identity_pk.clone());
-                    dispatch!(key, done, |state, scheduler, events_tx| {
-                        send_direct_presence(&state, &scheduler, &peer, mode, lease_secs, *via)
-                            .await
-                    });
+                    dispatch!(
+                        key,
+                        done,
+                        split | state,
+                        scheduler,
+                        events_tx,
+                        prepare,
+                        complete | {
+                            let prepared =
+                                prepare_direct_presence(&state, &peer, mode, lease_secs, *via)?;
+                            let ticket = complete.register();
+                            drop(prepare);
+                            let _ticket = ticket.wait().await;
+                            complete_direct_record(&scheduler, prepared)
+                                .await
+                                .map(|_| ())
+                        }
+                    );
                 }
                 Cmd::SetDirectPresenceOptIn {
                     peer,
@@ -347,20 +477,34 @@ pub(crate) fn spawn_command_loop(ctx: CommandLoopContext) -> tokio::task::JoinHa
                     };
                     if result.is_ok() && !enabled {
                         let key = CmdKey::Peer(peer_identity);
-                        dispatch!(key, done, |state, scheduler, events_tx| {
-                            send_direct_presence(
-                                &state,
-                                &scheduler,
-                                &peer,
-                                PresenceMode::Invisible,
-                                0,
-                                *via,
-                            )
-                            .await
-                            .map_err(|error| {
-                                format!("presence disabled locally; withdrawal failed: {error}")
-                            })
-                        });
+                        dispatch!(
+                            key,
+                            done,
+                            split | state,
+                            scheduler,
+                            events_tx,
+                            prepare,
+                            complete | {
+                                let prepared = prepare_direct_presence(
+                                    &state,
+                                    &peer,
+                                    PresenceMode::Invisible,
+                                    0,
+                                    *via,
+                                )?;
+                                let ticket = complete.register();
+                                drop(prepare);
+                                let _ticket = ticket.wait().await;
+                                complete_direct_record(&scheduler, prepared)
+                                    .await
+                                    .map(|_| ())
+                                    .map_err(|error| {
+                                        format!(
+                                            "presence disabled locally; withdrawal failed: {error}"
+                                        )
+                                    })
+                            }
+                        );
                     } else {
                         let _ = done.send(result);
                     }
@@ -566,9 +710,23 @@ pub(crate) fn spawn_command_loop(ctx: CommandLoopContext) -> tokio::task::JoinHa
                     done,
                 } => {
                     let key = CmdKey::Channel(channel.clone());
-                    dispatch!(key, done, |state, scheduler, events_tx| {
-                        send_channel_text(&state, &scheduler, &channel, &text).await
-                    });
+                    dispatch!(
+                        key,
+                        done,
+                        split | state,
+                        scheduler,
+                        events_tx,
+                        prepare,
+                        complete | {
+                            let prepared = prepare_channel_text(&state, &channel, &text, false)?;
+                            let ticket = complete.register();
+                            drop(prepare);
+                            let _ticket = ticket.wait().await;
+                            complete_channel_text(&scheduler, prepared)
+                                .await
+                                .map(|_| ())
+                        }
+                    );
                 }
                 Cmd::SendChannelTextTracked {
                     channel,
@@ -576,9 +734,21 @@ pub(crate) fn spawn_command_loop(ctx: CommandLoopContext) -> tokio::task::JoinHa
                     done,
                 } => {
                     let key = CmdKey::Channel(channel.clone());
-                    dispatch!(key, done, |state, scheduler, events_tx| {
-                        send_channel_text_tracked(&state, &scheduler, &channel, &text).await
-                    });
+                    dispatch!(
+                        key,
+                        done,
+                        split | state,
+                        scheduler,
+                        events_tx,
+                        prepare,
+                        complete | {
+                            let prepared = prepare_channel_text(&state, &channel, &text, true)?;
+                            let ticket = complete.register();
+                            drop(prepare);
+                            let _ticket = ticket.wait().await;
+                            complete_channel_text(&scheduler, prepared).await
+                        }
+                    );
                 }
                 Cmd::SendChannelPresence {
                     channel,
@@ -587,9 +757,22 @@ pub(crate) fn spawn_command_loop(ctx: CommandLoopContext) -> tokio::task::JoinHa
                     done,
                 } => {
                     let key = CmdKey::Channel(channel.clone());
-                    dispatch!(key, done, |state, scheduler, events_tx| {
-                        send_channel_presence(&state, &scheduler, &channel, mode, lease_secs).await
-                    });
+                    dispatch!(
+                        key,
+                        done,
+                        split | state,
+                        scheduler,
+                        events_tx,
+                        prepare,
+                        complete | {
+                            let prepared =
+                                prepare_channel_presence(&state, &channel, mode, lease_secs)?;
+                            let ticket = complete.register();
+                            drop(prepare);
+                            let _ticket = ticket.wait().await;
+                            complete_channel_presence(&scheduler, prepared).await
+                        }
+                    );
                 }
                 Cmd::SetChannelPresenceOptIn {
                     channel,
@@ -625,19 +808,32 @@ pub(crate) fn spawn_command_loop(ctx: CommandLoopContext) -> tokio::task::JoinHa
                     };
                     if result.is_ok() && !enabled {
                         let key = CmdKey::Channel(channel.clone());
-                        dispatch!(key, done, |state, scheduler, events_tx| {
-                            send_channel_presence(
-                                &state,
-                                &scheduler,
-                                &channel,
-                                PresenceMode::Invisible,
-                                0,
-                            )
-                            .await
-                            .map_err(|error| {
-                                format!("presence disabled locally; withdrawal failed: {error}")
-                            })
-                        });
+                        dispatch!(
+                            key,
+                            done,
+                            split | state,
+                            scheduler,
+                            events_tx,
+                            prepare,
+                            complete | {
+                                let prepared = prepare_channel_presence(
+                                    &state,
+                                    &channel,
+                                    PresenceMode::Invisible,
+                                    0,
+                                )?;
+                                let ticket = complete.register();
+                                drop(prepare);
+                                let _ticket = ticket.wait().await;
+                                complete_channel_presence(&scheduler, prepared)
+                                    .await
+                                    .map_err(|error| {
+                                        format!(
+                                            "presence disabled locally; withdrawal failed: {error}"
+                                        )
+                                    })
+                            }
+                        );
                     } else {
                         let _ = done.send(result);
                     }
@@ -649,33 +845,22 @@ pub(crate) fn spawn_command_loop(ctx: CommandLoopContext) -> tokio::task::JoinHa
                     done,
                 } => {
                     let key = CmdKey::Channel(channel.clone());
-                    if gcoms_core::is_piece_application_payload(&text) {
-                        let lock = serializer.lock_for(&key);
-                        let state = state.clone();
-                        let scheduler = scheduler.clone();
-                        spawned.push(Box::pin(async move {
-                            let prepared = {
-                                let _serialized = lock.lock().await;
-                                prepare_channel_direct(
-                                    &state, &scheduler, &channel, recipient, &text,
-                                )
-                            };
-                            // File cells use independently sealed channel-direct
-                            // envelopes, not a shared ratchet counter. Preserve
-                            // ordered authorization/enqueue, then let other peers
-                            // and membership commands progress during this wait.
-                            let result = match prepared {
-                                Ok(prepared) => prepared.complete(&state).await,
-                                Err(error) => Err(error),
-                            };
-                            let _ = done.send(result);
-                        }));
-                    } else {
-                        dispatch!(key, done, |state, scheduler, events_tx| {
-                            send_channel_direct(&state, &scheduler, &channel, recipient, &text)
-                                .await
-                        });
-                    }
+                    dispatch!(
+                        key,
+                        done,
+                        split | state,
+                        scheduler,
+                        events_tx,
+                        prepare,
+                        complete | {
+                            let prepared =
+                                prepare_channel_direct(&state, &channel, recipient, &text)?;
+                            let ticket = complete.register();
+                            drop(prepare);
+                            let _ticket = ticket.wait().await;
+                            complete_channel_direct(&state, &scheduler, prepared).await
+                        }
+                    );
                 }
                 Cmd::RemoveChannelMember {
                     channel,
@@ -981,5 +1166,34 @@ mod machine_migration_tests {
         assert!(machine_record_compatible(
             &crate::proto::encode_direct_durable_data([1; 16], 1, &route)
         ));
+    }
+
+    #[tokio::test]
+    async fn completion_chain_orders_successors_and_releases_on_cancellation() {
+        let serializer = super::KeyedSerializer::default();
+        let locks = serializer.locks_for(&super::CmdKey::Peer(vec![7]));
+        let order = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        // Command 1 and command 2 register in preparation order; command 2 must
+        // not pass while command 1's completion ticket is alive.
+        let first = locks.completion.register();
+        let second = locks.completion.register();
+        let waiter = tokio::spawn({
+            let order = order.clone();
+            async move {
+                let ticket = second.wait().await;
+                order.lock().unwrap().push(2);
+                drop(ticket);
+            }
+        });
+        tokio::time::sleep(std::time::Duration::from_millis(30)).await;
+        assert!(order.lock().unwrap().is_empty());
+        // Cancellation (or normal completion) drops the ticket and releases the
+        // successor.
+        drop(first);
+        tokio::time::timeout(std::time::Duration::from_secs(1), waiter)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(*order.lock().unwrap(), vec![2]);
     }
 }

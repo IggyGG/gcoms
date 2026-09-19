@@ -16,6 +16,13 @@ pub const KIND_CHAN: u8 = 4;
 const KIND_PROVISIONING: u8 = 5;
 pub const KIND_CHANNEL_DIRECT: u8 = 6;
 pub const KIND_CHAN_FRAGMENT: u8 = 7;
+/// Private relay card carrying an explicit GC/2 introduction advertisement.
+/// Version 1 clients reject this kind outright; there is no fallback.
+pub const KIND_PROVISIONING_GC2: u8 = 8;
+/// Request option asking a relay to advertise its GC/2 introduction.
+pub const PROVISION_OPTION_GC2: u8 = 1;
+/// Largest advertised GC/2 introduction accepted from a private card.
+pub const MAX_PROVISION_GC2_BYTES: usize = 1024;
 const CHAN_FRAGMENT_HEADER: usize = 21;
 const CHAN_FRAGMENT_SLOTS: usize = 64;
 const MAX_CHAN_FRAGMENT_BYTES: usize = 16 * 1024 * 1024;
@@ -831,21 +838,40 @@ impl NodeInfo {
     pub fn encode_private(&self) -> Option<Vec<u8>> {
         let provision = self.provisioning.as_ref()?;
         let mut v = self.encode_common(KIND_PROVISIONING);
+        Self::encode_private_provision(&mut v, provision)?;
+        Some(v)
+    }
+
+    /// Same layout as [`Self::encode_private`] with an explicit GC/2
+    /// introduction advertisement appended. Version 1 clients never receive
+    /// this kind because the relay only emits it for opted-in requests.
+    pub fn encode_private_gc2(&self, introduction: &[u8]) -> Option<Vec<u8>> {
+        let provision = self.provisioning.as_ref()?;
+        if introduction.is_empty() || introduction.len() > MAX_PROVISION_GC2_BYTES {
+            return None;
+        }
+        let mut v = self.encode_common(KIND_PROVISIONING_GC2);
+        Self::encode_private_provision(&mut v, provision)?;
+        put16(&mut v, introduction);
+        Some(v)
+    }
+
+    fn encode_private_provision(v: &mut Vec<u8>, provision: &RelayProvision) -> Option<()> {
         v.push(provision.aliases.len().min(u8::MAX as usize) as u8);
         for owned in provision.aliases.iter().take(u8::MAX as usize) {
-            put_contact(&mut v, &owned.contact);
+            put_contact(v, &owned.contact);
             v.extend_from_slice(&owned.capabilities.push);
             v.extend_from_slice(&owned.capabilities.sub);
             v.extend_from_slice(&owned.capabilities.admin);
             v.extend_from_slice(&owned.limits.max_queue_cells.to_be_bytes());
             v.extend_from_slice(&owned.limits.max_queue_bytes.to_be_bytes());
-            put16(&mut v, owned.create_path.as_bytes());
+            put16(v, owned.create_path.as_bytes());
             let wire = owned.lease_create.encode_wire().ok()?;
-            put16(&mut v, &wire);
+            put16(v, &wire);
         }
-        put16(&mut v, provision.frwd_path.as_bytes());
+        put16(v, provision.frwd_path.as_bytes());
         v.extend_from_slice(&provision.hop_key);
-        Some(v)
+        Some(())
     }
 
     pub fn decode(buf: &[u8]) -> Option<Self> {
@@ -854,7 +880,29 @@ impl NodeInfo {
     }
 
     pub fn decode_private(buf: &[u8]) -> Option<Self> {
-        let (mut info, mut p) = Self::decode_common(buf, KIND_PROVISIONING)?;
+        Self::decode_private_inner(buf, KIND_PROVISIONING).map(|(info, _)| info)
+    }
+
+    /// Decode a private relay card of either kind. Version 1 cards never carry
+    /// a GC/2 introduction; a version 2 card always does.
+    pub fn decode_private_any(buf: &[u8]) -> Option<(Self, Option<Vec<u8>>)> {
+        match buf.first().copied()? {
+            KIND_PROVISIONING => Self::decode_private_inner(buf, KIND_PROVISIONING),
+            KIND_PROVISIONING_GC2 => {
+                let (info, introduction) = Self::decode_private_inner(buf, KIND_PROVISIONING_GC2)?;
+                Some((info, Some(introduction?)))
+            }
+            _ => None,
+        }
+    }
+
+    pub fn decode_private_gc2(buf: &[u8]) -> Option<(Self, Vec<u8>)> {
+        let (info, introduction) = Self::decode_private_inner(buf, KIND_PROVISIONING_GC2)?;
+        Some((info, introduction?))
+    }
+
+    fn decode_private_inner(buf: &[u8], kind: u8) -> Option<(Self, Option<Vec<u8>>)> {
+        let (mut info, mut p) = Self::decode_common(buf, kind)?;
         let count = *take(buf, &mut p, 1)?.first()? as usize;
         let mut aliases = Vec::with_capacity(count);
         for _ in 0..count {
@@ -880,6 +928,15 @@ impl NodeInfo {
         }
         let frwd_path = String::from_utf8(take16(buf, &mut p)?).ok()?;
         let hop_key = take(buf, &mut p, 32)?.try_into().ok()?;
+        let introduction = if kind == KIND_PROVISIONING_GC2 {
+            let bytes = take16(buf, &mut p)?.to_vec();
+            if bytes.is_empty() || bytes.len() > MAX_PROVISION_GC2_BYTES {
+                return None;
+            }
+            Some(bytes)
+        } else {
+            None
+        };
         if p != buf.len() {
             return None;
         }
@@ -888,7 +945,7 @@ impl NodeInfo {
             frwd_path,
             hop_key,
         });
-        Some(info)
+        Some((info, introduction))
     }
 
     /// Structural validation for a freshly received private relay card:
@@ -1065,6 +1122,42 @@ mod tests {
         let decoded = NodeInfo::decode(&info.encode()).unwrap();
         assert!(decoded.provisioning.is_none());
         assert!(!info.encode().windows(7).any(|window| window == b"private"));
+    }
+
+    #[test]
+    fn gc2_private_card_roundtrips_and_keeps_v1_bytes_unchanged() {
+        let mut info = sample_info();
+        info.provisioning = Some(RelayProvision {
+            aliases: vec![],
+            frwd_path: "private".into(),
+            hop_key: [4; 32],
+        });
+        let v1 = info.encode_private().unwrap();
+        assert_eq!(v1[0], KIND_PROVISIONING);
+        let introduction = vec![0xA5; 155];
+        let v2 = info.encode_private_gc2(&introduction).unwrap();
+        assert_eq!(v2[0], KIND_PROVISIONING_GC2);
+        // The layouts are identical apart from the leading kind byte.
+        assert_eq!(v2[1..v1.len()], v1[1..]);
+        let (decoded, advertised) = NodeInfo::decode_private_gc2(&v2).unwrap();
+        assert_eq!(advertised, introduction);
+        assert_eq!(decoded.aliases, info.aliases);
+        assert!(NodeInfo::decode_private(&v2).is_none());
+        assert!(NodeInfo::decode_private_gc2(&v1).is_none());
+        let (_, advertised) = NodeInfo::decode_private_any(&v2).unwrap();
+        assert_eq!(advertised, Some(introduction.clone()));
+        let (_, advertised) = NodeInfo::decode_private_any(&v1).unwrap();
+        assert!(advertised.is_none());
+        let mut trailing = v2.clone();
+        trailing.push(0);
+        assert!(NodeInfo::decode_private_gc2(&trailing).is_none());
+        let mut truncated = v2;
+        truncated.pop();
+        assert!(NodeInfo::decode_private_gc2(&truncated).is_none());
+        assert!(info.encode_private_gc2(&[]).is_none());
+        assert!(info
+            .encode_private_gc2(&vec![0; MAX_PROVISION_GC2_BYTES + 1])
+            .is_none());
     }
 
     #[test]

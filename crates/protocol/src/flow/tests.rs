@@ -104,6 +104,159 @@ fn pair() -> (Endpoint, Endpoint) {
 }
 
 #[test]
+fn volatile_retry_bytes_stay_in_ram_and_restore_requires_recovery_or_credit() {
+    let (a, b) = pair();
+    let mut sender = CreditedSession::from_authenticated(a.ratchet, a.flow).unwrap();
+    let mut receiver = CreditedSession::from_authenticated(b.ratchet, b.flow).unwrap();
+    let body = b"RAM-only media bytes which must never appear in the private flow archive";
+    let record = Record::new(Purpose::Interactive, 1000, body, &mut rand::rngs::OsRng).unwrap();
+    let prepared = sender
+        .prepare_volatile_send(&record, 100, &[7; 32], &a.context)
+        .unwrap();
+    let frame = Frame::decode(prepared.wire()).unwrap();
+    let packet = crate::gc2_session::encode_frame(sender.window().session(), &frame).unwrap();
+    let private = prepared.private_flow();
+    assert_eq!(&private[..5], b"GCW2\x03");
+    assert!(!private.windows(body.len()).any(|part| part == body));
+    assert!(!private.windows(packet.len()).any(|part| part == packet));
+    let mut restored =
+        CreditedSession::restore(prepared.sealed_ratchet(), &private, &[7; 32], &a.context)
+            .unwrap();
+    assert_eq!(restored.window().cached_payload_count(), 0);
+    assert_eq!(restored.window().cached_payload_bytes(), 0);
+    assert_eq!(restored.window().retries().count(), 0);
+    assert!(restored.window().recovery_required(100));
+    assert!(matches!(
+        restored.prepare_send(&record, 100, &[7; 32], &a.context),
+        Err(SessionError::RecoveryRequired),
+    ));
+    assert_eq!(prepared.cached_payload_bytes(), packet.len());
+    sender.commit_send(prepared).unwrap();
+    assert_eq!(sender.window().retries().next().unwrap().2, packet);
+    assert!(!sender.window().recovery_required(100));
+    // A receive/ACK transaction must preserve the live RAM-only retry buffer.
+    let reply = Record::new(Purpose::Control, 0, b"reply", &mut rand::rngs::OsRng).unwrap();
+    let reply = receiver
+        .prepare_send(&reply, 100, &[7; 32], &b.context)
+        .unwrap();
+    let reply_frame = Frame::decode(reply.wire()).unwrap();
+    receiver.commit_send(reply).unwrap();
+    let received = sender
+        .prepare_receive(&reply_frame, &[7; 32], &a.context)
+        .unwrap();
+    let staged = sender
+        .stage_received(&received, &[7; 32], &a.context)
+        .unwrap();
+    assert_eq!(staged.window().retries().next().unwrap().2, packet);
+    let received = receiver
+        .prepare_receive(&frame, &[7; 32], &b.context)
+        .unwrap();
+    assert_eq!(received.record().unwrap().body(), body);
+    let credit = *received.credit();
+    receiver.commit_receive(received).unwrap();
+    // A retained authority can authenticate proof that the missing RAM packet
+    // arrived, without reconstructing its body or consuming a new counter.
+    let received = restored.prepare_credit(&credit).unwrap().unwrap();
+    restored.commit_credit(received).unwrap();
+    assert!(!restored.window().recovery_required(100));
+    assert!(restored
+        .prepare_send(&record, 100, &[7; 32], &a.context)
+        .is_ok());
+    assert_eq!(&restored.window().encode_private()[..5], b"GCW2\x01");
+}
+
+#[test]
+fn selectively_credited_volatile_counter_does_not_hide_a_durable_repair() {
+    let (a, b) = pair();
+    let mut sender = CreditedSession::from_authenticated(a.ratchet, a.flow).unwrap();
+    let mut receiver = CreditedSession::from_authenticated(b.ratchet, b.flow).unwrap();
+    let durable = Record::new(
+        Purpose::Bulk,
+        1000,
+        b"retained file piece",
+        &mut rand::rngs::OsRng,
+    )
+    .unwrap();
+    let volatile = Record::new(
+        Purpose::Interactive,
+        1000,
+        b"ephemeral",
+        &mut rand::rngs::OsRng,
+    )
+    .unwrap();
+    let prepared = sender
+        .prepare_send(&durable, 100, &[7; 32], &a.context)
+        .unwrap();
+    let first = Frame::decode(prepared.wire()).unwrap();
+    sender.commit_send(prepared).unwrap();
+    let prepared = sender
+        .prepare_volatile_send(&volatile, 100, &[7; 32], &a.context)
+        .unwrap();
+    let second = Frame::decode(prepared.wire()).unwrap();
+    sender.commit_send(prepared).unwrap();
+    let received = receiver
+        .prepare_receive(&second, &[7; 32], &b.context)
+        .unwrap();
+    let credit = *received.credit();
+    receiver.commit_receive(received).unwrap();
+    let credit = sender.prepare_credit(&credit).unwrap().unwrap();
+    sender.commit_credit(credit).unwrap();
+    let ratchet = sender.seal_ratchet(&[7; 32], &a.context).unwrap();
+    let mut restored = CreditedSession::restore(
+        &ratchet,
+        &sender.window().encode_private(),
+        &[7; 32],
+        &a.context,
+    )
+    .unwrap();
+    assert_eq!(restored.window().cached_payload_count(), 1);
+    assert!(!restored.window().recovery_required(100));
+    assert_eq!(restored.window().retries().next().unwrap().0, first.ctr);
+    let received = receiver
+        .prepare_receive(&first, &[7; 32], &b.context)
+        .unwrap();
+    let credit = *received.credit();
+    receiver.commit_receive(received).unwrap();
+    let credit = restored.prepare_credit(&credit).unwrap().unwrap();
+    restored.commit_credit(credit).unwrap();
+    assert_eq!(restored.window().credited_floor(), second.ctr);
+    assert_eq!(restored.window().cached_payload_count(), 0);
+}
+
+#[test]
+fn volatile_archives_reject_control_records_bad_markers_and_noncanonical_versions() {
+    let (a, _) = pair();
+    let sender = CreditedSession::from_authenticated(a.ratchet, a.flow).unwrap();
+    let control = Record::new(Purpose::Control, 0, b"ack", &mut rand::rngs::OsRng).unwrap();
+    assert!(sender
+        .prepare_volatile_send(&control, 100, &[7; 32], &a.context)
+        .is_err());
+    let media = Record::new(Purpose::Interactive, 1000, b"media", &mut rand::rngs::OsRng).unwrap();
+    let prepared = sender
+        .prepare_volatile_send(&media, 100, &[7; 32], &a.context)
+        .unwrap();
+    let bytes = prepared.private_flow();
+    assert_eq!(
+        Window::decode_private(&bytes).unwrap().encode_private(),
+        bytes
+    );
+    for (offset, value) in [(4, 4), (70, Purpose::Control as u8), (111, 2)] {
+        let mut bad = bytes.to_vec();
+        bad[offset] = value;
+        assert!(Window::decode_private(&bad).is_err(), "offset {offset}");
+    }
+    let mut bad = bytes.to_vec();
+    bad[21..29].fill(0);
+    assert!(Window::decode_private(&bad).is_err());
+    for end in 0..bytes.len() {
+        assert!(Window::decode_private(&bytes[..end]).is_err());
+    }
+    let mut bad = bytes.to_vec();
+    bad.push(0);
+    assert!(Window::decode_private(&bad).is_err());
+}
+
+#[test]
 fn a_lost_counter_blocks_credit_until_exact_ciphertext_repairs_it() {
     let (mut a, mut b) = pair();
     a.ratchet
@@ -412,7 +565,11 @@ fn prepared_session_transactions_reject_stale_and_cross_session_commits() {
     receiver.commit_receive(received).unwrap();
     // Reopen the paired persisted snapshots, preserving the exact retry bytes.
     one = CreditedSession::restore(&sealed, &private, &[7; 32], &context).unwrap();
-    assert_eq!(one.window().retries().next().unwrap().2, packet);
+    assert_eq!(
+        one.window().retries().next().unwrap().2,
+        crate::gc2_session::encode_frame(one.window().session(), &Frame::decode(&packet).unwrap())
+            .unwrap()
+    );
     let send_before_credit = one.prepare_send(&record, 101, &[7; 32], &context).unwrap();
     let prepared_credit = one.prepare_credit(&credit).unwrap().unwrap();
     assert_eq!(prepared_credit.cached_payload_bytes(), 0);

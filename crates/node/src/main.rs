@@ -446,6 +446,14 @@ async fn run() -> Result<(), String> {
                 .as_str()
             {
                 "production" => gcoms_node::node::NodeProfile::Production,
+                // The GC/2 carrier is the fleet profile: durable GC/2 directory
+                // beside the keystore, three background entries, production
+                // transport behaviour. Selected explicitly per unit.
+                #[cfg(feature = "experimental-gc2")]
+                "gc2" => gcoms_node::node::NodeProfile::gc2_carrier_production(
+                    Some(keystore.with_extension("gc2-directory")),
+                    3,
+                ),
                 // Production traffic behavior at a compressed cadence —
                 // for LOCAL QUALIFICATION runs only (multi-second
                 // multi-chunk transfers instead of tens of minutes).
@@ -458,7 +466,7 @@ async fn run() -> Result<(), String> {
                 }
                 other => {
                     return Err(format!(
-                        "unknown --schedule {other:?} (expected production|compressed)"
+                        "unknown --schedule {other:?} (expected production|gc2|compressed)"
                     ))
                 }
             };
@@ -603,7 +611,7 @@ fn print_usage() {
     eprintln!("  rekey --keystore <file> [--old-pass-file <file>] [--new-pass-file <file>]");
     eprintln!("  provision-relay --control <loopback-address:port> --out <file>");
     eprintln!(
-        "  serve --keystore <file> [--pass-file <file>] [--auto-listen | --port N] [--no-router-mapping] [--advertise-addr <ip:port>] [--tls-identity <file>] [--control-bind <address>] [--control-port 9090] [--control-server-cert <file> --control-server-key <file> --control-client-ca <file>] [--inbox-relay-file <file>] [--network-config <installed-network-json>] [--network-invitation-file <private-file>] [--dns-server-label r1..r8] [--dns-opt-in | --dns-opt-out] [--metrics <file>] [--print-node-info]"
+        "  serve --keystore <file> [--pass-file <file>] [--auto-listen | --port N] [--schedule production|gc2|compressed] [--no-router-mapping] [--advertise-addr <ip:port>] [--tls-identity <file>] [--control-bind <address>] [--control-port 9090] [--control-server-cert <file> --control-server-key <file> --control-client-ca <file>] [--inbox-relay-file <file>] [--network-config <installed-network-json>] [--network-invitation-file <private-file>] [--dns-server-label r1..r8] [--dns-opt-in | --dns-opt-out] [--metrics <file>] [--print-node-info]"
     );
     eprintln!();
     eprintln!(

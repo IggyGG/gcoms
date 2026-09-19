@@ -143,6 +143,28 @@ fn producers_share_a_class_and_bulk_cannot_use_reserved_credit() {
 }
 
 #[test]
+fn deep_bulk_backlog_cannot_starve_a_late_interactive_job() {
+    let mut queue = FairQueue::new(128);
+    for marker in 1..=32 {
+        let (class, mut job) = super::tests::queued(marker, ProducerClass::Direct);
+        job.traffic = TrafficClass::Bulk;
+        job.producer = [1; 32];
+        assert!(queue.push(class, job));
+    }
+    let (class, mut job) = super::tests::queued(99, ProducerClass::Direct);
+    job.producer = [2; 32];
+    assert!(queue.push(class, job));
+    // The byte-charged deficit round robin rotates producers, so a late
+    // interactive job is selected within one bulk quantum no matter how deep
+    // the bulk backlog is. This is the control-fairness invariant the GC/2
+    // reservation policy relies on; control records use the interactive class.
+    assert_eq!(super::tests::marker(&queue.pop().unwrap()), 1);
+    assert_eq!(super::tests::marker(&queue.pop().unwrap()), 99);
+    // While bulk is not allowed only the interactive producer can proceed.
+    assert!(queue.pop_eligible(false).is_none());
+}
+
+#[test]
 fn attempt_identity_includes_semantic_headers() {
     let target = RelayTarget {
         address: "127.0.0.1:1234".parse().unwrap(),

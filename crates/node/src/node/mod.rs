@@ -40,6 +40,22 @@ mod channel_recovery;
 mod channels;
 mod commands;
 mod direct;
+#[cfg(feature = "experimental-gc2")]
+mod gc2_acks;
+#[cfg(feature = "experimental-gc2")]
+mod gc2_bootstrap;
+#[cfg(feature = "experimental-gc2")]
+mod gc2_carrier;
+#[cfg(feature = "experimental-gc2")]
+mod gc2_direct;
+#[cfg(feature = "experimental-gc2")]
+mod gc2_gate;
+#[cfg(feature = "experimental-gc2")]
+mod gc2_receipts;
+mod peer_session;
+#[cfg(feature = "experimental-gc2")]
+mod retained;
+use peer_session::PeerSession;
 #[cfg(feature = "client-persist")]
 mod persist;
 #[cfg(feature = "client-persist")]
@@ -83,10 +99,60 @@ pub enum NodeProfile {
     /// Local test harness. Refuses to listen on a non-loopback address so
     /// that a fixture cannot be exposed by mistake.
     Fixture(FixtureProfile),
+    /// Explicit GC/2 carrier selection with production transport behaviour.
+    /// The normal production selection stays GC/1 until the qualification
+    /// gates pass; this variant is the deployment candidate.
+    #[cfg(feature = "experimental-gc2")]
+    Gc2Carrier(Gc2CarrierProfile),
+}
+
+/// Deployment-shaped GC/2 carrier settings. A durable directory is required
+/// for a listener that keeps state across restarts; `None` is an explicit
+/// outbound-only fixture-style selection.
+#[cfg(feature = "experimental-gc2")]
+#[derive(Clone, Debug)]
+pub struct Gc2CarrierProfile {
+    pub directory: Option<std::path::PathBuf>,
+    pub entries: usize,
+    pub record_len: usize,
+    pub period_ms: u16,
+    pub scheduler: SchedulerProfile,
+    /// Explicit private introductions for qualification fixtures. Deployment
+    /// profiles leave this empty and use the provisioning advertisement.
+    pub introductions: Vec<Vec<u8>>,
 }
 
 #[derive(Clone, Debug)]
 pub struct FixtureProfile {
+    /// Experimental peer sessions only. This does not qualify the GC/2 carrier
+    /// or privacy profile and is never selected by a production node.
+    #[cfg(feature = "experimental-gc2")]
+    pub gc2_sessions: bool,
+    /// Install the late-bound GC/2 role gate on the listener. It becomes active
+    /// only after this node provisions a relay service, so fixtures that do not
+    /// act as relays pass every path through unchanged.
+    #[cfg(feature = "experimental-gc2")]
+    pub gc2_gate: bool,
+    /// Optional encrypted GC/2 routing directory; `None` uses an in-memory
+    /// directory for tests. The cache keeps its exclusive writer lock for the
+    /// node lifetime.
+    #[cfg(feature = "experimental-gc2")]
+    pub gc2_directory: Option<std::path::PathBuf>,
+    /// Background entry count (one to three). Zero disables the carrier owner.
+    #[cfg(feature = "experimental-gc2")]
+    pub gc2_entries: usize,
+    /// Explicit private GC/2 introductions installed as directory seeds at
+    /// startup. Fixture/qualification only; deployment uses the authenticated
+    /// provisioning advertisement, and an invalid seed fails closed.
+    #[cfg(feature = "experimental-gc2")]
+    pub gc2_introductions: Vec<Vec<u8>>,
+    /// Carrier record bound and emission period for owner entry connections.
+    /// Deployment uses the production 4096/1000; qualification fixtures
+    /// compress the period so slot scheduling does not dominate latency.
+    #[cfg(feature = "experimental-gc2")]
+    pub gc2_carrier_record_len: usize,
+    #[cfg(feature = "experimental-gc2")]
+    pub gc2_carrier_period_ms: u16,
     /// Relay lane and maintenance scheduling.
     pub scheduler: SchedulerProfile,
     /// Permit loopback/private FRWD targets (all fixtures need this).
@@ -97,10 +163,30 @@ pub struct FixtureProfile {
     pub stream_emit_cover: bool,
 }
 
+/// Parallel protected circuits reserved for bulk records. The entry's shared
+/// circuit bound is larger, so interactive, control and subscriptions keep
+/// headroom.
+#[cfg(feature = "experimental-gc2")]
+const GC2_BULK_CIRCUITS: usize = 8;
+
 impl NodeProfile {
     /// Fast, deterministic fixture with cover disabled.
     pub fn fixture() -> Self {
         Self::Fixture(FixtureProfile {
+            #[cfg(feature = "experimental-gc2")]
+            gc2_sessions: false,
+            #[cfg(feature = "experimental-gc2")]
+            gc2_gate: false,
+            #[cfg(feature = "experimental-gc2")]
+            gc2_directory: None,
+            #[cfg(feature = "experimental-gc2")]
+            gc2_entries: 0,
+            #[cfg(feature = "experimental-gc2")]
+            gc2_introductions: Vec::new(),
+            #[cfg(feature = "experimental-gc2")]
+            gc2_carrier_record_len: 4096,
+            #[cfg(feature = "experimental-gc2")]
+            gc2_carrier_period_ms: 1000,
             scheduler: SchedulerProfile::fixture(),
             allow_local_targets: true,
             stream_slot_interval: std::time::Duration::from_millis(10),
@@ -112,6 +198,20 @@ impl NodeProfile {
     /// qualification runs on one host.
     pub fn compressed_production(seed: u64) -> Self {
         Self::Fixture(FixtureProfile {
+            #[cfg(feature = "experimental-gc2")]
+            gc2_sessions: false,
+            #[cfg(feature = "experimental-gc2")]
+            gc2_gate: false,
+            #[cfg(feature = "experimental-gc2")]
+            gc2_directory: None,
+            #[cfg(feature = "experimental-gc2")]
+            gc2_entries: 0,
+            #[cfg(feature = "experimental-gc2")]
+            gc2_introductions: Vec::new(),
+            #[cfg(feature = "experimental-gc2")]
+            gc2_carrier_record_len: 4096,
+            #[cfg(feature = "experimental-gc2")]
+            gc2_carrier_period_ms: 1000,
             scheduler: SchedulerProfile::compressed_production(seed),
             allow_local_targets: true,
             stream_slot_interval: std::time::Duration::from_millis(10),
@@ -119,14 +219,228 @@ impl NodeProfile {
         })
     }
 
+    /// Fixture transport with the production scheduler and stream cadences.
+    /// Used to compare GC/1 and GC/2 at the same production timing; loopback
+    /// production-cadence runs are wall-clock bound, so qualification repeats
+    /// run in parallel on the cluster.
+    pub fn production_cadence_fixture() -> Self {
+        Self::Fixture(FixtureProfile {
+            #[cfg(feature = "experimental-gc2")]
+            gc2_sessions: false,
+            #[cfg(feature = "experimental-gc2")]
+            gc2_gate: false,
+            #[cfg(feature = "experimental-gc2")]
+            gc2_directory: None,
+            #[cfg(feature = "experimental-gc2")]
+            gc2_entries: 0,
+            #[cfg(feature = "experimental-gc2")]
+            gc2_introductions: Vec::new(),
+            #[cfg(feature = "experimental-gc2")]
+            gc2_carrier_record_len: 4096,
+            #[cfg(feature = "experimental-gc2")]
+            gc2_carrier_period_ms: 1000,
+            scheduler: SchedulerProfile::production(),
+            allow_local_targets: true,
+            stream_slot_interval: std::time::Duration::from_secs(3),
+            stream_emit_cover: true,
+        })
+    }
+
     pub fn is_production(&self) -> bool {
-        matches!(self, Self::Production)
+        match self {
+            Self::Production => true,
+            #[cfg(feature = "experimental-gc2")]
+            Self::Gc2Carrier(_) => true,
+            _ => false,
+        }
+    }
+
+    #[cfg(feature = "experimental-gc2")]
+    pub fn gc2_session_fixture() -> Self {
+        let Self::Fixture(mut fixture) = Self::fixture() else {
+            unreachable!()
+        };
+        fixture.gc2_sessions = true;
+        Self::Fixture(fixture)
+    }
+
+    /// Fixture that installs the experimental GC/2 role gate on its listener.
+    /// The gate activates only after this node provisions a relay service.
+    #[cfg(feature = "experimental-gc2")]
+    pub fn gc2_gate_fixture() -> Self {
+        let Self::Fixture(mut fixture) = Self::fixture() else {
+            unreachable!()
+        };
+        fixture.gc2_gate = true;
+        Self::Fixture(fixture)
+    }
+
+    /// Fixture that runs the experimental GC/2 carrier owner: the role gate,
+    /// peer sessions, and one to three background entries over the given
+    /// directory (an in-memory directory when `directory` is `None`).
+    #[cfg(feature = "experimental-gc2")]
+    pub fn gc2_carrier_fixture(directory: Option<std::path::PathBuf>, entries: usize) -> Self {
+        let Self::Fixture(mut fixture) = Self::fixture() else {
+            unreachable!()
+        };
+        fixture.gc2_sessions = true;
+        fixture.gc2_gate = true;
+        fixture.gc2_directory = directory;
+        fixture.gc2_entries = entries;
+        Self::Fixture(fixture)
+    }
+
+    /// Deployment-shaped carrier with the production transport schedule.
+    #[cfg(feature = "experimental-gc2")]
+    pub fn gc2_carrier_production(directory: Option<std::path::PathBuf>, entries: usize) -> Self {
+        Self::Gc2Carrier(Gc2CarrierProfile {
+            directory,
+            entries,
+            record_len: 4096,
+            period_ms: 1000,
+            scheduler: SchedulerProfile::production(),
+            introductions: Vec::new(),
+        })
+    }
+
+    /// Deployment-shaped carrier with the compressed production schedule used
+    /// by qualification runs on one host.
+    #[cfg(feature = "experimental-gc2")]
+    pub fn gc2_carrier_qualification(
+        directory: Option<std::path::PathBuf>,
+        entries: usize,
+        seed: u64,
+    ) -> Self {
+        Self::Gc2Carrier(Gc2CarrierProfile {
+            directory,
+            entries,
+            record_len: 4096,
+            period_ms: 1000,
+            scheduler: SchedulerProfile::compressed_production(seed),
+            introductions: Vec::new(),
+        })
+    }
+
+    /// Carrier *fixture* with the compressed qualification cadence: identical
+    /// local transport to `gc2_carrier_fixture`, but maintenance and slot
+    /// delays suitable for one-host measurements against a
+    /// `compressed_production` baseline.
+    #[cfg(feature = "experimental-gc2")]
+    pub fn gc2_carrier_qualification_fixture(
+        directory: Option<std::path::PathBuf>,
+        entries: usize,
+        seed: u64,
+    ) -> Self {
+        let Self::Fixture(mut fixture) = Self::compressed_production(seed) else {
+            unreachable!()
+        };
+        fixture.gc2_sessions = true;
+        fixture.gc2_gate = true;
+        fixture.gc2_directory = directory;
+        fixture.gc2_entries = entries;
+        fixture.gc2_carrier_period_ms = 250;
+        Self::Fixture(fixture)
+    }
+
+    /// Qualification carrier fixture with explicit private introductions
+    /// installed as directory seeds before the owner starts. Used to exercise
+    /// the protected entry/middle circuit without a provisioning control plane.
+    #[cfg(feature = "experimental-gc2")]
+    pub fn gc2_carrier_qualification_fixture_seeded(
+        directory: Option<std::path::PathBuf>,
+        entries: usize,
+        seed: u64,
+        introductions: Vec<Vec<u8>>,
+    ) -> Self {
+        let Self::Fixture(mut fixture) =
+            Self::gc2_carrier_qualification_fixture(directory, entries, seed)
+        else {
+            unreachable!()
+        };
+        fixture.gc2_introductions = introductions;
+        Self::Fixture(fixture)
+    }
+
+    /// Production-cadence qualification carrier fixture: explicit private
+    /// introductions with the production scheduler and carrier period, so
+    /// GC/2 can be compared with GC/1 at the same production timing.
+    #[cfg(feature = "experimental-gc2")]
+    pub fn gc2_carrier_production_cadence_fixture_seeded(
+        directory: Option<std::path::PathBuf>,
+        entries: usize,
+        introductions: Vec<Vec<u8>>,
+    ) -> Self {
+        let Self::Fixture(mut fixture) = Self::production_cadence_fixture() else {
+            unreachable!()
+        };
+        fixture.gc2_sessions = true;
+        fixture.gc2_gate = true;
+        fixture.gc2_directory = directory;
+        fixture.gc2_entries = entries;
+        fixture.gc2_introductions = introductions;
+        Self::Fixture(fixture)
+    }
+
+    #[cfg(feature = "experimental-gc2")]
+    fn gc2_sessions(&self) -> bool {
+        match self {
+            Self::Fixture(fixture) => fixture.gc2_sessions,
+            Self::Gc2Carrier(_) => true,
+            Self::Production => false,
+        }
+    }
+
+    #[cfg(feature = "experimental-gc2")]
+    fn gc2_gate(&self) -> bool {
+        match self {
+            Self::Fixture(fixture) => fixture.gc2_gate,
+            Self::Gc2Carrier(_) => true,
+            Self::Production => false,
+        }
+    }
+
+    #[cfg(feature = "experimental-gc2")]
+    fn gc2_carrier(&self) -> Option<(Option<&std::path::Path>, usize, usize, u16)> {
+        match self {
+            Self::Fixture(fixture) if fixture.gc2_entries > 0 => Some((
+                fixture.gc2_directory.as_deref(),
+                fixture.gc2_entries,
+                fixture.gc2_carrier_record_len,
+                fixture.gc2_carrier_period_ms,
+            )),
+            Self::Gc2Carrier(carrier) if carrier.entries > 0 => Some((
+                carrier.directory.as_deref(),
+                carrier.entries,
+                carrier.record_len,
+                carrier.period_ms,
+            )),
+            _ => None,
+        }
+    }
+
+    /// Explicit private introductions installed as directory seeds at startup.
+    #[cfg(feature = "experimental-gc2")]
+    pub(crate) fn gc2_introductions(&self) -> &[Vec<u8>] {
+        match self {
+            Self::Fixture(fixture) => &fixture.gc2_introductions,
+            Self::Gc2Carrier(carrier) => &carrier.introductions,
+            Self::Production => &[],
+        }
+    }
+
+    /// True when the carrier profile is the loopback fixture variant; its
+    /// in-memory directory must accept loopback introductions.
+    #[cfg(feature = "experimental-gc2")]
+    pub(crate) fn gc2_loopback_fixture(&self) -> bool {
+        matches!(self, Self::Fixture(fixture) if fixture.gc2_entries > 0)
     }
 
     pub(crate) fn scheduler_profile(&self) -> SchedulerProfile {
         match self {
             Self::Production => SchedulerProfile::production(),
             Self::Fixture(fixture) => fixture.scheduler.clone(),
+            #[cfg(feature = "experimental-gc2")]
+            Self::Gc2Carrier(carrier) => carrier.scheduler.clone(),
         }
     }
 
@@ -139,6 +453,8 @@ impl NodeProfile {
             Self::Fixture(fixture) => {
                 configured.unwrap_or_else(|| FrwdTargetPolicy::new(fixture.allow_local_targets))
             }
+            #[cfg(feature = "experimental-gc2")]
+            Self::Gc2Carrier(_) => configured.unwrap_or_else(|| FrwdTargetPolicy::new(false)),
         }
     }
 
@@ -148,6 +464,8 @@ impl NodeProfile {
         match self {
             Self::Production => gcoms_transport::ServerLimits::default(),
             Self::Fixture(_) => gcoms_transport::ServerLimits::shared_host(),
+            #[cfg(feature = "experimental-gc2")]
+            Self::Gc2Carrier(_) => gcoms_transport::ServerLimits::default(),
         }
     }
 
@@ -162,6 +480,12 @@ impl NodeProfile {
                 slot_interval: fixture.stream_slot_interval,
                 emission_probability: 1.0,
                 emit_cover: fixture.stream_emit_cover,
+            },
+            #[cfg(feature = "experimental-gc2")]
+            Self::Gc2Carrier(_) => StreamEmission {
+                slot_interval: crate::scheduler::SLOT_INTERVAL,
+                emission_probability: crate::scheduler::EMISSION_PROBABILITY,
+                emit_cover: true,
             },
         }
     }
@@ -652,6 +976,16 @@ async fn start_with_tls_policy_control_sink_and_bootstrap(
     )
     .map_err(|e| e.to_string())?
     .with_limits(cfg.profile.server_limits());
+    #[cfg(feature = "experimental-gc2")]
+    let server = if cfg.profile.gc2_gate() {
+        // Compose the owned terminal queue service under the same role gate.
+        // Its handler only accepts authenticated queue tokens that resolve to a
+        // current lease in this node's store.
+        let terminal = Some(crate::gc2::QueueService::new(leases.clone()).handler());
+        server.with_dispatch_factory(gc2_gate::dispatch_factory(routing.clone(), terminal))
+    } else {
+        server
+    };
     let local_addr = server.local_addr().map_err(|e| e.to_string())?;
     let relay_target = RelayTarget {
         address: cfg.advertise.unwrap_or(local_addr),
@@ -790,6 +1124,24 @@ async fn start_with_tls_policy_control_sink_and_bootstrap(
         let safety_number = identity.safety_number();
 
         let state = Arc::new(Mutex::new(NodeState {
+            #[cfg(feature = "experimental-gc2")]
+            gc2_sessions: cfg.profile.gc2_sessions(),
+            #[cfg(feature = "experimental-gc2")]
+            gc2_carrier: None,
+            #[cfg(feature = "experimental-gc2")]
+            gc2_carrier_client: None,
+            #[cfg(feature = "experimental-gc2")]
+            gc2_carrier_route: None,
+            #[cfg(feature = "experimental-gc2")]
+            gc2_carrier_bulk_routes: Vec::new(),
+            #[cfg(feature = "experimental-gc2")]
+            gc2_carrier_bulk_cursor: 0,
+            #[cfg(feature = "experimental-gc2")]
+            gc2_carrier_directory: None,
+            #[cfg(feature = "experimental-gc2")]
+            retained_direct: std::sync::OnceLock::new(),
+            #[cfg(feature = "experimental-gc2")]
+            gc2_receipts: gc2_receipts::Ledger::default(),
             routing: routing.clone(),
             secrets,
             identity_seed: cfg.seed,
@@ -912,6 +1264,117 @@ async fn start_with_tls_policy_control_sink_and_bootstrap(
         .await;
         initialized?;
 
+        #[cfg(feature = "experimental-gc2")]
+        if let Some((directory_path, entries, record_len, period_ms)) = cfg.profile.gc2_carrier() {
+            let directory = match directory_path {
+                Some(path) => {
+                    let cache = crate::routing_cache::Cache::open_gc2(path, &cfg.seed)
+                        .map_err(|e| e.to_string())?;
+                    std::sync::Arc::new(cache.gc2_directory(now_unix()).map_err(|e| e.to_string())?)
+                }
+                None => std::sync::Arc::new(if cfg.profile.gc2_loopback_fixture() {
+                    gcoms_routing::gc2::directory::Directory::for_loopback_fixture()
+                } else {
+                    gcoms_routing::gc2::directory::Directory::new()
+                }),
+            };
+            // Explicit fixture/qualification seeds are installed before the
+            // owner starts; a malformed or expired seed fails startup closed.
+            for introduction in cfg.profile.gc2_introductions() {
+                gc2_bootstrap::install_advertised(&directory, introduction)
+                    .map_err(|error| format!("invalid GC/2 seed introduction: {error}"))?;
+            }
+            let (owner, ready) = gcoms_routing::gc2::owner::EntryOwner::new(
+                directory.clone(),
+                gcoms_routing::gc2::CandidateProfile::new(record_len, period_ms).map_err(|_| {
+                    format!("invalid GC/2 candidate profile {record_len}/{period_ms}")
+                })?,
+                entries,
+            )
+            .map_err(|e| e.to_string())?;
+            let route = gcoms_transport::Tp1Client::with_connector(ready.clone())
+                .map_err(|e| e.to_string())?;
+            let route = std::sync::Arc::new(route);
+            if let Some(runtime) = routing.clone() {
+                // Fetch the explicit GC/2 advertisement over the authenticated
+                // private provisioning channel. This allocates nothing on this
+                // node and discards the card's fresh aliases; only the
+                // advertised introduction is installed as a directory seed.
+                let advert_directory = directory.clone();
+                tasks.push(tokio::spawn(async move {
+                    for attempt in 0..6u32 {
+                        let request_id: [u8; 32] = rand::random();
+                        let options = [gcoms_protocol::proto::PROVISION_OPTION_GC2];
+                        match runtime.discovery.provision(request_id, &options, &[]).await {
+                            Ok((_relay, encoded)) => {
+                                if let Some((_card, Some(introduction))) =
+                                    NodeInfo::decode_private_any(&encoded)
+                                {
+                                    match gc2_bootstrap::install_advertised(
+                                        &advert_directory,
+                                        &introduction,
+                                    ) {
+                                        Ok(count) => {
+                                            metrics::log_event(
+                                                "gc2_advertisement_installed",
+                                                &[("n", count.to_string())],
+                                            );
+                                            return;
+                                        }
+                                        Err(error) => metrics::log_event(
+                                            "gc2_advertisement_rejected",
+                                            &[("e", error)],
+                                        ),
+                                    }
+                                }
+                            }
+                            Err(error) => metrics::log_event(
+                                "gc2_advertisement_deferred",
+                                &[("e", error.to_string())],
+                            ),
+                        }
+                        tokio::time::sleep(std::time::Duration::from_secs(
+                            30 * u64::from(attempt + 1),
+                        ))
+                        .await;
+                    }
+                }));
+            }
+            state.lock().unwrap_or_else(|p| p.into_inner()).gc2_carrier = Some(ready.clone());
+            state
+                .lock()
+                .unwrap_or_else(|p| p.into_inner())
+                .gc2_carrier_client = Some(client.clone());
+            state
+                .lock()
+                .unwrap_or_else(|p| p.into_inner())
+                .gc2_carrier_route = Some(route);
+            // Bulk stripes: one carrier circuit carries at most one record per
+            // profile period, so bulk records round-robin over a small set of
+            // protected circuits inside the entry's shared bound. Interactive
+            // and control traffic keep the single route above.
+            let mut bulk_routes = Vec::with_capacity(GC2_BULK_CIRCUITS);
+            for _ in 0..GC2_BULK_CIRCUITS {
+                bulk_routes.push(std::sync::Arc::new(
+                    gcoms_transport::Tp1Client::with_connector(ready.clone())
+                        .map_err(|e| e.to_string())?,
+                ));
+            }
+            state
+                .lock()
+                .unwrap_or_else(|p| p.into_inner())
+                .gc2_carrier_bulk_routes = bulk_routes;
+            state
+                .lock()
+                .unwrap_or_else(|p| p.into_inner())
+                .gc2_carrier_directory = Some(directory);
+            tasks.push(tokio::spawn(async move {
+                if let Err(error) = owner.run().await {
+                    metrics::log_event("gc2_carrier_owner_error", &[("e", error.to_string())]);
+                }
+            }));
+        }
+
         if let Some(runtime) = &routing {
             runtime.bind_state(&state)?;
         }
@@ -941,6 +1404,24 @@ async fn start_with_tls_policy_control_sink_and_bootstrap(
             ),
             ticks::spawn_invite_service_loop(state.clone(), scheduler.clone(), events_tx.clone()),
         ];
+        // The natural carrier drains its own class queues; the legacy pump
+        // stays for sessions that did not migrate.
+        #[cfg(feature = "experimental-gc2")]
+        let workers = {
+            let mut workers = workers;
+            if state
+                .lock()
+                .unwrap_or_else(|p| p.into_inner())
+                .gc2_carrier_client
+                .is_some()
+            {
+                workers.push(gc2_carrier::spawn_subscriptions(
+                    state.clone(),
+                    events_tx.clone(),
+                ));
+            }
+            workers
+        };
         tasks.push(ticks::spawn_alias_lifecycle_loop(
             state.clone(),
             scheduler.clone(),
@@ -1051,12 +1532,30 @@ async fn start_with_tls_policy_control_sink_and_bootstrap(
 fn persist_received_direct_transaction(
     st: &mut NodeState,
     peer: &[u8],
-    sealed: &SealedSession,
+    sealed: &peer_session::Snapshot,
+    credit: Option<&[u8]>,
 ) -> Result<(), String> {
+    let previous_outbox_len = st.direct_ack_outbox.len();
+    if let Some(credit) = credit {
+        if previous_outbox_len >= 1024 {
+            return Err("direct credit outbox is full".into());
+        }
+        let route = st
+            .peer_routes
+            .get(peer)
+            .cloned()
+            .ok_or("missing credit route")?;
+        st.direct_ack_outbox.push_back(DirectDelivery {
+            peer: route,
+            relay: st.client_relay.clone(),
+            cells: vec![Cell::new(CellType::Msg, 0, 0, credit.to_vec())],
+        });
+    }
     let previous = st
         .session_states
         .insert(peer.to_vec(), DirectSessionState::Established);
-    if let Err(error) = persist_direct_transaction(st, peer, sealed) {
+    if let Err(error) = persist_direct_state(st, Some((peer, sealed)), true) {
+        st.direct_ack_outbox.truncate(previous_outbox_len);
         match previous {
             Some(state) => {
                 st.session_states.insert(peer.to_vec(), state);
@@ -1070,37 +1569,63 @@ fn persist_received_direct_transaction(
     Ok(())
 }
 
-#[cfg(feature = "client-persist")]
-fn persist_direct_transaction(
-    st: &NodeState,
-    peer: &[u8],
-    sealed: &SealedSession,
-) -> Result<(), String> {
-    let Some(sink) = &st.durable_state_sink else {
-        return Ok(());
-    };
-    sink(persist::encode_state_with_session(st, peer, sealed)?)
-}
-
-#[cfg(feature = "client-persist")]
 fn persist_current_direct_state(st: &NodeState) -> Result<(), String> {
-    let Some(sink) = &st.durable_state_sink else {
-        return Ok(());
-    };
-    sink(persist::encode_state(st)?)
+    persist_direct_state(st, None, false)
 }
 
-#[cfg(not(feature = "client-persist"))]
-fn persist_direct_transaction(
-    _st: &NodeState,
-    _peer: &[u8],
-    _sealed: &SealedSession,
+enum DirectPersistenceError {
+    #[cfg(feature = "experimental-gc2")]
+    Admission(String),
+    #[cfg(feature = "client-persist")]
+    Storage(String),
+}
+
+impl DirectPersistenceError {
+    fn into_string(self) -> String {
+        match self {
+            #[cfg(feature = "experimental-gc2")]
+            Self::Admission(error) => error,
+            #[cfg(feature = "client-persist")]
+            Self::Storage(error) => error,
+        }
+    }
+}
+
+fn persist_direct_state(
+    st: &NodeState,
+    session_override: Option<(&[u8], &peer_session::Snapshot)>,
+    control: bool,
 ) -> Result<(), String> {
-    Ok(())
+    checkpoint_direct_state(st, session_override, control)
+        .map_err(DirectPersistenceError::into_string)
 }
 
-#[cfg(not(feature = "client-persist"))]
-fn persist_current_direct_state(_st: &NodeState) -> Result<(), String> {
+fn checkpoint_direct_state(
+    st: &NodeState,
+    session_override: Option<(&[u8], &peer_session::Snapshot)>,
+    control: bool,
+) -> Result<(), DirectPersistenceError> {
+    #[cfg(feature = "experimental-gc2")]
+    let retained = st
+        .stage_retained(session_override, control)
+        .map_err(DirectPersistenceError::Admission)?;
+    #[cfg(not(feature = "experimental-gc2"))]
+    let _ = control;
+    #[cfg(feature = "client-persist")]
+    if let Some(sink) = &st.durable_state_sink {
+        let bytes = match session_override {
+            Some((peer, sealed)) => persist::encode_state_with_session(st, peer, sealed),
+            None => persist::encode_state(st),
+        }
+        .map_err(DirectPersistenceError::Storage)?;
+        sink(bytes).map_err(DirectPersistenceError::Storage)?;
+    }
+    #[cfg(not(feature = "client-persist"))]
+    let _ = (st, session_override);
+    #[cfg(feature = "experimental-gc2")]
+    if let Some(retained) = retained {
+        retained.commit();
+    }
     Ok(())
 }
 

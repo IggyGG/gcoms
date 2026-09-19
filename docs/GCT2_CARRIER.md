@@ -30,16 +30,19 @@ and GC/1 framing fail closed. An established channel cannot open again.
 | Kind: cover 0, data 1, close 2, open 3 | 1 |
 | Payload length, unsigned network order | 2 |
 | Opaque inner multiplexor bytes | declared length |
-| Interactive zero padding | remainder of fixed record |
+| Zero padding | remainder of fixed record |
 
-Interactive records always occupy the selected 1/2/4 KiB size. The sender polls
-already available bytes once at each fixed 250/500/1,000/1,500 ms opportunity.
-No data produces cover; no opportunity is advanced or added for chat arrivals.
-A blocked write skips elapsed opportunities and resumes on the next future
-point of the original schedule, without a catch-up burst. Bulk data records are
-exactly nine header bytes plus nonempty payload, at most 16 KiB. Bulk has no cover
-record. Open/close have empty payloads. Close half-closes the channel; truncation,
-trailing bytes, invalid lengths, padding and control kinds are rejected.
+Both classes ride one fixed lattice. Each record occupies the selected 1/2/4 KiB
+size, and the sender polls already available bytes once at each fixed
+250/500/1,000/1,500 ms opportunity. No data produces cover; no opportunity is
+advanced or added for application arrivals. A blocked write skips elapsed
+opportunities and resumes on the next future point of the original schedule,
+without a catch-up burst. Bulk records are paced at the same lattice instead of
+being sent immediately, so record sizes and counts do not reveal whether a slot
+carried data or cover; the per-record payload bound is the profile record length
+minus the nine-byte header. Open/close have empty payloads. Close half-closes the
+channel; truncation, trailing bytes, invalid lengths, padding and control kinds
+are rejected.
 
 This schedule describes records, not a claim that real network packets reveal
 no chat activity. TLS records, HTTP2 control traffic, congestion and connection
@@ -50,8 +53,9 @@ inside a typed entry circuit. Its initial `GCX2` body contains magic (4 bytes),
 class (1), target length (2, network order) and the canonical target (at most
 256 bytes). The reply is `GCX2`, the same class and zero status. Subsequent bytes
 are unpadded, unscheduled terminal traffic inside that middle TLS connection.
-The outer entry alone supplies interactive shaping. The caller independently
-authenticates the terminal; it never inherits the middle's TLS identity.
+The outer entry alone supplies this shaping for both classes. The caller
+independently authenticates the terminal; it never inherits the middle's TLS
+identity.
 
 Before opening a circuit, the API rejects entry/middle/terminal IP or pin overlap
 and checks every supplied route exclusion against both intermediaries. It cannot

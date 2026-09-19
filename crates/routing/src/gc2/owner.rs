@@ -233,12 +233,13 @@ impl EntryOwner {
     fn retain_guards(&self) -> Result<()> {
         let mut candidates = self.directory.reentry_candidates();
         candidates.shuffle(&mut rand::thread_rng());
-        self.directory.retain_guards(
-            &candidates
-                .iter()
-                .map(|relay| relay.service_id)
-                .collect::<Vec<_>>(),
-        )
+        for candidate in candidates {
+            if self.directory.guards().len() == MAX_GUARDS {
+                break;
+            }
+            self.directory.retain_guard(candidate.service_id)?;
+        }
+        Ok(())
     }
 
     async fn discovery_loop(&self) -> Result<()> {
@@ -254,7 +255,6 @@ impl EntryOwner {
                 .collect();
             schedule.retain(|pin, _| candidates.iter().any(|seed| &seed.service_id == pin));
             for seed in candidates {
-                self.directory.check_persistence()?;
                 if schedule
                     .get(&seed.service_id)
                     .is_some_and(|state| state.next > Instant::now())
@@ -289,10 +289,6 @@ impl EntryOwner {
                             .map(|relay| relay.expires_at);
                     }
                 }
-                // A failed save is distinct from rejected remote credentials.
-                // Stop this owner and its entry drivers on an uncertain disk
-                // outcome, before another retained guard can be dialed.
-                self.directory.check_persistence()?;
                 let failures = if renewed.is_some() {
                     0
                 } else {
@@ -550,6 +546,40 @@ mod tests {
     }
 
     #[tokio::test(start_paused = true)]
+    async fn unsaved_guards_cannot_trigger_entry_or_control_dials() {
+        let directory = Arc::try_unwrap(directory()).ok().unwrap();
+        let writes = Arc::new(AtomicUsize::new(0));
+        let count = writes.clone();
+        let directory = Arc::new(
+            directory
+                .with_checkpoint(Arc::new(move |_| {
+                    if count.fetch_add(1, Ordering::SeqCst) == 0 {
+                        Ok(())
+                    } else {
+                        Err("fixture disk full".into())
+                    }
+                }))
+                .unwrap(),
+        );
+        let attempts = Arc::new(Mutex::new(Vec::new()));
+        let (owner, ready) = EntryOwner::with_entry_connector(
+            directory.clone(),
+            CandidateProfile::new(4096, 1000).unwrap(),
+            1,
+            Arc::new(FailingDial {
+                attempts: attempts.clone(),
+            }),
+        )
+        .unwrap();
+        // Test both independently: the combined owner may poll either first.
+        assert!(owner.entries_loop().await.is_err());
+        assert!(owner.discovery_loop().await.is_err());
+        assert!(attempts.lock().unwrap().is_empty());
+        assert!(directory.guards().is_empty());
+        assert_eq!(ready.ready_entries(), 0);
+    }
+
+    #[tokio::test(start_paused = true)]
     async fn message_requests_cannot_dial_or_advance_background_retry_schedule() {
         let attempts = Arc::new(Mutex::new(Vec::new()));
         let (owner, ready) = EntryOwner::with_entry_connector(
@@ -709,45 +739,5 @@ mod tests {
         assert!(task.await.unwrap_err().is_cancelled());
         assert_eq!(active.load(Ordering::SeqCst), 0);
         assert_eq!(ready.ready_entries(), 0);
-    }
-
-    #[tokio::test]
-    async fn failed_guard_commit_prevents_entry_and_renewal_connections() {
-        struct ObservedDial(Arc<AtomicUsize>);
-        impl Connector for ObservedDial {
-            fn connect(&self, _: SocketAddr, _: [u8; 32]) -> ConnectFuture<'_> {
-                self.0.fetch_add(1, Ordering::SeqCst);
-                Box::pin(async { Err("no dial is permitted before guard persistence".into()) })
-            }
-        }
-        let calls = Arc::new(AtomicUsize::new(0));
-        let initial = directory().encode_private().unwrap();
-        let directory = Arc::new(
-            Directory::restore_private_for_loopback_fixture(&initial, now_unix())
-                .unwrap()
-                .with_persistence(Arc::new(|bytes| {
-                    if bytes[6] != 0 {
-                        return Err("guard storage unavailable".into());
-                    }
-                    Ok(())
-                }))
-                .unwrap(),
-        );
-        let (owner, ready) = EntryOwner::with_entry_connector(
-            directory.clone(),
-            CandidateProfile::new(4096, 1000).unwrap(),
-            1,
-            Arc::new(ObservedDial(calls.clone())),
-        )
-        .unwrap();
-        let error = tokio::time::timeout(Duration::from_secs(1), owner.run())
-            .await
-            .unwrap()
-            .unwrap_err();
-        assert!(error.to_string().contains("guard storage unavailable"));
-        assert_eq!(calls.load(Ordering::SeqCst), 0);
-        assert_eq!(ready.ready_entries(), 0);
-        assert!(directory.guards().is_empty());
-        assert_eq!(directory.encode_private().unwrap(), initial);
     }
 }

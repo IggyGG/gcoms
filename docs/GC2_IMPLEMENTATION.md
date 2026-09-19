@@ -156,26 +156,91 @@ Retain failures, source/executable/configuration/workload hashes and exact scope
   cannot dial a new entry or signal maintenance from a message request. Renewal
   and reconnect run independently of chat, preserving role isolation and route
   exclusions. See [bounds, costs and remaining integration](GC2_DISCOVERY.md).
-- The fleet branch releases the channel command lock after authorizing, sealing
-  and enqueueing file application traffic, before awaiting hop acceptance. A
-  held real TLS/H2 response no longer blocks a different peer in that channel.
-- GC/2 private directory snapshots now preserve ordered guards and exact relay
-  authority with atomic save-before-publication. Failed guard persistence blocks
-  entry and renewal dials. Node/GChat storage wiring remains pending.
+- GC/2 directory snapshots retain guard order, exact authority lifetimes and
+  own-service exclusions. The encrypted cache saves staged changes before they
+  become available to routing; failed guard checkpoints stop entry/control dials.
+  Its version, key domain and file are separate from GC/1, with a shared exclusive
+  writer lock. Profile startup and explicit bootstrap migration remain pending.
 - Experimental ratchet credit now bounds every encrypted counter, reserves
   capacity for interactive/control records, repairs exact ciphertext after loss,
   and uses non-ratcheted authenticated credit to avoid mutual ACK deadlock.
   The session wrapper stages crypto and flow state together and rejects stale
   or cross-session commits. See [the transaction and adoption contract](GC2_FLOW.md).
-  Node archive/resource integration and explicit session recovery remain pending.
-- The experimental natural-cell scheduler now accepts only a background-owned
-  ready connector, binds lanes and subscriptions to traffic class, and dispatches
-  bounded work without an extra GC/1 inner cover clock. A real three-hop test
-  checks bulk records and interleaved chat. Application adoption is still pending;
-  see [the scheduler boundary](GC2_SCHEDULER.md).
-- Complete runtime counter-window integration, general command preparation/completion split,
-  authenticated class propagation, complete GC/2 routing, protected profiles,
-  SDK/GChat profile integration and application/privacy/mobile gates: pending.
+  Authenticated compact session envelopes and node archive v21 are now integrated
+  in an explicit local session fixture. Real node transaction tests exercise
+  durable application acceptance, independent counter credit, lost setup receipts,
+  restart, write failures, duplicate delivery and simultaneous initiation. The
+  fixture still uses the existing relay carrier. Retained direct payloads and retry
+  copies now share endpoint/transit admission; staged updates roll back on failed
+  writes, cold restore authenticates before admission, and ordinary producers
+  leave control and dispatch headroom. Signed recovery generations and bounded,
+  encrypted logical receipt history now cover lost setup, consumed messages,
+  re-encryption, restart and skipped-key expiry in that fixture. Production
+  routing and final qualification remain pending. Volatile media now has RAM-only
+  exact retries, metadata-only persistence, missing-counter recovery after restart
+  and duplicate-event suppression. Protocol, node transaction and TLS tests cover
+  this path; no media body or ciphertext is restored from an archive. Full-duplex
+  control-window pressure no longer stalls application ACKs: obligations persist
+  in the encrypted receipt ledger (`GC2R2`) and materialize through the bounded
+  maintenance owner (16 per tick, four per peer), and reliable control records
+  journal without consuming a counter. Tests cover full bidirectional windows,
+  restart with lost credit, uncertain writes and the legacy archive barrier.
+  Durable file records are now classified as bulk from their authenticated
+  component kind for both the GC/2 counter reservation and scheduler admission;
+  chat, acknowledgements, presence and contact updates keep the interactive and
+  control reservations. Concurrent file transfers therefore share the bounded
+  bulk slots instead of the interactive capacity. A durable send may also carry
+  an explicit scheduling class (`send_durable_1to1_class`; SDK
+  `submit_durable_opaque_class`); deferred copies re-derive the class from the
+  record, so the hint only affects the immediate reservation and never the
+  wire. Direct and channel application
+  sends now prepare under the per-peer/channel preparation lock and complete
+  after releasing it, with a FIFO completion chain preserving wire/result order
+  and cancellation release; invite, membership, replay and recovery commands
+  still serialize their network waits. The experimental combined-listener GC/2
+  role gate is attachable through an explicit fixture profile; it is late-bound
+  to owner provisioning and never falls back to GC/1 within a connection. The
+  owned terminal queue service is composed under the same gate. An explicit
+  carrier fixture opens the encrypted directory, runs the bounded background
+  entry owner under the node task set and retains the ready connector; a wrong
+  identity cannot restore another node's directory. An opted-in private
+  provisioning request returns a version-2 card carrying the relay's current
+  GC/2 introduction; the client installs it as a directory seed and the owner
+  renews it. Version 1 cards stay byte-identical, so un-upgraded clients are
+  unaffected and nothing falls back silently. The carrier profile delivers each
+  session frame as an authenticated natural terminal deposit and drains its own
+  class queues through natural subscriptions; delivery and subscriptions prefer
+  the protected entry/middle client once the directory has live entries, and a
+  two-node TLS fixture proves durable applications in both directions. The
+  legacy relay path remains for sessions that did not migrate. An explicit
+  deployment profile (`gc2_carrier_production`, or the compressed qualification
+  variant) selects the protected carrier with production transport behaviour;
+  a GC/2 carrier archive cannot be restored under a GC/1 profile, so a restart
+  cannot silently downgrade. The GChat application now selects it behind an
+  explicit `gc2-carrier` feature and `--gc2-carrier` flag (default builds keep
+  GC/1); a tracked durable send returns the exact logical id its application
+  receipt carries; and an application-level instrument (`app_performance` plus
+  `scripts/app-utilization.py`) measures durable chat latency, pipelined 11 KiB
+  file-record goodput, single-message shaping delay and exact receipt accounting
+  with the predeclared gates above. On the natural-terminal fixture the GC/2
+  variant does not yet meet the bulk/chat gates; a live protected-route node
+  fixture now seeds real entry and middle relay introductions into the
+  qualification profiles, and a two-node test proves a durable application
+  crossing entry→middle→terminal with relay dispatch counters. Its first
+  measurements show each natural deposit opening a fresh circuit, so chat and
+  bulk stay far outside the item-4 bounds on the protected path (chat p50
+  5.8–16.7 s, single-message 2–9 s, bulk 8.2 KiB/s against 48.2 KiB/s GC/1 on
+  the same fixture); both carrier classes now ride one fixed padded lattice with cover, and the
+  subscription pump warms each established peer's protected circuit, so idle
+  periods keep an open channel and the next deposit reuses it; the privacy
+  classifier is re-measuring that shape.
+- Complete GC/2 routing, protected-route qualification and the privacy/mobile
+  gates: pending. Counter-window flow control, the application-send
+  preparation/completion split, authenticated class propagation, GChat profile
+  selection and the application-level measurement instrument are implemented;
+  the remaining control-plane command waits are listed above, the experimental
+  combined-listener gate is attachable through an explicit fixture profile, and
+  a node-level protected-route fixture plus the privacy classifier gate remain.
 
 ## Consolidation validation — Linux, 2026-09-17
 

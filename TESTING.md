@@ -145,3 +145,45 @@ uses a writable handle when flushing the preserved encrypted bytes to disk.
 GChat's portable service, archive-reopen and standalone-daemon suites now run on
 Windows too. Their readiness probes use IPC connections, since named pipes have
 no socket-file entry. Unix PTY tests remain platform-specific.
+
+## Application-level GC/2 instrument (2026-09-19)
+
+`crates/node/examples/app_performance.rs` measures durable chat latency,
+pipelined 11 KiB file-record goodput, single-message shaping delay and exact
+receiver receipt accounting on two loopback nodes. Build it with
+`cargo build --features experimental-gc2,client-persist --example app_performance`
+and drive it with
+
+    python3 scripts/app-utilization.py --binary <example path> --report <json>
+
+The driver runs five balanced-order repeats per profile and workload, validates
+per-run accounting, and applies the predeclared gates from
+`docs/GC2_IMPLEMENTATION.md` (>= 20% median bulk-goodput improvement, chat p95
+within max(+5%, +20 ms), <= 3 s single-message delay). Missing or malformed runs
+cannot qualify, and `--quick` runs are explicitly non-qualifying. Loopback
+fixtures use `NodeProfile::gc2_carrier_qualification_fixture` and
+`compressed_production`; the natural-terminal path measured there does not yet
+meet the bulk/chat gates, and the node-level protected-route fixture is the next
+integration step. Durable sends can be tracked end-to-end with
+`NodeHandle::send_durable_1to1_tracked`, whose returned id is the one the
+`Ev::DirectDelivery` receipt carries (covered by
+`tests/gc2_sessions.rs::tracked_durable_sends_return_the_ids_the_receipts_carry`).
+
+Cluster execution: `target/cluster-battery/cluster-run.sh` syncs the current
+HEAD into a cluster pod running `registry.triform.cloud/ghost/gcoms-ci:20260919-2`
+(Rust 1.98 baked in, workspace dependencies vendored, so no cluster egress is
+needed) and runs the full Linux battery there, streaming per-step logs and the
+results JSON back under `target/cluster-battery/evidence-<stamp>/`. The image is
+built from `target/cluster-battery/Dockerfile`; the pod excludes the
+policy-protected `triform-1` node. The Forgejo runner fleet registers to
+`forgejo.triform.dev` with generic labels and cannot serve ghost repos; this
+pod-based runner is the working bridge.
+
+The harness also has a protected-route mode: `--protected` starts a real entry
+and middle relay service on distinct loopback addresses and seeds both nodes
+with their introductions, so the carrier owner dials real circuits instead of
+the direct terminal. `tests/gc2_protected_route.rs` proves a durable
+application crosses entry→middle→terminal with dispatch counters. The first
+protected measurements fail the performance bounds (per-deposit circuit
+establishment); the numbers are recorded in `docs/GC2_IMPLEMENTATION.md` and
+`target/gc2-status-20260918.md`.

@@ -24,7 +24,37 @@ use tokio::sync::Semaphore;
 use zeroize::Zeroizing;
 
 /// Returns a fresh private inbox grant, with no GC user identity in the request.
-pub type ProvisionHandler = Arc<dyn Fn() -> Result<Vec<u8>> + Send + Sync>;
+pub type ProvisionHandler = Arc<dyn Fn(&[u8]) -> Result<Vec<u8>> + Send + Sync>;
+
+/// Derive the explicit GC/2 introduction for a relay service principal. Both
+/// the live service and the provisioning advertisement use this single
+/// derivation so they can never disagree.
+#[cfg(feature = "experimental-gc2")]
+pub fn gc2_introduction_from(
+    addr: SocketAddr,
+    service_id: [u8; 32],
+    secret: &[u8; 32],
+    now: u64,
+) -> crate::gc2::directory::Introduction {
+    let epoch = now / 3600;
+    let derive = |domain: &[u8], with_epoch: bool| -> [u8; 32] {
+        let mut hash = Hmac::<Sha256>::new_from_slice(secret).expect("fixed HMAC key");
+        hash.update(domain);
+        hash.update(&service_id);
+        if with_epoch {
+            hash.update(&epoch.to_be_bytes());
+        }
+        hash.finalize().into_bytes().into()
+    };
+    crate::gc2::directory::Introduction {
+        addr,
+        service_id,
+        reentry_cap: derive(b"ghost.gct2.reentry.v2\0", false),
+        entry_cap: derive(b"ghost.gct2.entry.v2\0", true),
+        transit_cap: derive(b"ghost.gct2.transit.v2\0", true),
+        expires_at: (epoch + 1) * 3600,
+    }
+}
 pub type FixtureCatalogResolver = Arc<dyn Fn(&str) -> Vec<SocketAddr> + Send + Sync>;
 
 #[derive(Clone)]
@@ -200,20 +230,7 @@ impl RelayService {
     /// expiry; its domain is separate from GC/1, entry and middle capabilities.
     #[cfg(feature = "experimental-gc2")]
     pub fn gc2_introduction(&self, now: u64) -> crate::gc2::directory::Introduction {
-        let entry = self.gc2_entry_descriptor(now);
-        let transit = self.gc2_transit_descriptor(now);
-        let mut hash =
-            Hmac::<Sha256>::new_from_slice(self.secret.as_ref()).expect("fixed HMAC key");
-        hash.update(b"ghost.gct2.reentry.v2\0");
-        hash.update(&self.service_id);
-        crate::gc2::directory::Introduction {
-            addr: entry.addr,
-            service_id: entry.service_id,
-            reentry_cap: hash.finalize().into_bytes().into(),
-            entry_cap: entry.entry_cap,
-            transit_cap: transit.transit_cap,
-            expires_at: entry.expires_at,
-        }
+        gc2_introduction_from(self.address(), self.service_id, &self.secret, now)
     }
 
     #[cfg(feature = "experimental-gc2")]
@@ -587,7 +604,15 @@ impl RelayService {
         payload: &[u8],
         mut response: h2::server::SendResponse<bytes::Bytes>,
     ) -> Result<()> {
-        let id: [u8; 32] = payload.try_into()?;
+        // `request_id || options`: version 1 clients send exactly the 32-byte
+        // request ID; later clients may append bounded request options. A
+        // request ID is bound to its options; clients never reuse one with a
+        // different request.
+        if payload.len() < 32 || payload.len() > 40 {
+            return Err("invalid private provision request".into());
+        }
+        let (id, options) = payload.split_at(32);
+        let id: [u8; 32] = id.try_into()?;
         if id == [0; 32] {
             return Err("empty private request ID".into());
         }
@@ -608,7 +633,7 @@ impl RelayService {
                     .provision
                     .as_ref()
                     .ok_or("inbox provisioning unavailable")?;
-                let reply = Zeroizing::new(provision()?);
+                let reply = Zeroizing::new(provision(options)?);
                 if reply.is_empty() || reply.len() > carrier::MAX_PROVISION_BYTES {
                     return Err("private provision exceeds bounds".into());
                 }

@@ -5,5 +5,7 @@ pub use gcoms_core::lease;
 pub mod alias;
 #[cfg(feature = "experimental-gc2")]
 pub mod flow;
+#[cfg(feature = "experimental-gc2")]
+pub mod gc2_session;
 pub mod proto;
 pub mod relay;

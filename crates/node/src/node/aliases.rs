@@ -432,7 +432,7 @@ pub(crate) async fn renew_contact_aliases(
     if !changed {
         return Ok(());
     }
-    let (generation, info, deliveries, policy) = {
+    let (generation, info, deliveries, policy, natural) = {
         let mut st = state
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
@@ -442,11 +442,19 @@ pub(crate) async fn renew_contact_aliases(
             st.info.clone(),
             deliveries,
             st.frwd_target_policy.clone(),
+            natural_client(&st),
         )
     };
     let _ = events.send(Ev::IdentityUpdated { info, generation });
     for delivery in deliveries {
-        let _ = deliver_direct(scheduler, &delivery, &policy).await;
+        let _ = deliver_direct(
+            scheduler,
+            &delivery,
+            &policy,
+            gcoms_core::TrafficClass::Interactive,
+            natural.as_ref(),
+        )
+        .await;
     }
     Ok(())
 }
@@ -807,6 +815,7 @@ pub(crate) async fn contact_alias_lifecycle_tick(
                             st.info.clone(),
                             deliveries,
                             st.frwd_target_policy.clone(),
+                            natural_client(&st),
                         ))
                     }
                 }
@@ -819,10 +828,17 @@ pub(crate) async fn contact_alias_lifecycle_tick(
             None
         }
     };
-    if let Some((generation, info, deliveries, policy)) = announcement {
+    if let Some((generation, info, deliveries, policy, natural)) = announcement {
         let _ = events.send(Ev::IdentityUpdated { info, generation });
         for delivery in deliveries {
-            let _ = deliver_direct(scheduler, &delivery, &policy).await;
+            let _ = deliver_direct(
+                scheduler,
+                &delivery,
+                &policy,
+                gcoms_core::TrafficClass::Interactive,
+                natural.as_ref(),
+            )
+            .await;
         }
     }
 
@@ -929,7 +945,7 @@ pub(crate) fn queue_contact_updates(st: &mut NodeState) -> Result<Vec<DirectDeli
         st.info.bundle = bundle.encode();
         st.secrets = Arc::new(secrets);
         for session in st.sessions.values_mut() {
-            session.provide_local_kem(st.secrets.kem_decapsulation_key());
+            session.provide_local_secrets(&st.secrets);
         }
     }
     let expires_at = st
@@ -960,60 +976,26 @@ pub(crate) fn queue_contact_updates(st: &mut NodeState) -> Result<Vec<DirectDeli
         if st.pending_1to1.len() >= 1024 {
             break;
         }
-        let Some(route) = st.peer_routes.get(&peer).cloned() else {
+        if !st.peer_routes.contains_key(&peer) {
             continue;
-        };
+        }
         let message_id = contact_update_message_id(&st.info.identity_pk, &peer, update.generation);
         if st.pending_1to1.contains_key(&message_id) {
             continue;
         }
         let record = encode_contact_update(message_id, &update)
             .ok_or("contact update exceeds direct record limit")?;
-        let sequence = st.next_direct_sequence;
-        st.next_direct_sequence = sequence
-            .checked_add(1)
-            .ok_or("direct message sequence exhausted")?;
-        let mut wrapping_key = direct_session_wrapping_key(&st.identity_seed);
-        let context = direct_session_context(st, &peer)?;
-        let prepared = st.sessions[&peer]
-            .prepare_send(&record, &wrapping_key, &context)
-            .map_err(|error| error.to_string())?;
-        wrapping_key.fill(0);
-        let frame = gcoms_crypto::Frame::decode(prepared.wire()).ok_or("prepared invalid frame")?;
-        let delivery = DirectDelivery {
-            peer: route,
-            relay: st.client_relay.clone(),
-            cells: vec![Cell::new(
-                CellType::Msg,
-                0,
-                3,
-                encode_frame(&st.info.identity_pk, &frame),
-            )],
-        };
-        let now = std::time::Instant::now();
-        let lifetime = expires_at.saturating_sub(issued_at).max(1);
-        st.pending_1to1.insert(
+        let lifetime = std::time::Duration::from_secs(expires_at.saturating_sub(issued_at).max(1));
+        if let Some(delivery) = queue_session_control(
+            st,
+            &peer,
             message_id,
-            PendingDirect {
-                delivery: delivery.clone(),
-                logical_record: Some(record),
-                sequence,
-                next_attempt: now + std::time::Duration::from_secs(60),
-                expires: now + std::time::Duration::from_secs(lifetime),
-                application_event: false,
-            },
-        );
-        if let Err(error) = persist_direct_transaction(st, &peer, prepared.sealed_state()) {
-            st.pending_1to1.remove(&message_id);
-            st.next_direct_sequence = sequence;
-            return Err(error);
+            record,
+            lifetime,
+            std::time::Duration::from_secs(60),
+        )? {
+            deliveries.push(delivery);
         }
-        st.sessions
-            .get_mut(&peer)
-            .expect("session prepared above")
-            .commit_send(prepared)
-            .map_err(|error| error.to_string())?;
-        deliveries.push(delivery);
         // Renewals also refresh the peer's authority to route through us.
         if let Ok(Some(grant_delivery)) = queue_forward_grant(st, &peer) {
             deliveries.push(grant_delivery);
@@ -1103,7 +1085,7 @@ pub(crate) async fn install_inbox_relay(
         return Err("relay requires normal and control aliases".into());
     }
     let provision = consume_provision(scheduler, card).await?;
-    let (info, generation, deliveries, policy) = {
+    let (info, generation, deliveries, policy, natural) = {
         let mut st = state.lock().unwrap_or_else(|p| p.into_inner());
         // Provisioning awaits the network; recheck capacity before mutating the
         // owner record. A routine capacity refusal must not pause the owner.
@@ -1156,11 +1138,19 @@ pub(crate) async fn install_inbox_relay(
             st.local_contact_generation,
             deliveries,
             st.frwd_target_policy.clone(),
+            natural_client(&st),
         )
     };
     let _ = events.send(Ev::IdentityUpdated { info, generation });
     for delivery in deliveries {
-        let _ = deliver_direct(scheduler, &delivery, &policy).await;
+        let _ = deliver_direct(
+            scheduler,
+            &delivery,
+            &policy,
+            gcoms_core::TrafficClass::Interactive,
+            natural.as_ref(),
+        )
+        .await;
     }
     Ok(())
 }

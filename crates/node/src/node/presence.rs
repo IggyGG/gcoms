@@ -231,13 +231,18 @@ pub(crate) fn clear_channel_presence(
     }
 }
 
-pub(crate) async fn send_channel_presence(
+pub(crate) struct PreparedChannelPresence {
+    wire: Vec<u8>,
+    channel: String,
+    targets: Vec<crate::channel::PeerRef>,
+}
+
+pub(crate) fn prepare_channel_presence(
     state: &Arc<Mutex<NodeState>>,
-    scheduler: &RelayScheduler,
     channel: &str,
     mode: PresenceMode,
     lease_secs: u32,
-) -> Result<(), String> {
+) -> Result<PreparedChannelPresence, String> {
     let (wire, targets) = {
         let mut st = state
             .lock()
@@ -304,11 +309,27 @@ pub(crate) async fn send_channel_presence(
         }
         (wire, targets)
     };
+    Ok(PreparedChannelPresence {
+        wire,
+        channel: channel.to_string(),
+        targets,
+    })
+}
+
+pub(crate) async fn complete_channel_presence(
+    scheduler: &RelayScheduler,
+    prepared: PreparedChannelPresence,
+) -> Result<(), String> {
+    let PreparedChannelPresence {
+        wire,
+        channel,
+        targets,
+    } = prepared;
     let cell = Cell::new(
         CellType::Msg,
         0,
         0,
-        crate::proto::encode_chan(channel, &wire),
+        crate::proto::encode_chan(&channel, &wire),
     );
     let mut failures = 0;
     for target in &targets {
@@ -319,7 +340,7 @@ pub(crate) async fn send_channel_presence(
     metrics::log_event(
         "channel_presence_sent",
         &[
-            ("channel", channel.to_string()),
+            ("channel", channel.clone()),
             ("targets", targets.len().to_string()),
         ],
     );
@@ -332,14 +353,26 @@ pub(crate) async fn send_channel_presence(
     }
 }
 
-pub(crate) async fn send_direct_presence(
+#[cfg(test)]
+#[allow(dead_code)]
+pub(crate) async fn send_channel_presence(
     state: &Arc<Mutex<NodeState>>,
     scheduler: &RelayScheduler,
+    channel: &str,
+    mode: PresenceMode,
+    lease_secs: u32,
+) -> Result<(), String> {
+    let prepared = prepare_channel_presence(state, channel, mode, lease_secs)?;
+    complete_channel_presence(scheduler, prepared).await
+}
+
+pub(crate) fn prepare_direct_presence(
+    state: &Arc<Mutex<NodeState>>,
     peer: &NodeInfo,
     mode: PresenceMode,
     lease_secs: u32,
     via: Option<NodeInfo>,
-) -> Result<(), String> {
+) -> Result<PreparedDirect, String> {
     if mode != PresenceMode::Invisible
         && !state
             .lock()
@@ -349,19 +382,17 @@ pub(crate) async fn send_direct_presence(
     {
         return Err("direct presence is not opted in for this peer".into());
     }
-    send_direct_record(
+    prepare_direct_record(
         state,
-        scheduler,
         peer,
         via,
         // Report only the authenticated matching ACK after receive persistence.
         // This is transport reachability, not an application execution receipt.
         true,
+        None,
         move |message_id, sequence| {
             encode_direct_presence(message_id, sequence, mode, lease_secs)
                 .ok_or_else(|| "invalid direct presence lease".to_string())
         },
     )
-    .await
-    .map(|_| ())
 }

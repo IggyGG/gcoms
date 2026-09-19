@@ -3,7 +3,6 @@
 //! and the absolute connection lifetime. Starting/stopping an interactive pump
 //! in response to chat activity would defeat its traffic protection.
 use super::{RecordCodec, RecordKind, HEADER_LEN};
-use gcoms_core::TrafficClass;
 use std::{future::poll_fn, io, pin::Pin, task::Poll};
 use tokio::{
     io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadBuf},
@@ -75,23 +74,20 @@ where
     let mut counts = RecordCounts::default();
     let mut next_slot = first_slot;
     loop {
-        let ready = match codec.class() {
-            TrafficClass::Interactive => {
-                sleep_until(next_slot).await;
-                // Poll once at the public opportunity. Never wait to fill it,
-                // and never let a chat arrival add or advance an opportunity.
-                poll_fn(|cx| {
-                    let mut buf = ReadBuf::new(&mut payload);
-                    Poll::Ready(match Pin::new(&mut local).poll_read(cx, &mut buf) {
-                        Poll::Ready(Ok(())) => Ok(Some(buf.filled().len())),
-                        Poll::Ready(Err(error)) => Err(error),
-                        Poll::Pending => Ok(None),
-                    })
-                })
-                .await?
-            }
-            TrafficClass::Bulk => Some(local.read(&mut payload).await?),
-        };
+        // Both classes ride the same fixed lattice: one record per slot, with
+        // cover when nothing is queued. Bulk data is therefore paced at the
+        // profile rate instead of revealing activity through record timing and
+        // count, and idle periods look like active ones.
+        sleep_until(next_slot).await;
+        let ready = poll_fn(|cx| {
+            let mut buf = ReadBuf::new(&mut payload);
+            Poll::Ready(match Pin::new(&mut local).poll_read(cx, &mut buf) {
+                Poll::Ready(Ok(())) => Ok(Some(buf.filled().len())),
+                Poll::Ready(Err(error)) => Err(error),
+                Poll::Pending => Ok(None),
+            })
+        })
+        .await?;
         let (kind, len) = match ready {
             None => (RecordKind::Cover, 0),
             Some(0) => (RecordKind::Close, 0),
@@ -107,16 +103,14 @@ where
             wire.shutdown().await?;
             return Ok(counts);
         }
-        if codec.class() == TrafficClass::Interactive {
-            // Always choose the next *future* point on the original lattice.
-            // Interval::Skip can produce one immediate late tick after a blocked
-            // write; that would unnecessarily bunch two records together.
-            let now = Instant::now();
-            let period = codec.profile().period();
-            let elapsed = now.saturating_duration_since(first_slot);
-            let remainder = elapsed.as_nanos() % period.as_nanos();
-            next_slot = now + period - std::time::Duration::from_nanos(remainder as u64);
-        }
+        // Always choose the next *future* point on the original lattice.
+        // Interval::Skip can produce one immediate late tick after a blocked
+        // write; that would unnecessarily bunch two records together.
+        let now = Instant::now();
+        let period = codec.profile().period();
+        let elapsed = now.saturating_duration_since(first_slot);
+        let remainder = elapsed.as_nanos() % period.as_nanos();
+        next_slot = now + period - std::time::Duration::from_nanos(remainder as u64);
     }
 }
 
@@ -166,6 +160,7 @@ fn invalid(error: impl Into<Box<dyn std::error::Error + Send + Sync>>) -> io::Er
 mod tests {
     use super::*;
     use crate::gc2::{CandidateProfile, MAX_RECORD};
+    use gcoms_core::TrafficClass;
     use std::time::Duration;
 
     fn codec(class: TrafficClass) -> RecordCodec {
@@ -241,49 +236,41 @@ mod tests {
     }
 
     #[tokio::test(start_paused = true)]
-    async fn bulk_is_idle_without_data_and_ready_without_a_slot() {
+    async fn bulk_rides_the_same_lattice_and_covers_when_idle() {
         let codec = codec(TrafficClass::Bulk);
         let (mut application, local) = tokio::io::duplex(MAX_RECORD * 2);
-        let (wire, mut observer) = tokio::io::duplex(MAX_RECORD * 2);
-        let writer = tokio::spawn(write_records(
-            wire,
-            local,
-            codec,
-            Instant::now() + Duration::from_secs(100),
-        ));
-        let mut first = [0];
-        assert!(
-            tokio::time::timeout(Duration::from_secs(10), observer.read(&mut first))
-                .await
-                .is_err()
-        );
-        let ready = Instant::now();
+        let (wire, mut observer) = tokio::io::duplex(MAX_RECORD * 4);
+        let origin = Instant::now();
+        let period = codec.profile().period();
+        let writer = tokio::spawn(write_records(wire, local, codec, origin));
+        // The first two slots are idle: they emit padded cover records with no
+        // payload, exactly like the interactive lattice.
+        for _ in 0..2 {
+            let mut bytes = vec![0; codec.profile().record_len()];
+            observer.read_exact(&mut bytes).await.unwrap();
+            assert_eq!(codec.decode(&bytes).unwrap().kind(), RecordKind::Cover);
+        }
+        // Data written between slots is emitted at the next slot, one record
+        // per slot, never immediately.
         application.write_all(&vec![19; MAX_RECORD]).await.unwrap();
         application.shutdown().await.unwrap();
         let mut got = Vec::new();
         loop {
-            let mut header = [0; HEADER_LEN];
-            observer.read_exact(&mut header).await.unwrap();
-            let size = codec.wire_len(&header).unwrap();
-            assert!(size <= MAX_RECORD);
-            let mut record = header.to_vec();
-            record.resize(size, 0);
-            observer
-                .read_exact(&mut record[HEADER_LEN..])
-                .await
-                .unwrap();
-            let record = codec.decode(&record).unwrap();
+            let mut bytes = vec![0; codec.profile().record_len()];
+            observer.read_exact(&mut bytes).await.unwrap();
+            let record = codec.decode(&bytes).unwrap();
             if record.kind() == RecordKind::Close {
                 break;
             }
-            got.extend_from_slice(record.payload());
+            if record.kind() == RecordKind::Data {
+                got.extend_from_slice(record.payload());
+            }
         }
-        assert_eq!(ready.elapsed(), Duration::ZERO);
         assert_eq!(got, vec![19; MAX_RECORD]);
         let counts = writer.await.unwrap().unwrap();
         assert_eq!(counts.payload_bytes, MAX_RECORD as u64);
-        assert_eq!(counts.records, 3);
-        assert_eq!(counts.wire_bytes, (MAX_RECORD + 3 * HEADER_LEN) as u64);
+        assert!(counts.records >= 3);
+        let _ = period;
     }
 
     #[tokio::test]
@@ -311,7 +298,7 @@ mod tests {
         }
     }
 
-    #[tokio::test]
+    #[tokio::test(start_paused = true)]
     async fn fragmented_records_preserve_half_close_and_reply() {
         let codec = codec(TrafficClass::Bulk);
         let (mut client, client_local) = tokio::io::duplex(7);

@@ -69,3 +69,7 @@ client-persist = ["gcoms-crypto/client-persist", "gcoms-mls/client-persist"]
 [[bin]]
 name = "gcnode"
 path = "src/main.rs"
+
+[[example]]
+name = "app_performance"
+required-features = ["experimental-gc2", "client-persist"]

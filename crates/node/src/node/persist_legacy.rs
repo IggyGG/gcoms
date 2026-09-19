@@ -181,7 +181,7 @@ pub async fn decode_state(
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner());
     for (pk, session) in sessions {
-        st.sessions.insert(pk.clone(), session);
+        st.sessions.insert(pk.clone(), session.into());
         st.session_states
             .insert(pk, DirectSessionState::Established);
     }

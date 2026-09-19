@@ -27,6 +27,71 @@ fn pending(delivery: DirectDelivery, sequence: u64, now: Instant) -> PendingDire
     }
 }
 
+fn component_record(kind: &str, body: &[u8]) -> Vec<u8> {
+    let mut application = b"GCAPP1".to_vec();
+    application.extend_from_slice(&(kind.len() as u16).to_be_bytes());
+    application.extend_from_slice(kind.as_bytes());
+    application.extend_from_slice(body);
+    let routed = gcoms_core::component::RoutedApplication {
+        source: [7; 16],
+        destination: [8; 16],
+        application,
+    };
+    crate::proto::encode_direct_durable_data([9; 16], 1, &routed.encode().unwrap())
+}
+
+#[test]
+fn durable_file_records_are_bulk_while_chat_control_and_volatile_stay_interactive() {
+    assert_eq!(
+        direct_traffic_class(&component_record(
+            gcoms_core::FILE_RECORD_CONTENT_TYPE,
+            b"chunk"
+        )),
+        gcoms_core::TrafficClass::Bulk
+    );
+    assert_eq!(
+        direct_traffic_class(&component_record("application/vnd.ghost.chat.v1", b"hi")),
+        gcoms_core::TrafficClass::Interactive
+    );
+    assert_eq!(
+        direct_traffic_class(&crate::proto::encode_direct_ack([4; 16], false)),
+        gcoms_core::TrafficClass::Interactive
+    );
+    assert_eq!(
+        direct_traffic_class(&crate::proto::encode_volatile_application(
+            [5; 16], 1, b"media"
+        )),
+        gcoms_core::TrafficClass::Interactive
+    );
+}
+
+#[cfg(feature = "experimental-gc2")]
+#[tokio::test]
+async fn gc2_owned_retry_copies_are_charged_before_poll_and_released_on_cancel() {
+    let mut node = persist::tests::state();
+    node.gc2_sessions = true;
+    let scheduler = node.scheduler.clone();
+    let mut ack = delivery(&node, 1);
+    ack.cells[0].payload = vec![0; gcoms_protocol::flow::CREDIT_BYTES];
+    ack.cells[0].payload[..4].copy_from_slice(b"GCA2");
+    node.direct_ack_outbox.push_back(ack);
+    persist_current_direct_state(&node).unwrap();
+    let retained = scheduler.resource_snapshot().bytes;
+    assert_eq!(retained, gcoms_protocol::flow::CREDIT_BYTES);
+    let state = Arc::new(Mutex::new(node));
+    let (events, _) = broadcast::channel(4);
+    let mut owner = DirectMaintenance::default();
+    owner.tick(&state, &scheduler, &events);
+    assert_eq!(owner.active.len(), 1);
+    assert_eq!(scheduler.resource_snapshot().bytes, retained * 2);
+    drop(owner);
+    assert_eq!(scheduler.resource_snapshot().bytes, retained);
+    assert_eq!(state.lock().unwrap().direct_ack_outbox.len(), 1);
+    drop(state);
+    assert_eq!(scheduler.resource_snapshot().bytes, 0);
+    scheduler.shutdown();
+}
+
 #[tokio::test]
 async fn bounds_fair_retries_and_ack_archive_survive_owner_cancellation() {
     let mut node = persist::tests::state();

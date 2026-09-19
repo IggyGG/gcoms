@@ -156,10 +156,7 @@ impl RecordCodec {
         self.profile
     }
     pub fn payload_limit(self) -> usize {
-        match self.class {
-            TrafficClass::Interactive => self.profile.record_len() - HEADER_LEN,
-            TrafficClass::Bulk => MAX_RECORD - HEADER_LEN,
-        }
+        self.profile.record_len() - HEADER_LEN
     }
 
     /// Select a channel only from its canonical initial Open header. The full
@@ -196,7 +193,7 @@ impl RecordCodec {
             return Err(RecordError::Profile);
         }
         let kind = match header[6] {
-            0 if self.class == TrafficClass::Interactive => RecordKind::Cover,
+            0 => RecordKind::Cover,
             1 => RecordKind::Data,
             2 => RecordKind::Close,
             3 => RecordKind::Open,
@@ -210,10 +207,9 @@ impl RecordCodec {
         if payload_len > self.payload_limit() || !valid_payload {
             return Err(RecordError::Length);
         }
-        let wire_len = match self.class {
-            TrafficClass::Interactive => self.profile.record_len(),
-            TrafficClass::Bulk => HEADER_LEN + payload_len,
-        };
+        // Every class is padded to the profile record bound so record sizes
+        // never reveal whether a slot carried data or cover.
+        let wire_len = self.profile.record_len();
         Ok((kind, payload_len, wire_len))
     }
 
@@ -289,7 +285,7 @@ mod tests {
     }
 
     #[test]
-    fn all_candidates_keep_interactive_size_fixed_and_bulk_natural() {
+    fn all_candidates_keep_both_classes_size_fixed_and_padded() {
         for id in 0..12 {
             let profile = CandidateProfile::from_id(id).unwrap();
             assert_eq!(
@@ -317,24 +313,28 @@ mod tests {
                 );
             }
             let bulk = RecordCodec::new(TrafficClass::Bulk, profile);
-            for bytes in [1, 128, bulk.payload_limit()] {
+            for (kind, bytes) in [
+                (RecordKind::Cover, 0),
+                (RecordKind::Open, 0),
+                (RecordKind::Data, 1),
+                (RecordKind::Data, 128),
+                (RecordKind::Data, bulk.payload_limit()),
+                (RecordKind::Close, 0),
+            ] {
                 let payload = vec![7; bytes];
-                let wire = bulk.encode(RecordKind::Data, &payload).unwrap();
-                assert_eq!(wire.len(), HEADER_LEN + bytes);
-                assert_eq!(bulk.decode(&wire).unwrap().payload(), payload);
+                let wire = bulk.encode(kind, &payload).unwrap();
+                assert_eq!(wire.len(), profile.record_len());
+                assert_eq!(
+                    bulk.decode(&wire).unwrap(),
+                    RecordRef {
+                        kind,
+                        payload: &payload
+                    }
+                );
             }
-            assert_eq!(bulk.encode(RecordKind::Cover, &[]), Err(RecordError::Kind));
-            assert_eq!(
-                bulk.encode(RecordKind::Open, &[]).unwrap().len(),
-                HEADER_LEN
-            );
             assert!(bulk
                 .encode(RecordKind::Data, &vec![0; bulk.payload_limit() + 1])
                 .is_err());
-            assert_eq!(
-                bulk.encode(RecordKind::Close, &[]).unwrap().len(),
-                HEADER_LEN
-            );
         }
         assert_eq!(CandidateProfile::from_id(12), Err(RecordError::Profile));
         assert_eq!(CandidateProfile::new(4096, 0), Err(RecordError::Profile));

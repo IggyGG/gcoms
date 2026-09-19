@@ -103,12 +103,16 @@ pub enum Cmd {
         peer: Box<NodeInfo>,
         text: Vec<u8>,
         via: Box<Option<NodeInfo>>,
+        /// Explicit scheduling intent; `None` derives it from the record.
+        class: Option<gcoms_core::TrafficClass>,
         done: tokio::sync::oneshot::Sender<Result<(), String>>,
     },
     Send1to1Tracked {
+        durable: bool,
         peer: Box<NodeInfo>,
         text: Vec<u8>,
         via: Box<Option<NodeInfo>>,
+        class: Option<gcoms_core::TrafficClass>,
         done: tokio::sync::oneshot::Sender<Result<[u8; 16], String>>,
     },
     SendDirectPresence {
@@ -735,6 +739,7 @@ impl NodeHandle {
                 peer: Box::new(peer.clone()),
                 text: text.to_vec(),
                 via: Box::new(via),
+                class: None,
                 done,
             })
             .await
@@ -752,9 +757,46 @@ impl NodeHandle {
         let (done, receive) = tokio::sync::oneshot::channel();
         self.cmd_tx
             .send(Cmd::Send1to1Tracked {
+                durable: false,
                 peer: Box::new(peer.clone()),
                 text: text.to_vec(),
                 via: Box::new(via),
+                class: None,
+                done,
+            })
+            .await
+            .map_err(|e| e.to_string())?;
+        receive.await.map_err(|e| e.to_string())?
+    }
+
+    /// Durable tracked send: returns the exact logical message ID that the
+    /// application acknowledgment (`Ev::DirectDelivery`) carries. The record
+    /// is persisted before this returns; network delivery is deferred.
+    pub async fn send_durable_1to1_tracked(
+        &self,
+        peer: &NodeInfo,
+        body: &[u8],
+        via: Option<NodeInfo>,
+    ) -> Result<[u8; 16], String> {
+        self.send_durable_1to1_tracked_class(peer, body, via, None)
+            .await
+    }
+
+    pub async fn send_durable_1to1_tracked_class(
+        &self,
+        peer: &NodeInfo,
+        body: &[u8],
+        via: Option<NodeInfo>,
+        class: Option<gcoms_core::TrafficClass>,
+    ) -> Result<[u8; 16], String> {
+        let (done, receive) = tokio::sync::oneshot::channel();
+        self.cmd_tx
+            .send(Cmd::Send1to1Tracked {
+                durable: true,
+                peer: Box::new(peer.clone()),
+                text: body.to_vec(),
+                via: Box::new(via),
+                class,
                 done,
             })
             .await
@@ -1237,6 +1279,19 @@ impl NodeHandle {
         body: &[u8],
         via: Option<NodeInfo>,
     ) -> Result<(), String> {
+        self.send_durable_1to1_class(peer, body, via, None).await
+    }
+
+    /// Durable send with an explicit scheduling class. The class only selects
+    /// the ratchet reservation and scheduler admission; it changes no wire
+    /// bytes. Deferred copies re-derive the class from the record.
+    pub async fn send_durable_1to1_class(
+        &self,
+        peer: &NodeInfo,
+        body: &[u8],
+        via: Option<NodeInfo>,
+        class: Option<gcoms_core::TrafficClass>,
+    ) -> Result<(), String> {
         let (done, receive) = tokio::sync::oneshot::channel();
         self.cmd_tx
             .send(Cmd::Send1to1 {
@@ -1244,6 +1299,7 @@ impl NodeHandle {
                 peer: Box::new(peer.clone()),
                 text: body.to_vec(),
                 via: Box::new(via),
+                class,
                 done,
             })
             .await
