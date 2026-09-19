@@ -515,24 +515,33 @@ async fn main() -> Result<(), String> {
     let id = sender
         .send_durable_1to1_tracked(&peer, &chat_body, None)
         .await?;
-    let single_one_way_ms = {
+    let (single_one_way_ms, single_arrival) = {
         let deadline = Instant::now() + args.timeout;
         let mut arrived = -1.0f64;
+        let mut arrival = None;
         while Instant::now() < deadline {
             if let Ok(entries) = recipient.application_inbox(0, 32).await {
-                if entries.iter().any(|entry| entry.message_id == id) {
+                if let Some(entry) = entries.iter().find(|entry| entry.message_id == id) {
                     arrived = single_start.elapsed().as_secs_f64() * 1000.0;
+                    arrival = Some((entry.sequence, entry.digest()));
                     break;
                 }
             }
             tokio::time::sleep(Duration::from_millis(5)).await;
         }
-        arrived
+        (arrived, arrival)
     };
     let single_delay_ms = match tokio::time::timeout(args.timeout, hub.wait(id)).await {
         Ok(Some(_)) => single_start.elapsed().as_secs_f64() * 1000.0,
         _ => -1.0,
     };
+    // The drain task is paused for the one-way measurement; commit its receipt
+    // here so run accounting stays exact.
+    if let Some((sequence, digest)) = single_arrival {
+        if recipient.commit_application(sequence, digest).await.is_ok() {
+            drained.fetch_add(1, Ordering::Relaxed);
+        }
+    }
 
     let (mut chat_latencies, chat_sent, chat_failures) = chat;
     let (bulk_acked_bytes, bulk_chunks, bulk_failures) = bulk;
