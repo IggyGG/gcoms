@@ -169,6 +169,7 @@ fn profile(
 /// counter advances on every dialed circuit.
 async fn start_relay(
     ip: &str,
+    production: bool,
 ) -> (
     Arc<RelayService>,
     Arc<AtomicUsize>,
@@ -190,7 +191,11 @@ async fn start_relay(
         [8; 32],
         Arc::new(Directory::new()),
         ServicePolicy {
-            carrier: gcoms_routing::carrier::CarrierConfig::fixture(),
+            carrier: if production {
+                gcoms_routing::carrier::CarrierConfig::default()
+            } else {
+                gcoms_routing::carrier::CarrierConfig::fixture()
+            },
             target_allowed: Arc::new(|addr| addr.ip().is_loopback()),
             ..Default::default()
         },
@@ -210,14 +215,16 @@ async fn start_relay(
 }
 
 /// Entry and middle relays plus the encoded introductions for both directories.
-async fn protected_relays() -> (
+async fn protected_relays(
+    production: bool,
+) -> (
     Vec<Vec<u8>>,
     Arc<AtomicUsize>,
     Arc<AtomicUsize>,
     Vec<tokio::task::JoinHandle<()>>,
 ) {
-    let (entry, entry_connections, entry_task) = start_relay("127.0.0.86").await;
-    let (middle, middle_connections, middle_task) = start_relay("127.0.0.87").await;
+    let (entry, entry_connections, entry_task) = start_relay("127.0.0.86", production).await;
+    let (middle, middle_connections, middle_task) = start_relay("127.0.0.87", production).await;
     let now = now_unix();
     let introductions = vec![
         entry.gc2_introduction(now).encode().unwrap().to_vec(),
@@ -409,7 +416,8 @@ async fn bulk_stream(
 async fn main() -> Result<(), String> {
     let args = parse_args()?;
     let (introductions, entry_connections, middle_connections, _relay_tasks) = if args.protected {
-        let (introductions, entry, middle, tasks) = protected_relays().await;
+        let (introductions, entry, middle, tasks) =
+            protected_relays(args.cadence == "production").await;
         (introductions, Some(entry), Some(middle), tasks)
     } else {
         (Vec::new(), None, None, Vec::new())
