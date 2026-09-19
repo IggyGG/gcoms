@@ -29,6 +29,8 @@ struct Args {
     profile: String,
     protected: bool,
     entries: usize,
+    cadence: String,
+    drain_ms: u64,
     seed: u64,
     chat_count: usize,
     chat_bytes: usize,
@@ -45,6 +47,8 @@ fn parse_args() -> Result<Args, String> {
         profile: "gc1".into(),
         protected: false,
         entries: 2,
+        cadence: "compressed".into(),
+        drain_ms: 5000,
         seed: 1,
         chat_count: 0,
         chat_bytes: 128,
@@ -62,6 +66,14 @@ fn parse_args() -> Result<Args, String> {
             "--profile" => args.profile = value()?,
             "--protected" => args.protected = true,
             "--entries" => args.entries = value()?.parse::<usize>().map_err(|e| e.to_string())?,
+            "--drain-ms" => args.drain_ms = value()?.parse::<u64>().map_err(|e| e.to_string())?,
+            "--cadence" => {
+                let cadence = value()?;
+                if !matches!(cadence.as_str(), "compressed" | "production") {
+                    return Err("--cadence must be compressed or production".into());
+                }
+                args.cadence = cadence;
+            }
             "--seed" => args.seed = value()?.parse::<u64>().map_err(|e| e.to_string())?,
             "--chat-count" => {
                 args.chat_count = value()?.parse::<usize>().map_err(|e| e.to_string())?
@@ -105,14 +117,28 @@ fn parse_args() -> Result<Args, String> {
     Ok(args)
 }
 
-fn profile(name: &str, seed: u64, introductions: &[Vec<u8>], entries: usize) -> NodeProfile {
+fn profile(
+    name: &str,
+    seed: u64,
+    introductions: &[Vec<u8>],
+    entries: usize,
+    cadence: &str,
+) -> NodeProfile {
     // Both variants are loopback fixtures: a production-shaped profile has no
     // published inbox without the control plane, so the local carrier fixture
     // exercises the real session/scheduling path. Operated-network runs use the
     // production profile once a relay card is provisioned. With `--protected`
     // the fixture is seeded with live entry/middle introductions so the carrier
     // owner dials real circuits instead of the direct terminal.
+    let production = cadence == "production";
     match name {
+        "gc2" if !introductions.is_empty() && production => {
+            NodeProfile::gc2_carrier_production_cadence_fixture_seeded(
+                None,
+                entries,
+                introductions.to_vec(),
+            )
+        }
         "gc2" if !introductions.is_empty() => {
             NodeProfile::gc2_carrier_qualification_fixture_seeded(
                 None,
@@ -122,6 +148,7 @@ fn profile(name: &str, seed: u64, introductions: &[Vec<u8>], entries: usize) -> 
             )
         }
         "gc2" => NodeProfile::gc2_carrier_qualification_fixture(None, entries, seed),
+        _ if production => NodeProfile::production_cadence_fixture(),
         _ => NodeProfile::compressed_production(seed),
     }
 }
@@ -377,12 +404,24 @@ async fn main() -> Result<(), String> {
     };
     let recipient = endpoint(
         0x51,
-        profile(&args.profile, args.seed, &introductions, args.entries),
+        profile(
+            &args.profile,
+            args.seed,
+            &introductions,
+            args.entries,
+            &args.cadence,
+        ),
     )
     .await;
     let sender = endpoint(
         0x52,
-        profile(&args.profile, args.seed, &introductions, args.entries),
+        profile(
+            &args.profile,
+            args.seed,
+            &introductions,
+            args.entries,
+            &args.cadence,
+        ),
     )
     .await;
     let peer = recipient.current_info().await?;
@@ -463,7 +502,11 @@ async fn main() -> Result<(), String> {
     let (chat, bulk) = tokio::join!(chat, bulk);
     let elapsed = bulk_start.elapsed().as_secs_f64();
 
-    // A single idle message after the workloads measures the shaping delay.
+    // Drain the workload before measuring the idle shaping delay, then send a
+    // single message on the established session.
+    if args.drain_ms > 0 {
+        tokio::time::sleep(Duration::from_millis(args.drain_ms)).await;
+    }
     let single_start = Instant::now();
     let id = sender
         .send_durable_1to1_tracked(&peer, &chat_body, None)

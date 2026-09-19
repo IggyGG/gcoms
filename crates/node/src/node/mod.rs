@@ -219,6 +219,33 @@ impl NodeProfile {
         })
     }
 
+    /// Fixture transport with the production scheduler and stream cadences.
+    /// Used to compare GC/1 and GC/2 at the same production timing; loopback
+    /// production-cadence runs are wall-clock bound, so qualification repeats
+    /// run in parallel on the cluster.
+    pub fn production_cadence_fixture() -> Self {
+        Self::Fixture(FixtureProfile {
+            #[cfg(feature = "experimental-gc2")]
+            gc2_sessions: false,
+            #[cfg(feature = "experimental-gc2")]
+            gc2_gate: false,
+            #[cfg(feature = "experimental-gc2")]
+            gc2_directory: None,
+            #[cfg(feature = "experimental-gc2")]
+            gc2_entries: 0,
+            #[cfg(feature = "experimental-gc2")]
+            gc2_introductions: Vec::new(),
+            #[cfg(feature = "experimental-gc2")]
+            gc2_carrier_record_len: 4096,
+            #[cfg(feature = "experimental-gc2")]
+            gc2_carrier_period_ms: 1000,
+            scheduler: SchedulerProfile::production(),
+            allow_local_targets: true,
+            stream_slot_interval: std::time::Duration::from_secs(3),
+            stream_emit_cover: true,
+        })
+    }
+
     pub fn is_production(&self) -> bool {
         match self {
             Self::Production => true,
@@ -330,6 +357,26 @@ impl NodeProfile {
         else {
             unreachable!()
         };
+        fixture.gc2_introductions = introductions;
+        Self::Fixture(fixture)
+    }
+
+    /// Production-cadence qualification carrier fixture: explicit private
+    /// introductions with the production scheduler and carrier period, so
+    /// GC/2 can be compared with GC/1 at the same production timing.
+    #[cfg(feature = "experimental-gc2")]
+    pub fn gc2_carrier_production_cadence_fixture_seeded(
+        directory: Option<std::path::PathBuf>,
+        entries: usize,
+        introductions: Vec<Vec<u8>>,
+    ) -> Self {
+        let Self::Fixture(mut fixture) = Self::production_cadence_fixture() else {
+            unreachable!()
+        };
+        fixture.gc2_sessions = true;
+        fixture.gc2_gate = true;
+        fixture.gc2_directory = directory;
+        fixture.gc2_entries = entries;
         fixture.gc2_introductions = introductions;
         Self::Fixture(fixture)
     }
