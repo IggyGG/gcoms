@@ -116,6 +116,7 @@ pub struct Gc2CarrierProfile {
     pub entries: usize,
     pub record_len: usize,
     pub period_ms: u16,
+    pub cover_mode: gcoms_routing::gc2::CoverMode,
     pub scheduler: SchedulerProfile,
     /// Explicit private introductions for qualification fixtures. Deployment
     /// profiles leave this empty and use the provisioning advertisement.
@@ -153,6 +154,8 @@ pub struct FixtureProfile {
     pub gc2_carrier_record_len: usize,
     #[cfg(feature = "experimental-gc2")]
     pub gc2_carrier_period_ms: u16,
+    #[cfg(feature = "experimental-gc2")]
+    pub gc2_cover_mode: gcoms_routing::gc2::CoverMode,
     /// Relay lane and maintenance scheduling.
     pub scheduler: SchedulerProfile,
     /// Permit loopback/private FRWD targets (all fixtures need this).
@@ -187,6 +190,8 @@ impl NodeProfile {
             gc2_carrier_record_len: 4096,
             #[cfg(feature = "experimental-gc2")]
             gc2_carrier_period_ms: 1000,
+            #[cfg(feature = "experimental-gc2")]
+            gc2_cover_mode: gcoms_routing::gc2::CoverMode::Full,
             scheduler: SchedulerProfile::fixture(),
             allow_local_targets: true,
             stream_slot_interval: std::time::Duration::from_millis(10),
@@ -212,6 +217,8 @@ impl NodeProfile {
             gc2_carrier_record_len: 4096,
             #[cfg(feature = "experimental-gc2")]
             gc2_carrier_period_ms: 1000,
+            #[cfg(feature = "experimental-gc2")]
+            gc2_cover_mode: gcoms_routing::gc2::CoverMode::Full,
             scheduler: SchedulerProfile::compressed_production(seed),
             allow_local_targets: true,
             stream_slot_interval: std::time::Duration::from_millis(10),
@@ -239,6 +246,8 @@ impl NodeProfile {
             gc2_carrier_record_len: 4096,
             #[cfg(feature = "experimental-gc2")]
             gc2_carrier_period_ms: 1000,
+            #[cfg(feature = "experimental-gc2")]
+            gc2_cover_mode: gcoms_routing::gc2::CoverMode::Full,
             scheduler: SchedulerProfile::production(),
             allow_local_targets: true,
             stream_slot_interval: std::time::Duration::from_secs(3),
@@ -298,6 +307,7 @@ impl NodeProfile {
             entries,
             record_len: 4096,
             period_ms: 1000,
+            cover_mode: gcoms_routing::gc2::CoverMode::Full,
             scheduler: SchedulerProfile::production(),
             introductions: Vec::new(),
         })
@@ -316,6 +326,7 @@ impl NodeProfile {
             entries,
             record_len: 4096,
             period_ms: 1000,
+            cover_mode: gcoms_routing::gc2::CoverMode::Full,
             scheduler: SchedulerProfile::compressed_production(seed),
             introductions: Vec::new(),
         })
@@ -390,6 +401,30 @@ impl NodeProfile {
         }
     }
 
+    /// Explicit profile selection; never changes the legacy production carrier.
+    #[cfg(feature = "experimental-gc2")]
+    pub fn with_gc2_traffic_profile(
+        mut self,
+        profile: gcoms_routing::gc2::CandidateProfile,
+    ) -> Result<Self, String> {
+        match &mut self {
+            Self::Gc2Carrier(carrier) => {
+                carrier.record_len = profile.record_len();
+                carrier.period_ms = profile.period().as_millis() as u16;
+                carrier.cover_mode = profile.mode();
+            }
+            Self::Fixture(fixture) if fixture.gc2_gate => {
+                fixture.gc2_carrier_record_len = profile.record_len();
+                fixture.gc2_carrier_period_ms = profile.period().as_millis() as u16;
+                fixture.gc2_cover_mode = profile.mode();
+            }
+            _ => {
+                return Err("GC/2 traffic profile requires explicit GC/2 carrier selection".into())
+            }
+        }
+        Ok(self)
+    }
+
     #[cfg(feature = "experimental-gc2")]
     fn gc2_gate(&self) -> bool {
         match self {
@@ -400,19 +435,29 @@ impl NodeProfile {
     }
 
     #[cfg(feature = "experimental-gc2")]
-    fn gc2_carrier(&self) -> Option<(Option<&std::path::Path>, usize, usize, u16)> {
+    fn gc2_carrier(
+        &self,
+    ) -> Option<(
+        Option<&std::path::Path>,
+        usize,
+        usize,
+        u16,
+        gcoms_routing::gc2::CoverMode,
+    )> {
         match self {
             Self::Fixture(fixture) if fixture.gc2_entries > 0 => Some((
                 fixture.gc2_directory.as_deref(),
                 fixture.gc2_entries,
                 fixture.gc2_carrier_record_len,
                 fixture.gc2_carrier_period_ms,
+                fixture.gc2_cover_mode,
             )),
             Self::Gc2Carrier(carrier) if carrier.entries > 0 => Some((
                 carrier.directory.as_deref(),
                 carrier.entries,
                 carrier.record_len,
                 carrier.period_ms,
+                carrier.cover_mode,
             )),
             _ => None,
         }
@@ -1265,7 +1310,9 @@ async fn start_with_tls_policy_control_sink_and_bootstrap(
         initialized?;
 
         #[cfg(feature = "experimental-gc2")]
-        if let Some((directory_path, entries, record_len, period_ms)) = cfg.profile.gc2_carrier() {
+        if let Some((directory_path, entries, record_len, period_ms, cover_mode)) =
+            cfg.profile.gc2_carrier()
+        {
             let directory = match directory_path {
                 Some(path) => {
                     let cache = crate::routing_cache::Cache::open_gc2(path, &cfg.seed)
@@ -1286,9 +1333,11 @@ async fn start_with_tls_policy_control_sink_and_bootstrap(
             }
             let (owner, ready) = gcoms_routing::gc2::owner::EntryOwner::new(
                 directory.clone(),
-                gcoms_routing::gc2::CandidateProfile::new(record_len, period_ms).map_err(|_| {
-                    format!("invalid GC/2 candidate profile {record_len}/{period_ms}")
-                })?,
+                gcoms_routing::gc2::CandidateProfile::new(record_len, period_ms)
+                    .map_err(|_| {
+                        format!("invalid GC/2 candidate profile {record_len}/{period_ms}")
+                    })?
+                    .with_mode(cover_mode),
                 entries,
             )
             .map_err(|e| e.to_string())?;

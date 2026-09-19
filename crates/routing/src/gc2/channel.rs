@@ -2,7 +2,8 @@
 //! before running this pump, supplies bounded local I/O, and owns cancellation
 //! and the absolute connection lifetime. Starting/stopping an interactive pump
 //! in response to chat activity would defeat its traffic protection.
-use super::{RecordCodec, RecordKind, HEADER_LEN};
+use super::{CoverMode, RecordCodec, RecordKind, HEADER_LEN};
+use rand::Rng;
 use std::{future::poll_fn, io, pin::Pin, task::Poll};
 use tokio::{
     io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadBuf},
@@ -33,9 +34,9 @@ pub struct ChannelCounts {
 }
 
 /// Forward one already-open channel in both directions, without detached tasks.
-/// Interactive records use the profile's fixed lattice starting at `first_slot`;
-/// bulk records have no shaping timer or idle cover. A delayed write skips missed
-/// opportunities instead of accumulating a burst of catch-up records.
+/// The authenticated profile selects full cover or protected interactive slots
+/// with immediately eligible bulk. Jitter changes slot phase independently of
+/// payload arrivals. Blocked writes never accumulate catch-up bursts.
 ///
 /// The owner must keep both class channels alive for its traffic-independent
 /// connected period and reserve interactive transport credit separately. This
@@ -72,22 +73,22 @@ where
     let mut payload = vec![0; codec.payload_limit()];
     let mut encoded = Vec::new();
     let mut counts = RecordCounts::default();
-    let mut next_slot = first_slot;
+    let mut next_slot = first_slot + slot_phase(codec);
     loop {
-        // Both classes ride the same fixed lattice: one record per slot, with
-        // cover when nothing is queued. Bulk data is therefore paced at the
-        // profile rate instead of revealing activity through record timing and
-        // count, and idle periods look like active ones.
-        sleep_until(next_slot).await;
-        let ready = poll_fn(|cx| {
-            let mut buf = ReadBuf::new(&mut payload);
-            Poll::Ready(match Pin::new(&mut local).poll_read(cx, &mut buf) {
-                Poll::Ready(Ok(())) => Ok(Some(buf.filled().len())),
-                Poll::Ready(Err(error)) => Err(error),
-                Poll::Pending => Ok(None),
+        let ready = if codec.unshaped_bulk() {
+            Some(local.read(&mut payload).await?)
+        } else {
+            sleep_until(next_slot).await;
+            poll_fn(|cx| {
+                let mut buf = ReadBuf::new(&mut payload);
+                Poll::Ready(match Pin::new(&mut local).poll_read(cx, &mut buf) {
+                    Poll::Ready(Ok(())) => Ok(Some(buf.filled().len())),
+                    Poll::Ready(Err(error)) => Err(error),
+                    Poll::Pending => Ok(None),
+                })
             })
-        })
-        .await?;
+            .await?
+        };
         let (kind, len) = match ready {
             None => (RecordKind::Cover, 0),
             Some(0) => (RecordKind::Close, 0),
@@ -110,7 +111,19 @@ where
         let period = codec.profile().period();
         let elapsed = now.saturating_duration_since(first_slot);
         let remainder = elapsed.as_nanos() % period.as_nanos();
-        next_slot = now + period - std::time::Duration::from_nanos(remainder as u64);
+        next_slot =
+            now + period - std::time::Duration::from_nanos(remainder as u64) + slot_phase(codec);
+    }
+}
+
+fn slot_phase(codec: RecordCodec) -> std::time::Duration {
+    if codec.profile().mode() == CoverMode::InteractiveJitter && !codec.unshaped_bulk() {
+        // Independent phase in [0, period/4]. Consecutive unblocked intervals
+        // lie in [3*period/4, 5*period/4], with the same long-run mean rate.
+        let maximum = codec.profile().period().as_micros() as u64 / 4;
+        std::time::Duration::from_micros(rand::thread_rng().gen_range(0..=maximum))
+    } else {
+        std::time::Duration::ZERO
     }
 }
 
@@ -271,6 +284,76 @@ mod tests {
         assert_eq!(counts.payload_bytes, MAX_RECORD as u64);
         assert!(counts.records >= 3);
         let _ = period;
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn interactive_cover_profile_sends_bulk_immediately_without_idle_records() {
+        let profile = super::super::CandidateProfile::new(1024, 1500)
+            .unwrap()
+            .with_mode(CoverMode::Interactive);
+        let codec = RecordCodec::new(TrafficClass::Bulk, profile);
+        let (mut application, local) = tokio::io::duplex(MAX_RECORD * 2);
+        let (wire, mut observer) = tokio::io::duplex(MAX_RECORD * 2);
+        let writer = tokio::spawn(write_records(
+            wire,
+            local,
+            codec,
+            Instant::now() + std::time::Duration::from_secs(30),
+        ));
+        let mut header = [0; HEADER_LEN];
+        assert!(tokio::time::timeout(
+            std::time::Duration::from_secs(2),
+            observer.read_exact(&mut header)
+        )
+        .await
+        .is_err());
+        let payload = vec![42; 11 * 1024];
+        application.write_all(&payload).await.unwrap();
+        tokio::time::timeout(
+            std::time::Duration::from_millis(1),
+            observer.read_exact(&mut header),
+        )
+        .await
+        .unwrap()
+        .unwrap();
+        let mut wire = vec![0; codec.wire_len(&header).unwrap()];
+        wire[..HEADER_LEN].copy_from_slice(&header);
+        observer.read_exact(&mut wire[HEADER_LEN..]).await.unwrap();
+        assert_eq!(codec.decode(&wire).unwrap().payload(), payload);
+        application.shutdown().await.unwrap();
+        observer.read_exact(&mut header).await.unwrap();
+        assert_eq!(codec.decode(&header).unwrap().kind(), RecordKind::Close);
+        let counts = writer.await.unwrap().unwrap();
+        assert_eq!(counts.records, 2);
+        assert_eq!(counts.wire_bytes, (payload.len() + 2 * HEADER_LEN) as u64);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn independent_jitter_keeps_idle_interactive_slots_bounded() {
+        let profile = super::super::CandidateProfile::new(1024, 1000)
+            .unwrap()
+            .with_mode(CoverMode::InteractiveJitter);
+        let codec = RecordCodec::new(TrafficClass::Interactive, profile);
+        let (_application, local) = tokio::io::duplex(MAX_RECORD);
+        let (wire, mut observer) = tokio::io::duplex(MAX_RECORD);
+        let origin = Instant::now();
+        let writer = tokio::spawn(write_records(wire, local, codec, origin + profile.period()));
+        let mut previous = None;
+        for _ in 0..32 {
+            let mut wire = vec![0; profile.record_len()];
+            observer.read_exact(&mut wire).await.unwrap();
+            assert_eq!(codec.decode(&wire).unwrap().kind(), RecordKind::Cover);
+            let now = Instant::now();
+            if let Some(last) = previous {
+                let interval = now - last;
+                // Tokio's timer has millisecond resolution.
+                assert!(interval >= std::time::Duration::from_millis(749));
+                assert!(interval <= std::time::Duration::from_millis(1251));
+            }
+            previous = Some(now);
+        }
+        writer.abort();
+        assert!(writer.await.unwrap_err().is_cancelled());
     }
 
     #[tokio::test]
