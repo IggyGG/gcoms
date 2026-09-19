@@ -92,3 +92,40 @@ update, signed release, privacy qualification, or completed soak is implied here
 - Reports and failed attempts remain under `target/gc2-requalification/`. No
   current evidence supports a final anonymity claim or a production profile
   selection. The owner has not yet been presented qualified alternatives.
+
+## Combined source checkpoint, 2026-09-20
+
+- Incorporated the other session's completed file-transfer pair (GComs
+  `ea9157f`, GChat `a3c125c`) while leaving its isolated fleet campaign checkout
+  unchanged. This brings channel/file natural routing, retained transfer
+  ownership, bounded piece pipelines, profile-22 readiness diagnostics and
+  receiver reopen checks into the release branch.
+- Merge resolution preserves exact partial chunks, receipts and retained failed
+  runs. A fixed measurement interval overrun produces failed evidence instead
+  of discarding the run. The file classifier uses structured frame accounting,
+  authenticates the selected profile through the workload report, checks capture
+  loss and full workload coverage, and keeps pooled results diagnostic. Valid
+  unfavorable measurements remain informative.
+- Before this merge, the GComs native run completed 799 Rust tests (five reviewed
+  exclusions), docs, strict Clippy, generated artifacts and isolated package
+  consumers. Paired GChat completed 147 Rust tests, strict Clippy, UI checks and
+  a Linux desktop release build. Both CI entrypoints stopped at missing
+  `cargo-deny`; the retained reports correctly record failure. After installing
+  cargo-deny 0.20.2, GComs and the frozen GChat workspace passed dependency policy.
+  These results do not qualify the newly merged source or native installers.
+- Installer/native preparation now exports and verifies exact paired source
+  archives, Rust dependency paths, npm package integrity and derived locks. A
+  report can no longer name a GComs commit while building registry code instead.
+- Desktop startup exposes the explicit carrier selection. The shared service
+  launcher now forwards it; previously automatic startup silently omitted it.
+  A retained-profile regression checks that the resulting archive rejects legacy
+  reopening and can reopen with the selected carrier. Combined validation is
+  required before relying on this correction.
+- The original-coms port's two initial failures were corrected in `e2e858a`.
+  A later, uncommitted activity-promotion change on that separate shared checkout
+  fails three lease/replay-expiry tests and strict Clippy. It remains preserved,
+  unqualified and excluded from this separated GComs source integration.
+- Whole-client privacy captures, the owner's production profile/migration
+  choice, native signing/install journeys, long fuzz/soak runs and production
+  rollout remain outstanding. The other session's eight-host canary uses
+  isolated test listeners; it is not a production rollout.
