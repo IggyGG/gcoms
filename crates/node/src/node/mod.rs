@@ -146,6 +146,13 @@ pub struct FixtureProfile {
     /// provisioning advertisement, and an invalid seed fails closed.
     #[cfg(feature = "experimental-gc2")]
     pub gc2_introductions: Vec<Vec<u8>>,
+    /// Carrier record bound and emission period for owner entry connections.
+    /// Deployment uses the production 4096/1000; qualification fixtures
+    /// compress the period so slot scheduling does not dominate latency.
+    #[cfg(feature = "experimental-gc2")]
+    pub gc2_carrier_record_len: usize,
+    #[cfg(feature = "experimental-gc2")]
+    pub gc2_carrier_period_ms: u16,
     /// Relay lane and maintenance scheduling.
     pub scheduler: SchedulerProfile,
     /// Permit loopback/private FRWD targets (all fixtures need this).
@@ -170,6 +177,10 @@ impl NodeProfile {
             gc2_entries: 0,
             #[cfg(feature = "experimental-gc2")]
             gc2_introductions: Vec::new(),
+            #[cfg(feature = "experimental-gc2")]
+            gc2_carrier_record_len: 4096,
+            #[cfg(feature = "experimental-gc2")]
+            gc2_carrier_period_ms: 1000,
             scheduler: SchedulerProfile::fixture(),
             allow_local_targets: true,
             stream_slot_interval: std::time::Duration::from_millis(10),
@@ -191,6 +202,10 @@ impl NodeProfile {
             gc2_entries: 0,
             #[cfg(feature = "experimental-gc2")]
             gc2_introductions: Vec::new(),
+            #[cfg(feature = "experimental-gc2")]
+            gc2_carrier_record_len: 4096,
+            #[cfg(feature = "experimental-gc2")]
+            gc2_carrier_period_ms: 1000,
             scheduler: SchedulerProfile::compressed_production(seed),
             allow_local_targets: true,
             stream_slot_interval: std::time::Duration::from_millis(10),
@@ -290,6 +305,7 @@ impl NodeProfile {
         fixture.gc2_gate = true;
         fixture.gc2_directory = directory;
         fixture.gc2_entries = entries;
+        fixture.gc2_carrier_period_ms = 250;
         Self::Fixture(fixture)
     }
 
@@ -336,8 +352,8 @@ impl NodeProfile {
             Self::Fixture(fixture) if fixture.gc2_entries > 0 => Some((
                 fixture.gc2_directory.as_deref(),
                 fixture.gc2_entries,
-                4096,
-                1000,
+                fixture.gc2_carrier_record_len,
+                fixture.gc2_carrier_period_ms,
             )),
             Self::Gc2Carrier(carrier) if carrier.entries > 0 => Some((
                 carrier.directory.as_deref(),
