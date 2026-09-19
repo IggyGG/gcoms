@@ -68,8 +68,15 @@ def main():
     environment.setdefault("CARGO_BUILD_JOBS", "2")
     environment["CARGO_TARGET_DIR"] = str((target / "build").resolve())
     # Keep socket-test paths short, independently of deeply nested worktrees.
+    # Test scratch follows the workstation SSD policy: an explicit TMPDIR wins,
+    # then the approved short SSD directory; /tmp is RAM/swap and repeatedly
+    # filled under the full GChat suite.
+    test_root = os.environ.get("TMPDIR") or os.path.join(
+        os.path.expanduser("~"), ".cache", "opencode", "tmp"
+    )
+    os.makedirs(test_root, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="gc-chat-", dir=target) as scratch, \
-            tempfile.TemporaryDirectory(prefix="gc2-", dir="/tmp" if os.name != "nt" else None) as test_tmp:
+            tempfile.TemporaryDirectory(prefix="gc2-", dir=test_root if os.name != "nt" else None) as test_tmp:
         environment["TMPDIR"] = test_tmp
         environment["TEMP"] = test_tmp
         environment["TMP"] = test_tmp
