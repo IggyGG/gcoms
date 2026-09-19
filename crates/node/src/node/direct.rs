@@ -1693,6 +1693,7 @@ pub(crate) async fn send_1to1(
         .map(|_| ())
 }
 
+#[cfg(test)]
 pub(crate) fn prepare_1to1(
     state: &Arc<Mutex<NodeState>>,
     peer: &NodeInfo,
@@ -1725,11 +1726,12 @@ pub(crate) fn prepare_1to1_class(
     })
 }
 
-pub(crate) fn prepare_tracked_1to1(
+pub(crate) fn prepare_tracked_1to1_class(
     state: &Arc<Mutex<NodeState>>,
     peer: &NodeInfo,
     text: &[u8],
     via: Option<NodeInfo>,
+    class: Option<gcoms_core::TrafficClass>,
 ) -> Result<PreparedDirect, String> {
     if !cfg!(feature = "client-persist")
         || state
@@ -1740,7 +1742,7 @@ pub(crate) fn prepare_tracked_1to1(
     {
         return Err("tracked send requires persistent client state".into());
     }
-    prepare_1to1(state, peer, text, via)
+    prepare_1to1_class(state, peer, text, via, class)
 }
 
 #[cfg(test)]

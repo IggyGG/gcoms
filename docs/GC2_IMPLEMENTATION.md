@@ -216,13 +216,22 @@ Retain failures, source/executable/configuration/workload hashes and exact scope
   deployment profile (`gc2_carrier_production`, or the compressed qualification
   variant) selects the protected carrier with production transport behaviour;
   a GC/2 carrier archive cannot be restored under a GC/1 profile, so a restart
-  cannot silently downgrade. SDK/GChat selection and send options remain.
-- Complete GC/2 routing, protected profiles, SDK/GChat profile integration and
-  application/privacy/mobile gates: pending. Counter-window flow control, the
-  application-send preparation/completion split and authenticated class
-  propagation are implemented; the remaining control-plane command waits are
-  listed above, and the experimental combined-listener gate is attachable
-  through an explicit fixture profile.
+  cannot silently downgrade. The GChat application now selects it behind an
+  explicit `gc2-carrier` feature and `--gc2-carrier` flag (default builds keep
+  GC/1); a tracked durable send returns the exact logical id its application
+  receipt carries; and an application-level instrument (`app_performance` plus
+  `scripts/app-utilization.py`) measures durable chat latency, pipelined 11 KiB
+  file-record goodput, single-message shaping delay and exact receipt accounting
+  with the predeclared gates above. On the natural-terminal fixture the GC/2
+  variant does not yet meet the bulk/chat gates; the protected-route node
+  fixture is the next integration step.
+- Complete GC/2 routing, protected-route qualification and the privacy/mobile
+  gates: pending. Counter-window flow control, the application-send
+  preparation/completion split, authenticated class propagation, GChat profile
+  selection and the application-level measurement instrument are implemented;
+  the remaining control-plane command waits are listed above, the experimental
+  combined-listener gate is attachable through an explicit fixture profile, and
+  a node-level protected-route fixture plus the privacy classifier gate remain.
 
 ## Consolidation validation — Linux, 2026-09-17
 

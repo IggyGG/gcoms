@@ -145,3 +145,26 @@ uses a writable handle when flushing the preserved encrypted bytes to disk.
 GChat's portable service, archive-reopen and standalone-daemon suites now run on
 Windows too. Their readiness probes use IPC connections, since named pipes have
 no socket-file entry. Unix PTY tests remain platform-specific.
+
+## Application-level GC/2 instrument (2026-09-19)
+
+`crates/node/examples/app_performance.rs` measures durable chat latency,
+pipelined 11 KiB file-record goodput, single-message shaping delay and exact
+receiver receipt accounting on two loopback nodes. Build it with
+`cargo build --features experimental-gc2,client-persist --example app_performance`
+and drive it with
+
+    python3 scripts/app-utilization.py --binary <example path> --report <json>
+
+The driver runs five balanced-order repeats per profile and workload, validates
+per-run accounting, and applies the predeclared gates from
+`docs/GC2_IMPLEMENTATION.md` (>= 20% median bulk-goodput improvement, chat p95
+within max(+5%, +20 ms), <= 3 s single-message delay). Missing or malformed runs
+cannot qualify, and `--quick` runs are explicitly non-qualifying. Loopback
+fixtures use `NodeProfile::gc2_carrier_qualification_fixture` and
+`compressed_production`; the natural-terminal path measured there does not yet
+meet the bulk/chat gates, and the node-level protected-route fixture is the next
+integration step. Durable sends can be tracked end-to-end with
+`NodeHandle::send_durable_1to1_tracked`, whose returned id is the one the
+`Ev::DirectDelivery` receipt carries (covered by
+`tests/gc2_sessions.rs::tracked_durable_sends_return_the_ids_the_receipts_carry`).

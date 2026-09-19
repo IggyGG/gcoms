@@ -384,9 +384,11 @@ pub(crate) fn spawn_command_loop(ctx: CommandLoopContext) -> tokio::task::JoinHa
                     );
                 }
                 Cmd::Send1to1Tracked {
+                    durable,
                     peer,
                     text,
                     via,
+                    class,
                     done,
                 } => {
                     let key = CmdKey::Peer(peer.identity_pk.clone());
@@ -398,7 +400,11 @@ pub(crate) fn spawn_command_loop(ctx: CommandLoopContext) -> tokio::task::JoinHa
                         events_tx,
                         prepare,
                         complete | {
-                            let prepared = prepare_tracked_1to1(&state, &peer, &text, *via)?;
+                            let prepared = if durable {
+                                prepare_durable_1to1_class(&state, &peer, &text, *via, class)?
+                            } else {
+                                prepare_tracked_1to1_class(&state, &peer, &text, *via, class)?
+                            };
                             let ticket = complete.register();
                             drop(prepare);
                             let _ticket = ticket.wait().await;

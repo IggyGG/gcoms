@@ -163,6 +163,41 @@ async fn gc2_natural_carrier_delivers_durable_applications_both_ways() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn tracked_durable_sends_return_the_ids_the_receipts_carry() {
+    let a = endpoint(75, Archive::default(), None).await;
+    let b = endpoint(76, Archive::default(), None).await;
+    let original = b.current_info().await.unwrap();
+    let first = a
+        .send_durable_1to1_tracked(&original, b"tracked one", None)
+        .await
+        .unwrap();
+    let second = a
+        .send_durable_1to1_tracked(&original, b"tracked two", None)
+        .await
+        .unwrap();
+    assert_ne!(first, second);
+    let delivered = receive(&b, 2).await;
+    let ids: Vec<[u8; 16]> = delivered.iter().map(|message| message.message_id).collect();
+    assert!(ids.contains(&first) && ids.contains(&second));
+    // Both application acknowledgments arrive on the same event stream in
+    // either order; collect them together rather than one at a time.
+    tokio::time::timeout(Duration::from_secs(30), async {
+        let mut receipts = 0usize;
+        while receipts < 2 {
+            if let Some(Ev::DirectDelivery { msg_id, .. }) = a.next_event().await {
+                if msg_id == first || msg_id == second {
+                    receipts += 1;
+                }
+            }
+        }
+    })
+    .await
+    .expect("tracked durable receipt timeout");
+    a.shutdown().await;
+    b.shutdown().await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn gc2_carrier_archive_cannot_restore_under_a_gc1_profile() {
     let aa = Archive::default();
     let a = endpoint_with_profile(

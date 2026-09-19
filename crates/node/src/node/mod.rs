@@ -242,8 +242,8 @@ impl NodeProfile {
         })
     }
 
-    /// Carrier with the compressed production schedule used by qualification
-    /// runs on one host.
+    /// Deployment-shaped carrier with the compressed production schedule used
+    /// by qualification runs on one host.
     #[cfg(feature = "experimental-gc2")]
     pub fn gc2_carrier_qualification(
         directory: Option<std::path::PathBuf>,
@@ -257,6 +257,26 @@ impl NodeProfile {
             period_ms: 1000,
             scheduler: SchedulerProfile::compressed_production(seed),
         })
+    }
+
+    /// Carrier *fixture* with the compressed qualification cadence: identical
+    /// local transport to `gc2_carrier_fixture`, but maintenance and slot
+    /// delays suitable for one-host measurements against a
+    /// `compressed_production` baseline.
+    #[cfg(feature = "experimental-gc2")]
+    pub fn gc2_carrier_qualification_fixture(
+        directory: Option<std::path::PathBuf>,
+        entries: usize,
+        seed: u64,
+    ) -> Self {
+        let Self::Fixture(mut fixture) = Self::compressed_production(seed) else {
+            unreachable!()
+        };
+        fixture.gc2_sessions = true;
+        fixture.gc2_gate = true;
+        fixture.gc2_directory = directory;
+        fixture.gc2_entries = entries;
+        Self::Fixture(fixture)
     }
 
     #[cfg(feature = "experimental-gc2")]
