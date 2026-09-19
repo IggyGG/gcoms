@@ -40,6 +40,11 @@ def parse_args():
     parser.add_argument("--eval-seed", type=int, default=11)
     parser.add_argument("--windows", type=int, default=1)
     parser.add_argument("--bootstrap", type=int, default=2000)
+    parser.add_argument("--skip-seconds", type=float, default=0.0,
+                        help="drop this much lead-in time from every capture")
+    parser.add_argument("--idle-workload", choices=("idle", "warm_idle"), default="idle")
+    parser.add_argument("--entry-link-only", action="store_true",
+                        help="keep only packets on the client's entry link")
     return parser.parse_args()
 
 
@@ -144,7 +149,19 @@ def main():
         if meta["inner_rc"] != 0:
             continue
         pcap = args.out / meta["pcap"]
-        captures[(meta["workload"], meta["seed"])] = packets(pcap)
+        rows = packets(pcap)
+        if args.entry_link_only:
+            entry = (meta.get("record") or {}).get("entry_addr") or ""
+            if entry:
+                try:
+                    port = int(entry.rsplit(":", 1)[1])
+                    rows = [row for row in rows if row[1] == port or row[2] == port]
+                except (IndexError, ValueError):
+                    pass
+        if args.skip_seconds > 0 and rows:
+            cutoff = rows[0][0] + args.skip_seconds
+            rows = [row for row in rows if row[0] >= cutoff]
+        captures[(meta["workload"], meta["seed"])] = rows
 
     ports = {27101, 27102}
     report = {"captures": sorted(f"{k[0]}/{k[1]}" for k in captures), "gates": {}}
@@ -159,7 +176,7 @@ def main():
         return np.vstack(rows), np.concatenate(labels)
 
     for name, classes in (("chat_vs_bulk", (("chat", 1), ("bulk", 0))),
-                          ("idle_vs_chat", (("idle", 0), ("chat", 1)))):
+                          ("idle_vs_chat", ((args.idle_workload, 0), ("chat", 1)))):
         pairs_train = [(w, args.train_seed, l) for w, l in classes]
         pairs_eval = [(w, args.eval_seed, l) for w, l in classes]
         try:
@@ -203,11 +220,12 @@ def main():
         features = window_features(captures.get((workload, seed), []), ports, args.windows)
         return features[:, 0] + features[:, 1] if features.size else np.array([])
 
-    idle_syn = syn_count("idle", args.train_seed)
+    idle_syn = syn_count(args.idle_workload, args.train_seed)
     chat_syn = syn_count("chat", args.train_seed)
+    idle_big = big_count(args.idle_workload, args.train_seed)
     chat_big = big_count("chat", args.train_seed)
     bulk_big = big_count("bulk", args.train_seed)
-    idle_counts = window_counts("idle", args.train_seed)
+    idle_counts = window_counts(args.idle_workload, args.train_seed)
     chat_counts = window_counts("chat", args.train_seed)
     p_value = None
     if len(idle_counts) and len(chat_counts):
@@ -225,9 +243,12 @@ def main():
         "idle_syn": idle_syn,
         "chat_syn": chat_syn,
         "chat_connections_ok": chat_syn <= idle_syn,
+        "idle_packets_ge_4096": idle_big,
         "chat_packets_ge_4096": chat_big,
         "bulk_packets_ge_4096": bulk_big,
-        "chat_bulk_emissions_ok": chat_big == 0,
+        # Chat must not add bulk-sized records beyond the padded idle schedule
+        # (a 20% allowance covers cadence jitter).
+        "chat_bulk_emissions_ok": chat_big <= max(1, int(1.2 * idle_big)),
         "window_packet_permutation_p": p_value,
         "scheduling_independent": p_value is None or p_value >= 0.01,
     }

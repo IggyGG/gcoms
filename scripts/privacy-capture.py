@@ -26,7 +26,7 @@ def parse_args():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--binary", type=Path, required=True)
     parser.add_argument("--out", type=Path, required=True)
-    parser.add_argument("--workload", choices=("idle", "chat", "bulk"), required=True)
+    parser.add_argument("--workload", choices=("idle", "chat", "bulk", "warm_idle"), required=True)
     parser.add_argument("--profile", choices=("gc1", "gc2"), default="gc2")
     parser.add_argument("--protected", action="store_true")
     parser.add_argument("--seed", type=int, default=7)
@@ -61,6 +61,10 @@ def harness_args(args):
         command.append("--protected")
     if args.workload == "idle":
         command += ["--idle-ms", str(args.seconds * 1000)]
+    elif args.workload == "warm_idle":
+        # One warm-up exchange, then idle on the established (warm) circuits.
+        command += ["--chat-count", "1", "--chat-bytes", "128", "--chat-interval-ms", "0",
+                    "--idle-ms", str(args.seconds * 1000)]
     elif args.workload == "chat":
         count = max(1, args.bytes // 128)
         command += ["--chat-count", str(count), "--chat-bytes", "128",

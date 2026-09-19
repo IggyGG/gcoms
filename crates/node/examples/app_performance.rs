@@ -222,6 +222,8 @@ async fn protected_relays(
     Arc<AtomicUsize>,
     Arc<AtomicUsize>,
     Vec<tokio::task::JoinHandle<()>>,
+    std::net::SocketAddr,
+    std::net::SocketAddr,
 ) {
     let (entry, entry_connections, entry_task) = start_relay("127.0.0.86", production).await;
     let (middle, middle_connections, middle_task) = start_relay("127.0.0.87", production).await;
@@ -235,6 +237,8 @@ async fn protected_relays(
         entry_connections,
         middle_connections,
         vec![entry_task, middle_task],
+        entry.address(),
+        middle.address(),
     )
 }
 
@@ -415,12 +419,26 @@ async fn bulk_stream(
 #[tokio::main(flavor = "multi_thread", worker_threads = 4)]
 async fn main() -> Result<(), String> {
     let args = parse_args()?;
-    let (introductions, entry_connections, middle_connections, _relay_tasks) = if args.protected {
-        let (introductions, entry, middle, tasks) =
+    let (
+        introductions,
+        entry_connections,
+        middle_connections,
+        _relay_tasks,
+        entry_addr,
+        middle_addr,
+    ) = if args.protected {
+        let (introductions, entry, middle, tasks, entry_addr, middle_addr) =
             protected_relays(args.cadence == "production").await;
-        (introductions, Some(entry), Some(middle), tasks)
+        (
+            introductions,
+            Some(entry),
+            Some(middle),
+            tasks,
+            Some(entry_addr),
+            Some(middle_addr),
+        )
     } else {
-        (Vec::new(), None, None, Vec::new())
+        (Vec::new(), None, None, Vec::new(), None, None)
     };
     let listen_a: std::net::SocketAddr = format!("127.0.0.1:{}", args.listen_a).parse().unwrap();
     let listen_b: std::net::SocketAddr = format!("127.0.0.1:{}", args.listen_b).parse().unwrap();
@@ -501,9 +519,6 @@ async fn main() -> Result<(), String> {
         }
     });
 
-    if args.idle_ms > 0 && args.chat_count == 0 && args.bulk_bytes == 0 {
-        tokio::time::sleep(Duration::from_millis(args.idle_ms)).await;
-    }
     let chat_body = vec![0x41; args.chat_bytes];
     let bulk_body = file_record_body(&vec![0x42; args.bulk_chunk]);
     let chat_interval = Duration::from_millis(args.chat_interval_ms);
@@ -546,6 +561,11 @@ async fn main() -> Result<(), String> {
     };
     let diagnostics = sender.diagnostics();
 
+    // An explicit idle phase runs after the workload so captures can compare
+    // ongoing activity with idle periods that follow it on warm circuits.
+    if args.idle_ms > 0 {
+        tokio::time::sleep(Duration::from_millis(args.idle_ms)).await;
+    }
     // Drain the workload before measuring the idle shaping delay, then send a
     // single message on the established session. The gate bounds the *one-way*
     // intentional shaping delay, so stop the drain task and time arrival at the
@@ -609,7 +629,7 @@ async fn main() -> Result<(), String> {
     let delivered = drained.load(Ordering::Relaxed);
 
     let record = format!(
-        "{{\"profile\":\"{}\",\"protected\":{},\"entry_connections\":{},\"middle_connections\":{},\"seed\":{},\"listen_a\":\"{}\",\"listen_b\":\"{}\",\"chat_count\":{},\"chat_sent\":{},\"chat_p50_ms\":{:.3},\"chat_p95_ms\":{:.3},\"chat_max_ms\":{:.3},\"single_delay_ms\":{:.3},\"single_one_way_ms\":{:.3},\"bulk_chunk\":{},\"bulk_chunks\":{},\"bulk_acked_bytes\":{},\"bulk_goodput_kib_s\":{:.3},\"failures\":{},\"recipient_drained\":{},\"sender_jobs\":{},\"sender_bytes\":{}}}\n",
+        "{{\"profile\":\"{}\",\"protected\":{},\"entry_connections\":{},\"middle_connections\":{},\"seed\":{},\"listen_a\":\"{}\",\"listen_b\":\"{}\",\"entry_addr\":\"{}\",\"middle_addr\":\"{}\",\"chat_count\":{},\"chat_sent\":{},\"chat_p50_ms\":{:.3},\"chat_p95_ms\":{:.3},\"chat_max_ms\":{:.3},\"single_delay_ms\":{:.3},\"single_one_way_ms\":{:.3},\"bulk_chunk\":{},\"bulk_chunks\":{},\"bulk_acked_bytes\":{},\"bulk_goodput_kib_s\":{:.3},\"failures\":{},\"recipient_drained\":{},\"sender_jobs\":{},\"sender_bytes\":{}}}\n",
         args.profile,
         args.protected,
         entry_connections
@@ -623,6 +643,8 @@ async fn main() -> Result<(), String> {
         args.seed,
         recipient_addr,
         sender_addr,
+        entry_addr.map(|a| a.to_string()).unwrap_or_default(),
+        middle_addr.map(|a| a.to_string()).unwrap_or_default(),
         args.chat_count,
         chat_sent,
         chat_p50_ms,
