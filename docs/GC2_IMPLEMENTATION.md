@@ -230,8 +230,10 @@ Retain failures, source/executable/configuration/workload hashes and exact scope
   measurements show each natural deposit opening a fresh circuit, so chat and
   bulk stay far outside the item-4 bounds on the protected path (chat p50
   5.8–16.7 s, single-message 2–9 s, bulk 8.2 KiB/s against 48.2 KiB/s GC/1 on
-  the same fixture); persistent class-channel reuse for deposits is the next
-  integration step.
+  the same fixture); both carrier classes now ride one fixed padded lattice with cover, and the
+  subscription pump warms each established peer's protected circuit, so idle
+  periods keep an open channel and the next deposit reuses it; the privacy
+  classifier is re-measuring that shape.
 - Complete GC/2 routing, protected-route qualification and the privacy/mobile
   gates: pending. Counter-window flow control, the application-send
   preparation/completion split, authenticated class propagation, GChat profile
