@@ -70,6 +70,8 @@ fn durable_file_records_are_bulk_while_chat_control_and_volatile_stay_interactiv
 async fn gc2_owned_retry_copies_are_charged_before_poll_and_released_on_cancel() {
     let mut node = persist::tests::state();
     node.gc2_sessions = true;
+    // Exercise the natural carrier branch as well as its retained GC/2 state.
+    node.gc2_carrier_client = Some(Arc::new(Tp1Client::new().unwrap()));
     let scheduler = node.scheduler.clone();
     let mut ack = delivery(&node, 1);
     ack.cells[0].payload = vec![0; gcoms_protocol::flow::CREDIT_BYTES];

@@ -30,6 +30,7 @@ struct Relays {
 
 async fn start_relay(
     ip: &str,
+    delay: Duration,
 ) -> (
     Arc<RelayService>,
     Arc<AtomicUsize>,
@@ -65,14 +66,19 @@ async fn start_relay(
         factory()
     }));
     let handle = tokio::spawn(async move {
+        tokio::time::sleep(delay).await;
         let _ = server.run_until(std::future::pending::<()>()).await;
     });
     (service, connections, handle)
 }
 
 async fn start_relays() -> Relays {
-    let (entry, entry_connections, entry_server) = start_relay("127.0.0.86").await;
-    let (middle, middle_connections, middle_server) = start_relay("127.0.0.87").await;
+    start_relays_after(Duration::ZERO).await
+}
+
+async fn start_relays_after(delay: Duration) -> Relays {
+    let (entry, entry_connections, entry_server) = start_relay("127.0.0.86", delay).await;
+    let (middle, middle_connections, middle_server) = start_relay("127.0.0.87", delay).await;
     Relays {
         entry,
         middle,
@@ -81,6 +87,51 @@ async fn start_relays() -> Relays {
         _entry_server: entry_server,
         _middle_server: middle_server,
     }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn cold_entry_readiness_retries_without_the_minute_timer() {
+    let relays = start_relays_after(Duration::from_secs(3)).await;
+    let introductions = seeds(&relays);
+    let profile = gcoms_routing::gc2::CandidateProfile::new(4096, 250)
+        .unwrap()
+        .with_mode(gcoms_routing::gc2::CoverMode::Interactive);
+    let a = endpoint(
+        101,
+        NodeProfile::gc2_carrier_qualification_fixture_seeded(None, 1, 101, introductions.clone())
+            .with_gc2_traffic_profile(profile)
+            .unwrap(),
+    )
+    .await;
+    let b = endpoint(
+        102,
+        NodeProfile::gc2_carrier_qualification_fixture_seeded(None, 1, 102, introductions)
+            .with_gc2_traffic_profile(profile)
+            .unwrap(),
+    )
+    .await;
+    a.enable_durable_applications().await.unwrap();
+    b.enable_durable_applications().await.unwrap();
+    let info = b.current_info().await.unwrap();
+    let id = a
+        .send_durable_1to1_tracked(&info, b"queued before entry readiness", None)
+        .await
+        .unwrap();
+    tokio::time::timeout(Duration::from_secs(25), async {
+        let delivered = receive(&b, 1).await;
+        assert_eq!(delivered[0].message_id, id);
+        assert_eq!(delivered[0].body, b"queued before entry readiness");
+        loop {
+            if matches!(a.next_event().await, Some(Ev::DirectDelivery {msg_id, ..}) if msg_id == id)
+            {
+                break;
+            }
+        }
+    })
+    .await
+    .expect("entry readiness must retry before the 60-second timer");
+    a.shutdown().await;
+    b.shutdown().await;
 }
 
 fn seeds(relays: &Relays) -> Vec<Vec<u8>> {
@@ -185,4 +236,41 @@ async fn protected_route_carries_durable_applications_through_the_circuit() {
 
     a.shutdown().await;
     b.shutdown().await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn missing_entries_defer_durable_delivery_without_direct_fallback() {
+    let a = endpoint(
+        91,
+        NodeProfile::gc2_carrier_qualification_fixture(None, 1, 91),
+    )
+    .await;
+    let b = endpoint(
+        92,
+        NodeProfile::gc2_carrier_qualification_fixture(None, 1, 92),
+    )
+    .await;
+    a.enable_durable_applications().await.unwrap();
+    b.enable_durable_applications().await.unwrap();
+    let info = b.current_info().await.unwrap();
+    a.send_durable_1to1(&info, b"must wait for a protected entry", None)
+        .await
+        .unwrap();
+    // Both terminal listeners are reachable, but neither directory has an
+    // entry. The old readiness fallback could deliver over direct TLS here.
+    let unexpected = tokio::time::timeout(Duration::from_secs(3), async {
+        loop {
+            if !b.application_inbox(0, 32).await.unwrap().is_empty() {
+                return;
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    })
+    .await;
+    a.shutdown().await;
+    b.shutdown().await;
+    assert!(
+        unexpected.is_err(),
+        "message escaped the protected route while entries were unavailable"
+    );
 }

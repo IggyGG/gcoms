@@ -59,6 +59,7 @@ struct ReadyEntry {
 #[derive(Default)]
 struct ReadyState {
     entries: RwLock<Vec<ReadyEntry>>,
+    revision: std::sync::atomic::AtomicU64,
 }
 
 /// A class-bound connector that selects only existing entries. Acquiring a new
@@ -68,6 +69,13 @@ pub struct ReadyConnector {
     state: Arc<ReadyState>,
 }
 impl ReadyConnector {
+    /// Local readiness changes only; applications cannot wake the entry owner.
+    pub fn readiness_revision(&self) -> u64 {
+        self.state
+            .revision
+            .load(std::sync::atomic::Ordering::Acquire)
+    }
+
     /// Local aggregate only; this is not a promise that a particular excluded
     /// terminal has an independent, fresh route through the current set.
     pub fn ready_entries(&self) -> usize {
@@ -399,6 +407,9 @@ impl Drop for ReadySlot {
             .write()
             .unwrap_or_else(|p| p.into_inner())
             .retain(|entry| entry.introduction.service_id != self.pin);
+        self.state
+            .revision
+            .fetch_add(1, std::sync::atomic::Ordering::Release);
     }
 }
 async fn maintain_entry(
@@ -425,6 +436,9 @@ async fn maintain_entry(
             introduction,
             carrier,
         });
+    state
+        .revision
+        .fetch_add(1, std::sync::atomic::Ordering::Release);
     driver.await
 }
 

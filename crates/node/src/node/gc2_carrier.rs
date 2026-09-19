@@ -88,6 +88,9 @@ pub(crate) fn spawn_subscriptions(
     let task = tokio::spawn(async move {
         let mut subscriptions = futures_util::stream::FuturesUnordered::new();
         let mut active = std::collections::HashSet::new();
+        let mut warmups = futures_util::stream::FuturesUnordered::new();
+        let mut warming = std::collections::HashSet::new();
+        let mut warm_cursor = 0usize;
         let mut clock = tokio::time::interval(std::time::Duration::from_millis(200));
         clock.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
         loop {
@@ -96,6 +99,10 @@ pub(crate) fn spawn_subscriptions(
                 _ = stopped.changed() => break,
                 Some(key) = subscriptions.next(), if !subscriptions.is_empty() => {
                     active.remove(&key);
+                    continue;
+                },
+                Some(key) = warmups.next(), if !warmups.is_empty() => {
+                    warming.remove(&key);
                     continue;
                 },
                 _ = clock.tick() => {},
@@ -135,10 +142,29 @@ pub(crate) fn spawn_subscriptions(
             // the next delivery reuses an established circuit instead of
             // paying a fresh entry->middle->terminal setup. A hanging connect
             // must never stall subscriptions.
-            for (addr, pin) in peers {
-                let _ =
-                    tokio::time::timeout(std::time::Duration::from_secs(5), client.warm(addr, pin))
+            // Warmups must be polled beside subscriptions, never awaited in
+            // this owner loop. A dead peer otherwise prevents all inbox drains
+            // and even shutdown for five seconds per peer.
+            if !peers.is_empty() {
+                for index in 0..peers.len() {
+                    if warming.len() >= 4 {
+                        break;
+                    }
+                    let key = peers[(warm_cursor.wrapping_add(index)) % peers.len()];
+                    if !warming.insert(key) {
+                        continue;
+                    }
+                    let client = client.clone();
+                    warmups.push(async move {
+                        let _ = tokio::time::timeout(
+                            std::time::Duration::from_secs(5),
+                            client.warm(key.0, key.1),
+                        )
                         .await;
+                        key
+                    });
+                }
+                warm_cursor = warm_cursor.wrapping_add(4);
             }
             for alias in aliases {
                 for class in [
@@ -236,6 +262,45 @@ async fn drain(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    struct UnavailableRoute;
+
+    impl gcoms_transport::connector::Connector for UnavailableRoute {
+        fn connect(
+            &self,
+            _addr: std::net::SocketAddr,
+            _service_id: [u8; 32],
+        ) -> gcoms_transport::connector::ConnectFuture<'_> {
+            Box::pin(async { Err("protected route unavailable".into()) })
+        }
+    }
+
+    #[tokio::test]
+    async fn failed_protected_deposit_never_dials_the_terminal_directly() {
+        let terminal = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let client = Tp1Client::with_connector(Arc::new(UnavailableRoute)).unwrap();
+        let contact = AliasContact {
+            target: gcoms_protocol::relay::RelayTarget {
+                address: terminal.local_addr().unwrap(),
+                relay_service_id: [0x52; 32],
+            },
+            queue_id: [0x53; 32],
+            epoch: 1,
+            push_cap: [0x54; 32],
+            expiry: now_unix() + 120,
+        };
+        let result = tokio::select! {
+            accepted = terminal.accept() => panic!("protected deposit bypassed its route: {accepted:?}"),
+            result = deliver(&client, &contact, gcoms_core::TrafficClass::Interactive, b"ciphertext") => result,
+            _ = tokio::time::sleep(std::time::Duration::from_secs(2)) => panic!("route refusal did not complete"),
+        };
+        assert!(result.unwrap_err().contains("protected route unavailable"));
+        assert!(
+            tokio::time::timeout(std::time::Duration::from_millis(50), terminal.accept())
+                .await
+                .is_err()
+        );
+    }
 
     #[test]
     fn deposit_expiry_never_exceeds_the_alias_lifetime() {
