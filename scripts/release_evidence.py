@@ -239,6 +239,7 @@ def validate_publication(config, project, version):
         for platform in ("windows", "macos", "linux"):
             identity = config.get("publisher_identities", {}).get(platform)
             require(isinstance(identity, dict) and nonempty(identity.get("name")) and nonempty(identity.get("certificate_fingerprint")), f"missing {platform} distribution signer")
+            require(re.fullmatch(r"(?:[A-Fa-f0-9]{40}|[A-Fa-f0-9]{64})", identity["certificate_fingerprint"].replace(" ", "")), f"invalid {platform} distribution fingerprint")
 
 
 def validate(candidate, base, stage="candidate", repositories=None, publication=None):
@@ -248,6 +249,7 @@ def validate(candidate, base, stage="candidate", repositories=None, publication=
         require(isinstance(candidate, dict) and type(candidate.get("schema_version")) is int and candidate["schema_version"] == 1, "unsupported candidate schema")
         require(candidate.get("channel") == "developer-preview" and candidate.get("wire_profile") == "GC/1", "candidate is not the GC/1 developer preview")
         require(nonempty(candidate.get("version")), "missing candidate version")
+        require(candidate.get("signing_policy", "publicly-trusted") in {"publicly-trusted", "self-signed-preview"}, "unsupported candidate signing policy")
         require(candidate.get("targets") == list(TARGETS), "candidate must retain Linux, Windows, and both macOS qualification targets")
         validate_sources(candidate, base, repositories)
         artifacts = candidate.get("artifacts")

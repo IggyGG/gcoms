@@ -68,6 +68,24 @@ class EvidenceTests(unittest.TestCase):
         self.assertEqual(self.errors(), [])
         self.assertTrue(release.validate(self.candidate, self.base, "preflight"))
 
+    def test_unknown_signing_policy_and_preview_publication_mismatch_fail(self):
+        self.candidate["signing_policy"] = "unsigned"
+        self.assertTrue(any("signing policy" in error for error in self.errors()))
+        config = {
+            "project": "gchat", "version": "0.1.0", "channel": "developer-preview",
+            "publication_status": "approved_by_owner", "signing_policy": "self-signed-preview",
+            "public_repository_url": "https://github.com/IggyGG/gchat",
+            "companion_url": "https://github.com/IggyGG/gcoms",
+            "security_contact": "iggy@gchat.boo", "conduct_contact": "iggy@gchat.boo",
+            "maintainers": ["IggyGG"],
+            "publisher_identities": {platform: {"name": "Gh0st", "certificate_fingerprint": "A" * 40}
+                                     for platform in ("linux", "windows", "macos")},
+        }
+        release.validate_publication(config, "gchat", "0.1.0")
+        config["channel"] = "stable"
+        with self.assertRaisesRegex(release.EvidenceError, "preview channel"):
+            release.validate_publication(config, "gchat", "0.1.0")
+
     def test_truthy_strings_and_booleans_cannot_replace_success(self):
         check = "native.gcoms.linux-x86_64"
         original = copy.deepcopy(self.reports[check])
