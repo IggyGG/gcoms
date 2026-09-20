@@ -1,12 +1,17 @@
 //! Registration and dispatch for a shared machine transport. Local credentials
 //! select a component; they do not claim isolation from the owning OS account.
 
+use crate::{ipc::Capability, SdkError};
+#[cfg(all(any(unix, windows), feature = "ipc"))]
 use crate::{
-    ipc::{Capability, Request, Response},
-    ApplicationMessage, ContactCard, GcClient, SdkError,
+    ipc::{Request, Response},
+    ApplicationMessage, ContactCard, GcClient,
 };
-use gcoms_core::component::{ComponentId, RoutedApplication};
+use gcoms_core::component::ComponentId;
+#[cfg(all(any(unix, windows), feature = "ipc"))]
+use gcoms_core::component::RoutedApplication;
 use serde::{Deserialize, Serialize};
+#[cfg(all(any(unix, windows), feature = "ipc"))]
 use zeroize::Zeroizing;
 
 #[derive(Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -179,6 +184,7 @@ impl MachineRegistry {
         Ok(())
     }
 
+    #[cfg(all(any(unix, windows), feature = "ipc"))]
     pub(crate) fn authenticate(
         &self,
         credentials: &ComponentCredentials,
@@ -265,6 +271,7 @@ impl ComponentRegistration {
         }
     }
 
+    #[cfg(all(any(unix, windows), feature = "ipc"))]
     fn incoming(&self, peer_identity: &[u8], body: &[u8]) -> Result<RoutedApplication, SdkError> {
         let route = RoutedApplication::decode(body).map_err(|_| SdkError::PermissionDenied)?;
         let app = ApplicationMessage::decode(&route.application)?;
@@ -280,6 +287,7 @@ impl ComponentRegistration {
         Ok(route)
     }
 
+    #[cfg(all(any(unix, windows), feature = "ipc"))]
     async fn send<C: GcClient>(
         &self,
         client: &C,

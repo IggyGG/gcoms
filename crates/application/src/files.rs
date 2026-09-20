@@ -78,9 +78,10 @@ impl Files {
             let mut piece = 0;
             while remaining != 0 {
                 let count = remaining.min(PIECE_BYTES as u64) as usize;
-                let mut bytes = vec![0; count];
+                let mut bytes = zeroize::Zeroizing::new(vec![0; count]);
                 input.read_exact(&mut bytes).await.map_err(io)?;
-                self.write_piece(id, piece, bytes).await?;
+                self.write_piece(id, piece, std::mem::take(&mut *bytes))
+                    .await?;
                 remaining -= count as u64;
                 piece += 1;
             }
@@ -127,7 +128,7 @@ impl Files {
         let mut remaining = file.size_bytes;
         let mut piece = 0;
         while remaining != 0 {
-            let bytes = self.read_piece(id, piece).await?;
+            let bytes = zeroize::Zeroizing::new(self.read_piece(id, piece).await?);
             if bytes.len() as u64 != remaining.min(PIECE_BYTES as u64) {
                 return Err(SdkError::Protocol("invalid exported piece length".into()));
             }

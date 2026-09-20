@@ -443,6 +443,7 @@ impl Transport for GcTransport {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use gcoms_sdk::ContactCard;
     use std::sync::atomic::{AtomicBool, Ordering};
 
     #[derive(Default)]

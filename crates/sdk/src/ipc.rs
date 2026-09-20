@@ -1,9 +1,11 @@
 //! Versioned messages shared by daemon and SDK IPC backends.
 
+#[cfg(any(test, all(any(unix, windows), feature = "ipc")))]
+use crate::ApplicationMessage;
 use crate::{
-    ActivityBucket, ApplicationMessage, AutomaticJoinEndpoint, Blob, ChannelId,
-    ChannelMemberSummary, ChannelVisibility, ClientEvent, ContactCard, Identity, JoinRequest,
-    JoinedChannel, PresenceMode, PublicChannelDescriptor, SdkError,
+    ActivityBucket, AutomaticJoinEndpoint, Blob, ChannelId, ChannelMemberSummary,
+    ChannelVisibility, ClientEvent, ContactCard, Identity, JoinRequest, JoinedChannel,
+    PresenceMode, PublicChannelDescriptor, SdkError,
 };
 use serde::{Deserialize, Serialize};
 use zeroize::{Zeroize, Zeroizing};
@@ -333,6 +335,7 @@ impl Request {
 
     fn validate_application_payload(&self) -> Result<(), SdkError> {
         match self {
+            Self::Sharing(request) => request.validate(),
             Self::CatalogHttp(request) => request.validate_size(),
             Self::ConfigureCatalogOrigins { origins }
                 if origins.len() > 8 || origins.iter().any(|h| h.len() > 253) =>
@@ -449,6 +452,9 @@ pub fn encode(frame: &Frame) -> Result<Vec<u8>, SdkError> {
 impl Zeroize for Request {
     fn zeroize(&mut self) {
         match self {
+            Self::Sharing(crate::sharing::Request::WritePiece { bytes, .. }) => {
+                bytes.as_mut_slice().zeroize()
+            }
             Self::ImportNetworkInvitation { invitation } => invitation.zeroize(),
             Self::JoinChannelInvitation { link, .. } | Self::InspectChannelInvitation { link } => {
                 link.zeroize()
@@ -3491,6 +3497,25 @@ mod application_version_tests {
 #[cfg(test)]
 mod sharing_version_tests {
     use super::*;
+    #[test]
+    fn sharing_upload_is_bounded_at_codec_and_clears_owned_bytes() {
+        let mut request = Request::Sharing(crate::sharing::Request::WritePiece {
+            id: [1; 16],
+            piece: 0,
+            bytes: vec![7; crate::sharing::PIECE_BYTES + 1],
+        });
+        assert!(encode(&Frame::Request(RequestEnvelope {
+            version: VERSION,
+            request_id: 1,
+            request: request.clone()
+        }))
+        .is_err());
+        request.zeroize();
+        let Request::Sharing(crate::sharing::Request::WritePiece { bytes, .. }) = request else {
+            panic!("wrong request")
+        };
+        assert!(bytes.iter().all(|b| *b == 0));
+    }
     #[test]
     fn sharing_and_status_append_without_reusing_prior_tags() {
         let request = Request::Sharing(crate::sharing::Request::List);

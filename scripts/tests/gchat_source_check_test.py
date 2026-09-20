@@ -77,15 +77,15 @@ class SourceCheckTest(unittest.TestCase):
     def test_patch_covers_only_protocol_packages_inside_the_workspace(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp).resolve()
-            members = ['crates/node', 'crates/sdk', 'crates/rpc', 'examples/client']
+            members = ['crates/application', 'crates/runtime', 'crates/node', 'crates/sdk', 'crates/rpc', 'examples/client']
             (root / 'Cargo.toml').write_text('[workspace]\nmembers=' + repr(members).replace("'", '"') + '\n')
-            for member, name in zip(members, ['gcoms-node', 'gcoms-sdk', 'gcoms-rpc', 'example-client']):
+            for member, name in zip(members, ['gcoms', 'gcoms-runtime', 'gcoms-node', 'gcoms-sdk', 'gcoms-rpc', 'example-client']):
                 directory = root / member
                 directory.mkdir(parents=True)
                 (directory / 'Cargo.toml').write_text(f'[package]\nname="{name}"\n')
             encoded, names = check.patches(root)
             parsed = check.tomllib.loads(encoded)['patch']['crates-io']
-            self.assertEqual(names, ['gcoms-node', 'gcoms-rpc', 'gcoms-sdk'])
+            self.assertEqual(names, ['gcoms', 'gcoms-node', 'gcoms-rpc', 'gcoms-runtime', 'gcoms-sdk'])
             self.assertEqual(sorted(parsed), names)
             self.assertTrue(all(Path(item['path']).is_relative_to(root) for item in parsed.values()))
 

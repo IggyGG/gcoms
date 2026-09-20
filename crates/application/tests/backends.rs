@@ -473,6 +473,23 @@ async fn qualify_files(backend: Backend, dir: &Path) {
         .open()
         .await
         .unwrap();
+    if let Backend::Attach { endpoint } = &backend {
+        let unauthorized = dir.join("unopened-cache");
+        assert!(gcoms::control::exchange(
+            endpoint,
+            gcoms::control::Request::ConfigureFileCache {
+                profile: path.clone(),
+                token: [0; 32],
+                path: unauthorized.clone(),
+                key: [0; 32],
+                config: Default::default(),
+            }
+        )
+        .await
+        .unwrap_err()
+        .contains("credential rejected"));
+        assert!(!unauthorized.exists());
+    }
     let channel = app
         .messaging()
         .create_channel("files", "owner", 8, ChannelVisibility::Private)
@@ -564,6 +581,154 @@ async fn file_streaming_reopen_and_bounds_ipc() {
     gcoms::runtime::private_fs::make_private(dir.path(), true).unwrap();
     let (endpoint, stop, task) = daemon(dir.path()).await;
     qualify_files(Backend::Attach { endpoint }, dir.path()).await;
+    let _ = stop.send(());
+    task.await.unwrap().unwrap();
+}
+
+#[cfg(feature = "files")]
+#[tokio::test]
+async fn files_cross_embedded_and_ipc_with_pause_resume_and_current_membership() {
+    use gcoms::sdk::sharing::{Scope, Status};
+    let dir = tempfile::tempdir().unwrap();
+    gcoms::runtime::private_fs::make_private(dir.path(), true).unwrap();
+    let (endpoint, stop, task) = daemon(dir.path()).await;
+    let source = builder(
+        &dir.path().join("source"),
+        "source",
+        Backend::Embedded,
+        port(),
+    )
+    .receive_messages(false)
+    .open()
+    .await
+    .unwrap();
+    let receiver = builder(
+        &dir.path().join("receiver"),
+        "receiver",
+        Backend::Attach { endpoint },
+        port(),
+    )
+    .receive_messages(false)
+    .open()
+    .await
+    .unwrap();
+    let channel = source
+        .messaging()
+        .create_channel("shared", "owner", 8, ChannelVisibility::Private)
+        .await
+        .unwrap();
+    let pending = receiver
+        .messaging()
+        .prepare_channel_join("receiver")
+        .await
+        .unwrap();
+    let package = receiver
+        .messaging()
+        .channel_key_package(pending)
+        .await
+        .unwrap();
+    let welcome = source
+        .messaging()
+        .admit_channel("shared", &package, "receiver")
+        .await
+        .unwrap();
+    receiver
+        .messaging()
+        .join_channel(pending, "shared", ChannelVisibility::Private, &welcome)
+        .await
+        .unwrap();
+    receiver.files().list().await.unwrap();
+    let content = vec![0x35; 256 * 1024 + 13];
+    let id = source
+        .files()
+        .import(
+            Scope {
+                channel: channel.0,
+                participants: vec![],
+            },
+            "shared.bin".into(),
+            content.len() as u64,
+            &mut content.as_slice(),
+        )
+        .await
+        .unwrap();
+    tokio::time::timeout(Duration::from_secs(15), async {
+        while !receiver
+            .files()
+            .list()
+            .await
+            .unwrap()
+            .files
+            .iter()
+            .any(|f| f.id == id)
+        {
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .unwrap();
+    receiver.files().accept(id).await.unwrap();
+    receiver.files().pause(id).await.unwrap();
+    assert_eq!(
+        receiver.files().list().await.unwrap().files[0].status,
+        Status::Paused
+    );
+    receiver.files().resume(id).await.unwrap();
+    tokio::time::timeout(Duration::from_secs(25), async {
+        while receiver.files().list().await.unwrap().files[0].status != Status::Complete {
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .expect("mixed backend transfer completes");
+    let mut exported = Vec::new();
+    receiver.files().export(id, &mut exported).await.unwrap();
+    assert_eq!(exported, content);
+    let member = receiver
+        .messaging()
+        .channel_roster("shared")
+        .await
+        .unwrap()
+        .into_iter()
+        .find(|m| m.is_self)
+        .unwrap()
+        .member_id;
+    source
+        .messaging()
+        .remove_channel_member("shared", member)
+        .await
+        .unwrap();
+    tokio::time::timeout(Duration::from_secs(10), async {
+        loop {
+            if receiver
+                .messaging()
+                .list_channels()
+                .await
+                .unwrap()
+                .iter()
+                .all(|c| c.status != gcoms::sdk::ChannelStatus::Active)
+            {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .unwrap();
+    assert!(receiver
+        .files()
+        .prepare(
+            Scope {
+                channel: channel.0,
+                participants: vec![]
+            },
+            "forbidden.bin".into(),
+            1
+        )
+        .await
+        .is_err());
+    source.stop_profile().await.unwrap();
+    receiver.stop_profile().await.unwrap();
     let _ = stop.send(());
     task.await.unwrap().unwrap();
 }

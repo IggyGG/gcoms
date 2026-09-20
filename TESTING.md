@@ -49,7 +49,9 @@ mixed message delivery, channel invitations, profile restart and replay,
 credential/capability denial, exclusive inbox attachment, and bundled daemon startup.
 A reconnection timeout is recovered with the original operation handle; the
 handler effect must remain single. Runtime storage and shutdown regressions now
-live in `gcoms-runtime`. IPC17 appends operations without changing GC/1 or GCPRT1.
+live in `gcoms-runtime`. IPC18 appends file sharing/network status after IPC17
+without changing GC/1 or GCPRT1. Control protocol 2 carries explicit carrier
+selection and owner-authenticated legacy file-cache configuration.
 
 Also compile the facade with `--no-default-features --features ipc`,
 `--no-default-features --features embedded`, and
@@ -237,3 +239,17 @@ rejection, matched lifecycle/file requirements, and IPC waits bounded by the
 declared phase rather than an unrelated controller timeout. Use the managed
 runner on the workstation. Native namespace/capture tools are needed only for
 the separate actual-daemon calibration command, not these unit tests.
+
+## Minimal native Rust integrations
+
+Run `python3 scripts/check-rust-integrations.py` for isolated consumer graph checks,
+or add `--measure` for stripped opt-level 3/s/z executables. The standalone example
+has its own lockfile and enables only `files` plus the selected backend. Reports
+record native OS/architecture, toolchain, source revision, consumer hashes and byte
+counts. `.github/workflows/rust-integrations.yml` executes backend/SDK/swarm tests
+and these measurements on Linux, macOS arm64 and macOS x86_64. A successful local
+Linux run does not substitute for those native macOS jobs.
+
+The relocated production bootstrap fixture runs with
+`scripts/test-bootstrap-namespace.py --binary <gcoms-runtime-test-binary> --output <evidence-directory>`.
+It remains isolated from operated networks and retains its own bounded deadline.

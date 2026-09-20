@@ -34,11 +34,14 @@ def main():
     # Retain exact consumer code and manifest digest alongside the source revision.
     report['consumer_sha256'] = {str(p.relative_to(ROOT)): hashlib.sha256(p.read_bytes()).hexdigest()
                                  for p in [MANIFEST, MANIFEST.parent / 'src/main.rs']}
+    source_paths = subprocess.check_output(['git', 'ls-files', '-z', '--cached', '--others', '--exclude-standard'], cwd=ROOT).decode().split('\0')
+    source_paths = sorted({name for name in source_paths if name and (name.endswith('.rs') or Path(name).name in ('Cargo.toml', 'Cargo.lock')) and (ROOT / name).is_file()})
+    report['source_sha256'] = {name: hashlib.sha256((ROOT / name).read_bytes()).hexdigest() for name in source_paths}
     for mode in args.modes:
         options = ['--manifest-path', str(MANIFEST), '--no-default-features', '--features', mode]
         # cargo metadata includes inactive optional dependency edges. cargo tree
         # reports the actual target's resolved normal/build graph.
-        tree = subprocess.check_output(['cargo', 'tree', *options, '--edges', 'normal,build', '--prefix', 'none', '--format', '{p}|{f}'], cwd=ROOT, env=environment, text=True)
+        tree = subprocess.check_output(['cargo', 'tree', *options, '--locked', '--edges', 'normal,build', '--prefix', 'none', '--format', '{p}|{f}'], cwd=ROOT, env=environment, text=True)
         graph = {}
         for line in tree.splitlines():
             package, features = line.split('|', 1)
@@ -68,7 +71,20 @@ def main():
             report['binaries'].append({'mode': mode, 'opt_level': profile, 'bytes': len(data),
                                        'sha256': hashlib.sha256(data).hexdigest(), 'artifact': retained.name})
             (output / 'summary.json').write_text(json.dumps(report, indent=2) + '\n')
+    if args.measure and 'ipc' in args.modes:
+        # The IPC client's footprint excludes this separate host. Report it too.
+        build_env = dict(environment, CARGO_PROFILE_RELEASE_OPT_LEVEL='s', CARGO_PROFILE_RELEASE_LTO='true',
+                         CARGO_PROFILE_RELEASE_CODEGEN_UNITS='1', CARGO_PROFILE_RELEASE_STRIP='symbols', CARGO_PROFILE_RELEASE_PANIC='unwind')
+        subprocess.run(['cargo', 'build', '-p', 'gcoms', '--no-default-features', '--features', 'daemon,files,gc2-carrier', '--bin', 'gcomsd', '--locked', '--release'], cwd=ROOT, env=build_env, check=True)
+        executable = target / 'release' / ('gcomsd.exe' if os.name == 'nt' else 'gcomsd')
+        retained = output / ('host-opt-s' + executable.suffix)
+        shutil.copy2(executable, retained)
+        data = retained.read_bytes()
+        report['binaries'].append({'mode': 'host', 'opt_level': 's', 'bytes': len(data),
+                                   'sha256': hashlib.sha256(data).hexdigest(), 'artifact': retained.name})
     (output / 'summary.json').write_text(json.dumps(report, indent=2) + '\n')
+    if any(hashlib.sha256((ROOT / name).read_bytes()).hexdigest() != digest for name, digest in report['source_sha256'].items()):
+        raise RuntimeError('Rust source changed during size qualification; rerun after changes settle')
     print(json.dumps({'graphs': {k: len(v) for k, v in report['graphs'].items()}, 'binaries': report['binaries']}, indent=2))
 
 

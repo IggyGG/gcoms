@@ -172,7 +172,7 @@ GChat keeps its archives and can adapt a legacy combined store through the runti
 storage interface. Existing machine/central-owned profiles are refused by this
 unscoped application API.
 
-Run `cargo test -p gcoms --test backends -- --test-threads=1` for both backends,
+Run `cargo test -p gcoms --all-features --test backends -- --test-threads=1` for both backends,
 mixed RPC/messages, invite redemption, restart/replay, credentials, consumer
 leases and bundled daemon startup on Unix and Windows. The archived external consumer gate uses
 only a renamed `gcoms` dependency, which also checks macro path resolution.
