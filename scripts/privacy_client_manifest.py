@@ -9,7 +9,7 @@ from pathlib import Path
 import re
 import subprocess
 
-from privacy_packets import sha256
+from privacy_packets import sha256, write_new
 from privacy_client_packets import capture_counts, observer_features, read_frames
 
 SCOPE = 'isolated_gchat_daemon_explicit_bootstrap_v1'
@@ -88,7 +88,12 @@ def validate_capture(root, plan):
         require(meta['workload'] in WORKLOADS and meta['seed'] == plan['seed'], 'undeclared workload or seed')
         require(meta['config'] == plan['config'] and meta['build'] == plan['build'], 'configuration/build mismatch')
         for name, digest in plan['tooling'].items():
-            require(sha256(Path(__file__).with_name(name)) == digest, 'capture tooling changed during run')
+            require(sha256(bound_path(root.parent / 'tooling', name)) == digest, 'capture source snapshot changed')
+        require(outer.get('tooling_unchanged') is True, 'capture tooling changed during run')
+        require(set(meta['private_inputs']) == {'bootstrap', 'resolver', 'nsswitch', 'c0/bootstrap', 'c0/card', 'c1/bootstrap', 'c1/card'}, 'private configuration bindings missing')
+        for name, digest in meta['private_inputs'].items():
+            require(sha256(bound_path(root, name)) == digest, 'private configuration changed: ' + name)
+        require(meta['bootstrap_sha256'] == meta['private_inputs']['bootstrap'], 'bootstrap binding mismatch')
         config = meta['config']
         require(config['profile_id'] == 22 and config['bootstrap_version'] == 2 and config['entries'] == 2
                 and config['cadence'] == 'production' and config['local_fixture'] is False
@@ -133,6 +138,7 @@ def validate_capture(root, plan):
                     and status['routing_ready'] is True and status['usable_terminal_routes'] > 0
                     and status['interactive_subscriptions'] >= 2 and status['bulk_subscriptions'] >= 2, 'unqualified transport readiness')
         require(len(meta['readiness']) == 2, 'both client readiness observations required')
+        require(not any(e['event'] == 'operation_response_unobserved' for e in events), 'operation response was not observed; inspect retained operation IDs')
         for e in events:
             if e['event'].startswith(('chat_', 'file_')):
                 require(times[2] <= e['unix_seconds'] <= times[3], 'workload escaped matched measurement window')
@@ -163,7 +169,9 @@ def validate_capture(root, plan):
                       epoch_phase_seconds=times[1] % 3600,
                       crossed_credential_epoch=int(times[1] // 3600) != int(times[5] // 3600),
                       features=observer_features(frames, times[2], config['seconds'], times[1], times[6]),
-                      manifest_sha256=sha256(root / 'worker.json'), pcap_sha256=sha256(root / 'observer.pcap'))
+                      manifest_sha256=sha256(root / 'worker.json'), pcap_sha256=sha256(root / 'observer.pcap'),
+                      analysis_tooling={n: sha256(Path(__file__).with_name(n)) for n in
+                          ('privacy_client_manifest.py', 'privacy_client_packets.py', 'privacy_packets.py')})
     except (OSError, ValueError, TypeError, KeyError, IndexError, subprocess.SubprocessError) as error:
         report['error'] = str(error)
     return report
@@ -192,3 +200,21 @@ def validate_quartet(reports, plan):
     except (ValueError, TypeError, KeyError) as error:
         result['error'] = str(error)
     return result
+
+
+def main():
+    import argparse
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--root', type=Path, required=True)
+    parser.add_argument('--output', type=Path, required=True, help='new report path; existing evidence cannot be overwritten')
+    args = parser.parse_args()
+    plan = json.loads((args.root / 'plan.json').read_text())
+    reports = [validate_capture(args.root / w, plan) for w in plan['order']]
+    report = validate_quartet(reports, plan)
+    write_new(args.output, json.dumps(report, indent=2, allow_nan=False) + '\n')
+    print(json.dumps(report, indent=2))
+    return 0 if report['measurement_valid'] else 1
+
+
+if __name__ == '__main__':
+    raise SystemExit(main())

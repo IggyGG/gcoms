@@ -95,6 +95,7 @@ class Worker:
                        'config': spec['config'], 'build': spec['build'], 'completed': False}
         self.capture = self.loop_capture = self.holder = None
         self.clients = []
+        self.rpc_deadline = None
         self.env = {'PATH': '/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin', 'LANG': 'C.UTF-8',
                     'HOME': '/mnt/home', 'TMPDIR': '/mnt/tmp', 'XDG_RUNTIME_DIR': '/mnt/run',
                     'TOKIO_WORKER_THREADS': '2'}
@@ -283,6 +284,9 @@ class Worker:
             card = self.control(inbox, 'provision_client_relay')['private_card_b64']
             self.private(folder / 'card', card + '\n')
             self.private(folder / 'bootstrap', b'GCRB\x02\x03' + b''.join(r for i, r in enumerate(records) if i != inbox))
+        self.result['private_inputs'] = {str(p.relative_to(self.root)): sha256(p) for p in
+            [self.root / 'bootstrap', self.root / 'resolver', self.root / 'nsswitch',
+             *[self.root / f'c{i}' / n for i in (0, 1) for n in ('bootstrap', 'card')]]}
 
     def start_client(self, i):
         folder = self.root / f'c{i}'
@@ -309,7 +313,10 @@ class Worker:
                 result += chunk
             return result
         with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as stream:
-            stream.settimeout(35)
+            remaining = self.rpc_deadline - time.monotonic() if self.rpc_deadline else 30
+            if remaining <= 0:
+                raise TimeoutError('declared IPC phase deadline elapsed')
+            stream.settimeout(remaining)
             stream.connect(str(self.root / f'c{i}/probe.sock'))
             raw = json.dumps(request).encode()
             stream.sendall(struct.pack('!I', len(raw)) + raw)
@@ -330,8 +337,16 @@ class Worker:
         return self.request(i, 'files', request={'action': action, **values})['snapshot']
 
     def submit(self, i, text, conversation=None):
-        return self.request(i, 'submit', operation_id=uuid.uuid4().hex,
-                            text=text, conversation=conversation)
+        operation = uuid.uuid4().hex
+        command = text.split()[0] if text.startswith('/') else 'message'
+        self.event('operation_requested', client=i, operation_id=operation, command=command)
+        try:
+            value = self.request(i, 'submit', operation_id=operation, text=text, conversation=conversation)
+            self.event('operation_response', client=i, operation_id=operation, command=command)
+            return value
+        except Exception as error:
+            self.event('operation_response_unobserved', client=i, operation_id=operation, command=command, error=str(error))
+            raise
 
     def readiness(self, i):
         observations = []
@@ -385,6 +400,7 @@ class Worker:
         for i in (0, 1):
             self.start_client(i)
         deadline = start + self.spec['config']['warmup_seconds'] - 10
+        self.rpc_deadline = deadline
         statuses = []
         for i in (0, 1):
             until(lambda i=i: self.request(i, 'snapshot'), deadline, 'daemon IPC startup')
@@ -406,6 +422,7 @@ class Worker:
         begin = start + self.spec['config']['warmup_seconds']
         end = begin + self.spec['config']['seconds']
         wait_until(begin)
+        self.rpc_deadline = end
         self.result['measurement_started_epoch'] = time.time()
         self.event('measurement_start')
         chat = []
@@ -493,10 +510,13 @@ class Worker:
                     self.stop(process)
             self.stop(self.capture, signal.SIGINT)
             self.stop(self.loop_capture, signal.SIGINT)
+            self.result.setdefault('capture_finished_epoch', time.time())
             self.stop(self.holder)
             self.result['children'] = [{'role': role, 'pid': p.pid, 'returncode': p.poll()} for role, p in self.children]
             self.result['children_stopped'] = all(p.poll() is not None for _, p in self.children)
-            self.result['host_contact_possible'] = False  # topology must independently validate this assertion
+            self.result['capture_returncode'] = self.capture.poll() if self.capture else None
+            self.result['loopback_capture_returncode'] = self.loop_capture.poll() if self.loop_capture else None
+            self.result['application_returncodes'] = [p.poll() for p in self.clients]
             for name in ('observer.pcap', 'observer.capture.log', 'loopback.pcap', 'loopback.capture.log', 'events.jsonl', 'client0.log', 'client1.log', *[f'r{i}/metrics.jsonl' for i in range(4)]):
                 path = self.original_root / name
                 if path.exists():
@@ -515,7 +535,7 @@ def main():
     parser.add_argument('--build', type=Path, required=True)
     parser.add_argument('--out', type=Path, required=True)
     parser.add_argument('--seed', type=int, default=20260920)
-    parser.add_argument('--warmup-seconds', type=int, default=120)
+    parser.add_argument('--warmup-seconds', type=int, default=180)
     parser.add_argument('--seconds', type=int, default=60)
     parser.add_argument('--file-bytes', type=int, default=65536)
     args = parser.parse_args()
@@ -534,11 +554,17 @@ def main():
     order = list(WORKLOADS); random.Random(args.seed).shuffle(order)
     plan = {'schema': 1, 'scope': SCOPE, 'order': order, 'seed': args.seed, 'config': config,
         'build': build, 'tooling': {n: sha256(Path(__file__).with_name(n)) for n in
-            ('privacy-client-capture.py', 'privacy_client_packets.py', 'privacy_client_manifest.py')},
+            ('privacy-client-capture.py', 'privacy_client_packets.py', 'privacy_client_manifest.py', 'privacy_packets.py')},
         'decoder': run(['tshark', '--version']).splitlines()[0],
         'capture_tool': run(['tcpdump', '--version']).splitlines()[0],
         'diagnostic_only': True, 'release_qualified': False}
     write_new(root / 'plan.json', json.dumps(plan, indent=2) + '\n')
+    (root / 'tooling').mkdir(mode=0o700)
+    for name, digest in plan['tooling'].items():
+        data = Path(__file__).with_name(name).read_bytes()
+        if hashlib.sha256(data).hexdigest() != digest:
+            raise RuntimeError('tooling changed while retaining source snapshot')
+        (root / 'tooling' / name).write_bytes(data)
     reports = []
     from privacy_client_manifest import validate_capture, validate_quartet
     for workload in order:
@@ -558,7 +584,8 @@ def main():
         after = links()
         boundary = {'host_links_unchanged': link_identity(before) == link_identity(after),
                     'before': before, 'after': after, 'worker_returncode': completed.returncode,
-                    'build_unchanged': build_binding(args.build.resolve()) == build}
+                    'build_unchanged': build_binding(args.build.resolve()) == build,
+                    'tooling_unchanged': all(sha256(Path(__file__).with_name(n)) == h for n, h in plan['tooling'].items())}
         write_new(out / 'outer.json', json.dumps(boundary, indent=2) + '\n')
         report = validate_capture(out, plan)
         write_new(out / 'validity.json', json.dumps(report, indent=2, allow_nan=False) + '\n')

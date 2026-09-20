@@ -17,7 +17,7 @@ run as the invoking user. No fleet server, SSH deployment or production relay is
 involved.
 
 The privileged worker also has disposable mount and PID namespaces. Its private
-resolver uses `files dns`, an unreachable fixture-only DNS address, and hides
+resolver uses `files dns`, a fixture-only DNS address with no resolver service, and hides
 nscd's host pathname if present. Application environment is constructed explicitly;
 bootstrap/provider/proxy/desktop-service settings are not inherited. A bounded
 watchdog and PID-namespace teardown contain descendants. Normal completion
@@ -47,7 +47,7 @@ hashes are bound into every run. A historical artifact validates only that
 historical source pair, regardless of the current checkout. The controller binds
 its own source hashes and the decoder versions separately.
 
-Default timing is 120 seconds from observed daemon launch to measurement, then
+Default timing is 180 seconds from observed daemon launch to measurement, then
 60 seconds of measurement. Setup must finish within the fixed allowance. Every
 workload uses fresh cryptographic identities and state. The numeric seed controls
 workload order and the matched file bytes, never cryptographic identity or
@@ -55,7 +55,8 @@ transport randomness. Chat/mixed send two messages with distinct IDs and require
 receiver delivery plus a returned application acknowledgment for each. Bulk/mixed
 use the same 64 KiB file identity, bytes, receiver role, explicit acceptance,
 retention and quota policy; independent export size/hash verification and an
-authenticated terminal Bulk acceptance diagnostic are required. All workload
+authenticated terminal Bulk acceptance diagnostic are required. IPC response waits use the remaining declared setup or measurement deadline;
+operation IDs and missing responses are retained. All workload
 receipts must fall inside the measurement window. A failed capture stops the
 sequence before allocating further runs.
 
@@ -108,3 +109,15 @@ idle/chat and matched bulk/mixed, for windows and observer connection features.
 Invalid data or exceeded bounds fail; unfavorable evidence must be retained.
 There is no statistical matrix in this calibration driver and no waiver of the
 installed-client or fleet gates.
+
+To revalidate retained raw evidence without starting applications or namespaces:
+
+```sh
+python3 scripts/privacy_client_manifest.py \
+  --root target/client-capture-calibration-NEW \
+  --output target/client-capture-calibration-NEW/reanalysis.json
+```
+
+The archived capture scripts are checked against the collection manifest; the
+current analysis script hashes are reported separately. Reanalysis does not
+rewrite the original validity or packet evidence.

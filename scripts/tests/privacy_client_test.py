@@ -7,6 +7,7 @@ import struct
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
 SCRIPTS = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(SCRIPTS))
@@ -106,6 +107,39 @@ class ClientPacketsTest(unittest.TestCase):
         for bad in ('0 packets dropped by kernel\n', '1 packets captured\n1 packets captured\n1 packets received by filter\n0 packets dropped by kernel\n'):
             with self.assertRaises(ValueError):
                 capture_counts(bad)
+
+
+class ClientIpcDeadlineTest(unittest.TestCase):
+    def test_long_setup_response_uses_phase_budget_and_expired_budget_refuses_io(self):
+        spec = importlib.util.spec_from_file_location('client_capture_driver', SCRIPTS / 'privacy-client-capture.py')
+        driver = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(driver)
+        worker = object.__new__(driver.Worker)
+        worker.root = Path('/unused-fixture')
+        worker.rpc_deadline = 190.0
+        raw = json.dumps({'ok': True, 'value': {'joined': True}}).encode()
+
+        class Socket:
+            def __init__(self):
+                self.data = struct.pack('!I', len(raw)) + raw
+            def __enter__(self): return self
+            def __exit__(self, *_): return False
+            def settimeout(self, timeout): self.timeout = timeout
+            def connect(self, path): pass
+            def sendall(self, data): pass
+            def recv(self, n):
+                # A completed response at 40 seconds used to be lost to the
+                # unrelated 35-second controller timeout despite setup budget.
+                if self.timeout < 40:
+                    raise TimeoutError('response exceeded socket timeout')
+                result, self.data = self.data[:n], self.data[n:]
+                return result
+        with patch.object(driver.time, 'monotonic', return_value=100.0), \
+                patch.object(driver.socket, 'socket', side_effect=lambda *_: Socket()):
+            self.assertEqual(worker.probe(0, {}), {'joined': True})
+            worker.rpc_deadline = 99.0
+            with self.assertRaisesRegex(TimeoutError, 'phase deadline'):
+                worker.probe(0, {})
 
 
 class ClientManifestTest(unittest.TestCase):
