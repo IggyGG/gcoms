@@ -148,14 +148,14 @@ async fn cold_both_expired_channel_queues_recover_over_bound_base_contact() {
                 .await
                 .is_err());
         }
-        let refusal = owner
+        let accepted = owner
             .send_channel_text_tracked(name, b"pending across route repair")
             .await
-            .expect_err("expired channel queue must refuse the actual send");
-        assert!(refusal.contains("channel send failed"));
+            .expect("exact pending wire is durably accepted before route repair");
         let retained = decode_v2(&owner.export_state().await?, &a_seed)?;
         assert_eq!(retained.channels[0].message_outbox.len(), 1);
         let before_wire = retained.channels[0].message_outbox[0].0;
+        assert_eq!(accepted, before_wire);
         assert!(
             tokio::time::timeout(Duration::from_millis(400), async {
                 loop {

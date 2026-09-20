@@ -1264,6 +1264,9 @@ impl NodeHandle {
         done_rx.await.map_err(|e| e.to_string())?
     }
 
+    /// Send channel text. A committed persistent outbox covering the complete
+    /// recipient roster preserves local acceptance if the first hop fails.
+    /// This does not assert recipient delivery; observe `Ev::ChannelDelivery`.
     pub async fn send_channel_text(&self, channel: &str, text: &[u8]) -> Result<(), String> {
         validate_application_payload(text)?;
         let (done, done_rx) = tokio::sync::oneshot::channel();
@@ -1278,6 +1281,9 @@ impl NodeHandle {
         done_rx.await.map_err(|e| e.to_string())?
     }
 
+    /// Return the exact wire ID after durable local acceptance. Requires a
+    /// persistent sink and routes for every remote roster member. A first-hop
+    /// failure leaves the exact outbox eligible for retry across restart.
     pub async fn send_channel_text_tracked(
         &self,
         channel: &str,

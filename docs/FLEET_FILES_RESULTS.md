@@ -414,3 +414,29 @@ then validate the combined source pair and coordinate an isolated test window.
 Owner profile/migration selection gates production rollout; this experimental
 isolated test profile is not a production selection. No later campaign or
 production rollout is implied by the passing small-file canary.
+
+### Local admission correction after capacity 02
+
+The retained client samples lose all ready entries at 04:30:03 and 04:30:05
+CEST, approximately thirty minutes after the first renewal. The entry carrier
+has a thirty-minute maximum lifetime; its completion/reconnect scheduling is
+therefore a reproduction lead, not a confirmed diagnosis of this fleet failure.
+No routing lifetime or retry schedule was changed by this follow-up.
+
+An independent local regression reproduced the terminal channel-send error:
+`prepare_channel_text` had committed the exact MLS wire and recipient outbox,
+but `complete_channel_text` discarded local acceptance when the first hop
+failed. It now retains acceptance only when a persistent commit covers the
+complete, nonempty recipient roster. Ordinary maintenance retries the same
+wire; authenticated recipient ACKs still exclusively determine delivery.
+Sends without that durable outbox retain their previous failure behavior.
+Failed persistence and missing tracked recipient routes remain failures.
+
+The native regression checks the saved ID, exact ciphertext, authenticated
+plaintext and ACK processing. The cold-route integration test retains its
+no-delivery-before-authorized-repair, unchanged wire ID, roster/epoch and
+all-member ACK assertions while checking the locally accepted ID. GChat adds
+an actual offline-recipient send followed by both encrypted-profile reopens,
+plaintext reception and a matching delivery ACK. These local checks do not
+qualify consecutive protected-carrier turnover or complete the failed 1 GiB
+fleet transfer. Capacity 02 remains failed, and its evidence is unchanged.

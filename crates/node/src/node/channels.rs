@@ -2048,6 +2048,7 @@ pub(crate) struct PreparedChannelText {
     id: [u8; 16],
     channel: String,
     targets: Vec<crate::channel::PeerRef>,
+    durable_outbox: bool,
 }
 
 pub(crate) fn prepare_channel_text(
@@ -2057,9 +2058,10 @@ pub(crate) fn prepare_channel_text(
     tracked: bool,
 ) -> Result<PreparedChannelText, String> {
     validate_application_payload(text)?;
-    let (wire, id, targets) = {
+    let (wire, id, targets, durable_outbox) = {
         let mut st = state.lock().unwrap_or_else(|p| p.into_inner());
-        if tracked && (!cfg!(feature = "client-persist") || st.durable_state_sink.is_none()) {
+        let persistent = cfg!(feature = "client-persist") && st.durable_state_sink.is_some();
+        if tracked && !persistent {
             return Err("tracked send requires persistent client state".into());
         }
         let share_presence = st.channel_presence_opt_in.contains(channel);
@@ -2077,6 +2079,7 @@ pub(crate) fn prepare_channel_text(
         }
         let own_pseudonym = cs.role.own_pseudonym();
         let mut expected = HashMap::new();
+        let mut complete_roster = true;
         // Track the authenticated roster at this exact send. A missing route
         // must not silently reduce the set whose ACKs mean delivery.
         for (_, name) in cs.role.roster() {
@@ -2096,12 +2099,13 @@ pub(crate) fn prepare_channel_text(
                     expected.insert(pseudonym, route.clone());
                 }
                 None if tracked => return Err("channel recipient route is not ready".into()),
-                None => {}
+                None => complete_roster = false,
             }
         }
         if tracked && expected.is_empty() {
             return Err("tracked channel send requires a remote member".into());
         }
+        let durable_outbox = persistent && complete_roster && !expected.is_empty();
         let checkpoint = cs
             .role
             .checkpoint(&archive_key)
@@ -2161,13 +2165,14 @@ pub(crate) fn prepare_channel_text(
         }
         cs.enqueue_forward(id, wire.clone());
         st.last_channel_send = Some((channel.to_string(), wire.clone()));
-        (wire, id, targets)
+        (wire, id, targets, durable_outbox)
     };
     Ok(PreparedChannelText {
         wire,
         id,
         channel: channel.to_string(),
         targets,
+        durable_outbox,
     })
 }
 
@@ -2180,6 +2185,7 @@ pub(crate) async fn complete_channel_text(
         id,
         channel,
         targets,
+        durable_outbox,
     } = prepared;
     let cell = Cell::new(
         CellType::Msg,
@@ -2201,10 +2207,16 @@ pub(crate) async fn complete_channel_text(
         &[
             ("channel", channel.clone()),
             ("targets", sent.to_string()),
+            ("failed_targets", failures.to_string()),
+            ("durable_outbox", durable_outbox.to_string()),
             ("msg", encode_b64url(&id)),
         ],
     );
-    if failures == 0 {
+    // Preparation committed the exact MLS wire and complete recipient set.
+    // The ordinary channel tick retries this outbox across route loss and
+    // restart; a failed first hop cannot undo its local acceptance. Only an
+    // authenticated ACK can remove a recipient or emit ChannelDelivery.
+    if failures == 0 || durable_outbox {
         Ok(id)
     } else {
         Err(format!("channel send failed for {failures} target(s)"))
