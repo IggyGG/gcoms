@@ -733,3 +733,75 @@ async fn files_cross_embedded_and_ipc_with_pause_resume_and_current_membership()
     let _ = stop.send(());
     task.await.unwrap().unwrap();
 }
+
+#[cfg(feature = "files")]
+#[tokio::test]
+async fn legacy_cache_reconnect_revalidates_journals_in_both_backends() {
+    use gcoms::sdk::sharing::{Request, Scope};
+    let dir = private_dir();
+    let (endpoint, stop, task) = daemon(dir.path()).await;
+    for (index, backend) in [Backend::Embedded, Backend::Attach { endpoint }]
+        .into_iter()
+        .enumerate()
+    {
+        let app = builder(
+            &dir.path().join(format!("profile-{index}")),
+            "cache",
+            backend,
+            port(),
+        )
+        .receive_messages(false)
+        .open()
+        .await
+        .unwrap();
+        let cache = dir.path().join(format!("legacy-{index}.pieces"));
+        let key = [0x54; 32];
+        app.configure_file_cache(&cache, key, Default::default())
+            .await
+            .unwrap();
+        let channel = app
+            .messaging()
+            .create_channel("cache", "owner", 8, ChannelVisibility::Private)
+            .await
+            .unwrap();
+        let id = app
+            .files()
+            .import(
+                Scope {
+                    channel: channel.0,
+                    participants: vec![],
+                },
+                "retained.bin".into(),
+                1,
+                &mut b"x".as_slice(),
+            )
+            .await
+            .unwrap();
+        let name: String = id.iter().map(|byte| format!("{byte:02x}")).collect();
+        let journal = cache.join(name).join("state");
+        app.files()
+            .request(Request::SetEnabled(false))
+            .await
+            .unwrap();
+        let original = std::fs::read(&journal).unwrap();
+        let mut damaged = original.clone();
+        damaged[0] ^= 1;
+        std::fs::write(&journal, damaged).unwrap();
+        assert!(app
+            .configure_file_cache(&cache, key, Default::default())
+            .await
+            .is_err());
+        assert!(
+            app.files().list().await.is_err(),
+            "a failed reopen must not select another cache"
+        );
+        std::fs::write(&journal, original).unwrap();
+        app.configure_file_cache(&cache, key, Default::default())
+            .await
+            .unwrap();
+        assert_eq!(app.files().read_piece(id, 0).await.unwrap(), b"x");
+        app.stop_profile().await.unwrap();
+    }
+    stop.send(()).unwrap();
+    task.await.unwrap().unwrap();
+}
