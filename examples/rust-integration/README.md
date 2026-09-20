@@ -11,8 +11,10 @@ cargo build --release --no-default-features --features embedded
 For IPC, run an existing `gcomsd` host and set `GCOMS_ENDPOINT` to its private
 control socket. For embedded production use, supply signed network settings in
 `GCOMS_NETWORK`. `GCOMS_SECRET` supplies the private profile's unlock secret.
-Run either executable without arguments for its supported operations.
-`GCOMS_FIXTURE=1` explicitly selects disposable loopback fixtures in embedded mode.
+Run either executable without arguments for its supported operations. Both modes
+explicitly select GC/2; `GCOMS_FIXTURE=1` selects disposable loopback fixtures.
+Use `run SECONDS` to keep an embedded profile online for background transfers.
+The IPC host keeps the profile online after a client command exits.
 
 The application dependency has no default features. IPC enables `ipc,files`;
 embedded enables `embedded,files,gc2-carrier`. Neither enables RPC, daemon launch
