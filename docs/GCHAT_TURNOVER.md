@@ -53,6 +53,19 @@ that a particular connection ended because of the carrier cap while credentials
 were fresh; retain that causal/lifecycle evidence separately. Explicit fixture
 bootstrap does not qualify installed signed-network/provider onboarding.
 
+For a separate real carrier-limit journey, `GCOMS_GC2_LIFECYCLE=1` opts each
+process into local `gc2_entry_lifecycle` stderr records. They include a
+process-local sequence, client/server-channel role, wall timestamp, monotonic
+elapsed time, original credential expiry, the already computed deadline and
+the unchanged 1800-second maximum. Client class-mux readiness and deadline,
+transport-end or future-drop completion are separate events. No address,
+service identity, capability, message body or unbounded error string is logged.
+Logging is disabled by default and does not wake the owner or replace a deadline.
+Bind its use in the workload manifest. A `dropped` or `transport_ended` event is
+not itself evidence that a lifetime deadline expired. To qualify the carrier
+limit, retain a deadline event near 1800 elapsed seconds with original authority
+still fresh, application work crossing it, and authenticated recovery receipts.
+
 ## Fair retry prerequisite
 
 GComs `fbab1959e4380a32f3b30d76c682b4d18985e4f1`, paired with GChat

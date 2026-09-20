@@ -11,7 +11,7 @@ use std::{
     future::poll_fn,
     net::SocketAddr,
     sync::{Arc, Mutex},
-    time::Duration,
+    time::{Duration, SystemTime, UNIX_EPOCH},
 };
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
@@ -24,6 +24,71 @@ use zeroize::Zeroize;
 const CHANNEL_BUFFER: usize = 32 * 1024;
 const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(30);
 pub const MAX_LIFETIME: Duration = Duration::from_secs(1800);
+
+/// Opt-in local lifecycle evidence. No addresses, service IDs, capabilities,
+/// application bytes or error strings are emitted. This observes the existing
+/// deadline; it never changes authority, scheduling or reconnect behavior.
+struct Lifecycle {
+    id: u64,
+    role: &'static str,
+    started: Instant,
+    expires_at: u64,
+    deadline_ms: u128,
+    enabled: bool,
+    ended: bool,
+}
+
+impl Lifecycle {
+    fn new(role: &'static str, expires_at: u64, deadline: Instant) -> Self {
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static NEXT: AtomicU64 = AtomicU64::new(1);
+        let enabled = std::env::var_os("GCOMS_GC2_LIFECYCLE").is_some_and(|v| v == "1");
+        let started = Instant::now();
+        let value = Self {
+            id: if enabled {
+                NEXT.fetch_add(1, Ordering::Relaxed)
+            } else {
+                0
+            },
+            role,
+            started,
+            expires_at,
+            deadline_ms: deadline.saturating_duration_since(started).as_millis(),
+            enabled,
+            ended: false,
+        };
+        value.emit("started");
+        value
+    }
+
+    fn emit(&self, phase: &'static str) {
+        if !self.enabled {
+            return;
+        }
+        let wall_ms = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis();
+        eprintln!(
+            "gc2_entry_lifecycle {{\"id\":{},\"role\":\"{}\",\"phase\":\"{}\",\"unix_ms\":{},\"elapsed_ms\":{},\"authority_expires_at\":{},\"deadline_after_start_ms\":{},\"max_lifetime_ms\":{}}}",
+            self.id, self.role, phase, wall_ms, self.started.elapsed().as_millis(),
+            self.expires_at, self.deadline_ms, MAX_LIFETIME.as_millis(),
+        );
+    }
+
+    fn finish(&mut self, phase: &'static str) {
+        self.emit(phase);
+        self.ended = true;
+    }
+}
+
+impl Drop for Lifecycle {
+    fn drop(&mut self) {
+        if !self.ended {
+            self.emit("dropped");
+        }
+    }
+}
 
 #[cfg(test)]
 #[path = "entry_lifetime_tests.rs"]
@@ -150,7 +215,8 @@ pub async fn run(
     descriptor.validate()?;
     let deadline = super::authority_deadline(descriptor.expires_at, MAX_LIFETIME)
         .ok_or("GC/2 entry authority expired")?;
-    timeout_at(deadline, async {
+    let mut lifecycle = Lifecycle::new("client", descriptor.expires_at, deadline);
+    let result = timeout_at(deadline, async {
         let tls = timeout(HANDSHAKE_TIMEOUT, async {
             let tls = TlsConnector::from(Arc::new(tls::client_config_pinned(descriptor.service_id)?))
                 .connect(tls::server_name_ip(descriptor.addr.ip()), socket).await?;
@@ -204,6 +270,7 @@ pub async fn run(
                         let (nested, nested_rx) = mpsc::channel(mux::MAX_CIRCUITS);
                         let carrier = EntryCarrier { interactive, bulk, descriptor, budget, nested };
                         ready.send(carrier).map_err(|_| "GC/2 entry readiness owner dropped")?;
+                        lifecycle.emit("class_muxes_ready");
                         tokio::select! {
                             result = chat_driver => { result?; Err("GC/2 interactive mux ended".into()) },
                             result = bulk_driver => { result?; Err("GC/2 bulk mux ended".into()) },
@@ -213,7 +280,13 @@ pub async fn run(
                 }
             } => result,
         }
-    }).await.map_err(|_| "GC/2 entry lifetime ended")?
+    }).await;
+    lifecycle.finish(match &result {
+        Err(_) => "deadline_elapsed",
+        Ok(Err(_)) => "transport_ended",
+        Ok(Ok(_)) => "completed",
+    });
+    result.map_err(|_| "GC/2 entry lifetime ended")?
 }
 
 async fn own_nested(mut receiver: mpsc::Receiver<NestedDriver>) -> Result<()> {
@@ -357,7 +430,13 @@ impl ConnectionContext {
                     return;
                 };
                 let wire = H2Stream::new(body, send);
-                let _ = timeout_at(deadline, context.serve(wire, connect)).await;
+                let mut lifecycle = Lifecycle::new("server_channel", expires_at, deadline);
+                let result = timeout_at(deadline, context.serve(wire, connect)).await;
+                lifecycle.finish(match result {
+                    Err(_) => "deadline_elapsed",
+                    Ok(Err(_)) => "transport_ended",
+                    Ok(Ok(_)) => "completed",
+                });
             })
         })
     }
