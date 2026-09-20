@@ -91,21 +91,29 @@ def qualify(a, application, packages, cargo_home):
         with tempfile.TemporaryDirectory(prefix='gcoms-registry-') as temporary:
             config=Path(temporary)/'registry.toml'
             config.write_text('[source.crates-io]\nreplace-with="preview"\n[source.preview]\nregistry="sparse+http://127.0.0.1:'+str(server.server_port)+registry_prefix+'/index/"\n')
-            locked=[] if a.command=='update' else ['--locked']
-            args=['cargo',a.command,'--config',str(config),'--manifest-path',a.manifest,*locked]
-            if a.command=='metadata': args+=['--all-features','--format-version=1']
-            elif a.command=='update':
+            def run_cargo(command, extra):
+                args=['cargo',command,'--config',str(config),'--manifest-path',a.manifest,*extra]
+                done=subprocess.run(args,cwd=application,capture_output=True,text=True)
+                sys.stdout.write(done.stdout);sys.stderr.write(done.stderr)
+                if done.returncode!=0:
+                    # Surface the underlying tool output for the caller; the
+                    # return code alone hides the actual gate failure.
+                    raise subprocess.CalledProcessError(done.returncode,args,done.stdout,done.stderr)
+                return done
+            gate=a.command
+            if a.command=='bump':
+                gate=a.bump_gate
+                extra=[]
                 for name in (a.update_packages or '').split(','):
-                    if name: args+=['-p',name]
-            else: args+=['--workspace','--all-features','--target-dir',str(a.target_dir.resolve())]
-            if a.command=='clippy':args+=['--all-targets','--','-D','warnings']
-            if a.command=='test':args+=['--','--test-threads=1']
-            done=subprocess.run(args,cwd=application,capture_output=True,text=True)
-            sys.stdout.write(done.stdout);sys.stderr.write(done.stderr)
-            if done.returncode!=0:
-                # Surface the underlying tool output for the caller; the
-                # return code alone hides the actual gate failure.
-                raise subprocess.CalledProcessError(done.returncode,args,done.stdout,done.stderr)
+                    if name: extra+=['-p',name]
+                run_cargo('update',extra)
+            locked=[] if gate=='update' else ['--locked']
+            if gate=='metadata': run_cargo('metadata',['--all-features','--format-version=1','--locked'])
+            else:
+                extra=['--workspace','--all-features','--target-dir',str(a.target_dir.resolve()),*locked]
+                if gate=='clippy':extra+=['--all-targets','--','-D','warnings']
+                if gate=='test':extra+=['--','--test-threads=1']
+                run_cargo(gate,extra)
     finally: server.shutdown();server.server_close()
 
     return lock_path
@@ -118,7 +126,8 @@ def main():
     p.add_argument('--packages',type=Path,required=True)
     p.add_argument('--target-dir',type=Path,required=True)
     p.add_argument('--offline',action='store_true')
-    p.add_argument('--command',choices=['check','test','clippy','build','metadata','update'],default='check')
+    p.add_argument('--command',choices=['check','test','clippy','build','metadata','update','bump'],default='check')
+    p.add_argument('--bump-gate',choices=['check','test','clippy','build','metadata'],default='check')
     p.add_argument('--update-packages',default='')
     p.add_argument('--lockfile-output',type=Path)
     a=p.parse_args()
