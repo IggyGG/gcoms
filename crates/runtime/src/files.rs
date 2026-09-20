@@ -23,7 +23,7 @@ pub struct FileService {
     path: PathBuf,
     key: Zeroizing<[u8; 32]>,
     enabled: AtomicBool,
-    inner: Mutex<Backend>,
+    inner: Mutex<Option<Backend>>,
     operations: AsyncMutex<()>,
     sdk: Arc<dyn GcClient>,
     stop: watch::Sender<bool>,
@@ -98,13 +98,13 @@ impl FileService {
             path: path.to_owned(),
             key: Zeroizing::new(key),
             enabled: AtomicBool::new(true),
-            inner: Mutex::new(Backend {
+            inner: Mutex::new(Some(Backend {
                 engine: Engine::new(cache),
                 routes: BTreeMap::new(),
                 rosters: BTreeMap::new(),
                 pending: VecDeque::new(),
                 next_diagnostic: 0,
-            }),
+            })),
             operations: AsyncMutex::new(()),
             sdk,
             stop: watch::channel(false).0,
@@ -132,6 +132,9 @@ impl FileService {
         if let Some(task) = task {
             let _ = task.await;
         }
+        // Release the cache's exclusive lock even while callers retain a
+        // stopped service handle. Subsequent operations remain closed.
+        self.inner.lock().unwrap_or_else(|e| e.into_inner()).take();
     }
     async fn refresh(&self) -> Result<(), SdkError> {
         let joined = self.sdk.list_channels().await?;
@@ -151,7 +154,8 @@ impl FileService {
                 }
             }
         }
-        let mut b = self.inner.lock().map_err(error)?;
+        let mut inner = self.inner.lock().map_err(error)?;
+        let b = inner.as_mut().ok_or(SdkError::ConnectionClosed)?;
         let removed: Vec<_> = b
             .routes
             .keys()
@@ -188,7 +192,8 @@ impl FileService {
         } else if !self.enabled.load(Ordering::Acquire) {
             return Err(SdkError::PermissionDenied);
         }
-        let mut b = self.inner.lock().map_err(error)?;
+        let mut inner = self.inner.lock().map_err(error)?;
+        let b = inner.as_mut().ok_or(SdkError::ConnectionClosed)?;
         match request {
             api::Request::List | api::Request::SetEnabled(_) => {}
             api::Request::Prepare {
@@ -357,7 +362,8 @@ impl FileService {
         completion: Option<(Option<SendToken>, SendOutcome)>,
         capacity: usize,
     ) -> Result<Vec<(String, Action)>, SdkError> {
-        let mut b = self.inner.lock().map_err(error)?;
+        let mut inner = self.inner.lock().map_err(error)?;
+        let b = inner.as_mut().ok_or(SdkError::ConnectionClosed)?;
         if let Some((token, outcome)) = completion {
             b.engine.send_finished(token, outcome, now());
         }
