@@ -104,23 +104,26 @@ impl ProtocolRuntime {
                     "a different file cache is already open".into(),
                 ));
             }
-            current
-                .request(gcoms_sdk::sharing::Request::SetEnabled(true))
-                .await?;
-            current
-                .request(gcoms_sdk::sharing::Request::Configure(config))
-                .await?;
-        } else {
-            *files = Some(
-                crate::files::FileService::open(
-                    path,
-                    key,
-                    config,
-                    Arc::new(EmbeddedClient::new(self.0.node.clone())),
-                )
-                .await?,
-            );
+            if current.is_enabled() {
+                return current
+                    .request(gcoms_sdk::sharing::Request::Configure(config))
+                    .await
+                    .map(|_| ());
+            }
+            // A fresh consumer reconnecting after disconnect must validate the
+            // retained encrypted journals again. Keep the stopped service on
+            // failure so ordinary requests cannot silently open a default cache.
+            current.shutdown().await;
         }
+        *files = Some(
+            crate::files::FileService::open(
+                path,
+                key,
+                config,
+                Arc::new(EmbeddedClient::new(self.0.node.clone())),
+            )
+            .await?,
+        );
         Ok(())
     }
     #[cfg(feature = "files")]

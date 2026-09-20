@@ -121,6 +121,9 @@ impl FileService {
         use subtle::ConstantTimeEq;
         self.path == path && bool::from(self.key.ct_eq(key))
     }
+    pub fn is_enabled(&self) -> bool {
+        self.enabled.load(Ordering::Acquire)
+    }
     pub async fn shutdown(&self) {
         self.enabled.store(false, Ordering::Release);
         self.stop.send_replace(true);
