@@ -69,12 +69,12 @@ pub use identity::{
 };
 #[cfg(any(test, feature = "test-vectors"))]
 pub use session::initiate;
+#[cfg(feature = "std")]
+pub use session::initiate_authenticated;
 pub use session::{
     frame_authenticated_payload, initiate_authenticated_with_rng_at, split_authenticated_payload,
     verify_first_move_auth, FirstMove, Frame, Session, SessionTime, DEFAULT_PQ_AFTER,
     DEFAULT_PQ_EVERY_MSGS, FIRST_MOVE_AUTH_DOMAIN, MAX_SKIP, SKIP_KEY_TTL,
 };
-#[cfg(feature = "std")]
-pub use session::{
-    initiate_authenticated, PreparedReceive, PreparedSend, SealedSession, SessionContext,
-};
+#[cfg(any(feature = "std", feature = "sealed-state"))]
+pub use session::{PreparedReceive, PreparedSend, SealedSession, SessionContext};

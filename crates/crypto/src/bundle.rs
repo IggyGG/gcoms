@@ -169,7 +169,9 @@ impl IdentityKeypair {
         Ok(self.issue_bundle_from_material(*ecdh, *kem, now_unix))
     }
 
-    pub(crate) fn issue_bundle_from_material(
+    /// Deterministic bundle issuance from caller-supplied material for
+    /// conformance and qualification harnesses; no OS entropy is drawn here.
+    pub fn issue_bundle_from_material(
         &self,
         ecdh_bytes: [u8; 32],
         seed_bytes: [u8; 64],
