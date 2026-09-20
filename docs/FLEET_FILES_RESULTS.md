@@ -644,3 +644,33 @@ the related promotion previously failed expiry/replay checks. No rollback was
 requested or performed. Canary 14's production-change gate remains failed.
 The campaign remains idle; the next run must refresh its own observed baseline
 and retain automatic abort-on-production-change behavior.
+
+### Local lease correction, separate from the deployed relay
+
+A delayed owner receipt describes an uncommitted `e2e858a` patch that promotes
+leases during activation replay and reports 27 queue tests. Read-only inspection
+instead finds the original-Coms fleet checkout clean at `4e8c5a4`, following
+`48a4cfc` and `5bd1a95`. Promotion has been removed entirely: an exact
+authenticated activation retry returns the existing lease without extending its
+signed or temporary deadline, and preserves earlier replay cleanup. Push/sub
+traffic cannot renew the lease. Administrative eviction remains available through
+the existing control access and removes queue data and authority without making
+the consumed grant reusable. These source corrections do not identify or qualify
+the earlier dirty patch used to build r4's deployed `acd8ced269996ab7` binary.
+
+The protocol peer's retained combined receipt names this exact `4e8c5a4` source:
+279 node library tests pass with one existing exclusion; 23 selected GC/2
+integration tests, 26 queue tests without default features, 42 routing library
+tests and 55 protocol tests pass. Strict workspace/all-target/all-feature Clippy,
+both no-std protocol configurations, reviewed-source rustfmt and diff checks
+pass. This is not a full CI or whole-workspace formatting receipt. This audit
+independently verified all 944 source hashes and 12 receipt/log hashes without
+rerunning the peer's checks or modifying its checkout. The peer summary SHA-256
+is `23888116d4a92ae55a80fa3b2aa7ea089b7adedbd9598f5669f5dda9ebbdc5af`;
+the local review is retained at
+`target/lease-promotion-security-review-02/review.json`.
+
+The receipt's repeated 03:24:03 quiet claim remains superseded by the later
+owner inventory and 07:11:39 stop acknowledgment above. No new fleet observation,
+deployment, rollback, traffic, or release of the coordinated hold occurred during
+this review. The local correction does not clear Canary 14 or qualify production.
