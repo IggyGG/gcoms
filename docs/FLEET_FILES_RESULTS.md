@@ -345,5 +345,39 @@ all executable hashes pass. Local validation covers 287 node-library cases
 (one ignored), eight cold-channel/protected-route/session cases, the legacy
 control retry, both strict Clippy checks, all 151 GChat cases and packaged Rust,
 npm, frontend and desktop consumers. Both source snapshots remained unchanged
-during the paired checks. Capacity 02 is still in progress; its planned 1 GiB
-transfer and expiry crossing must be observed before claiming success.
+during the paired checks.
+
+## Capacity 02 crosses expiry with retained authority — 2026-09-20
+
+The repeated 64 KiB canary verified in 5.435 seconds after acceptance. A separate
+receiver reopen retained the same identity and verified another export. Subsequent independent exports
+verified 4 MiB in 20.915 seconds, 32 MiB in 119.022 seconds and 256 MiB in
+1,019.896 seconds (17 minutes). The 256 MiB SHA-256 matches the deterministic
+fixture recorded above. Different route choices and the coordinated quiet
+window also differ from capacity 01; these timings do not isolate the repair's
+effect on throughput.
+
+The initial credential expired at 04:00 CEST, elapsed 1,643.268 seconds. Both
+clients briefly reported zero Interactive subscriptions, then reported ready
+routes and four subscriptions of each class by approximately eight and nine
+seconds after expiry. Neither client reported inbox recovery in the five-second
+samples from 30 seconds before expiry through five minutes afterward. The
+largest interval between new verified-byte observations near this rollover was
+30.997 seconds, versus the 129-second interruption in capacity 01. Live evidence
+remains in `target/protocol-plan-capacity02-live/renewal-observations.json`.
+
+The actual 1 GiB transfer was accepted at elapsed 1,824.069 seconds and is still
+running. At the retained 1,927-second checkpoint, mixed chat had 86 acknowledged
+messages, p95 9.904 seconds and maximum 40.241 seconds; baseline p95 was 18.555
+seconds. No failure or production-change stop had occurred. This is an interim
+observation, not a capacity-phase pass or a cleanup result.
+
+The workstation continuation waits for the capacity report, then runs coverage
+and the full campaign serially on the same frozen binaries. Each transition
+requires a passing phase, no reported failures, all eight cleanup checks and
+unchanged bound controller/worker/build inputs. The full campaign retains the
+30-minute baseline, four-hour mixed window and original capacity/chat gates.
+Its state and stop control remain in the ignored task-local
+`target/protocol-plan-fleet-sequence-01.*` files. Phase completion or failure
+notifies both coordinating Codex threads; release of the production quiet window
+still requires an explicit handoff. No later phase has started yet.
