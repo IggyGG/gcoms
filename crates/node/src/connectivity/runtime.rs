@@ -11,6 +11,27 @@ use tokio::sync::watch;
 
 type CandidateUpdate = Arc<dyn Fn(SocketAddr) -> Result<(), String> + Send + Sync>;
 
+/// A wildcard is a bind address, never a relay introduction. Resolve it before
+/// attaching the service; an offline node starts with an unpublished loopback
+/// candidate and normal background connectivity can replace it later.
+pub(crate) async fn initial_candidate(bound: SocketAddr) -> SocketAddr {
+    local_address(bound)
+        .await
+        .unwrap_or_else(|_| unpublished_candidate(bound))
+}
+
+fn unpublished_candidate(bound: SocketAddr) -> SocketAddr {
+    if !bound.ip().is_unspecified() {
+        return bound;
+    }
+    let ip = if bound.is_ipv4() {
+        std::net::IpAddr::V4(std::net::Ipv4Addr::LOCALHOST)
+    } else {
+        std::net::IpAddr::V6(std::net::Ipv6Addr::LOCALHOST)
+    };
+    SocketAddr::new(ip, bound.port())
+}
+
 pub(crate) struct RuntimeTask {
     stop: watch::Sender<bool>,
     task: Option<tokio::task::JoinHandle<()>>,
@@ -55,7 +76,7 @@ pub(crate) fn spawn(
                 // the listener, TLS principal and encrypted node archives survive.
                 if local.as_ref().ok().copied() != Some(SocketAddr::V4(grant.local_addr())) {
                     published.store(false, Ordering::Release);
-                    let _ = update(local.unwrap_or(bound));
+                    let _ = update(local.unwrap_or_else(|_| unpublished_candidate(bound)));
                     let _ = grant.cleanup().await;
                     mapping = None;
                     next_attempt = Instant::now();
@@ -70,7 +91,7 @@ pub(crate) fn spawn(
                         next_renewal = renewal_deadline(grant.remaining_lifetime());
                     } else {
                         published.store(false, Ordering::Release);
-                        let _ = update(local.unwrap_or(bound));
+                        let _ = update(local.unwrap_or_else(|_| unpublished_candidate(bound)));
                         let _ = grant.cleanup().await;
                         mapping = None;
                         failures = failures.saturating_add(1);
@@ -78,7 +99,9 @@ pub(crate) fn spawn(
                     }
                 }
             } else if Instant::now() >= next_attempt {
-                let candidate = advertised.or(local.ok()).unwrap_or(bound);
+                let candidate = advertised
+                    .or(local.ok())
+                    .unwrap_or_else(|| unpublished_candidate(bound));
                 if update(candidate).is_err() {
                     break;
                 }
@@ -169,6 +192,24 @@ async fn local_address(bound: SocketAddr) -> Result<SocketAddr, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn offline_wildcards_keep_bound_port_without_claiming_public_reachability() {
+        for (bound, expected) in [
+            ("0.0.0.0:4433", "127.0.0.1:4433"),
+            ("[::]:8443", "[::1]:8443"),
+            ("192.0.2.8:443", "192.0.2.8:443"),
+        ] {
+            let candidate = unpublished_candidate(bound.parse().unwrap());
+            assert_eq!(candidate, expected.parse::<SocketAddr>().unwrap());
+            assert!(
+                gcoms_routing::wire::decode_address(&gcoms_routing::wire::encode_address(
+                    candidate
+                ))
+                .is_ok()
+            );
+        }
+    }
+
     #[test]
     fn renewal_and_failure_backoff_are_bounded_and_jittered() {
         for failures in 0..100 {

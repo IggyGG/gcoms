@@ -15,3 +15,7 @@ GC/2 uses profile 22 explicitly. Start the desktop with `gchat-desktop --gc2-car
 ## Receipt scope
 
 Production executables are bound to GComs 726172785baacc25781d427c75faada5f8849d6b and GChat 0b599cfaa880828b5b0a04c99467c5616afc5b2c. Later policy/documentation/tooling commits do not relabel the frozen native CI or artifact source. The original signing receipt calls its trust policy `self-signed-preview`; the key and signed bytes are unchanged, while this owner decision changes deployment status to production.
+
+## Automatic desktop startup correction
+
+Automatic listeners resolve a concrete endpoint before attaching relay metadata. An offline wildcard listener uses an unpublished loopback candidate until background connectivity resolves a route; public relay address checks and independent reachability admission remain unchanged. Regression coverage starts and reopens profile 22 from `0.0.0.0:0`, retains identity and asserts no premature publication. The installed 0.1.0 desktop reproduced the original error; affected Node tests, connectivity cases, desktop default creation/reopen and strict Node Clippy passed in `target/gui-startup-01`.

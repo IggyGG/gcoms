@@ -17,6 +17,52 @@ fn config() -> NodeConfig {
     }
 }
 
+#[cfg(feature = "experimental-gc2")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn protected_automatic_wildcard_starts_and_reopens_without_publication() {
+    let make_config = || NodeConfig {
+        listen: "0.0.0.0:0".parse().unwrap(),
+        profile: NodeProfile::gchat_file_transfer_production(None, 2),
+        ..config()
+    };
+    let routing = || RoutingConfig {
+        connectivity: Some(ConnectivityConfig {
+            mapping: false,
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
+    let first = start_persistent_restored_with_routing(
+        make_config(),
+        routing(),
+        Arc::new(|_| Ok(())),
+        None,
+    )
+    .await
+    .unwrap();
+    assert!(first.listener_addr().ip().is_unspecified());
+    assert_ne!(first.listener_addr().port(), 0);
+    let candidate = first.relay_introduction().unwrap();
+    assert!(!candidate.addr.ip().is_unspecified());
+    assert_eq!(candidate.addr.port(), first.listener_addr().port());
+    assert!(!first.relay_published());
+    assert!(first.local_relay_introduction().unwrap().is_none());
+    let identity = first.info.identity_pk.clone();
+    let state = first.export_state().await.unwrap();
+    first.shutdown().await;
+    let reopened = start_persistent_restored_with_routing(
+        make_config(),
+        routing(),
+        Arc::new(|_| Ok(())),
+        Some(&state),
+    )
+    .await
+    .unwrap();
+    assert_eq!(reopened.info.identity_pk, identity);
+    assert!(!reopened.relay_published());
+    reopened.shutdown().await;
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn auto_restart_reuses_port_then_survives_collision_without_identity_reset() {
     let path = std::env::temp_dir().join(format!("gc-auto-restart-{:016x}", rand::random::<u64>()));

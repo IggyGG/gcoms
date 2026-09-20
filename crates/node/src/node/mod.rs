@@ -1104,8 +1104,13 @@ async fn start_with_tls_policy_control_sink_and_bootstrap(
         server
     };
     let local_addr = server.local_addr().map_err(|e| e.to_string())?;
+    let candidate = match cfg.advertise {
+        Some(address) => address,
+        None if connectivity.is_some() => crate::connectivity::initial_candidate(local_addr).await,
+        None => local_addr,
+    };
     let relay_target = RelayTarget {
-        address: cfg.advertise.unwrap_or(local_addr),
+        address: candidate,
         relay_service_id: service_id,
     };
     #[cfg(feature = "experimental-gc2")]

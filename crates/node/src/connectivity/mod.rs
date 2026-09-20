@@ -2,7 +2,7 @@
 //! for a second bind. Router grants are candidates, never reachability evidence.
 pub mod nat;
 mod runtime;
-pub(crate) use runtime::{spawn, RuntimeTask};
+pub(crate) use runtime::{initial_candidate, spawn, RuntimeTask};
 
 use gcoms_transport::server::Tp1Server;
 use hmac::{Hmac, Mac};
