@@ -405,8 +405,9 @@ isolate the repair's effect on throughput.
 The initial credential expired at 04:00 CEST, elapsed 1,643.268 seconds. Both
 clients briefly reported zero Interactive subscriptions, then reported ready
 routes and four subscriptions of each class by approximately eight and nine
-seconds after expiry. Neither client reported inbox recovery in the five-second
-samples from 30 seconds before expiry through five minutes afterward. The
+seconds after expiry. Neither client reported inbox recovery in the nominal
+five-second samples from 30 seconds before expiry through five minutes afterward
+(observed gaps were 5–6 seconds on the sender and 5 seconds on the receiver). The
 largest interval between new verified-byte observations near this rollover was
 30.997 seconds, versus the 129-second interruption in capacity 01. Live evidence
 remains in `target/protocol-plan-capacity02-live/renewal-observations.json`.
@@ -450,6 +451,39 @@ admitted-send failure make the run fail regardless of that percentile.
 `isolated_resources_removed: true`. All eight host cleanup events passed,
 including unchanged production state. Complete logs and the original manifest,
 events and failed report remain retained; the immutable build is unchanged.
+
+The retrospective review in `target/capacity02-rollover-review-01/analysis-v2.json`
+binds the original manifest, events, report and all eight archived host logs by
+SHA-256, retaining a complete chat ledger and verified-progress observation
+intervals. Around 04:00, each client has 66 diagnostic samples. At +4 seconds
+on the sender and +3 on the receiver, `routing_ready` is false and Interactive
+subscriptions are zero, while `ready_entries=2`, `usable_terminal_routes=1`
+and Bulk subscriptions remain four. The next samples at +9/+8 report both
+classes at four. This distinguishes subscription readiness from usable-route
+availability; neither entry counts alone nor sampled absence of inbox recovery
+establishes continuous readiness.
+
+At 04:30, sender +5 and receiver +3 samples show zero usable routes, zero
+entries and zero subscriptions in both classes. The sender's final sample is
++5; the receiver continues through +23. Its +8 and later timestamps map after
+the approximately +7.431-second controller failure when aligned by recorded
+clocks. They are retained as post-failure observations under that approximate
+alignment, not evidence of a continued successful workload.
+Neither client has a subsequent ready sample in the retained logs. The two
+missing chat ACKs correspond to sends at elapsed 3,450.503 seconds. Acknowledged
+mixed messages retain p95 8.158 seconds and maximum 40.241 seconds; excluding
+the missing ACKs cannot convert the failed run into a pass.
+
+The longest completed progress-observation interval around the first boundary
+is 30.997 seconds. The unfinished 1 GiB transfer's final observation precedes
+controller failure by 8.778 seconds, with no later progress/export receipt;
+that interval is cut short by the failed run and is not a recovery duration.
+Progress polling waits five seconds plus RPC time, diagnostics use integer
+client wall timestamps, and cross-host clock offsets were not measured. No
+entry-owner refresh/error trace or fresh-middle authentication timeline was
+retained, so these aggregates cannot assign the interruption to a specific
+renewal stage or isolate the repair's throughput effect. The original failed
+report and all input hashes remain unchanged.
 
 Before another capacity attempt, reproduce consecutive rollovers with both
 Interactive and Bulk subscriptions and an admitted channel send in flight,
