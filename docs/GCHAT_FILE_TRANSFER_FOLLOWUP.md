@@ -178,3 +178,11 @@ checks, all 151 GChat cases and the package/frontend/desktop consumers. Its
 source-bound `fleet-build-11` is now running capacity 02 in the quiet window
 coordinated by the other protocol worker. No actual 1 GiB result or whole-client
 privacy qualification has been recorded yet.
+
+Measured capacity also exposed a harness mismatch: partial-progress fault cases
+allowed only 900 seconds for a whole 256 MiB export, shorter than the 1,408-second
+healthy observation. Those cases now use the existing 3,600-second capacity
+budget and separately enforce the required 300-second recovery-progress bound.
+Receiver/relay startup time counts toward that progress bound, and reports must
+bind observed recovery to the same transfer's independent export. This tooling
+change applies to later campaigns; capacity 02 keeps its recorded coordinator.
