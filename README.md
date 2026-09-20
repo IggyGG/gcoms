@@ -92,4 +92,5 @@ The application/runtime consolidation reuses existing dependencies; `sha2` deriv
 a purpose-specific host cache key. TLS fixture dependencies (`rcgen`, `rustls`,
 `tokio-rustls`) are test-only in the runtime. No new third-party package is added.
 
-Native integration sizes and validation are recorded in [the Rust integration report](docs/RUST_INTEGRATIONS.md).
+Both Rust integrations are tested natively on Linux x86_64 and macOS arm64/x86_64.
+Measured sizes and exact validation inputs are in [the Rust integration report](docs/RUST_INTEGRATIONS.md).

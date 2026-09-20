@@ -31,7 +31,17 @@
       "minimal-ipc": 0,
       "wasm": 0,
       "generated": 0
+    },
+    "native_listener_followup": {
+      "revision": "da12b45156ae59cc59a818d040ea3f3bc47af306",
+      "passed": 106,
+      "ignored": 2,
+      "record": "rust-integration-native-2026-09-20.json"
     }
   },
-  "native_macos": "pending"
+  "native_macos": {
+    "status": "passed",
+    "revision": "da12b45156ae59cc59a818d040ea3f3bc47af306",
+    "record": "rust-integration-native-2026-09-20.json"
+  }
 }

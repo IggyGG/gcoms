@@ -20,5 +20,7 @@
 Linux results are recorded in [the integration report](docs/RUST_INTEGRATIONS.md).
 The full workspace passed 900 cases before the cache-only follow-up; the affected
 suites passed 105 after it. GChat passed 137 Rust tests, 22 frontend tests,
-generated contracts and the packaged desktop check. Native macOS jobs remain
-pending. Retain per-platform source and binary hashes before marking them passed.
+generated contracts and the packaged desktop check. The final native follow-up
+passed 106 focused tests per target on Linux x86_64 and macOS arm64/x86_64,
+including the disconnected-peer regression. Size checks passed for all three
+optimization levels; downloaded binary and source hashes were independently verified.
