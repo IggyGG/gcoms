@@ -15,6 +15,8 @@ import time
 import tomllib
 import uuid
 
+import gc2_release_evidence as gc2
+
 from release_evidence import (
     EvidenceError, PROJECTS, TARGETS, PUBLISHED, EXCLUSIONS, bindings, digest, file_reference,
     read_json, require, source_identity,
@@ -79,6 +81,14 @@ def init(args):
         config = read_json(publication) if publication.is_file() else {}
         policies.add(config.get("signing_policy", "publicly-trusted"))
     require(len(policies) == 1 and policies <= {"publicly-trusted", "self-signed-preview"}, "source signing policies differ or are unknown")
+    require((args.wire_profile == "GC/2") == (args.traffic_config is not None),
+            "GC/2 requires --traffic-config; GC/1 does not accept it")
+    if args.traffic_config:
+        traffic_config = read_json(args.traffic_config)
+        require(isinstance(traffic_config, dict) and type(traffic_config.get("profile_id")) is int and
+                traffic_config["profile_id"] == 22, "traffic configuration must select profile 22")
+    traffic_bytes = args.traffic_config.read_bytes() if args.traffic_config else None
+    require(traffic_bytes is None or bool(traffic_bytes), "empty traffic configuration")
     base = args.output.resolve()
     base.mkdir(parents=True, exist_ok=False)
     (base / "sources").mkdir()
@@ -90,6 +100,13 @@ def init(args):
     candidate = {"schema_version": 1, "version": versions.pop(), "channel": "developer-preview",
                  "wire_profile": "GC/1", "signing_policy": policies.pop(), "created_at": now(), "targets": list(TARGETS),
                  "sources": sources, "artifacts": {}, "checks": {}, "attempts": []}
+    if args.wire_profile == "GC/2":
+        traffic = base / "sources" / "traffic-config.json"
+        traffic.write_bytes(traffic_bytes)
+        candidate.update(schema_version=2, wire_profile="GC/2", gc2={
+            "profile_id": 22, "privacy_contract": "gchat-file-profile-22",
+            "new_profile_protocol": "gc2", "existing_profile_migration": "explicit",
+            "traffic_config": reference(base, traffic)})
     write_json(base / "candidate.json", candidate)
     print(base / "candidate.json")
 
@@ -202,13 +219,17 @@ def record(args):
               "tests": {"passed": sum(int(row[0]) for row in counts), "failed": sum(int(row[1]) for row in counts),
                         "ignored": sum(int(row[2]) for row in counts), "incomplete": [] if status == "passed" else [status], "excluded": excluded},
               **facts}
+    if candidate.get("wire_profile") == "GC/2":
+        report["gc2"] = candidate["gc2"]
     if facts_error:
         report["facts_error"] = facts_error
     report_path = base / "reports" / (run_id + ".json")
     write_json(report_path, report)
     with manifest_lock(manifest):
         latest = read_json(manifest)
-        require(bindings(latest) == source_bindings, "candidate source inputs changed during execution")
+        require(bindings(latest) == source_bindings and latest.get("gc2") == candidate.get("gc2") and
+                latest.get("wire_profile") == candidate.get("wire_profile"),
+                "candidate source/configuration inputs changed during execution")
         latest["checks"][args.check] = reference(base, report_path)
         latest["attempts"].append({"check": args.check, **reference(base, report_path)})
         write_json(manifest, latest)
@@ -221,6 +242,8 @@ def main():
     commands = parser.add_subparsers(dest="action", required=True)
     create = commands.add_parser("init")
     create.add_argument("--output", type=Path, required=True)
+    create.add_argument("--wire-profile", choices=("GC/1", "GC/2"), default="GC/1")
+    create.add_argument("--traffic-config", type=Path, help="frozen profile-22 traffic configuration (GC/2 only)")
     for project in PROJECTS:
         create.add_argument("--" + project, type=Path, required=True)
     create.set_defaults(run=init)
@@ -229,12 +252,12 @@ def main():
     artifact.add_argument("--file", type=Path, required=True)
     artifact.add_argument("--name")
     artifact.add_argument("--project", choices=PROJECTS, required=True)
-    artifact.add_argument("--kind", choices=("rust", "npm", "installer", "inventory", "provenance", "signature"), required=True)
+    artifact.add_argument("--kind", choices=("rust", "npm", "installer", "inventory", "provenance", "signature", "executable"), required=True)
     artifact.add_argument("--target", choices=TARGETS)
     artifact.set_defaults(run=add_artifact)
     run = commands.add_parser("record")
     run.add_argument("--candidate", type=Path, required=True)
-    run.add_argument("--check", choices=sorted(PUBLISHED), required=True)
+    run.add_argument("--check", choices=sorted(PUBLISHED | gc2.CHECKS), required=True)
     run.add_argument("--project", choices=PROJECTS, required=True)
     run.add_argument("--timeout", type=float, required=True)
     run.add_argument("--facts", type=Path)

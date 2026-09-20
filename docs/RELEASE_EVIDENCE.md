@@ -1,9 +1,10 @@
-# GC/1 developer-preview qualification
+# Developer-preview qualification
 
 The release targets are **Linux x86_64, Windows x86_64, macOS x86_64, and macOS
 aarch64**. Windows uses a native MSVC VM; macOS uses GitHub-hosted workers.
 The local Mac is unavailable. Historical results are retained but do not qualify
-new source commits. GC/2 and production security/privacy claims are separate work.
+new source commits. Current-protocol candidates have additional application,
+fleet, installed-network and privacy requirements described below.
 
 Forgejo remains authoritative. GitHub mirrors source and signed release assets.
 These qualification scripts never publish; the separate GChat delivery tooling
@@ -26,6 +27,21 @@ GC/1 profile and supported targets. Hashed `git archive` files retain the source
 Changing either checkout after freezing requires a new candidate and fresh checks.
 The private diagnostic records from earlier revisions remain useful but do not
 automatically qualify a new commit.
+
+For a GC/2 file-profile candidate, explicitly freeze its traffic configuration:
+
+```sh
+python3 scripts/release-candidate.py init \
+  --gcoms /path/to/gcoms --gchat /path/to/gchat \
+  --wire-profile GC/2 --traffic-config /path/to/profile-22.json \
+  --output /path/to/evidence/gc2-rc-01
+```
+
+This creates schema 2, with the profile-22 file privacy contract, new-profile GC/2
+selection and explicit existing-profile migration. It records intended behavior;
+it does not select an unqualified production profile or authorize deployment.
+GC/1 schema 1 remains supported separately. Source/configuration identities are
+attached to recorded checks; older reports cannot qualify by relabelling them.
 
 Build inspected archives in isolation:
 
@@ -119,6 +135,41 @@ source bindings or timing. These facts must come from the workload or an actual
 acceptance session, not planned work. Reports are trusted-runner attestations;
 hashes detect mismatched bytes but are not proof that a dishonest runner executed
 the stated workload. Protect the runner and review its retained evidence.
+
+GC/2 retains every requirement above and additionally requires:
+
+- `integration.gc2-bootstrap`: the real GChat runtime's disconnected authenticated
+  HTTPS fresh/reopen/recovery journey. Its ordinary-suite exclusion is permitted
+  only with this separate successful gate. An explicit fixture provider does not
+  qualify installed signed-network onboarding.
+- `integration.gc2-turnover`: actual daemons, three real credential expiries,
+  separately demonstrated 1800-second carrier expiry while authority is fresh,
+  both contact/channel classes, admitted MLS wire retention, authenticated ACKs,
+  exact file export and same-identity reopen. Simulated time, missing ACKs,
+  premature delivery and recovery beyond 300 seconds fail.
+- `fleet.gc2-files`: eight hosts, exact 64 KiB through 1 GiB exports, the four-hour
+  mixed/fault campaign, 16 clients and 56 directed host pairs. All cleanup and
+  production-baseline comparisons must pass. The accepted file deadlines and
+  overall chat latency/ACK gates remain required. Historical failed campaigns
+  and unmatched background conditions cannot qualify.
+- `privacy.gc2-client`: isolated actual-client all-egress/lifecycle accounting,
+  packet-derived connection lifetimes and independent train/held-out cohorts on
+  unconstrained and adverse links. A hash-bound classifier report must bind the
+  same source, executables and traffic configuration and pass all four upper-95%
+  separability bounds at **0.55**: idle/chat and matched bulk/mixed, each windows
+  and connections. Pooled capture, validity calibration alone, missing components
+  and valid unfavorable bounds fail release qualification.
+- `installed.gc2-network.<target>` on every target: actual installed desktop
+  signed-network discovery/provider TLS, retained recovery, protected catalog,
+  default GC/2 on fresh profiles, and explicit migration preserving existing
+  identity/archive/cache/pending operations. No silent fallback or migration.
+
+Register workload binaries with `artifact --kind executable --project gcoms`
+and `--project gchat`; reports bind actual executables as well as source archives.
+GC/2 report measurement fields are specified in `gc2_release_evidence.py`. Missing
+facts fail closed. Do not manufacture measurement facts from intended behavior.
+Changing the candidate/configuration requires new evidence; a passing earlier
+component is retained at its original source and scope.
 
 ## Check the appropriate stage
 

@@ -13,6 +13,8 @@ import subprocess
 from pathlib import Path
 from urllib.parse import urlparse
 
+import gc2_release_evidence as gc2
+
 PROJECTS = ("gcoms", "gchat")
 TARGETS = ("linux-x86_64", "windows-x86_64", "macos-x86_64", "macos-aarch64")
 STAGES = ("candidate", "preflight", "published")
@@ -182,7 +184,9 @@ def validate_report(check, report, candidate, base, artifacts):
         require(type(counts.get("ignored")) is int and counts["ignored"] == len(counts["excluded"]), "ignored-test count lacks a complete inventory")
         for exclusion in counts["excluded"]:
             require(isinstance(exclusion, dict) and nonempty(exclusion.get("name")) and nonempty(exclusion.get("reason")), "unexplained test exclusion")
-            require(check.startswith("native.gcoms.") and exclusion["name"] in EXCLUSIONS,
+            require((check.startswith("native.gcoms.") and exclusion["name"] in EXCLUSIONS) or
+                    (candidate.get("wire_profile") == "GC/2" and check.startswith("native.gchat.") and
+                     exclusion["name"] == "bootstrap_gc2_tests::production_bootstrap_fresh_reopen_and_recovery"),
                     "test exclusion is not in the reviewed qualification policy")
         require(len({entry["name"] for entry in counts["excluded"]}) == len(counts["excluded"]), "duplicate test exclusions")
     if check in INSTALLERS:
@@ -240,6 +244,9 @@ def validate_report(check, report, candidate, base, artifacts):
             for invariant in ("durable_operations_accounted", "archives_intact", "resource_bounds_held", "fault_recovery_passed"):
                 require(measurements.get(invariant) is True, f"soak invariant unproven: {invariant}")
 
+    if candidate.get("wire_profile") == "GC/2":
+        gc2.validate(check, report, candidate, base, artifacts, require, file_reference, read_json)
+
 
 def validate_publication(config, project, version):
     require(config.get("project") == project and config.get("version") == version, "publication identity/version mismatch")
@@ -267,8 +274,12 @@ def validate(candidate, base, stage="candidate", repositories=None, publication=
     errors = []
     try:
         require(stage in STAGES, "unknown qualification stage")
-        require(isinstance(candidate, dict) and type(candidate.get("schema_version")) is int and candidate["schema_version"] == 1, "unsupported candidate schema")
-        require(candidate.get("channel") == "developer-preview" and candidate.get("wire_profile") == "GC/1", "candidate is not the GC/1 developer preview")
+        require(isinstance(candidate, dict) and type(candidate.get("schema_version")) is int and
+                (candidate["schema_version"], candidate.get("wire_profile")) in {(1, "GC/1"), (2, "GC/2")},
+                "unsupported candidate schema/profile")
+        require(candidate.get("channel") == "developer-preview", "candidate is not a developer preview")
+        if candidate["wire_profile"] == "GC/2":
+            gc2.contract(candidate, base, require, file_reference, read_json)
         require(nonempty(candidate.get("version")), "missing candidate version")
         require(candidate.get("signing_policy", "publicly-trusted") in {"publicly-trusted", "self-signed-preview"}, "unsupported candidate signing policy")
         require(candidate.get("targets") == list(TARGETS), "candidate must retain Linux, Windows, and both macOS qualification targets")
@@ -294,6 +305,8 @@ def validate(candidate, base, stage="candidate", repositories=None, publication=
     except (EvidenceError, OSError, ValueError, TypeError) as error:
         return [str(error)]
     required = {"candidate": CANDIDATE, "preflight": PREFLIGHT, "published": PUBLISHED}[stage]
+    if candidate["wire_profile"] == "GC/2":
+        required = required | gc2.CHECKS
     for check in sorted(required):
         try:
             reference = candidate["checks"].get(check)

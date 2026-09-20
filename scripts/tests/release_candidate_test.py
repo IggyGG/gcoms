@@ -110,6 +110,26 @@ class CandidateTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(self.report("soak.application")["measurements"]["clients"], 16)
 
+    def test_current_candidate_freezes_explicit_configuration_and_records_it(self):
+        result = self.run_cli("init", *self.sources(), "--output", self.manifest.parent,
+                              "--wire-profile", "GC/2")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertFalse(self.manifest.parent.exists())
+        traffic = self.base / "traffic.json"
+        traffic.write_text('{"profile_id":22,"fixture":"test only"}')
+        result = self.run_cli("init", *self.sources(), "--output", self.manifest.parent,
+                              "--wire-profile", "GC/2", "--traffic-config", traffic)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        manifest = json.loads(self.manifest.read_text())
+        self.assertEqual((manifest["schema_version"], manifest["wire_profile"]), (2, "GC/2"))
+        frozen = self.manifest.parent / manifest["gc2"]["traffic_config"]["path"]
+        self.assertEqual(frozen.read_bytes(), traffic.read_bytes())
+        traffic.write_text("later edits do not alter the candidate")
+        self.assertNotEqual(frozen.read_bytes(), traffic.read_bytes())
+        result = self.record("integration.gc2-turnover", "print('fixture command, not qualification')")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.report("integration.gc2-turnover")["gc2"], manifest["gc2"])
+
 
 if __name__ == "__main__":
     unittest.main()
