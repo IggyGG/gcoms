@@ -188,7 +188,8 @@ remain maintainer actions; pre-publication GChat checks use `scripts/check-gchat
 `app.files()` uses the same encrypted piece engine in both backends. Call `list()`
 to initialize/resume the host file worker and inspect progress. `send_path(scope,
 path)` streams a local file; `accept`, `pause`, `resume`, `cancel`, and
-`save_path(id, destination)` manage incoming files. Paths stay on the caller.
+`save_path(id, destination)` manage incoming files. Source and export paths stay
+on the caller.
 Lower-level `prepare`, `write_piece`, `commit`, and `read_piece` support custom
 streams and resumable local upload. Each IPC piece is bounded at 256 KiB.
 
@@ -199,6 +200,13 @@ is encrypted and preserved across profile shutdown/reopen; explicit acceptance
 precedes downloads. Export only publishes a complete verified file and never
 replaces an existing destination. File requests require the distinct IPC18
 `FileSharing` capability; they do not grant managed component file operations.
+
+For migration, call `configure_file_cache(host_cache_path, key, config)` before
+the first file request to retain an existing encrypted cache. This separate,
+owner-authenticated startup operation configures a host-local cache in either
+backend. GChat uses it to preserve its existing cache path and key. Reconnecting
+a disabled cache reopens and validates its encrypted journals; a failed reopen
+does not silently select another cache.
 
 Control protocol version 2 carries explicit carrier configuration. Older hosts
 are rejected with an incompatibility error. GC/2 requires explicit
