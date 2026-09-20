@@ -101,6 +101,11 @@ The source-bound `fleet-build-10` passes as well. Canary 14 was interrupted by a
 external production relay replacement before file admission; see the retained
 [fleet results](FLEET_FILES_RESULTS.md). It does not qualify the invitation fix
 or file capacity on the fleet.
+Canary 15 subsequently passed on the same frozen binaries: the 64 KiB transfer
+verified in 5.510 seconds after acceptance, receiver restart preserved identity
+and a second export hash, and all eight cleanup checks passed. This clears the
+small-file/reopen gate; it does not establish larger-file capacity or full fleet
+qualification.
 
 Preserve earlier fleet failures, including the current-protocol bootstrap failure
 in `files-canary-12`. Rebuild both repositories together and require the ordinary

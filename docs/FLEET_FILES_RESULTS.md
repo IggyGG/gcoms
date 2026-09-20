@@ -274,3 +274,23 @@ The original report remains failed in `test-evidence/files-canary-14`.
 The controller now distinguishes campaign cancellation from a readiness or
 transfer deadline and reports isolated resource removal separately from the
 unchanged-production gate. Neither change relaxes the campaign pass criteria.
+
+## Canary 15 passes transfer and receiver reopen — 2026-09-20
+
+Run `ff-20260920-023919` reused frozen `fleet-build-10` (Rust GComs `628ec44`,
+GChat `36a96ae`) with controller `5d8846e`. All eight isolated relays were ready
+after 47.5 seconds. Both clients proved profile-22/GCRB2 readiness, invitation
+export succeeded and the receiver joined through remote redemption.
+
+The 65,536-byte file was accepted at 265.812 seconds and independently exported
+and SHA-256 verified at 271.322 seconds: **5.510 seconds after acceptance**.
+Offer import preceded acceptance by 62.5 seconds; this is a single small-file
+measurement, not a sustained throughput estimate. After receiver restart,
+the same instance identity and a second export hash were verified at 323.833
+seconds. Every host passed cleanup, including unchanged production state.
+
+`test-evidence/files-canary-15/report.json` records `phase_passed: true`,
+`canary_reopen_verified: true`, and both cleanup observations true. Its overall
+verdict remains `incomplete` because a canary does not qualify the full fleet
+campaign. Larger files, concurrent chat, all 56 directed host pairs, the
+four-hour mixed run, faults and privacy qualification remain separate gates.
