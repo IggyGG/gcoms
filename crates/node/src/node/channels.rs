@@ -16,168 +16,27 @@ pub(crate) async fn push_to_ref(
         .map(|_| ())
 }
 
+#[path = "channel_maintenance.rs"]
+mod maintenance;
+pub(crate) use maintenance::ChannelMaintenance;
+
+// One finite retry round for focused tests. Production owns the same receipt
+// set across recurring ticks in spawn_channel_maintenance_loop.
+#[cfg(all(test, feature = "client-persist"))]
 pub(crate) async fn channel_tick(
     state: &Arc<Mutex<NodeState>>,
     scheduler: &RelayScheduler,
     _events: &broadcast::Sender<Ev>,
 ) {
-    /// One forward job: which pending id (if any) it belongs to, target, cell.
-    type ForwardJob = (Option<[u8; 16]>, crate::channel::PeerRef, Cell);
-    type ChannelTickAction = (String, Vec<ForwardJob>);
-    let actions: Vec<ChannelTickAction> = {
-        let mut st = state.lock().unwrap_or_else(|p| p.into_inner());
-        if st.owner_transition_failed {
-            return;
-        }
-        let mut actions = Vec::new();
-        for (chan, cs) in st.channels.iter_mut() {
-            if cs.own_route.aliases.len() != 2 {
-                continue;
-            }
-            let self_ref = crate::channel::PeerRef::from_route(&cs.own_route.public);
-            let mut pushes: Vec<ForwardJob> = Vec::new();
-            let pending: Vec<crate::channel::PendingForward> = cs.pending.iter().cloned().collect();
-            for entry in pending {
-                let targets = cs.overlay.forward_targets(None);
-                let mut queued = false;
-                for pid in targets {
-                    if let Some(r) = cs.resolve(&pid) {
-                        if let Ok(cells) = crate::proto::encode_chan_cells(chan, &entry.wire) {
-                            queued |= !cells.is_empty();
-                            pushes.extend(
-                                cells
-                                    .into_iter()
-                                    .map(|cell| (Some(entry.id), r.clone(), cell)),
-                            );
-                        }
-                    }
-                }
-                if !queued {
-                    // No reachable target this tick still counts as an attempt.
-                    cs.settle_forward(entry.id, false);
-                }
-            }
-            while let Some((target, _id, wire)) = cs.pull_outbox.pop_front() {
-                if let Ok(cells) = crate::proto::encode_chan_cells(chan, &wire) {
-                    pushes.extend(cells.into_iter().map(|cell| (None, target.clone(), cell)));
-                }
-            }
-            for outbox in cs.message_outbox.values() {
-                for (identity, peer) in &outbox.expected {
-                    if !outbox.acknowledged.contains(identity) {
-                        if let Ok(cells) = crate::proto::encode_chan_cells(chan, &outbox.wire) {
-                            let peer = crate::channel::PeerRef::from_route(peer);
-                            pushes.extend(cells.into_iter().map(|cell| (None, peer.clone(), cell)));
-                        }
-                    }
-                }
-            }
-            for _ in 0..2 {
-                let Some((partner, _descs)) = cs.overlay.pex_outbound() else {
-                    continue;
-                };
-                let mut refs: Vec<crate::channel::PeerRef> = vec![self_ref.clone()];
-                for pid in cs.overlay.view.random_descriptors(7).iter().map(|d| d.id) {
-                    if let Some(r) = cs.resolve(&pid) {
-                        refs.push(r);
-                    }
-                }
-                let have = cs.have_list();
-                if let Some(r) = cs.resolve(&partner) {
-                    match stage_channel_pex(chan, cs, r.pseudonym, &refs, &have) {
-                        Ok((target, cell)) => pushes.push((None, target, cell)),
-                        Err(error) => metrics::log_event(
-                            "chan_pex_prepare_failed",
-                            &[("channel", chan.clone()), ("e", error)],
-                        ),
-                    }
-                }
-            }
-            if !pushes.is_empty() {
-                actions.push((chan.clone(), pushes));
-            }
-        }
-        actions
-    };
-    let data = async {
-        for (chan, pushes) in actions {
-            // Enqueue every push first (enqueue is synchronous), then await the
-            // receipts together. Lanes deliver in parallel, so a slow peer no
-            // longer serialises the whole tick.
-            let mut receipts = Vec::with_capacity(pushes.len());
-            for (id, peer, cell) in pushes {
-                match scheduler.push(ProducerClass::ChannelData, peer.contact.clone(), cell) {
-                    Ok(receipt) => receipts.push((id, Some(receipt))),
-                    Err(_) => receipts.push((id, None)),
-                }
-            }
-            let expected = receipts.len();
-            let mut sent = 0usize;
-            // Per-id accounting: an id settles when all of *its* pushes landed.
-            let mut per_id: HashMap<[u8; 16], (usize, usize)> = HashMap::new();
-            // A push waits for its lane slot (expected 2 slots at p=0.5) and the
-            // lane queue ahead of it. Allow a generous multiple before treating
-            // the remainder as failed for this tick; the jobs still complete.
-            let batch_deadline = scheduler.slot_interval() * 8 * expected.max(1) as u32;
-            let outcomes = tokio::time::timeout(
-                batch_deadline.clamp(
-                    crate::scheduler::SLOT_INTERVAL * 4,
-                    std::time::Duration::from_secs(120),
-                ),
-                futures_join_all(receipts.into_iter().map(|(id, receipt)| async move {
-                    let ok = match receipt {
-                        Some(receipt) => match receipt.completion().await.accepted() {
-                            Ok(_) => true,
-                            Err(error) => {
-                                metrics::log_event("chan_push_failed", &[("e", error)]);
-                                false
-                            }
-                        },
-                        None => {
-                            metrics::log_event("chan_push_failed", &[("e", "enqueue".into())]);
-                            false
-                        }
-                    };
-                    (id, ok)
-                })),
-            )
-            .await
-            .unwrap_or_else(|_| {
-                metrics::log_event("chan_tick_timeout", &[]);
-                Vec::new()
-            });
-            for (id, ok) in outcomes {
-                sent += usize::from(ok);
-                if let Some(id) = id {
-                    let slot = per_id.entry(id).or_insert((0, 0));
-                    slot.0 += 1;
-                    slot.1 += usize::from(ok);
-                }
-            }
-            {
-                let mut st = state.lock().unwrap_or_else(|p| p.into_inner());
-                if let Some(cs) = st.channels.get_mut(&chan) {
-                    for (id, (total, ok)) in per_id {
-                        cs.settle_forward(id, total > 0 && ok == total);
-                    }
-                }
-            }
-            metrics::log_event(
-                "chan_tick",
-                &[
-                    ("channel", chan),
-                    ("pushes", sent.to_string()),
-                    ("expected", expected.to_string()),
-                ],
-            );
-        }
-    };
-    data.await;
+    let mut maintenance = ChannelMaintenance::default();
+    maintenance.tick(state, scheduler);
+    while !maintenance.is_empty() {
+        maintenance.complete_next(state).await;
+    }
 }
 
-/// Control recovery has its own maintenance clock. A data batch may wait for
-/// up to 120 seconds, longer than membership convergence, so it cannot own the
-/// clock that retransmits the corresponding ACKs and commits.
+/// Control recovery keeps its independent maintenance clock. Data admission
+/// and held hop receipts never own the clock that retransmits ACKs and commits.
 pub(crate) async fn channel_control_tick(
     state: &Arc<Mutex<NodeState>>,
     scheduler: &RelayScheduler,

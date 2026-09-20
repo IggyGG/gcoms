@@ -477,9 +477,18 @@ pub(crate) fn spawn_channel_maintenance_loop(
         // Both loops are owned by this task, so runtime shutdown cancels both.
         // Their jobs still leave through the existing lane slots and cover policy.
         let data = async {
+            let mut maintenance = ChannelMaintenance::default();
+            let clock = tokio::time::sleep(scheduler_profile.maintenance_delay(&mut data_rng));
+            tokio::pin!(clock);
             loop {
-                tokio::time::sleep(scheduler_profile.maintenance_delay(&mut data_rng)).await;
-                channel_tick(&state, &scheduler, &events).await;
+                tokio::select! {
+                    _ = &mut clock => {
+                        maintenance.tick(&state, &scheduler);
+                        clock.as_mut().reset(tokio::time::Instant::now()
+                            + scheduler_profile.maintenance_delay(&mut data_rng));
+                    }
+                    _ = maintenance.complete_next(&state), if !maintenance.is_empty() => {}
+                }
             }
         };
         let control = async {
