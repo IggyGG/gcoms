@@ -1258,24 +1258,6 @@ mod persist_tests {
     }
 }
 
-#[cfg(test)]
-mod zeroize_tests {
-    use super::*;
-
-    #[test]
-    fn memory_storage_wipe_removes_serialized_secrets() {
-        let backend = OpenMlsRustCrypto::default();
-        backend
-            .storage()
-            .values
-            .write()
-            .unwrap()
-            .insert(b"secret-key".to_vec(), b"secret-value".to_vec());
-        zeroize_storage(&backend);
-        assert!(backend.storage().values.read().unwrap().is_empty());
-    }
-}
-
 impl Ctx {
     fn stage_admit(
         &mut self,
@@ -1358,5 +1340,23 @@ impl Ctx {
                 .map_err(|e| MlsError::OpenMls(format!("{e:?}")))?;
         }
         encoded
+    }
+}
+
+#[cfg(test)]
+mod zeroize_tests {
+    use super::*;
+
+    #[test]
+    fn memory_storage_wipe_removes_serialized_secrets() {
+        let backend = OpenMlsRustCrypto::default();
+        backend
+            .storage()
+            .values
+            .write()
+            .unwrap()
+            .insert(b"secret-key".to_vec(), b"secret-value".to_vec());
+        zeroize_storage(&backend);
+        assert!(backend.storage().values.read().unwrap().is_empty());
     }
 }
