@@ -16,6 +16,7 @@ tokio = { version = "1", features = ["macros", "rt"] }
 let app = gcoms::Application::builder("org.example.notes")
     .profile("/private/notes/protocol")
     .unlock_secret("obtain this from the user's unlock flow")
+    .carrier_profile(gcoms::sdk::CarrierProfile::Gc2)
     .open().await?;
 let status = app.status().await.map_err(|e| e.to_string())?;
 app.close().await?;
@@ -111,6 +112,8 @@ never chooses it from the bind address. It skips network enrollment and relay
 participation and must not be used to claim production privacy qualification.
 
 ## Typed services and messages
+
+Enable the optional `rpc` feature for typed services.
 
 ```rust
 #[gcoms::service(name = "notes.search", version = 1)]
