@@ -139,3 +139,6 @@ window traffic and connection-count gates must meet the upper bound. It creates
 a separate diagnostic report and refuses to overwrite one. Its
 `component_gate_passed` result cannot set `release_qualified`, which remains false. This application harness is
 component evidence; final GChat/fleet release qualification remains outstanding.
+An invalid measurement or a failed component bound returns a failing exit status;
+valid unfavorable measurements are retained in the report. General exploratory
+classifiers and their informative thresholds cannot waive this file-profile gate.

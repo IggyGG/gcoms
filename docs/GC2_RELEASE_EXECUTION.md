@@ -1,10 +1,14 @@
 # GC/2 correction and release execution
 
-Owner direction (2026-09-19): implement the end-to-end release plan. Privacy and
-performance thresholds are informative comparisons, not automatic release vetoes.
-Present measured alternatives and obtain the owner's profile/migration selection
-before deployment. Encryption, authentication, protected routing, durable delivery,
-and state continuity remain required. Physical mobile testing is deferred.
+Implement the end-to-end release plan and present measured alternatives before
+the owner's profile/migration selection. General experimental privacy/performance
+comparisons remain informative; they do not override the specific accepted
+[file-profile contract](GCHAT_FILE_TRANSFER_FOLLOWUP.md): the upper 95% bound on
+chat separability must be at most 0.55 for idle/chat and matched bulk/mixed, in
+both traffic windows and connection observations. No explicit waiver of that
+contract is established in this handoff. Encryption, authentication, protected
+routing, durable delivery, and state continuity remain required. Physical mobile
+testing is deferred.
 
 Scope: separated GComs, GChat, and original coms host integration only. Release to
 eight native Hetzner relays and three Kubernetes anchors; publish signed Linux
@@ -18,8 +22,9 @@ signature verification and all correctness/evidence requirements remain required
 1. Remove protected-route bypasses; test unavailable routes, direct-dial tripwires,
    natural subscriptions, compatible legacy clients, and durable recovery.
 2. Correct packet parsing, direction, time normalization, AUC ties, and independent
-   run uncertainty. Invalid evidence must fail; a valid privacy measurement over
-   the reference threshold must remain an informative result.
+   run uncertainty. Invalid evidence must fail. Retain valid measurements above
+   the reference threshold for comparison, while failing the file-profile gate
+   when either required chat comparison exceeds its accepted bound.
 3. Bind captures and results to exact source, scripts, executable, configuration,
    and workload. Preserve prior failures and reports. Measure real persistence,
    exact IDs/bytes/receipts, tail latency, admission delay, and interface costs.
@@ -105,7 +110,10 @@ update, signed release, privacy qualification, or completed soak is implied here
   of discarding the run. The file classifier uses structured frame accounting,
   authenticates the selected profile through the workload report, checks capture
   loss and full workload coverage, and keeps pooled results diagnostic. Valid
-  unfavorable measurements remain informative.
+  unfavorable measurements remain available for comparison. The original merge
+  also made the file classifier's threshold non-vetoing; the coordination fix
+  restores the accepted file gate. A passing pooled component still cannot
+  establish release qualification.
 - Before this merge, the GComs native run completed 799 Rust tests (five reviewed
   exclusions), docs, strict Clippy, generated artifacts and isolated package
   consumers. Paired GChat completed 147 Rust tests, strict Clippy, UI checks and

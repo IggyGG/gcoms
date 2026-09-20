@@ -55,13 +55,29 @@ native results above apply to the explicitly named commits.
 
 ## Remaining release scope
 
-The next isolated fleet experiment needs a stable production baseline. Canary
-14 stopped before offering a file when its monitor detected a production relay
+Canary 14 stopped before offering a file when its monitor detected a production relay
 process change. All eight hosts removed their test namespaces, interfaces,
 rules and mounted test volumes; the production-stability check failed for one
 host. Its production service was subsequently observed active after an orderly
 stop/start with a changed binary hash. This session made no fleet changes.
 That run does not qualify transfer capacity or receiver reopen behavior.
+
+The other session subsequently completed canary 15 with its frozen GComs
+`628ec44` / GChat `36a96ae` binaries and controller `5d8846e`. A 64 KiB file
+verified in 5.510 seconds after acceptance; receiver restart preserved identity
+and a second export hash. All eight cleanup checks passed. These are small-file
+and receiver-reopen observations, not sustained capacity or qualification of the
+newer merged release source. See [the retained fleet results](FLEET_FILES_RESULTS.md).
+
+Coordination found conflicting descriptions of privacy acceptance. The accepted
+file-profile gate remains upper 95% separability at most 0.55 for idle/chat and
+matched bulk/mixed, including both window traffic and connection observations.
+The file classifier now returns failure for an exceeded component bound while
+retaining its valid measurement. A passing pooled component is still diagnostic;
+general comparison results do not waive this specific release requirement.
+The combined controller/privacy follow-up passed all 118 Python checks and the
+464-path source audit. These script checks do not extend the native CI receipt
+to a new source revision.
 
 The pooled packet captures remain diagnostic. Still required are isolated
 whole-client observations, the full workload/network/client-count comparison,
