@@ -29,6 +29,8 @@ std = ["rand/std", "rand/std_rng", "rand_core/getrandom", "sha2/std", "precomput
 precomputed-tables = ["x25519-dalek/precomputed-tables"]
 tls-pin = ["dep:p256", "dep:x509-cert"]
 client-persist = ["std"]
+# Authenticated session storage with caller-supplied entropy and monotonic time.
+sealed-state = []
 # Deterministic RNG seeding and the unauthenticated initiator, for
 # conformance vectors and fuzz harnesses only. Never enable in a client.
 test-vectors = ["std"]

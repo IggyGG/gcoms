@@ -294,9 +294,9 @@ pub struct Session {
     rng: StdRng,
 }
 
-#[cfg(feature = "std")]
+#[cfg(any(feature = "std", feature = "sealed-state"))]
 mod storage;
-#[cfg(feature = "std")]
+#[cfg(any(feature = "std", feature = "sealed-state"))]
 pub use storage::{PreparedReceive, PreparedSend, SealedSession, SessionContext};
 
 impl Session {
@@ -580,7 +580,7 @@ impl Drop for Session {
 }
 impl ZeroizeOnDrop for Session {}
 
-#[cfg(feature = "std")]
+#[cfg(any(feature = "std", feature = "sealed-state"))]
 mod persist {
     use super::*;
     use ml_kem::KeyExport;
@@ -615,7 +615,12 @@ mod persist {
     }
 
     impl Session {
+        #[cfg(all(feature = "std", any(test, feature = "client-persist")))]
         pub(super) fn encode_private(&self) -> Vec<u8> {
+            self.encode_private_at(Instant::now())
+        }
+
+        pub(super) fn encode_private_at(&self, now: SessionTime) -> Vec<u8> {
             let mut v = Vec::with_capacity(256);
             v.extend_from_slice(MAGIC);
             v.extend_from_slice(&self.send_chain);
@@ -650,7 +655,7 @@ mod persist {
             v.extend_from_slice(&self.sent_since_pq.to_be_bytes());
             v.extend_from_slice(&self.pq_every.to_be_bytes());
             v.extend_from_slice(&(self.pq_after.as_secs()).to_be_bytes());
-            let since_pq_secs = self.last_pq.elapsed().as_secs().min(u32::MAX as u64) as u32;
+            let since_pq_secs = elapsed(now, self.last_pq).as_secs().min(u32::MAX as u64) as u32;
             v.extend_from_slice(&since_pq_secs.to_be_bytes());
             v.extend_from_slice(&self.send_rotated_at.to_be_bytes());
             put_opt32(&mut v, &self.mixed_peer);
@@ -667,13 +672,23 @@ mod persist {
                 v.extend_from_slice(&key.ctr.to_be_bytes());
                 v.extend_from_slice(&key.mk);
                 v.extend_from_slice(&key.nonce);
-                let age = key.stored_at.elapsed().as_secs().min(u32::MAX as u64) as u32;
+                let age = elapsed(now, key.stored_at).as_secs().min(u32::MAX as u64) as u32;
                 v.extend_from_slice(&age.to_be_bytes());
             }
             v
         }
 
+        #[cfg(all(feature = "std", any(test, feature = "client-persist")))]
         pub(super) fn decode_private(buf: &[u8]) -> Option<Self> {
+            Self::decode_private_at(buf, Instant::now(), Duration::ZERO, StdRng::from_entropy())
+        }
+
+        pub(super) fn decode_private_at(
+            buf: &[u8],
+            now: SessionTime,
+            offline: Duration,
+            rng: StdRng,
+        ) -> Option<Self> {
             if buf.len() < 6 + 32 * 3 + 8 * 2 + 32 + 1 {
                 return None;
             }
@@ -742,7 +757,7 @@ mod persist {
                 }
                 _ => return None,
             };
-            let sent_since_pq = u32::from_be_bytes(buf.get(p..p + 4)?.try_into().ok()?);
+            let mut sent_since_pq = u32::from_be_bytes(buf.get(p..p + 4)?.try_into().ok()?);
             p += 4;
             let pq_every = u32::from_be_bytes(buf.get(p..p + 4)?.try_into().ok()?);
             p += 4;
@@ -752,10 +767,10 @@ mod persist {
                 return None;
             }
             let pq_after = Duration::from_secs(pq_after_secs);
-            let now = Instant::now();
             let (last_pq, send_rotated_at, mixed_peer, epoch_pq_ct, skipped) = if legacy {
                 // A v1 archive did not record refresh age or epoch material:
                 // force a fresh epoch and refresh on the next send.
+                sent_since_pq = pq_every;
                 (
                     now.checked_sub(pq_after).unwrap_or(now),
                     send_ctr,
@@ -807,25 +822,28 @@ mod persist {
                     if ctr > recv_ctr {
                         return None;
                     }
-                    let age = Duration::from_secs(u64::from(age));
+                    let age = Duration::from_secs(u64::from(age)).saturating_add(offline);
                     if age >= SKIP_KEY_TTL {
                         continue;
                     }
+                    // An earlier boot's age may exceed this boot's monotonic
+                    // clock. Drop that key instead of granting it a fresh TTL.
+                    let Some(stored_at) = now.checked_sub(age) else {
+                        continue;
+                    };
                     skipped.push_back(SkippedKey {
                         ctr,
                         mk,
                         nonce,
-                        stored_at: now.checked_sub(age).unwrap_or(now),
+                        stored_at,
                     });
                 }
-                (
-                    now.checked_sub(Duration::from_secs(u64::from(since_pq_secs)))
-                        .unwrap_or(now),
-                    send_rotated_at,
-                    mixed_peer,
-                    epoch_pq_ct,
-                    skipped,
-                )
+                let age = Duration::from_secs(u64::from(since_pq_secs)).saturating_add(offline);
+                let last_pq = now.checked_sub(age).unwrap_or_else(|| {
+                    sent_since_pq = pq_every;
+                    now
+                });
+                (last_pq, send_rotated_at, mixed_peer, epoch_pq_ct, skipped)
             };
             if p != buf.len() {
                 return None;
@@ -848,12 +866,12 @@ mod persist {
                 pq_every,
                 pq_after,
                 last_pq,
-                rng: StdRng::from_entropy(),
+                rng,
             })
         }
     }
 
-    #[cfg(test)]
+    #[cfg(all(test, feature = "std"))]
     mod tests {
         use super::*;
         use crate::identity::IdentityKeypair;
