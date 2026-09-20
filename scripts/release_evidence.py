@@ -22,7 +22,7 @@ CANDIDATE = NATIVE | INSTALLERS | {
     "packages.rust", "packages.npm", "packages.gchat-registry",
     "integration.browser", "integration.gchat", "security.dependencies",
     "security.inventory", "security.secrets", "security.fuzz", "stress.mls64", "stress.low-port",
-    "soak.application",
+    "soak.application", "stress.files-streaming",
 }
 PREFLIGHT = CANDIDATE | {"review.rights", "review.operator", "review.maintainers",
                          "signing.windows", "signing.macos", "signing.linux", "signing.manifest"}
@@ -40,6 +40,7 @@ RUST_CRATES = {
 # These cases have separate qualification gates or explicitly private fixtures.
 # Adding another ignored test requires a reviewed policy change here.
 EXCLUSIONS = {
+    "gib_import_resume_export_is_streaming": "stress.files-streaming",
     "sixty_four_member_channel": "stress.mls64",
     "connectivity::privilege_tests::real_denied_low_port_falls_back_without_privileges": "stress.low-port",
     "native_c_handshake_accepts_only_the_pinned_relay_and_h2": "private external TLS probe",
@@ -208,6 +209,26 @@ def validate_report(check, report, candidate, base, artifacts):
                      artifact.get("target", "").startswith(platform)))}
         require(required and required <= inputs.keys(), "signing report omits signed artifact inputs")
         require(bool(report.get("evidence")), "signing verification needs retained evidence")
+    if check == "stress.files-streaming":
+        counts = report.get("tests", {})
+        require(all(type(counts.get(key)) is int and counts[key] == expected
+                    for key, expected in (("passed", 1), ("failed", 0), ("ignored", 0))) and
+                counts.get("incomplete") == [],
+                "streaming qualification must execute exactly one successful test")
+        def streaming_command(command):
+            if len(command) < 2 or Path(command[0]).name not in {"cargo", "cargo.exe"} or command[1] != "test" or "--" not in command:
+                return False
+            split = command.index("--")
+            cargo, harness = command[2:split], command[split + 1:]
+            pairs = set(zip(cargo, cargo[1:]))
+            return (("-p", "gcoms-file-transfer") in pairs or
+                    ("--package", "gcoms-file-transfer") in pairs) and (
+                    ("--test", "swarm") in pairs and "--release" in cargo and
+                    "--locked" in cargo and "--ignored" in harness and
+                    "--exact" in harness and
+                    "gib_import_resume_export_is_streaming" in cargo + harness)
+        require(any(streaming_command(step["command"]) for step in report["steps"]),
+                "streaming qualification must run the exact 1 GiB release test")
     if check in {"security.fuzz", "soak.application"}:
         measurements = report.get("measurements", {})
         measured = measurements.get("workload_seconds")

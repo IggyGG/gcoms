@@ -2,6 +2,8 @@
 """Native CI gate; runners are disposable and contain the pinned toolchain."""
 import json, os, subprocess, sys
 from pathlib import Path
+
+NPM = 'npm.cmd' if os.name == 'nt' else 'npm'
 root=Path(__file__).resolve().parents[1]
 def run(args):
     subprocess.run(args,cwd=root,check=True)
@@ -12,10 +14,10 @@ run(['cargo','fmt','--all','--','--check'])
 run(['cargo','test','--workspace','--all-features','--locked','--','--test-threads=1'])
 run(['cargo','doc','--workspace','--all-features','--no-deps','--locked'])
 run(['cargo','clippy','--workspace','--all-targets','--all-features','--locked','--','-D','warnings'])
-run(['npm','ci','--ignore-scripts'])
-run(['npm','run','check'])
-run(['npm','test'])
-run(['npm','run','build'])
+run([NPM,'ci','--ignore-scripts'])
+run([NPM,'run','check'])
+run([NPM,'test'])
+run([NPM,'run','build'])
 run([sys.executable,'scripts/check-vectors.py'])
 run([sys.executable,'scripts/check-generated.py'])
 run(['cargo','check','-p','gcoms-sdk','--no-default-features','--features','ipc','--locked'])

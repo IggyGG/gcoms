@@ -101,7 +101,10 @@ must use disposable isolated runners with no release/signing secrets.
   integration and GChat integration against the candidate inputs.
 - Current dependency audits and source/license inventories. Scanning does not
   establish distribution rights.
-- Explicit 64-member MLS and isolated Linux privileged-port tests. The three
+- Explicit 64-member MLS, isolated Linux privileged-port, and 1 GiB cache streaming
+  tests. The streaming gate must execute `cargo test -p gcoms-file-transfer --release
+  --test swarm --locked gib_import_resume_export_is_streaming -- --ignored --exact
+  --test-threads=1` and report exactly one passed, unskipped test. The three
   ignored private C TLS-probe cases do not establish public interoperability.
 - At least 24 hours of parser fuzzing and a 24-hour application soak with at least
   16 clients and four channels. Soak evidence must account for durable operations,
