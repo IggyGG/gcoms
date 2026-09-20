@@ -34,6 +34,7 @@ def install_snapshot_npm(chat, archives, offline, run):
 
 def prepare_gchat_resources(chat, config, archives, args, out, env, run, report):
     install_snapshot_npm(chat, archives, args.offline, run)
+    run([sys.executable, 'scripts/check-generated.py', '--cargo-config', config], chat)
     run([NPM, 'run', 'check'], chat)
     run([NPM, 'test'], chat)
     run([NPM, 'run', 'build'], chat)

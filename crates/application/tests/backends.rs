@@ -486,7 +486,8 @@ async fn qualify_files(backend: Backend, dir: &Path) {
             }
         )
         .await
-        .unwrap_err()
+        .err()
+        .unwrap()
         .contains("credential rejected"));
         assert!(!unauthorized.exists());
     }
