@@ -5,6 +5,7 @@ Canonical lockfile changes are exported for review, never written to the origina
 application. Only cached third-party packages are used when --offline is selected.
 """
 import argparse, hashlib, http.server, json, os, re, subprocess, tarfile, tempfile, threading, tomllib, urllib.request, uuid
+import sys
 from pathlib import Path
 from urllib.parse import unquote
 from source_snapshot import snapshot, unchanged
