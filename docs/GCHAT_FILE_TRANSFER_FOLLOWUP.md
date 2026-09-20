@@ -197,3 +197,8 @@ budget and separately enforce the required 300-second recovery-progress bound.
 Receiver/relay startup time counts toward that progress bound, and reports must
 bind observed recovery to the same transfer's independent export. This tooling
 change applies to later campaigns; capacity 02 keeps its recorded coordinator.
+
+The separate [isolated daemon capture calibration](GCHAT_CLIENT_CAPTURE.md)
+implements the proposed single-client boundary and packet-derived connection
+features. Its one-quartet validity check does not qualify privacy, installed
+clients, or the fleet, and does not replace the accepted <=0.55 gates.
