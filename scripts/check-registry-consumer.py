@@ -97,7 +97,14 @@ def qualify(a, application, packages, cargo_home):
             else: args+=['--workspace','--all-features','--target-dir',str(a.target_dir.resolve())]
             if a.command=='clippy':args+=['--all-targets','--','-D','warnings']
             if a.command=='test':args+=['--','--test-threads=1']
-            subprocess.run(args,cwd=application,check=True)
+            try:
+                subprocess.run(args,cwd=application,check=True)
+            except subprocess.CalledProcessError as error:
+                # Surface the underlying tool output for the caller; the
+                # exception alone hides the actual gate failure.
+                if error.stdout: sys.stderr.write(error.stdout if isinstance(error.stdout,str) else error.stdout.decode(errors='replace'))
+                if error.stderr: sys.stderr.write(error.stderr if isinstance(error.stderr,str) else error.stderr.decode(errors='replace'))
+                raise
     finally: server.shutdown();server.server_close()
 
     return lock_path
