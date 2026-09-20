@@ -247,3 +247,30 @@ readable. The local channel test now redeems a shareable invitation remotely
 before its first file message, instead of bypassing that path with direct owner
 admission. A rebuilt candidate must pass the normal canary and receiver reopen
 before the capacity phase can start.
+
+## Canary 14 interrupted by production replacement — 2026-09-20
+
+Run `ff-20260920-022818` used frozen `fleet-build-10`, GComs `628ec44` and
+GChat `36a96ae`, after all 151 paired GChat tests, strict Clippy, the remote
+invitation/renewal regression, dependency policy and archive/frontend/desktop
+consumer checks passed. Eight isolated relays were ready after 47.8 seconds;
+client 0 proved profile-22/GCRB2 readiness after 94.5 seconds.
+
+At 135.1 seconds the monitor detected a changed production service identity on
+host 4 (`157.90.35.101`) and aborted before any file offer. Read-only journal
+inspection showed a deliberate stop/start at 02:30:25 CEST with a newly installed
+binary (`gc2-dfaf5e620e3920b4`); systemd reported a successful stop and zero
+automatic restarts. The isolated worker never targets `ghost-relay.service`.
+The other worker was notified and the rollout schedule was requested. Repeated
+read-only observations found all eight production services unchanged over the
+next sampled three-minute interval, about eight minutes after the replacement.
+A subsequent canary uses a fresh baseline and retains the automatic stop on any
+production change; this run is not a transfer timeout observation.
+
+All eight hosts confirmed removal of the test namespace, veth, firewall rules
+and volume mount, with no cleanup operation errors. Seven overall cleanup
+receipts passed; host 4 correctly failed the unchanged-production requirement.
+The original report remains failed in `test-evidence/files-canary-14`.
+The controller now distinguishes campaign cancellation from a readiness or
+transfer deadline and reports isolated resource removal separately from the
+unchanged-production gate. Neither change relaxes the campaign pass criteria.

@@ -94,6 +94,13 @@ invitation redemption before sending file application traffic.
 That expanded scenario passed in 146.74 seconds, including file delivery after
 subscription renewal. Its first attempt retained a route-readiness failure after
 invitation import; the shared GChat inbox wait now also requires a usable route.
+The final shared-wait scenario passes in 142.94 seconds. On the committed pair
+`628ec44` / `36a96ae`, all 151 GChat cases, both strict Clippy checks, dependency
+policy, current/legacy invite codecs and package/frontend/desktop consumers pass.
+The source-bound `fleet-build-10` passes as well. Canary 14 was interrupted by an
+external production relay replacement before file admission; see the retained
+[fleet results](FLEET_FILES_RESULTS.md). It does not qualify the invitation fix
+or file capacity on the fleet.
 
 Preserve earlier fleet failures, including the current-protocol bootstrap failure
 in `files-canary-12`. Rebuild both repositories together and require the ordinary
