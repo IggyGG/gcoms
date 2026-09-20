@@ -66,6 +66,18 @@ not itself evidence that a lifetime deadline expired. To qualify the carrier
 limit, retain a deadline event near 1800 elapsed seconds with original authority
 still fresh, application work crossing it, and authenticated recovery receipts.
 
+`--mode carrier-cap --expiries 1` selects that separate journey. It waits for
+a real hourly window with enough fresh authority before starting the fixture,
+then identifies two ready entry drivers for each actual client. A new 256 MiB
+file and chat cross their recorded 1800-second deadlines. Every selected client
+driver must emit `deadline_elapsed` while its original authority remains fresh;
+transport failure or dropping a driver cannot satisfy this condition. Fresh
+drivers, both subscription classes, verified file progress and the returned
+chat acknowledgment must recover within the same 300-second budget. Independent
+export and receiver reopen/re-export remain required. The driver binds all
+client lifecycle logs into its report. This does not advance the paused test
+clock or change production credentials, carrier lifetimes or owner retry pacing.
+
 ## Fair retry prerequisite
 
 GComs `fbab1959e4380a32f3b30d76c682b4d18985e4f1`, paired with GChat

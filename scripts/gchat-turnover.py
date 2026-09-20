@@ -18,6 +18,8 @@ class Journey(base.Worker):
         super().__init__(spec)
         self.result.update(scope=SCOPE, privacy_qualified=False, release_qualified=False)
         self.origin = time.monotonic(); self.roles = {}; self.latest = {}; self.chat_count = 0
+        if self.spec['config'].get('mode') == 'carrier-cap':
+            self.env['GCOMS_GC2_LIFECYCLE'] = '1'
 
     def event(self, kind, **facts):
         super().event(kind, elapsed=time.monotonic() - self.origin, **facts)
@@ -77,6 +79,74 @@ class Journey(base.Worker):
             'offloads': offloads, 'before': self.inventory()}
         self.assert_topology(self.result['boundary']['before'])
 
+
+
+    def prepare(self):
+        if self.spec['config'].get('mode') == 'carrier-cap':
+            # Start only while credentials will remain fresh beyond 1800 s.
+            now=time.time()
+            if now % 3600 > 900:
+                next_window=(int(now)//3600+1)*3600+5
+                self.event('fresh_authority_window_wait', until_unix=next_window)
+                while time.time()<next_window: time.sleep(min(2,next_window-time.time()))
+        super().prepare()
+
+    def lifecycle(self, i):
+        path=self.root/(self.latest[f'client{i}']+'.log')
+        rows=[]
+        for line in path.read_text(errors='replace').splitlines():
+            if line.startswith('gc2_entry_lifecycle '):
+                row=json.loads(line.removeprefix('gc2_entry_lifecycle '))
+                if row['role']=='client': rows.append(row)
+        return rows
+
+    def carrier_cap(self, channel):
+        starts={}
+        for i in (0,1):
+            rows=self.lifecycle(i)
+            ready={r['id'] for r in rows if r['phase']=='class_muxes_ready'}
+            starts[i]=[r for r in rows if r['phase']=='started' and r['id'] in ready and
+                r['max_lifetime_ms']==1800000 and 1799000<=r['deadline_after_start_ms']<=1800000 and
+                r['authority_expires_at']>r['unix_ms']/1000+1860]
+            if len(starts[i])!=2: raise RuntimeError('two fresh 1800-second entry drivers required per client')
+        ends=[r['unix_ms']/1000+r['deadline_after_start_ms']/1000 for rows in starts.values() for r in rows]
+        first,last=min(ends),max(ends)
+        if last-first>60 or first-time.time()<120: raise RuntimeError('carrier deadlines are not a usable bounded application window')
+        self.event('carrier_cap_planned', first_deadline=first, last_deadline=last, client_entries=starts)
+        self.wait(first-60)
+        transfer=self.start_file(channel,self.spec['config']['file_bytes'],'carrier-cap')
+        self.wait(first-1)
+        before=self.file_info(transfer)
+        if before['state']=='complete': raise RuntimeError('file completed before carrier cap')
+        self.event('immediate_pre_cap_file_state', **before)
+        # One deadline includes the carrier-end interval and all setup/admission.
+        deadline=time.monotonic()+max(0,first-time.time())+300
+        self.wait(first+1)
+        self.rpc_deadline=deadline
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+            chat=pool.submit(self.chat,channel,'turnover:carrier-cap',max(.1,deadline-time.monotonic()))
+            def recovered():
+                self.sample()
+                evidence={}
+                for i in (0,1):
+                    rows=self.lifecycle(i)
+                    evidence[i]=validated_cap_ends(starts[i],rows)
+                    if evidence[i] is None: return False
+                    old={r['id'] for r in starts[i]}
+                    fresh={r['id'] for r in rows if r['phase']=='class_muxes_ready' and r['id'] not in old and r['unix_ms']/1000>=first}
+                    if len(fresh)<2: return False
+                if not all(self.readiness(i) for i in (0,1)): return False
+                if int(self.file_info(transfer)['verified_bytes'])<=int(before['verified_bytes']): return False
+                return evidence
+            evidence=until(recovered,deadline,'actual carrier cap and both-class/file recovery')
+            chat.result(timeout=max(.1,deadline-time.monotonic()))
+        self.rpc_deadline=None
+        self.event('carrier_cap_recovered', client_ends=evidence, seconds=time.time()-first)
+        self.finish_file(transfer)
+        self.reopen(1)
+        self.probe(1,{'action':'export','id':transfer['id'],'name':'reopened-'+transfer['name'],**{k:transfer[k] for k in ('size','sha256')}})
+        self.result['carrier_cap']={'client_starts':starts,'client_ends':evidence,'file':transfer,'actual_elapsed_1800_seconds':True,'authority_still_fresh':True}
+        self.event('carrier_cap_passed', **self.result['carrier_cap'])
 
     def start_client(self, i):
         if self.roles.get(f'client{i}', 0) == 0:
@@ -258,6 +328,12 @@ class Journey(base.Worker):
         self.reopen(1)
         self.probe(1,{'action':'export','id':small['id'],'name':'reopened-'+small['name'],**{k:small[k] for k in ('size','sha256')}})
         self.admitted_sender_reopen(channel)
+        if self.spec['config'].get('mode') == 'carrier-cap':
+            self.carrier_cap(channel)
+            self.result['chat_acknowledged']=self.chat_count
+            self.result['boundary']['after']=self.inventory(); self.assert_topology(self.result['boundary']['after'])
+            self.result['completed']=True
+            return
         cycles=[]
         for generation in range(self.spec['config']['expiries']):
             boundary=(int(time.time())//3600+1)*3600
@@ -297,6 +373,22 @@ class Journey(base.Worker):
         self.result['boundary']['after']=self.inventory();self.assert_topology(self.result['boundary']['after'])
         self.result['completed']=True
 
+def validated_cap_ends(starts, rows):
+    ends=[]
+    for start in starts:
+        observed=[r for r in rows if r['id']==start['id'] and r['phase'] in ('deadline_elapsed','transport_ended','dropped','completed')]
+        if not observed: return None
+        if len(observed)!=1: raise RuntimeError('duplicate driver completion')
+        end=observed[0]
+        if (end['phase']!='deadline_elapsed' or not start['deadline_after_start_ms']-1<=end['elapsed_ms']<=start['deadline_after_start_ms']+60000 or
+                end['unix_ms']>=start['authority_expires_at']*1000 or
+                start['max_lifetime_ms']!=1800000 or
+                start['authority_expires_at']*1000-start['unix_ms']<=1860000):
+            raise RuntimeError('driver did not reach the actual carrier cap with fresh authority')
+        ends.append(end)
+    return ends
+
+
 def main():
     if sys.argv[1:2]==['--worker']:
         return Journey(json.loads(Path(sys.argv[2]).read_text())).execute()
@@ -304,6 +396,7 @@ def main():
     parser.add_argument('--build',type=Path,required=True)
     parser.add_argument('--out',type=Path,required=True)
     parser.add_argument('--expiries',type=int,default=3,choices=(1,2,3))
+    parser.add_argument('--mode',choices=('credential-expiry','carrier-cap'),default='credential-expiry')
     parser.add_argument('--file-bytes',type=int,default=256*1024*1024)
     args=parser.parse_args()
     if os.geteuid()==0: parser.error('run controller as ordinary owner')
@@ -311,7 +404,7 @@ def main():
     root=args.out.resolve();root.mkdir(mode=0o700,parents=True,exist_ok=False)
     build=base.build_binding(args.build.resolve())
     before=links();tool_hash=sha256(Path(__file__));helper_hash=sha256(HELPER)
-    config={'expiries':args.expiries,'file_bytes':args.file_bytes,'production_credential_seconds':3600,'production_carrier_cap_seconds':1800,'recovery_seconds':300}
+    config={'mode':args.mode,'lifecycle_diagnostics':args.mode=='carrier-cap','expiries':args.expiries,'file_bytes':args.file_bytes,'production_credential_seconds':3600,'production_carrier_cap_seconds':1800,'recovery_seconds':300}
     spec={'out':str(root),'build':build,'config':config,'workload':'turnover','seed':20260920,
           'uid':os.getuid(),'gid':os.getgid(),'run_nonce':uuid.uuid4().hex,
           'host_netns':os.readlink('/proc/self/ns/net'),'host_mountns':os.readlink('/proc/self/ns/mnt')}
@@ -332,6 +425,7 @@ def main():
             if os.readlink(proc/'ns/net') in retired: residual.append(int(proc.name))
         except (FileNotFoundError,PermissionError): pass
     evidence={name:sha256(root/name) for name in ('worker.json','events.jsonl','connections.pcap','connections.capture.log','controller.log') if (root/name).exists()}
+    evidence.update({p.name:sha256(p) for p in root.glob('client*.log')})
     report={'evidence':evidence,'retired_namespace_pids':residual,'scope':SCOPE,'worker_exit':result.returncode,'host_links_unchanged':base.link_identity(before)==base.link_identity(after),
             'host_before':before,'host_after':after,'build_unchanged':base.build_binding(args.build.resolve())==build,
             'tooling_unchanged':sha256(Path(__file__))==tool_hash and sha256(HELPER)==helper_hash,

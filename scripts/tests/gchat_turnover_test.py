@@ -94,5 +94,27 @@ class ControllerTests(unittest.TestCase):
                 worker.exercise()
 
 
+class CapEvidenceTests(unittest.TestCase):
+    def setUp(self):
+        self.start = dict(id=1, role="client", phase="started", unix_ms=1000000,
+            authority_expires_at=4600, max_lifetime_ms=1800000,
+            deadline_after_start_ms=1799999, elapsed_ms=0)
+        self.end = self.start | dict(phase="deadline_elapsed", unix_ms=2800001, elapsed_ms=1800001)
+
+    def test_requires_actual_deadline_and_fresh_authority(self):
+        self.assertEqual(turnover.validated_cap_ends([self.start], [self.end]), [self.end])
+        for change in ({"phase": "transport_ended"}, {"phase": "dropped"},
+                       {"elapsed_ms": 1790000}, {"unix_ms": 4600000}):
+            with self.subTest(change=change), self.assertRaises(RuntimeError):
+                turnover.validated_cap_ends([self.start], [self.end | change])
+        with self.assertRaises(RuntimeError):
+            turnover.validated_cap_ends([self.start | dict(authority_expires_at=2700)], [self.end])
+
+    def test_missing_or_duplicate_completion_cannot_pass(self):
+        self.assertIsNone(turnover.validated_cap_ends([self.start], []))
+        with self.assertRaises(RuntimeError):
+            turnover.validated_cap_ends([self.start], [self.end, self.end])
+
+
 if __name__ == "__main__":
     unittest.main()
