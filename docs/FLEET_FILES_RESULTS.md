@@ -1,4 +1,4 @@
-# Fleet file-transfer findings — 2026-09-18
+# Fleet file-transfer findings — 2026-09-20
 
 > **Candidate update (2026-09-20).** The current implementation adds explicit
 > GCRB2 provisioning, channel bulk transport, both subscription classes,
@@ -10,11 +10,12 @@
 > post-merge note below describes the earlier state. See the
 > [implementation and remaining gates](GCHAT_FILE_TRANSFER_FOLLOWUP.md).
 
-**Full fleet qualification has not passed.** The harness is implemented and the
-file worker liveness defect is fixed, but the standard 64 KiB cross-host canary
-still misses its five-minute deadline. The 16-client ramp, 56 transfer pairs,
-30-minute baseline, four-hour mixed workload, large files and fault matrix remain
-unexecuted behind that gate. See [the runbook](FLEET_FILES.md) for the exact campaign.
+**Full fleet qualification has not passed.** Canary 15 passes the standard
+64 KiB transfer and receiver reopen. The subsequent capacity run verifies 4 MiB
+and 32 MiB exports, but exposes excessive chat latency during hourly routing
+credential renewal. The 16-client ramp, 56 transfer pairs, 30-minute baseline,
+four-hour mixed workload and fault matrix remain unqualified. Historical failures
+below are retained; see [the runbook](FLEET_FILES.md) for the exact campaign.
 
 > **Post-merge state (2026-09-19).** The campaign branch is reconciled with trunk
 > `a71db53` and now builds relays and clients with the fleet carrier profile.
@@ -294,3 +295,31 @@ seconds. Every host passed cleanup, including unchanged production state.
 verdict remains `incomplete` because a canary does not qualify the full fleet
 campaign. Larger files, concurrent chat, all 56 directed host pairs, the
 four-hour mixed run, faults and privacy qualification remain separate gates.
+
+## Capacity 01 exposes renewal interruption — 2026-09-20
+
+Run `ff-20260920-024634` uses the same immutable `fleet-build-10`. Its repeated
+64 KiB canary and receiver reopen passed, followed by a 300.9-second chat
+baseline. Independent export hashes verified 4 MiB in 31.183 seconds and 32 MiB
+in 326.997 seconds after acceptance. Larger transfers remain in progress at this
+checkpoint; these observations do not establish the 1 GiB capacity gate.
+
+The initial introduction expires at elapsed 805.835 seconds. Both clients then
+report `no ready independent GC/2 route`, lose subscriptions and enter inbox
+recovery. The sender becomes route-ready near 857 seconds and the receiver near
+932 seconds. The 32 MiB transfer has a 129-second interval without new observed
+verified progress. Chat acknowledgement latency reaches 129.700 seconds, above
+the fixed 120-second maximum; the measured baseline p95 was 16.486 seconds.
+This run cannot pass the mixed-traffic gate, regardless of subsequent file
+completion. Production service state remains unchanged at this checkpoint.
+
+The subscription pumps treated a temporarily unavailable protected route as lost
+terminal authority. A local regression reproduces this inbox invalidation. The
+repair waits for usable entries before opening subscriptions and retains inbox
+and channel authority when the ready-route generation changes during a failed
+attempt. An error on a still-ready, unchanged route retains ordinary recovery.
+The regression fails before the repair and passes after it, alongside the
+independent channel-control retry regression. The repair still needs a rebuilt
+fleet run across credential expiry. Live observations are retained privately in
+`target/protocol-plan-capacity01-live/renewal-observations.json`; the complete
+campaign evidence remains under `test-evidence/files-capacity-01`.

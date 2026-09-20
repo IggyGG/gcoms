@@ -7,6 +7,43 @@ use futures_util::{stream::FuturesUnordered, StreamExt};
 #[path = "ticks_tests.rs"]
 mod tests;
 
+#[derive(Default)]
+struct SubscriptionRoute {
+    #[cfg(feature = "experimental-gc2")]
+    entry: Option<(Arc<gcoms_routing::gc2::owner::ReadyConnector>, u64)>,
+}
+
+impl SubscriptionRoute {
+    /// Entry renewal does not invalidate terminal queue authority. Only observe
+    /// the background owner's ready set; never dial or wake it from this pump.
+    fn prepare(state: &NodeState, target: &RelayTarget) -> Option<Self> {
+        #[cfg(feature = "experimental-gc2")]
+        if let Some(entry) = &state.gc2_carrier {
+            let revision = entry.readiness_revision();
+            if !entry.can_route((target.address, target.relay_service_id)) {
+                return None;
+            }
+            return Some(Self {
+                entry: Some((entry.clone(), revision)),
+            });
+        }
+        let _ = (state, target);
+        Some(Self::default())
+    }
+
+    /// A failed request on a replaced/unavailable entry is inconclusive about
+    /// the inbox. Reopen through the current route before recovering authority.
+    fn unchanged(&self, target: &RelayTarget) -> bool {
+        #[cfg(feature = "experimental-gc2")]
+        if let Some((entry, revision)) = &self.entry {
+            return *revision == entry.readiness_revision()
+                && entry.can_route((target.address, target.relay_service_id));
+        }
+        let _ = target;
+        true
+    }
+}
+
 pub(crate) fn spawn_contact_subscription_pump(
     state: Arc<Mutex<NodeState>>,
     scheduler: RelayScheduler,
@@ -83,6 +120,10 @@ pub(crate) fn spawn_contact_subscription_pump(
                     let events = events.clone();
                     subscriptions.push(async move {
                     if !owner_alias_receiving(&state.lock().unwrap_or_else(|p| p.into_inner()), &alias) { return key; }
+                    let Some(route) = SubscriptionRoute::prepare(
+                        &state.lock().unwrap_or_else(|p| p.into_inner()),
+                        &alias.contact.target,
+                    ) else { return key; };
                     let opened = match scheduler.subscribe_with_class(alias.clone(), traffic) {
                         Ok(receipt) => receipt.completion().await.delivery_stream(),
                         Err(error) => Err(error.to_string()),
@@ -117,7 +158,7 @@ pub(crate) fn spawn_contact_subscription_pump(
                         }
                         Err(error) => metrics::log_event("contact_sub_error", &[("e", error)]),
                     }
-                    if !resubscribe_in_place {
+                    if !resubscribe_in_place && route.unchanged(&alias.contact.target) {
                         super::routing::owner_unavailable(&state.lock().unwrap_or_else(|p| p.into_inner()), &alias);
                     }
                     key
@@ -211,6 +252,13 @@ pub(crate) fn spawn_channel_subscription_pump(
                     let scheduler = scheduler.clone();
                     let events = events.clone();
                     subscriptions.push(async move {
+                        let target = alias.contact.target.clone();
+                        let Some(route) = SubscriptionRoute::prepare(
+                            &state.lock().unwrap_or_else(|p| p.into_inner()),
+                            &target,
+                        ) else {
+                            return key;
+                        };
                         let stream = match scheduler.subscribe_with_class(alias, traffic) {
                             Ok(receipt) => receipt.completion().await.delivery_stream(),
                             Err(error) => Err(error.to_string()),
@@ -226,7 +274,7 @@ pub(crate) fn spawn_channel_subscription_pump(
                                 handle_incoming(&state, cell, &events);
                             }
                         }
-                        if !resubscribe_in_place {
+                        if !resubscribe_in_place && route.unchanged(&target) {
                             if let Some(runtime) =
                                 &state.lock().unwrap_or_else(|p| p.into_inner()).routing
                             {

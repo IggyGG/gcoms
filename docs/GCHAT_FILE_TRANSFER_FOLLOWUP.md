@@ -156,3 +156,17 @@ topologies. A local mixed measurement on profile 22 verified exactly 32,769 bulk
 bytes across three chunks and two chat messages, with all five distinct receipts,
 no delivery errors and no overrun of its 60-second interval. These measurements
 do not alter the frozen fleet executables or supply privacy qualification.
+
+The full workspace subsequently passes 832 cases (six ignored) on `5d60225`.
+GChat `200cd7a` incorporates the shared desktop/service carrier-forwarding fix
+and passes all 151 cases against that unchanged GComs snapshot. An immutable
+profile-22 capture verifies exact workload accounting, capture coverage and zero
+packet drops; one seed is instrumentation evidence, not a privacy gate result.
+
+Capacity 01 exposes a separate hourly-renewal interruption after verified 4 MiB
+and 32 MiB exports. Missing protected entries incorrectly trigger inbox and
+channel reprovisioning, and one chat acknowledgement exceeds 120 seconds.
+Subscription pumps now retain their authority through unavailable or replaced
+entry routes and retry through the background owner's ready set. A red/green
+regression covers both pumps. See the retained [fleet findings](FLEET_FILES_RESULTS.md);
+local regression success does not qualify the repair on the fleet.

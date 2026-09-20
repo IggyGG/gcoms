@@ -4,6 +4,70 @@ use std::time::Duration;
 use tokio::net::TcpListener;
 use tokio_rustls::TlsAcceptor;
 
+#[cfg(feature = "experimental-gc2")]
+#[tokio::test]
+async fn unavailable_entries_preserve_inbox_and_channel_authority() {
+    use std::sync::atomic::Ordering;
+    let directory = Arc::new(gcoms_routing::gc2::directory::Directory::for_loopback_fixture());
+    let (_entry_owner, ready) = gcoms_routing::gc2::owner::EntryOwner::new(
+        directory,
+        gcoms_routing::gc2::CandidateProfile::file_transfer(),
+        2,
+    )
+    .unwrap();
+    let scheduler = RelayScheduler::gc2(ready.clone()).unwrap();
+    let runtime = super::super::routing::RoutingRuntime::new(
+        RoutingConfig::default(),
+        gcoms_routing::Directory::new(),
+        true,
+    )
+    .unwrap();
+    runtime.recovering_owner.store(false, Ordering::Release);
+    runtime.channel_ready.lock().unwrap().insert("files".into());
+    let mut node = persist::tests::state();
+    node.scheduler = scheduler.clone();
+    node.gc2_carrier = Some(ready);
+    node.routing = Some(runtime.clone());
+    node.channels.insert(
+        "files".into(),
+        persist::tests::established_owner_fixture("files"),
+    );
+    let inbox = node.client_relay.clone();
+    let channel = node.channels["files"].own_route.aliases.clone();
+    let state = Arc::new(Mutex::new(node));
+    let (events, _) = broadcast::channel(4);
+    let contact = spawn_contact_subscription_pump(
+        state.clone(),
+        scheduler.clone(),
+        events.clone(),
+        Duration::from_millis(10),
+    );
+    let channels = spawn_channel_subscription_pump(state.clone(), scheduler.clone(), events);
+    // Poll both ordinary pumps across several maintenance opportunities with
+    // retained authority but no usable entry, as at the hourly carrier rollover.
+    tokio::time::sleep(Duration::from_millis(1200)).await;
+    for pump in [contact, channels] {
+        pump.stop.send(true).unwrap();
+        tokio::time::timeout(Duration::from_secs(2), pump.task)
+            .await
+            .unwrap()
+            .unwrap();
+    }
+    scheduler.shutdown();
+    assert!(
+        !runtime.recovering_owner.load(Ordering::Acquire),
+        "a missing entry must not invalidate retained inbox authority"
+    );
+    assert!(
+        runtime.channel_ready.lock().unwrap().contains("files"),
+        "a missing entry must not invalidate retained channel authority"
+    );
+    let st = state.lock().unwrap();
+    assert_eq!(st.client_relay, inbox);
+    assert_eq!(st.channels["files"].own_route.aliases, channel);
+    assert!(st.subscribed_classes.is_empty());
+}
+
 #[tokio::test]
 async fn channel_control_retries_while_data_response_is_stalled() {
     let identity = TlsIdentity::generate().unwrap();
