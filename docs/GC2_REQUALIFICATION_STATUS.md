@@ -62,6 +62,24 @@ host. Its production service was subsequently observed active after an orderly
 stop/start with a changed binary hash. This session made no fleet changes.
 That run does not qualify transfer capacity or receiver reopen behavior.
 
+The production changes were subsequently attributed by direct acknowledgment to
+OpenCode session `ses_f657247f6ffe3oDxEHezkGyr1X`. It confirmed r4-only deployments
+at 02:30:25 CEST (`dfaf5e620e3920b4…`) and 02:46:05 CEST
+(`acd8ced269996ab7…`) on September 20. The latter running hash and service start
+were also observed read-only. The owner reports original Coms `e2e858a` plus
+uncommitted lease-promotion, subscription-diagnostic and logging changes. That
+binary is outside the qualified separated-source pair above. The owner committed
+to no further production changes until explicit coordination. Deployment end and
+traffic cessation are separate. The owner subsequently confirmed its final mint
+at approximately 03:16:02 CEST, payload traffic ending at 03:16:30, and residual
+listener/bridge lease replays and reconnects stopping at **03:24:03 CEST**. It
+holds both production changes and relay-impacting test traffic until fleet-files
+explicitly coordinates a new window. This is the owner's activity acknowledgment;
+each isolated run still needs a fresh observed production baseline and its
+abort-on-change monitor. The exact attribution and quiet-window messages are
+retained under
+`target/gc2-requalification/rollout-quiet-window-acknowledgment.json`.
+
 The other session subsequently completed canary 15 with its frozen GComs
 `628ec44` / GChat `36a96ae` binaries and controller `5d8846e`. A 64 KiB file
 verified in 5.510 seconds after acceptance; receiver restart preserved identity
