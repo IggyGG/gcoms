@@ -20,7 +20,7 @@ gcoms-mls = { version = "0.1.0", path = "../mls" }
 gcoms-transport = { version = "0.1.0", path = "../transport" }
 gcoms-routing = { version = "0.1.0", path = "../routing" }
 gcoms-network-client = { version = "0.1.0", path = "../network-client" }
-tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "time", "io-util", "sync", "signal"] }
+tokio = { version = "1", features = ["rt", "macros", "net", "time", "io-util", "sync"] }
 tokio-rustls = "0.26"
 rustls = { version = "0.23.45", default-features = false, features = ["aws-lc-rs", "std"] }
 bytes = "1"
@@ -51,7 +51,7 @@ libc = "0.2"
 windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Storage_FileSystem"] }
 
 [dev-dependencies]
-tokio = { version = "1", features = ["test-util"] }
+tokio = { version = "1", features = ["test-util", "rt-multi-thread"] }
 h2 = "0.4"
 http = "1"
 rcgen = { version = "0.13", default-features = false, features = ["aws_lc_rs", "pem"] }
@@ -59,6 +59,8 @@ tempfile = "3"
 gcoms-crypto = { version = "0.1.0", path = "../crypto", features = ["test-vectors"] }
 
 [features]
+default = ["cli"]
+cli = ["tokio/rt-multi-thread", "tokio/signal"]
 chaos-debug = []
 # Queue/runtime plumbing for the explicit GC/2 wire; not a production profile.
 experimental-gc2 = ["gcoms-core/experimental-gc2", "gcoms-protocol/experimental-gc2", "gcoms-routing/experimental-gc2", "gcoms-transport/experimental-gc2", "dep:h2", "dep:http"]
@@ -69,6 +71,7 @@ client-persist = ["gcoms-crypto/client-persist", "gcoms-mls/client-persist"]
 [[bin]]
 name = "gcnode"
 path = "src/main.rs"
+required-features = ["cli"]
 
 [[example]]
 name = "app_performance"

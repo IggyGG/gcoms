@@ -12,7 +12,7 @@ publish.workspace = true
 
 [features]
 default = ["native"]
-native = ["dep:tokio", "dep:gcoms-sdk", "dep:gcoms-private-fs", "dep:rustix"]
+native = ["dep:futures-util", "dep:tokio", "dep:gcoms-sdk", "dep:gcoms-private-fs", "dep:rustix"]
 file-store = ["native", "dep:aes-gcm", "dep:fs2", "dep:tempfile", "dep:zeroize"]
 wasm = ["dep:gloo-net", "dep:gloo-timers", "dep:web-sys", "dep:js-sys", "dep:wasm-bindgen", "dep:wasm-bindgen-futures"]
 
@@ -28,6 +28,7 @@ sha2 = "0.10"
 uuid = { version = "1", features = ["v4", "js"] }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+futures-util = { version = "0.3", optional = true }
 tokio = { version = "1", optional = true, features = ["rt", "sync", "time", "macros", "net", "io-util"] }
 gcoms-sdk = { version = "0.1.0", path = "../sdk", optional = true, default-features = false, features = ["ipc"] }
 gcoms-private-fs = { version = "0.1.0", path = "../private-fs", optional = true }

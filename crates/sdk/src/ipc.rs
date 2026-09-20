@@ -27,8 +27,8 @@ use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 #[cfg(all(any(unix, windows), feature = "ipc"))]
 use tokio::sync::{broadcast, mpsc, oneshot, watch, Mutex};
 
-pub const VERSION: u16 = 16;
-// IPC16 appends restricted bootstrap; deployed network tags remain unchanged.
+pub const VERSION: u16 = 18;
+// IPC18 appends file-sharing and network-status operations; existing tags stay fixed.
 // new operations/capabilities/events are never admitted under an older version.
 #[cfg(all(any(unix, windows), feature = "ipc"))]
 const MIN_SERVER_VERSION: u16 = 10;
@@ -50,6 +50,7 @@ pub enum Capability {
     VolatileApplication,
     CatalogAccess,
     BootstrapApplication,
+    FileSharing,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -224,11 +225,47 @@ pub enum Request {
         content_type: String,
         body: Vec<u8>,
     },
+    PersistProfile,
+    RecoverNetwork {
+        urls: Vec<String>,
+    },
+    ConfigureNetworkDns {
+        enabled: bool,
+    },
+    NetworkDnsStatus,
+    RuntimeStatus,
+    ImportNetworkInvitation {
+        invitation: String,
+    },
+    CreateChannelInvitation {
+        channel: String,
+        ttl_secs: u64,
+    },
+    InspectChannelInvitation {
+        link: String,
+    },
+    JoinChannelInvitation {
+        link: String,
+        display: String,
+        timeout_secs: u64,
+    },
+    Sharing(crate::sharing::Request),
+    NetworkStatus,
 }
 
 impl Request {
     pub fn minimum_version(&self) -> u16 {
         match self {
+            Self::Sharing(_) | Self::NetworkStatus => 18,
+            Self::PersistProfile
+            | Self::RecoverNetwork { .. }
+            | Self::ConfigureNetworkDns { .. }
+            | Self::NetworkDnsStatus
+            | Self::RuntimeStatus
+            | Self::ImportNetworkInvitation { .. }
+            | Self::CreateChannelInvitation { .. }
+            | Self::InspectChannelInvitation { .. }
+            | Self::JoinChannelInvitation { .. } => 17,
             Self::ConfigureCatalogOrigins { .. } | Self::CatalogHttp(_) => 15,
             Self::RecoverChannelRoute { .. } => 14,
             Self::SendDirectTracked { .. } | Self::SendChannelTracked { .. } => 13,
@@ -241,6 +278,17 @@ impl Request {
     }
     pub fn required_capability(&self) -> Capability {
         match self {
+            Self::Sharing(_) => Capability::FileSharing,
+            Self::NetworkStatus => Capability::IdentityRead,
+            Self::RuntimeStatus | Self::NetworkDnsStatus => Capability::IdentityRead,
+            Self::PersistProfile
+            | Self::RecoverNetwork { .. }
+            | Self::ConfigureNetworkDns { .. } => Capability::ProfileAdmin,
+            Self::ImportNetworkInvitation { .. } => Capability::ProfileAdmin,
+            Self::CreateChannelInvitation { .. } => Capability::ChannelAdmin,
+            Self::InspectChannelInvitation { .. } | Self::JoinChannelInvitation { .. } => {
+                Capability::ChannelMember
+            }
             Self::ConfigureCatalogOrigins { .. } | Self::CatalogHttp(_) => {
                 Capability::CatalogAccess
             }
@@ -334,6 +382,13 @@ pub enum Response {
     ApplicationInbox(Vec<crate::ApplicationDelivery>),
     Shell(crate::shell::ShellReply),
     CatalogHttp(crate::CatalogHttpResponse),
+    RuntimeStatus(crate::RuntimeStatus),
+    ChannelInvitation(crate::ChannelInvitation),
+    ChannelJoined(String),
+    NetworkDnsStatus(crate::NetworkNameStatus),
+    NetworkRecovered(String),
+    Sharing(crate::sharing::Reply),
+    NetworkStatus(crate::NetworkStatus),
 }
 
 #[cfg(all(any(unix, windows), feature = "ipc"))]
@@ -363,6 +418,7 @@ pub enum Frame {
     Request(RequestEnvelope),
     Response(ResponseEnvelope),
     Event(EventEnvelope),
+    ProfileHello { hello: Hello, token: [u8; 32] },
 }
 
 // Keep the public Vec-returning codec compatible. Runtime I/O uses the guarded
@@ -393,6 +449,10 @@ pub fn encode(frame: &Frame) -> Result<Vec<u8>, SdkError> {
 impl Zeroize for Request {
     fn zeroize(&mut self) {
         match self {
+            Self::ImportNetworkInvitation { invitation } => invitation.zeroize(),
+            Self::JoinChannelInvitation { link, .. } | Self::InspectChannelInvitation { link } => {
+                link.zeroize()
+            }
             Self::CatalogHttp(request) => request.body.as_mut_slice().zeroize(),
             Self::SubmitVolatileComponent { body, .. }
             | Self::SubmitBootstrap { body, .. }
@@ -407,8 +467,10 @@ impl Zeroize for Request {
 }
 impl Zeroize for Frame {
     fn zeroize(&mut self) {
-        if let Self::Request(envelope) = self {
-            envelope.request.zeroize();
+        match self {
+            Self::Request(envelope) => envelope.request.zeroize(),
+            Self::ProfileHello { token, .. } => token.zeroize(),
+            _ => {}
         }
     }
 }
@@ -483,12 +545,13 @@ struct IpcInner {
     identity: std::sync::OnceLock<Identity>,
     granted: Vec<Capability>,
     event_stream_id: [u8; 16],
-    writer: Mutex<tokio::io::WriteHalf<ClientStream>>,
+    writer: Mutex<Option<tokio::io::WriteHalf<ClientStream>>>,
     pending: Mutex<HashMap<u64, oneshot::Sender<Result<Response, SdkError>>>>,
     events: broadcast::Sender<EventEnvelope>,
     closed: watch::Sender<bool>,
     next_request_id: AtomicU64,
     reader_abort: std::sync::OnceLock<tokio::task::AbortHandle>,
+    reader_task: Mutex<Option<tokio::task::JoinHandle<()>>>,
 }
 
 #[cfg(all(any(unix, windows), feature = "ipc"))]
@@ -497,6 +560,25 @@ pub struct IpcClient(Arc<IpcInner>, Option<([u8; 16], [u8; 16])>);
 
 #[cfg(all(any(unix, windows), feature = "ipc"))]
 impl IpcClient {
+    /// Explicitly detach and release the profile inbox lease.
+    pub async fn close(&self) {
+        self.0.closed.send_replace(true);
+        if let Some(reader) = self.0.reader_abort.get() {
+            reader.abort();
+        }
+        for (_, sender) in std::mem::take(&mut *self.0.pending.lock().await) {
+            let _ = sender.send(Err(SdkError::ConnectionClosed));
+        }
+        // Named-pipe shutdown does not close its handle. Drop both split halves,
+        // even when callers retain client clones, before completing detachment.
+        self.0.writer.lock().await.take();
+        let mut reader = self.0.reader_task.lock().await;
+        if let Some(task) = reader.take() {
+            task.abort();
+            let _ = task.await;
+        }
+    }
+
     pub async fn resolve_contact_identity(&self, card: &ContactCard) -> Result<Vec<u8>, SdkError> {
         match self
             .request(Request::ContactIdentity { card: card.clone() })
@@ -534,7 +616,7 @@ impl IpcClient {
         application: impl Into<String>,
         requested_capabilities: Vec<Capability>,
     ) -> Result<Self, SdkError> {
-        Self::connect_authenticated(path, application, requested_capabilities, None).await
+        Self::connect_authenticated(path, application, requested_capabilities, None, None).await
     }
 
     pub async fn connect_component(
@@ -543,8 +625,14 @@ impl IpcClient {
         requested_capabilities: Vec<Capability>,
         credentials: crate::machine::ComponentCredentials,
     ) -> Result<Self, SdkError> {
-        Self::connect_authenticated(path, application, requested_capabilities, Some(credentials))
-            .await
+        Self::connect_authenticated(
+            path,
+            application,
+            requested_capabilities,
+            Some(credentials),
+            None,
+        )
+        .await
     }
 
     pub async fn submit_volatile_component(
@@ -579,11 +667,23 @@ impl IpcClient {
         .await
     }
 
+    /// Attach to an application profile. The token is provisioned by its local owner.
+    pub async fn connect_profile(
+        path: impl AsRef<Path>,
+        application: impl Into<String>,
+        requested_capabilities: Vec<Capability>,
+        token: [u8; 32],
+    ) -> Result<Self, SdkError> {
+        Self::connect_authenticated(path, application, requested_capabilities, None, Some(token))
+            .await
+    }
+
     async fn connect_authenticated(
         path: impl AsRef<Path>,
         application: impl Into<String>,
         requested_capabilities: Vec<Capability>,
         component: Option<crate::machine::ComponentCredentials>,
+        profile_token: Option<[u8; 32]>,
     ) -> Result<Self, SdkError> {
         let endpoint = crate::LocalEndpoint::new(path.as_ref());
         let mut stream = local::connect(&endpoint).await?;
@@ -591,17 +691,19 @@ impl IpcClient {
             requested_capabilities.contains(&Capability::BootstrapApplication);
         let component_scoped = component.is_some();
         let authenticated_component_id = component.as_ref().map(|c| c.component_id);
-        write_frame(
-            &mut stream,
-            &Frame::Hello(Hello {
-                component,
-                min_version: VERSION,
-                max_version: VERSION,
-                application: application.into(),
-                requested_capabilities,
-            }),
-        )
-        .await?;
+        let hello = Hello {
+            component,
+            min_version: VERSION,
+            max_version: VERSION,
+            application: application.into(),
+            requested_capabilities,
+        };
+        let frame = Zeroizing::new(match profile_token {
+            Some(token) => Frame::ProfileHello { hello, token },
+            None => Frame::Hello(hello),
+        });
+        write_frame(&mut stream, &frame).await?;
+        drop(frame);
         let (granted, event_stream_id) = match read_frame(&mut stream).await? {
             Frame::Welcome(welcome) if welcome.version == VERSION => {
                 (welcome.granted_capabilities, welcome.event_stream_id)
@@ -619,12 +721,13 @@ impl IpcClient {
             identity: std::sync::OnceLock::new(),
             granted,
             event_stream_id,
-            writer: Mutex::new(writer),
+            writer: Mutex::new(Some(writer)),
             pending: Mutex::new(HashMap::new()),
             events,
             closed: watch::channel(false).0,
             next_request_id: AtomicU64::new(1),
             reader_abort: std::sync::OnceLock::new(),
+            reader_task: Mutex::new(None),
         });
         let reader_inner = inner.clone();
         let reader_task = tokio::spawn(async move {
@@ -658,6 +761,7 @@ impl IpcClient {
             .reader_abort
             .set(reader_task.abort_handle())
             .expect("IPC reader abort handle initialized once");
+        *inner.reader_task.lock().await = Some(reader_task);
         let client = Self(inner, None);
         let identity = match client.request(Request::Identity).await? {
             Response::Identity(identity) => identity,
@@ -756,7 +860,18 @@ impl IpcClient {
             request_id,
             request: std::mem::replace(&mut *request, Request::Identity),
         }));
-        if let Err(error) = write_frame(&mut *self.0.writer.lock().await, &frame).await {
+        let mut closed = self.0.closed.subscribe();
+        let sent = {
+            let mut writer = self.0.writer.lock().await;
+            match writer.as_mut() {
+                Some(writer) if !*closed.borrow() => tokio::select! {
+                    _ = closed.changed() => Err(SdkError::ConnectionClosed),
+                    result = write_frame(writer, &frame) => result,
+                },
+                _ => Err(SdkError::ConnectionClosed),
+            }
+        };
+        if let Err(error) = sent {
             self.0.pending.lock().await.remove(&request_id);
             return Err(error);
         }
@@ -790,6 +905,106 @@ impl Drop for IpcClient {
 #[cfg(all(any(unix, windows), feature = "ipc"))]
 #[async_trait]
 impl GcClient for IpcClient {
+    async fn persist_profile(&self) -> Result<(), SdkError> {
+        self.expect_empty(Request::PersistProfile).await
+    }
+    async fn configure_network_dns(&self, enabled: bool) -> Result<(), SdkError> {
+        self.expect_empty(Request::ConfigureNetworkDns { enabled })
+            .await
+    }
+    async fn network_dns_status(&self) -> Result<crate::NetworkNameStatus, SdkError> {
+        match self.request(Request::NetworkDnsStatus).await? {
+            Response::NetworkDnsStatus(status) => Ok(status),
+            _ => Err(SdkError::Protocol("unexpected DNS status".into())),
+        }
+    }
+    async fn recover_network(&self, urls: Vec<String>) -> Result<String, SdkError> {
+        match self.request(Request::RecoverNetwork { urls }).await? {
+            Response::NetworkRecovered(address) => Ok(address),
+            _ => Err(SdkError::Protocol(
+                "unexpected network recovery response".into(),
+            )),
+        }
+    }
+
+    async fn resolve_contact_identity(&self, card: &ContactCard) -> Result<Vec<u8>, SdkError> {
+        IpcClient::resolve_contact_identity(self, card).await
+    }
+    async fn network_status(&self) -> Result<crate::NetworkStatus, SdkError> {
+        match self.request(Request::NetworkStatus).await? {
+            Response::NetworkStatus(value) => Ok(value),
+            _ => Err(SdkError::Protocol("invalid network status reply".into())),
+        }
+    }
+    async fn sharing(
+        &self,
+        request: crate::sharing::Request,
+    ) -> Result<crate::sharing::Reply, SdkError> {
+        request.validate()?;
+        match self.request(Request::Sharing(request)).await? {
+            Response::Sharing(value) => Ok(value),
+            _ => Err(SdkError::Protocol("invalid file sharing reply".into())),
+        }
+    }
+    async fn runtime_status(&self) -> Result<crate::RuntimeStatus, SdkError> {
+        match self.request(Request::RuntimeStatus).await? {
+            Response::RuntimeStatus(value) => Ok(value),
+            _ => Err(SdkError::Protocol("unexpected runtime status".into())),
+        }
+    }
+    async fn import_network_invitation(&self, invitation: &str) -> Result<(), SdkError> {
+        self.expect_empty(Request::ImportNetworkInvitation {
+            invitation: invitation.into(),
+        })
+        .await
+    }
+    async fn create_channel_invitation(
+        &self,
+        channel: &str,
+        ttl_secs: u64,
+    ) -> Result<crate::ChannelInvitation, SdkError> {
+        match self
+            .request(Request::CreateChannelInvitation {
+                channel: channel.into(),
+                ttl_secs,
+            })
+            .await?
+        {
+            Response::ChannelInvitation(value) => Ok(value),
+            _ => Err(SdkError::Protocol("unexpected invitation".into())),
+        }
+    }
+    async fn inspect_channel_invitation(
+        &self,
+        link: &str,
+    ) -> Result<crate::ChannelInvitation, SdkError> {
+        match self
+            .request(Request::InspectChannelInvitation { link: link.into() })
+            .await?
+        {
+            Response::ChannelInvitation(value) => Ok(value),
+            _ => Err(SdkError::Protocol("unexpected invitation".into())),
+        }
+    }
+    async fn join_channel_invitation(
+        &self,
+        link: &str,
+        display: &str,
+        timeout_secs: u64,
+    ) -> Result<String, SdkError> {
+        match self
+            .request(Request::JoinChannelInvitation {
+                link: link.into(),
+                display: display.into(),
+                timeout_secs,
+            })
+            .await?
+        {
+            Response::ChannelJoined(value) => Ok(value),
+            _ => Err(SdkError::Protocol("unexpected channel join".into())),
+        }
+    }
+
     async fn configure_catalog_origins(&self, origins: Vec<String>) -> Result<(), SdkError> {
         match self
             .request(Request::ConfigureCatalogOrigins { origins })
@@ -1380,7 +1595,7 @@ where
 
 #[cfg(all(any(unix, windows), feature = "ipc"))]
 async fn serve_connection<C, S>(
-    mut stream: S,
+    stream: S,
     client: C,
     allowed: Vec<Capability>,
     registry: Option<Arc<crate::machine::MachineRegistry>>,
@@ -1389,26 +1604,61 @@ where
     C: GcClient,
     S: AsyncRead + AsyncWrite + Unpin,
 {
-    let hello = match read_frame(&mut stream).await? {
-        Frame::Hello(hello)
-            if hello.min_version <= hello.max_version
-                && hello.min_version <= VERSION
-                && hello.max_version >= MIN_SERVER_VERSION =>
+    serve_profile_connection(stream, client, allowed, registry, None).await
+}
+
+#[cfg(all(any(unix, windows), feature = "ipc"))]
+async fn serve_profile_connection<C, S>(
+    mut stream: S,
+    client: C,
+    allowed: Vec<Capability>,
+    registry: Option<Arc<crate::machine::MachineRegistry>>,
+    profile: Option<Arc<ProfileAccess>>,
+) -> Result<(), SdkError>
+where
+    C: GcClient,
+    S: AsyncRead + AsyncWrite + Unpin,
+{
+    let mut incoming = Zeroizing::new(
+        tokio::time::timeout(std::time::Duration::from_secs(10), read_frame(&mut stream))
+            .await
+            .map_err(|_| SdkError::ConnectionClosed)??,
+    );
+    let hello = match &mut *incoming {
+        Frame::Hello(hello) if profile.is_none() => hello.clone(),
+        Frame::ProfileHello { hello, token }
+            if profile.as_ref().is_some_and(|p| {
+                token
+                    .iter()
+                    .zip(p.token.iter())
+                    .fold(0u8, |difference, (a, b)| difference | (a ^ b))
+                    == 0
+            }) =>
         {
-            hello
+            hello.clone()
         }
-        unexpected => {
-            let _unexpected = Zeroizing::new(unexpected);
-            return Err(SdkError::Protocol("incompatible IPC hello".into()));
-        }
+        _ => return Err(SdkError::PermissionDenied),
     };
+    drop(incoming);
+    if hello.min_version > hello.max_version
+        || hello.min_version > VERSION
+        || hello.max_version < MIN_SERVER_VERSION
+        || (profile.is_some() && hello.max_version < 17)
+    {
+        return Err(SdkError::Protocol("incompatible IPC hello".into()));
+    }
+    let mut inbox_lease = InboxLease(None);
     let version = hello.max_version.min(VERSION);
     // Tag 12 meant BootstrapApplication in the unreleased bootstrap-v13 fork.
     // Never downgrade/filter that Hello: tags 30/31 now mean network sends.
-    if (version < 15
+    if (version < 18
         && hello
             .requested_capabilities
-            .contains(&Capability::CatalogAccess))
+            .contains(&Capability::FileSharing))
+        || (version < 15
+            && hello
+                .requested_capabilities
+                .contains(&Capability::CatalogAccess))
         || (version < 16
             && hello
                 .requested_capabilities
@@ -1447,6 +1697,8 @@ where
                 && (version >= 12 || *capability != Capability::VolatileApplication)
                 && (version >= 15 || *capability != Capability::CatalogAccess)
                 && (version >= 16 || *capability != Capability::BootstrapApplication)
+                && (version >= 18 || *capability != Capability::FileSharing)
+                && (version >= 17 || *capability != Capability::ProfileAdmin)
         })
         .collect::<Vec<_>>();
     write_frame(
@@ -1488,7 +1740,32 @@ where
         if request.version != version {
             return Err(SdkError::Protocol("IPC request version mismatch".into()));
         }
-        let result = if version >= guarded_request.minimum_version()
+        let authorized = version >= guarded_request.minimum_version()
+            && granted.contains(&guarded_request.required_capability());
+        let inbox_allowed = if !authorized {
+            false
+        } else if let Some(profile) = &profile {
+            match &*guarded_request {
+                Request::ApplicationInbox { .. } if inbox_lease.0.is_none() => {
+                    if profile
+                        .inbox
+                        .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+                        .is_ok()
+                    {
+                        inbox_lease.0 = Some(profile.inbox.clone());
+                        true
+                    } else {
+                        false
+                    }
+                }
+                Request::CommitApplication { .. } => inbox_lease.0.is_some(),
+                _ => true,
+            }
+        } else {
+            true
+        };
+        let result = if inbox_allowed
+            && version >= guarded_request.minimum_version()
             && granted.contains(&guarded_request.required_capability())
         {
             if matches!(
@@ -1634,9 +1911,88 @@ fn event_allowed(event: &ClientEvent, granted: &[Capability]) -> bool {
 #[cfg(all(any(unix, windows), feature = "ipc"))]
 pub(crate) async fn dispatch<C: GcClient>(
     client: &C,
-    request: Request,
+    mut request: Request,
 ) -> Result<Response, SdkError> {
+    let bounded = match &request {
+        Request::ImportNetworkInvitation { invitation } => {
+            !invitation.is_empty() && invitation.len() <= 64 * 1024
+        }
+        Request::CreateChannelInvitation { channel, ttl_secs } => {
+            channel.len() <= 1024 && *ttl_secs > 0 && *ttl_secs <= 7 * 24 * 3600
+        }
+        Request::InspectChannelInvitation { link } => link.len() <= 64 * 1024,
+        Request::JoinChannelInvitation {
+            link,
+            display,
+            timeout_secs,
+        } => {
+            link.len() <= 64 * 1024
+                && display.len() <= 1024
+                && *timeout_secs > 0
+                && *timeout_secs <= 600
+        }
+        Request::RecoverNetwork { urls } => {
+            urls.len() <= 16 && urls.iter().all(|u| u.len() <= 4096)
+        }
+        _ => true,
+    };
+    if !bounded {
+        request.zeroize();
+        return Err(SdkError::Protocol(
+            "application request exceeds limit".into(),
+        ));
+    }
     match request {
+        Request::PersistProfile => {
+            client.persist_profile().await?;
+            Ok(Response::Empty)
+        }
+        Request::ConfigureNetworkDns { enabled } => {
+            client.configure_network_dns(enabled).await?;
+            Ok(Response::Empty)
+        }
+        Request::NetworkDnsStatus => client
+            .network_dns_status()
+            .await
+            .map(Response::NetworkDnsStatus),
+        Request::RecoverNetwork { urls } => client
+            .recover_network(urls)
+            .await
+            .map(Response::NetworkRecovered),
+        Request::Sharing(request) => {
+            request.validate()?;
+            let reply = client.sharing(request).await?;
+            if matches!(&reply, crate::sharing::Reply::Piece(bytes) if bytes.len() > crate::sharing::PIECE_BYTES)
+            {
+                return Err(SdkError::Protocol(
+                    "file piece response exceeds limit".into(),
+                ));
+            }
+            Ok(Response::Sharing(reply))
+        }
+        Request::NetworkStatus => client.network_status().await.map(Response::NetworkStatus),
+        Request::RuntimeStatus => client.runtime_status().await.map(Response::RuntimeStatus),
+        Request::ImportNetworkInvitation { invitation } => {
+            let invitation = Zeroizing::new(invitation);
+            client.import_network_invitation(&invitation).await?;
+            Ok(Response::Empty)
+        }
+        Request::CreateChannelInvitation { channel, ttl_secs } => client
+            .create_channel_invitation(&channel, ttl_secs)
+            .await
+            .map(Response::ChannelInvitation),
+        Request::InspectChannelInvitation { link } => client
+            .inspect_channel_invitation(&link)
+            .await
+            .map(Response::ChannelInvitation),
+        Request::JoinChannelInvitation {
+            link,
+            display,
+            timeout_secs,
+        } => client
+            .join_channel_invitation(&link, &display, timeout_secs)
+            .await
+            .map(Response::ChannelJoined),
         Request::ConfigureCatalogOrigins { origins } => {
             client.configure_catalog_origins(origins).await?;
             Ok(Response::Empty)
@@ -1654,7 +2010,8 @@ pub(crate) async fn dispatch<C: GcClient>(
         }
         Request::File(_) | Request::Shell(_) => Err(SdkError::PermissionDenied),
         Request::ContactIdentity { card } => client
-            .contact_identity(&card)
+            .resolve_contact_identity(&card)
+            .await
             .map(|bytes| Response::Blob(Blob(bytes))),
         Request::Identity => client.refresh_identity().await.map(Response::Identity),
         Request::FileRoute => client
@@ -2059,7 +2416,7 @@ mod tests {
 
     #[test]
     fn requests_declare_required_capability() {
-        assert_eq!(VERSION, 16);
+        assert_eq!(VERSION, 18);
         for request in [
             Request::SubmitDurableOpaque {
                 recipient: ContactCard(Vec::new()),
@@ -3015,3 +3372,165 @@ mod route_recovery_compatibility_tests {
 #[cfg(all(test, any(unix, windows), feature = "ipc", feature = "embedded"))]
 #[path = "ipc/bootstrap_compat_tests.rs"]
 mod bootstrap_compat_tests;
+
+#[cfg(all(any(unix, windows), feature = "ipc"))]
+struct ProfileAccess {
+    token: [u8; 32],
+    inbox: Arc<std::sync::atomic::AtomicBool>,
+}
+#[cfg(all(any(unix, windows), feature = "ipc"))]
+struct InboxLease(Option<Arc<std::sync::atomic::AtomicBool>>);
+#[cfg(all(any(unix, windows), feature = "ipc"))]
+impl Drop for InboxLease {
+    fn drop(&mut self) {
+        if let Some(lease) = &self.0 {
+            lease.store(false, Ordering::Release);
+        }
+    }
+}
+/// Serve a profile with a credential-bound handshake and a single inbox consumer.
+#[cfg(all(any(unix, windows), feature = "ipc"))]
+pub async fn serve_profile_until<C, F>(
+    endpoint: impl AsRef<Path>,
+    client: C,
+    allowed: Vec<Capability>,
+    token: [u8; 32],
+    shutdown: F,
+) -> Result<(), SdkError>
+where
+    C: GcClient + Clone + 'static,
+    F: std::future::Future<Output = ()>,
+{
+    let listener = LocalListener::bind(&crate::LocalEndpoint::new(endpoint.as_ref()))?;
+    serve_profile_listener_until(listener, client, allowed, token, shutdown).await
+}
+/// Serve an already-bound listener, allowing hosts to acknowledge readiness only after bind.
+#[cfg(all(any(unix, windows), feature = "ipc"))]
+pub async fn serve_profile_listener_until<C, F>(
+    mut listener: LocalListener,
+    client: C,
+    allowed: Vec<Capability>,
+    token: [u8; 32],
+    shutdown: F,
+) -> Result<(), SdkError>
+where
+    C: GcClient + Clone + 'static,
+    F: std::future::Future<Output = ()>,
+{
+    let profile = Arc::new(ProfileAccess {
+        token,
+        inbox: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+    });
+    let mut connections = tokio::task::JoinSet::new();
+    let slots = Arc::new(tokio::sync::Semaphore::new(32));
+    tokio::pin!(shutdown);
+    let result = loop {
+        tokio::select! {
+            _ = &mut shutdown => break Ok(()),
+            accepted = listener.accept() => match accepted {
+                Ok(stream) => {
+                    let Ok(slot) = slots.clone().try_acquire_owned() else { continue };
+                    let client = client.clone(); let allowed = allowed.clone(); let profile = profile.clone();
+                    connections.spawn(async move { let _slot = slot; serve_profile_connection(stream, client, allowed, None, Some(profile)).await });
+                }
+                Err(error) => break Err(error),
+            },
+            _ = connections.join_next(), if !connections.is_empty() => {},
+        }
+    };
+    drop(listener);
+    connections.abort_all();
+    while connections.join_next().await.is_some() {}
+    result
+}
+
+#[cfg(test)]
+mod application_version_tests {
+    use super::*;
+    #[test]
+    fn application_operations_are_appended_and_require_ipc17() {
+        let requests = [
+            Request::PersistProfile,
+            Request::RecoverNetwork { urls: vec![] },
+            Request::ConfigureNetworkDns { enabled: false },
+            Request::NetworkDnsStatus,
+            Request::RuntimeStatus,
+            Request::ImportNetworkInvitation {
+                invitation: "fixture".into(),
+            },
+            Request::CreateChannelInvitation {
+                channel: "fixture".into(),
+                ttl_secs: 1,
+            },
+            Request::InspectChannelInvitation {
+                link: "fixture".into(),
+            },
+            Request::JoinChannelInvitation {
+                link: "fixture".into(),
+                display: "peer".into(),
+                timeout_secs: 1,
+            },
+        ];
+        for (offset, request) in requests.into_iter().enumerate() {
+            assert_eq!(request.minimum_version(), 17);
+            let bytes = postcard::to_allocvec(&request).unwrap();
+            assert_eq!(bytes[0] as usize, 37 + offset);
+            assert_eq!(postcard::from_bytes::<Request>(&bytes).unwrap(), request);
+        }
+        assert_eq!(
+            Request::PersistProfile.required_capability(),
+            Capability::ProfileAdmin
+        );
+        assert_eq!(
+            Request::RuntimeStatus.required_capability(),
+            Capability::IdentityRead
+        );
+    }
+}
+
+#[cfg(test)]
+mod sharing_version_tests {
+    use super::*;
+    #[test]
+    fn sharing_and_status_append_without_reusing_prior_tags() {
+        let request = Request::Sharing(crate::sharing::Request::List);
+        assert_eq!(request.minimum_version(), 18);
+        assert_eq!(request.required_capability(), Capability::FileSharing);
+        assert_eq!(Request::NetworkStatus.minimum_version(), 18);
+        // IPC17's last request remains immediately before the new append-only tags.
+        let previous = postcard::to_allocvec(&Request::JoinChannelInvitation {
+            link: String::new(),
+            display: String::new(),
+            timeout_secs: 0,
+        })
+        .unwrap();
+        let encoded = postcard::to_allocvec(&request).unwrap();
+        assert_eq!(encoded[0], previous[0] + 1);
+        assert_eq!(
+            postcard::to_allocvec(&Capability::BootstrapApplication).unwrap(),
+            vec![13]
+        );
+        assert_eq!(
+            postcard::to_allocvec(&Capability::FileSharing).unwrap(),
+            vec![14]
+        );
+        assert!(crate::sharing::Request::WritePiece {
+            id: [1; 16],
+            piece: 0,
+            bytes: vec![0; crate::sharing::PIECE_BYTES + 1]
+        }
+        .validate()
+        .is_err());
+        assert!(crate::sharing::Request::Prepare {
+            id: [1; 16],
+            scope: crate::sharing::Scope {
+                channel: [2; 32],
+                participants: vec![[3; 32]]
+            },
+            name: "file".into(),
+            size_bytes: 1
+        }
+        .validate()
+        .is_err());
+    }
+}

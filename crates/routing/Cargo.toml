@@ -14,7 +14,7 @@ publish.workspace = true
 gcoms-core = { version = "0.1.0", path = "../core", optional = true }
 gcoms-transport = { version = "0.1.0", path = "../transport" }
 futures-util = { version = "0.3", default-features = false, features = ["std"], optional = true }
-tokio = { version = "1", features = ["rt-multi-thread", "net", "macros", "time", "io-util", "sync"] }
+tokio = { version = "1", features = ["rt", "net", "macros", "time", "io-util", "sync"] }
 tokio-rustls = "0.26"
 h2 = "0.4"
 http = "1"

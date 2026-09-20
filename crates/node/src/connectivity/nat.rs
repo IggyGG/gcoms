@@ -1678,7 +1678,11 @@ mod tests {
     async fn stop_fixture(tasks: Vec<tokio::task::JoinHandle<()>>) {
         for task in tasks {
             task.abort();
-            assert!(task.await.unwrap_err().is_cancelled());
+            // A socket task can already have returned after a peer closes
+            // (notably a delayed UDP reset on Windows). Still surface panics.
+            if let Err(error) = task.await {
+                assert!(error.is_cancelled(), "fixture task failed: {error}");
+            }
         }
     }
 

@@ -1,0 +1,49 @@
+[package]
+name = "gcoms-runtime"
+description = "Persistent application runtime for embedded and shared GComs hosts"
+readme = "README.md"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+version.workspace = true
+publish.workspace = true
+
+[features]
+default = []
+files = ["dep:gcoms-file-transfer", "dep:sha2"]
+gc2-carrier = ["gcoms-node/experimental-gc2", "gcoms-network-client/experimental-gc2"]
+
+[dependencies]
+gcoms-file-transfer = { version = "0.1.0", path = "../file-transfer", optional = true }
+sha2 = { version = "0.10", optional = true }
+gcoms-core = { version = "0.1.0", path = "../core" }
+gcoms-node = { version = "0.1.0", path = "../node", default-features = false, features = ["client-persist"] }
+gcoms-sdk = { version = "0.1.0", path = "../sdk", default-features = false, features = ["embedded"] }
+gcoms-network-client = { version = "0.1.0", path = "../network-client" }
+gcoms-routing = { version = "0.1.0", path = "../routing" }
+gcoms-transport = { version = "0.1.0", path = "../transport" }
+gcoms-crypto = { version = "0.1.0", path = "../crypto" }
+gcoms-private-fs = { version = "0.1.0", path = "../private-fs" }
+async-trait = "0.1"
+tokio = { version = "1", features = ["rt", "macros", "sync", "time", "net", "io-util"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+postcard = { version = "1", default-features = false, features = ["alloc"] }
+argon2 = "0.5"
+aes-gcm = "0.10"
+rand = "0.8"
+zeroize = "1"
+fs2 = "0.4"
+subtle = "2"
+tempfile = "3"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+url = "2"
+base64 = "0.22"
+
+[dev-dependencies]
+gcoms-core = { version = "0.1.0", path = "../core" }
+axum = "0.8"
+rcgen = { version = "0.13", default-features = false, features = ["aws_lc_rs", "pem"] }
+rustls = { version = "0.23.45", default-features = false, features = ["aws-lc-rs", "std"] }
+tokio-rustls = "0.26"
+tokio = { version = "1", features = ["rt-multi-thread", "test-util"] }

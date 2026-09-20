@@ -871,6 +871,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "92d699e522242e69e3003b94ecc1f960f3a5e015aa7c5d7486e65ad01dd94f5e"
 
 [[package]]
+name = "futures-macro"
+version = "0.3.34"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9fb9654ba8355388abeb8dcb4fc62f511300867002afc858860463bdd9fe0c44"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 3.0.4",
+]
+
+[[package]]
 name = "futures-sink"
 version = "0.3.34"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -889,9 +900,32 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0d50a92467f8ba5dd6e3ee5d4bd04d73ab2e4e1c44474a0674821dfce14b79bc"
 dependencies = [
  "futures-core",
+ "futures-macro",
  "futures-task",
  "pin-project-lite",
  "slab",
+]
+
+[[package]]
+name = "gcoms"
+version = "0.1.0"
+dependencies = [
+ "argon2",
+ "fs2",
+ "gcoms-private-fs",
+ "gcoms-rpc",
+ "gcoms-runtime",
+ "gcoms-sdk",
+ "postcard",
+ "rand 0.8.8",
+ "rustix",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "tempfile",
+ "tokio",
+ "windows-sys 0.61.2",
+ "zeroize",
 ]
 
 [[package]]
@@ -1141,7 +1175,7 @@ dependencies = [
 name = "gcoms-renamed-dependency-check"
 version = "0.1.0"
 dependencies = [
- "gcoms-rpc",
+ "gcoms",
 ]
 
 [[package]]
@@ -1177,6 +1211,7 @@ dependencies = [
  "aes-gcm",
  "async-trait",
  "fs2",
+ "futures-util",
  "gcoms-node",
  "gcoms-private-fs",
  "gcoms-rpc-contract",
@@ -1219,6 +1254,41 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.119",
+]
+
+[[package]]
+name = "gcoms-runtime"
+version = "0.1.0"
+dependencies = [
+ "aes-gcm",
+ "argon2",
+ "async-trait",
+ "axum",
+ "base64",
+ "fs2",
+ "gcoms-core",
+ "gcoms-crypto",
+ "gcoms-file-transfer",
+ "gcoms-network-client",
+ "gcoms-node",
+ "gcoms-private-fs",
+ "gcoms-routing",
+ "gcoms-sdk",
+ "gcoms-transport",
+ "postcard",
+ "rand 0.8.8",
+ "rcgen",
+ "reqwest",
+ "rustls",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "subtle",
+ "tempfile",
+ "tokio",
+ "tokio-rustls",
+ "url",
+ "zeroize",
 ]
 
 [[package]]

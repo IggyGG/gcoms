@@ -1,5 +1,10 @@
 # GComs
 
+Rust applications start with the [`gcoms` application API](crates/application/README.md):
+one dependency for messaging, channels and files. Select `ipc,files` for a small
+client of an existing host, or `embedded,files,gc2-carrier` for an in-process relay.
+RPC and automatic daemon launch are optional. GChat consumes the same API.
+
 **GComs** is a Rust communication protocol for secure connections, with typed
 service APIs for addon and client integration. **GChat** is its separate reference
 application, with a desktop UI, terminal UI and local service.
@@ -82,3 +87,7 @@ The preview pins rustls >=0.23.45 and quick-xml >=0.41 for current advisory fixe
 uses rustls-pki-types' PEM parser, and disables unused postcard heapless defaults.
 `deny.toml` records exact transitive-version exceptions and one reviewed build-time
 unmaintained hax/libcrux macro dependency; it does not waive runtime vulnerabilities.
+
+The application/runtime consolidation reuses existing dependencies; `sha2` derives
+a purpose-specific host cache key. TLS fixture dependencies (`rcgen`, `rustls`,
+`tokio-rustls`) are test-only in the runtime. No new third-party package is added.

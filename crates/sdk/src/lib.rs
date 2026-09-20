@@ -27,10 +27,11 @@ pub use local::LocalEndpoint;
 pub use types::InMemoryCatalog;
 pub use types::{
     application_body_limit, ActivityBucket, ApplicationDelivery, ApplicationMessage,
-    AutomaticJoinEndpoint, Blob, CatalogRequest, CatalogResponse, ChannelId, ChannelMemberSummary,
-    ChannelRole, ChannelStatus, ChannelVisibility, ClientEvent, ContactCard, GcClient, Identity,
-    JoinRequest, JoinedChannel, MessageId, PresenceMode, PublicChannelDescriptor, Reachability,
-    SdkError,
+    AutomaticJoinEndpoint, Blob, CarrierProfile, CatalogRequest, CatalogResponse, ChannelId,
+    ChannelInvitation, ChannelMemberSummary, ChannelRole, ChannelStatus, ChannelVisibility,
+    ClientEvent, ConnectionState, ContactCard, GcClient, Identity, JoinRequest, JoinedChannel,
+    MessageId, NetworkNameStatus, Peer, PresenceMode, PublicChannelDescriptor, Reachability,
+    RelayCard, RelayState, RuntimeStatus, SdkError,
 };
 
 pub use gcoms_core::component;
@@ -46,3 +47,7 @@ pub use gcoms_core::file_stream;
 pub mod bootstrap;
 #[cfg(all(any(unix, windows), feature = "ipc"))]
 pub mod local_rpc;
+
+mod network_status;
+pub mod sharing;
+pub use network_status::{NetworkState, NetworkStatus};

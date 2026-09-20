@@ -433,8 +433,116 @@ impl std::fmt::Display for SdkError {
 
 impl std::error::Error for SdkError {}
 
+/// Private provisioning material supplied by an application host, never a public peer card.
+#[derive(Clone, Serialize, Deserialize)]
+pub struct RelayCard(pub Vec<u8>);
+impl Drop for RelayCard {
+    fn drop(&mut self) {
+        zeroize::Zeroize::zeroize(&mut self.0);
+    }
+}
+impl std::fmt::Debug for RelayCard {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("RelayCard([redacted])")
+    }
+}
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct NetworkNameStatus {
+    pub published: bool,
+    pub opted_in: bool,
+    pub pending: bool,
+    pub removed: bool,
+    pub name: Option<String>,
+    pub lease_expires_at: Option<u64>,
+}
+
+/// Public runtime facts; relay admission is independent of message readiness.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RuntimeStatus {
+    pub connection: ConnectionState,
+    pub relay: RelayState,
+}
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ConnectionState {
+    NeedsInvitation,
+    Connecting,
+    Online,
+    Recovering,
+    Stopped,
+}
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum RelayState {
+    Disabled,
+    Attempting,
+    Published,
+    Unreachable,
+}
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ChannelInvitation {
+    pub link: String,
+    pub channel: String,
+    pub expires_at: u64,
+    pub local_only: bool,
+}
+
 #[async_trait]
 pub trait GcClient: Send + Sync {
+    async fn network_status(&self) -> Result<crate::NetworkStatus, SdkError> {
+        Err(SdkError::Protocol(
+            "host does not support network status".into(),
+        ))
+    }
+    async fn sharing(
+        &self,
+        request: crate::sharing::Request,
+    ) -> Result<crate::sharing::Reply, SdkError> {
+        request.validate()?;
+        Err(SdkError::Protocol(
+            "host was built without file sharing".into(),
+        ))
+    }
+
+    async fn persist_profile(&self) -> Result<(), SdkError> {
+        Err(SdkError::PermissionDenied)
+    }
+    async fn recover_network(&self, _urls: Vec<String>) -> Result<String, SdkError> {
+        Err(SdkError::PermissionDenied)
+    }
+    async fn configure_network_dns(&self, _enabled: bool) -> Result<(), SdkError> {
+        Err(SdkError::PermissionDenied)
+    }
+    async fn network_dns_status(&self) -> Result<NetworkNameStatus, SdkError> {
+        Err(SdkError::PermissionDenied)
+    }
+
+    async fn resolve_contact_identity(&self, card: &ContactCard) -> Result<Vec<u8>, SdkError> {
+        self.contact_identity(card)
+    }
+    async fn runtime_status(&self) -> Result<RuntimeStatus, SdkError> {
+        Err(SdkError::PermissionDenied)
+    }
+    async fn import_network_invitation(&self, _invitation: &str) -> Result<(), SdkError> {
+        Err(SdkError::PermissionDenied)
+    }
+    async fn create_channel_invitation(
+        &self,
+        _channel: &str,
+        _ttl_secs: u64,
+    ) -> Result<ChannelInvitation, SdkError> {
+        Err(SdkError::PermissionDenied)
+    }
+    async fn inspect_channel_invitation(&self, _link: &str) -> Result<ChannelInvitation, SdkError> {
+        Err(SdkError::PermissionDenied)
+    }
+    async fn join_channel_invitation(
+        &self,
+        _link: &str,
+        _display: &str,
+        _timeout_secs: u64,
+    ) -> Result<String, SdkError> {
+        Err(SdkError::PermissionDenied)
+    }
+
     async fn configure_catalog_origins(&self, _origins: Vec<String>) -> Result<(), SdkError> {
         Err(SdkError::PermissionDenied)
     }
@@ -701,6 +809,313 @@ pub trait GcClient: Send + Sync {
     ) -> Result<(), SdkError>;
 }
 
+// Preserve the complete interface when sharing either backend as a trait object.
+#[async_trait]
+impl<T: GcClient + ?Sized> GcClient for std::sync::Arc<T> {
+    async fn sharing(
+        &self,
+        request: crate::sharing::Request,
+    ) -> Result<crate::sharing::Reply, SdkError> {
+        (**self).sharing(request).await
+    }
+    async fn network_status(&self) -> Result<crate::NetworkStatus, SdkError> {
+        (**self).network_status().await
+    }
+
+    async fn persist_profile(&self) -> Result<(), SdkError> {
+        (**self).persist_profile().await
+    }
+    async fn recover_network(&self, _urls: Vec<String>) -> Result<String, SdkError> {
+        (**self).recover_network(_urls).await
+    }
+    async fn configure_network_dns(&self, _enabled: bool) -> Result<(), SdkError> {
+        (**self).configure_network_dns(_enabled).await
+    }
+    async fn network_dns_status(&self) -> Result<NetworkNameStatus, SdkError> {
+        (**self).network_dns_status().await
+    }
+    async fn resolve_contact_identity(&self, card: &ContactCard) -> Result<Vec<u8>, SdkError> {
+        (**self).resolve_contact_identity(card).await
+    }
+    async fn runtime_status(&self) -> Result<RuntimeStatus, SdkError> {
+        (**self).runtime_status().await
+    }
+    async fn import_network_invitation(&self, _invitation: &str) -> Result<(), SdkError> {
+        (**self).import_network_invitation(_invitation).await
+    }
+    async fn create_channel_invitation(
+        &self,
+        _channel: &str,
+        _ttl_secs: u64,
+    ) -> Result<ChannelInvitation, SdkError> {
+        (**self)
+            .create_channel_invitation(_channel, _ttl_secs)
+            .await
+    }
+    async fn inspect_channel_invitation(&self, _link: &str) -> Result<ChannelInvitation, SdkError> {
+        (**self).inspect_channel_invitation(_link).await
+    }
+    async fn join_channel_invitation(
+        &self,
+        _link: &str,
+        _display: &str,
+        _timeout_secs: u64,
+    ) -> Result<String, SdkError> {
+        (**self)
+            .join_channel_invitation(_link, _display, _timeout_secs)
+            .await
+    }
+    async fn configure_catalog_origins(&self, _origins: Vec<String>) -> Result<(), SdkError> {
+        (**self).configure_catalog_origins(_origins).await
+    }
+    async fn catalog_request(
+        &self,
+        _request: crate::CatalogHttpRequest,
+    ) -> Result<crate::CatalogHttpResponse, SdkError> {
+        (**self).catalog_request(_request).await
+    }
+    async fn component_shell(
+        &self,
+        _component: [u8; 16],
+        _request: crate::shell::ShellRequest,
+    ) -> Result<crate::shell::ShellReply, SdkError> {
+        (**self).component_shell(_component, _request).await
+    }
+    async fn file_route(&self) -> Result<Vec<u8>, SdkError> {
+        (**self).file_route().await
+    }
+    async fn component_files(
+        &self,
+        _component: [u8; 16],
+        _request: crate::files::FileRequest,
+    ) -> Result<crate::files::FileReply, SdkError> {
+        (**self).component_files(_component, _request).await
+    }
+    fn contact_identity(&self, _card: &ContactCard) -> Result<Vec<u8>, SdkError> {
+        (**self).contact_identity(_card)
+    }
+    fn identity(&self) -> Identity {
+        (**self).identity()
+    }
+    async fn refresh_identity(&self) -> Result<Identity, SdkError> {
+        (**self).refresh_identity().await
+    }
+    async fn sign_identity_digest(&self, _digest: [u8; 32]) -> Result<Vec<u8>, SdkError> {
+        (**self).sign_identity_digest(_digest).await
+    }
+    async fn sign_principal_binding_hash(
+        &self,
+        _claims_hash: [u8; 32],
+    ) -> Result<Vec<u8>, SdkError> {
+        (**self).sign_principal_binding_hash(_claims_hash).await
+    }
+    fn subscribe_events(&self) -> mpsc::Receiver<ClientEvent> {
+        (**self).subscribe_events()
+    }
+    async fn list_channels(&self) -> Result<Vec<JoinedChannel>, SdkError> {
+        (**self).list_channels().await
+    }
+    async fn channel_roster(&self, channel: &str) -> Result<Vec<ChannelMemberSummary>, SdkError> {
+        (**self).channel_roster(channel).await
+    }
+    async fn public_channel_descriptor(
+        &self,
+        channel: &str,
+        description: &str,
+        activity: ActivityBucket,
+        automatic_join: AutomaticJoinEndpoint,
+        expires_at_unix: u64,
+    ) -> Result<PublicChannelDescriptor, SdkError> {
+        (**self)
+            .public_channel_descriptor(
+                channel,
+                description,
+                activity,
+                automatic_join,
+                expires_at_unix,
+            )
+            .await
+    }
+    async fn send_direct(
+        &self,
+        peer: &ContactCard,
+        body: &[u8],
+        via: Option<&ContactCard>,
+    ) -> Result<(), SdkError> {
+        (**self).send_direct(peer, body, via).await
+    }
+    async fn send_direct_tracked(
+        &self,
+        _peer: &ContactCard,
+        _body: &[u8],
+        _via: Option<&ContactCard>,
+    ) -> Result<MessageId, SdkError> {
+        (**self).send_direct_tracked(_peer, _body, _via).await
+    }
+    async fn set_direct_presence(
+        &self,
+        peer: &ContactCard,
+        mode: PresenceMode,
+        lease_secs: u32,
+        via: Option<&ContactCard>,
+    ) -> Result<(), SdkError> {
+        (**self)
+            .set_direct_presence(peer, mode, lease_secs, via)
+            .await
+    }
+    async fn set_direct_presence_opt_in(
+        &self,
+        peer: &ContactCard,
+        enabled: bool,
+        via: Option<&ContactCard>,
+    ) -> Result<(), SdkError> {
+        (**self)
+            .set_direct_presence_opt_in(peer, enabled, via)
+            .await
+    }
+    async fn submit_opaque(
+        &self,
+        recipient: &ContactCard,
+        content_type: &str,
+        body: &[u8],
+    ) -> Result<(), SdkError> {
+        (**self).submit_opaque(recipient, content_type, body).await
+    }
+    async fn submit_volatile_opaque(
+        &self,
+        _recipient: &ContactCard,
+        _content_type: &str,
+        _body: &[u8],
+    ) -> Result<(), SdkError> {
+        (**self)
+            .submit_volatile_opaque(_recipient, _content_type, _body)
+            .await
+    }
+    async fn submit_durable_opaque(
+        &self,
+        _recipient: &ContactCard,
+        _content_type: &str,
+        _body: &[u8],
+    ) -> Result<(), SdkError> {
+        (**self)
+            .submit_durable_opaque(_recipient, _content_type, _body)
+            .await
+    }
+    async fn submit_local_component(&self, _wire: &[u8]) -> Result<(), SdkError> {
+        (**self).submit_local_component(_wire).await
+    }
+    async fn application_inbox(
+        &self,
+        _after: u64,
+        _limit: u16,
+    ) -> Result<Vec<ApplicationDelivery>, SdkError> {
+        (**self).application_inbox(_after, _limit).await
+    }
+    async fn commit_application(&self, _sequence: u64, _digest: [u8; 32]) -> Result<(), SdkError> {
+        (**self).commit_application(_sequence, _digest).await
+    }
+    async fn create_channel(
+        &self,
+        channel: &str,
+        display_name: &str,
+        capacity: usize,
+        visibility: ChannelVisibility,
+    ) -> Result<ChannelId, SdkError> {
+        (**self)
+            .create_channel(channel, display_name, capacity, visibility)
+            .await
+    }
+    async fn prepare_channel_join(&self, display_name: &str) -> Result<JoinRequest, SdkError> {
+        (**self).prepare_channel_join(display_name).await
+    }
+    async fn channel_key_package(&self, request: JoinRequest) -> Result<Blob, SdkError> {
+        (**self).channel_key_package(request).await
+    }
+    async fn admit_channel(
+        &self,
+        channel: &str,
+        key_package: &Blob,
+        member_name: &str,
+    ) -> Result<Blob, SdkError> {
+        (**self)
+            .admit_channel(channel, key_package, member_name)
+            .await
+    }
+    async fn recover_channel_route(
+        &self,
+        _channel: &str,
+        _expected_channel_id: ChannelId,
+        _expected_epoch: u64,
+        _retained_welcome: &Blob,
+        _peer: &ContactCard,
+    ) -> Result<MessageId, SdkError> {
+        (**self)
+            .recover_channel_route(
+                _channel,
+                _expected_channel_id,
+                _expected_epoch,
+                _retained_welcome,
+                _peer,
+            )
+            .await
+    }
+    async fn join_channel(
+        &self,
+        request: JoinRequest,
+        channel: &str,
+        visibility: ChannelVisibility,
+        welcome: &Blob,
+    ) -> Result<(), SdkError> {
+        (**self)
+            .join_channel(request, channel, visibility, welcome)
+            .await
+    }
+    async fn send_channel(&self, channel: &str, body: &[u8]) -> Result<(), SdkError> {
+        (**self).send_channel(channel, body).await
+    }
+    async fn send_channel_tracked(
+        &self,
+        _channel: &str,
+        _body: &[u8],
+    ) -> Result<MessageId, SdkError> {
+        (**self).send_channel_tracked(_channel, _body).await
+    }
+    async fn set_channel_presence(
+        &self,
+        channel: &str,
+        mode: PresenceMode,
+        lease_secs: u32,
+    ) -> Result<(), SdkError> {
+        (**self)
+            .set_channel_presence(channel, mode, lease_secs)
+            .await
+    }
+    async fn set_channel_presence_opt_in(
+        &self,
+        channel: &str,
+        enabled: bool,
+    ) -> Result<(), SdkError> {
+        (**self).set_channel_presence_opt_in(channel, enabled).await
+    }
+    async fn send_channel_direct(
+        &self,
+        channel: &str,
+        recipient_member_id: [u8; 32],
+        body: &[u8],
+    ) -> Result<MessageId, SdkError> {
+        (**self)
+            .send_channel_direct(channel, recipient_member_id, body)
+            .await
+    }
+    async fn remove_channel_member(
+        &self,
+        channel: &str,
+        member_id: [u8; 32],
+    ) -> Result<(), SdkError> {
+        (**self).remove_channel_member(channel, member_id).await
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -767,4 +1182,32 @@ mod tests {
 
         assert!(low < ChannelId(high_bytes));
     }
+}
+
+/// Explicit wire carrier selection. Never inferred from addresses or cargo features.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum CarrierProfile {
+    #[default]
+    Legacy,
+    Gc2,
+}
+
+#[derive(Clone)]
+pub struct Peer {
+    pub identity: Vec<u8>,
+    pub contact: ContactCard,
+    pub component: Option<[u8; 16]>,
+}
+impl Peer {
+    pub fn principal(&self) -> String {
+        format!(
+            "gc:{}:{}",
+            peer_hex(&self.identity),
+            self.component.map(|c| peer_hex(&c)).unwrap_or_default()
+        )
+    }
+}
+
+fn peer_hex(bytes: &[u8]) -> String {
+    bytes.iter().map(|b| format!("{b:02x}")).collect()
 }

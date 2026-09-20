@@ -1,0 +1,27 @@
+[package]
+name = "gcoms-integration"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.98"
+publish = false
+license = "MIT OR Apache-2.0"
+
+# A real, independent consumer graph: workspace feature unification cannot hide
+# an accidental embedded/RPC dependency in the IPC binary.
+[workspace]
+
+[features]
+default = []
+ipc = ["gcoms/ipc"]
+embedded = ["gcoms/embedded", "gcoms/gc2-carrier"]
+
+[dependencies]
+gcoms = { version = "0.1.0", path = "../../crates/application", default-features = false, features = ["files"] }
+tokio = { version = "1", features = ["rt", "io-util"] }
+
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+strip = "symbols"
+panic = "unwind"
