@@ -70,6 +70,12 @@ source binding. See the latest [fleet results](FLEET_FILES_RESULTS.md) and the
 [traffic-path inventory](GCHAT_TRAFFIC_PATHS.md), including the remaining
 installed bootstrap and catalog migration gaps.
 
+The [current-protocol bootstrap migration](GC2_NETWORK_BOOTSTRAP.md) specifies
+HTTP envelope v3, authenticated current relay control and GChat's typed import
+and retained-directory recovery. Its local source validation is separate from
+operated-provider deployment, installed-artifact acceptance and catalog transport
+migration. It does not change the client-observer privacy release gate.
+
 The subsequent [recovery and isolated-client capture review](GC2_CLIENT_CAPTURE_REVIEW.md)
 identifies a recovery-liveness gap in the global readiness revision and missing
 in-flight failure coverage. A disconnected local namespace smoke establishes a

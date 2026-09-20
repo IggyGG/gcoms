@@ -3,6 +3,7 @@
 //! establish identity. Private grants are never sent to an invitation's URL
 //! until it agrees with independently verified network defaults.
 pub mod names;
+pub mod routing;
 
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use fs2::FileExt;
@@ -364,6 +365,27 @@ impl NetworkClient {
         Err(last)
     }
     pub async fn fetch_routing(&self, deadline: Instant) -> Result<BootstrapBundle> {
+        self.fetch_routing_with(deadline, 2, routing::decode_legacy_response)
+            .await
+    }
+
+    /// Fetch only authenticated current-protocol introductions. Envelope v3
+    /// explicitly carries GC/2; envelope v2 is the legacy GCRB1 protocol.
+    #[cfg(feature = "experimental-gc2")]
+    pub async fn fetch_gc2_routing(
+        &self,
+        deadline: Instant,
+    ) -> Result<gcoms_routing::gc2::directory::BootstrapBundle> {
+        self.fetch_routing_with(deadline, 3, routing::decode_gc2_response)
+            .await
+    }
+
+    async fn fetch_routing_with<T>(
+        &self,
+        deadline: Instant,
+        version: u8,
+        decode: fn(&[u8]) -> Result<T>,
+    ) -> Result<T> {
         // A provider failure doesn't invalidate a still-valid signed cache.
         // Public document refresh gets at most one quarter of the remaining
         // budget, leaving room for private provisioning and another provider.
@@ -395,7 +417,7 @@ impl NetworkClient {
                     .http
                     .post(format!("{}v1/relay-provisions", base))
                     .bearer_auth(&invitation.grant)
-                    .json(&serde_json::json!({"request_id":request_id,"supported_versions":[2]}))
+                    .json(&serde_json::json!({"request_id":request_id,"supported_versions":[version]}))
                     .send()
                     .await
                     .map_err(|_| "network bootstrap unreachable")?;
@@ -405,25 +427,7 @@ impl NetworkClient {
                         response.status().as_u16()
                     ));
                 }
-                #[derive(Deserialize)]
-                #[serde(deny_unknown_fields)]
-                struct Reply {
-                    version: u8,
-                    routing_bundle_b64: String,
-                }
-                let reply: Reply = serde_json::from_slice(&bounded_body(response).await?)
-                    .map_err(|_| "invalid network bootstrap response")?;
-                if reply.version != 2 {
-                    return Err("network bootstrap version mismatch".into());
-                }
-                let bundle = BootstrapBundle::decode(&canonical_b64(&reply.routing_bundle_b64)?)
-                    .map_err(|_| "invalid network relay bundle")?;
-                if bundle.relays.iter().any(|r| {
-                    !gcoms_routing::service::public_ip(r.addr.ip()) || r.expires_at <= now_unix()
-                }) {
-                    return Err("network relay must be public".into());
-                }
-                Ok(bundle)
+                decode(&bounded_body(response).await?)
             };
             match tokio::time::timeout_at(provider_deadline(deadline, count - index), attempt).await
             {

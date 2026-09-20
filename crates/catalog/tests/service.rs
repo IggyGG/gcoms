@@ -536,6 +536,10 @@ async fn idempotent_join_response_survives_restart_in_owner_only_state() {
 
 enum RelayCard {
     Valid,
+    #[cfg(feature = "experimental-gc2")]
+    Gc2Expiry(Arc<std::sync::atomic::AtomicU64>),
+    #[cfg(feature = "experimental-gc2")]
+    LegacyRouting,
     Garbage,
     Public,
 }
@@ -634,6 +638,47 @@ async fn fake_relay(pki: &TestPki, card: RelayCard) -> (String, Arc<AtomicUsize>
                 } else {
                     calls.fetch_add(1, Ordering::SeqCst);
                     match &*card {
+                        #[cfg(feature = "experimental-gc2")]
+                        RelayCard::Valid | RelayCard::Gc2Expiry(_)
+                            if request.get("cmd").and_then(Value::as_str)
+                                == Some("routing_bootstrap")
+                                && request.get("version").and_then(Value::as_u64) == Some(2) =>
+                        {
+                            let relays = (2..5u8)
+                                .map(|n| {
+                                    let mut intro = gcoms_routing::service::gc2_introduction_from(
+                                        format!("127.0.0.{n}:8443").parse().unwrap(),
+                                        [n; 32],
+                                        &[n + 10; 32],
+                                        now(),
+                                    );
+                                    if let RelayCard::Gc2Expiry(expiry) = &*card {
+                                        intro.expires_at = expiry.load(Ordering::SeqCst);
+                                    }
+                                    intro
+                                })
+                                .collect();
+                            let bytes = gcoms_routing::gc2::directory::BootstrapBundle { relays }
+                                .encode()
+                                .unwrap();
+                            json!({"id":1,"ok":true,"data":{"version":2,"routing_bundle_b64":URL_SAFE_NO_PAD.encode(bytes)}})
+                        }
+                        #[cfg(feature = "experimental-gc2")]
+                        RelayCard::LegacyRouting => {
+                            let relays = vec![gcoms_routing::Relay {
+                                addr: "127.0.0.2:8443".parse().unwrap(),
+                                service_id: [2; 32],
+                                reentry_cap: [12; 32],
+                                circuit_cap: [22; 32],
+                                expires_at: now() + 60,
+                            }];
+                            let bytes = gcoms_routing::bootstrap::BootstrapBundle { relays }
+                                .encode()
+                                .unwrap();
+                            json!({"id":1,"ok":true,"data":{"version":2,"routing_bundle_b64":URL_SAFE_NO_PAD.encode(bytes)}})
+                        }
+                        #[cfg(feature = "experimental-gc2")]
+                        RelayCard::Gc2Expiry(_) => panic!("current control request required"),
                         RelayCard::Valid
                             if request.get("cmd").and_then(Value::as_str)
                                 == Some("routing_bootstrap") =>
@@ -926,8 +971,114 @@ async fn bootstrap_v2_is_private_introductions_only_and_separates_legacy_replay(
     assert_eq!(calls.load(Ordering::SeqCst), 2);
 }
 
+#[cfg(feature = "experimental-gc2")]
+#[tokio::test]
+async fn bootstrap_v3_requires_current_control_and_separates_legacy_replays() {
+    let pki = TestPki::new();
+    let (relay, calls) = fake_relay(&pki, RelayCard::Valid).await;
+    let service = serve_catalog(relay_config("http://catalog.test", &pki, vec![relay])).await;
+    let client = reqwest::Client::new();
+    let request_id = URL_SAFE_NO_PAD.encode([43u8; 16]);
+    let mut previous = None;
+    for _ in 0..2 {
+        let response = client
+            .post(format!("{service}/v1/relay-provisions"))
+            .json(&json!({"request_id":request_id,"supported_versions":[3,2]}))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), 200);
+        assert_eq!(response.headers()["cache-control"], "no-store");
+        let response: Value = response.json().await.unwrap();
+        assert_eq!(response.as_object().unwrap().len(), 3);
+        assert_eq!(response["version"], 3);
+        assert_eq!(response["routing_protocol"], "gc2");
+        let raw = URL_SAFE_NO_PAD
+            .decode(response["routing_bundle_b64"].as_str().unwrap())
+            .unwrap();
+        assert_eq!(
+            gcoms_routing::gc2::directory::BootstrapBundle::decode(&raw)
+                .unwrap()
+                .relays
+                .len(),
+            3
+        );
+        assert!(gcoms_routing::bootstrap::BootstrapBundle::decode(&raw).is_err());
+        if let Some(old) = previous {
+            assert_eq!(response, old);
+        }
+        previous = Some(response);
+    }
+    assert_eq!(calls.load(Ordering::SeqCst), 1);
+    let legacy: Value = client
+        .post(format!("{service}/v1/relay-provisions"))
+        .json(&json!({"request_id":request_id,"supported_versions":[2]}))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(legacy["version"], 2);
+    assert!(legacy.get("routing_protocol").is_none());
+    assert_eq!(calls.load(Ordering::SeqCst), 2);
+    let (old, old_calls) = fake_relay(&pki, RelayCard::LegacyRouting).await;
+    let old_service = serve_catalog(relay_config("http://catalog.test", &pki, vec![old])).await;
+    let response = client
+        .post(format!("{old_service}/v1/relay-provisions"))
+        .json(&json!({"request_id":request_id,"supported_versions":[3]}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), 503);
+    assert_eq!(
+        old_calls.load(Ordering::SeqCst),
+        1,
+        "no retry via legacy control"
+    );
+}
+
 #[tokio::test]
 async fn network_grants_authorize_before_relay_cache_and_persist_revocation() {
+    network_grants_authorize_for(2).await;
+}
+
+#[cfg(feature = "experimental-gc2")]
+#[tokio::test]
+async fn current_bootstrap_cache_never_outlives_its_credentials() {
+    use std::sync::atomic::AtomicU64;
+    let pki = TestPki::new();
+    let expiry = Arc::new(AtomicU64::new(now() + 3));
+    let (relay, calls) = fake_relay(&pki, RelayCard::Gc2Expiry(expiry.clone())).await;
+    let service = serve_catalog(relay_config("http://catalog.test", &pki, vec![relay])).await;
+    let client = reqwest::Client::new();
+    let request = json!({"request_id":URL_SAFE_NO_PAD.encode([44;16]),"supported_versions":[3]});
+    let url = format!("{service}/v1/relay-provisions");
+    let first = client.post(&url).json(&request).send().await.unwrap();
+    assert_eq!(first.status(), 200);
+    assert_eq!(calls.load(Ordering::SeqCst), 1);
+    let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(5);
+    while now() < expiry.load(Ordering::SeqCst) {
+        assert!(tokio::time::Instant::now() < deadline);
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
+    // An unchanged request ID must not replay expired introductions.
+    let stale = client.post(&url).json(&request).send().await.unwrap();
+    assert_eq!(stale.status(), 503);
+    assert_eq!(calls.load(Ordering::SeqCst), 2);
+    expiry.store(now() + 3600, Ordering::SeqCst);
+    let fresh = client.post(&url).json(&request).send().await.unwrap();
+    assert_eq!(fresh.status(), 200);
+    assert_eq!(calls.load(Ordering::SeqCst), 3);
+}
+
+#[cfg(feature = "experimental-gc2")]
+#[tokio::test]
+async fn current_network_grants_authorize_before_relay_cache_and_persist_revocation() {
+    network_grants_authorize_for(3).await;
+}
+
+async fn network_grants_authorize_for(version: u8) {
     use gcoms_catalog::network::{
         atomic_json, token_digest, GrantFile, GrantRecord, NetworkConfig,
     };
@@ -985,7 +1136,7 @@ async fn network_grants_authorize_before_relay_cache_and_persist_revocation() {
     });
     let service = serve_catalog(config).await;
     let client = reqwest::Client::new();
-    let body = json!({"request_id":URL_SAFE_NO_PAD.encode([14;16]),"supported_versions":[2]});
+    let body = json!({"request_id":URL_SAFE_NO_PAD.encode([14;16]),"supported_versions":[version]});
     for token in ["wrong", &tokens[2]] {
         assert_eq!(
             client
@@ -1010,7 +1161,7 @@ async fn network_grants_authorize_before_relay_cache_and_persist_revocation() {
     assert_eq!(first.status(), 200);
     assert_eq!(first.headers()["cache-control"], "no-store");
     let first: Value = first.json().await.unwrap();
-    assert_eq!(first["version"], 2);
+    assert_eq!(first["version"], version);
     let replay: Value = client
         .post(format!("{service}/v1/relay-provisions"))
         .bearer_auth(&tokens[0])

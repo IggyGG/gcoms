@@ -220,6 +220,12 @@ pub struct RelayProvisionResponse {
 #[serde(untagged)]
 enum RelayBootstrapResponse {
     Legacy(RelayProvisionResponse),
+    #[cfg(feature = "experimental-gc2")]
+    Gc2 {
+        version: u8,
+        routing_protocol: String,
+        routing_bundle_b64: String,
+    },
     Routing {
         version: u8,
         routing_bundle_b64: String,
@@ -705,6 +711,8 @@ async fn relay_provision(
     };
     let version = match body.supported_versions.as_deref() {
         None => 1,
+        #[cfg(feature = "experimental-gc2")]
+        Some(v) if v.len() <= 8 && v.contains(&3) => 3,
         Some(v) if v.len() <= 8 && v.contains(&2) => 2,
         Some(v) if v.len() <= 8 && v.contains(&1) => 1,
         _ => return Err(ApiError::bad("unsupported bootstrap version")),
@@ -755,7 +763,16 @@ async fn relay_provision(
         network.authorize(&headers, "bootstrap")?;
     }
     let allow_local = state.config.public_base_url.scheme() == "http";
-    let response = if version == 2 {
+    let (response, authority_expiry) = if version == 3 {
+        #[cfg(feature = "experimental-gc2")]
+        {
+            gc2_bootstrap_response(&bootstrap, allow_local).await?
+        }
+        #[cfg(not(feature = "experimental-gc2"))]
+        {
+            return Err(ApiError::bad("GC/2 bootstrap is not enabled"));
+        }
+    } else if version == 2 {
         let mut relays: Vec<gcoms_routing::Relay> = Vec::new();
         for relay in &bootstrap.relays {
             let Ok(bundle) = relay.routing_bootstrap().await else {
@@ -784,10 +801,13 @@ async fn relay_provision(
         let bytes = gcoms_routing::bootstrap::BootstrapBundle { relays }
             .encode()
             .map_err(|_| unavailable())?;
-        RelayBootstrapResponse::Routing {
-            version: 2,
-            routing_bundle_b64: URL_SAFE_NO_PAD.encode(bytes),
-        }
+        (
+            RelayBootstrapResponse::Routing {
+                version: 2,
+                routing_bundle_b64: URL_SAFE_NO_PAD.encode(bytes),
+            },
+            u64::MAX,
+        )
     } else {
         let mut encoded = None;
         for relay in &bootstrap.relays {
@@ -798,16 +818,22 @@ async fn relay_provision(
                 }
             }
         }
-        RelayBootstrapResponse::Legacy(RelayProvisionResponse {
-            version: 1,
-            private_card_b64: encoded.ok_or_else(unavailable)?,
-        })
+        (
+            RelayBootstrapResponse::Legacy(RelayProvisionResponse {
+                version: 1,
+                private_card_b64: encoded.ok_or_else(unavailable)?,
+            }),
+            u64::MAX,
+        )
     };
     drop(_permit);
     if let Some(network) = &state.network {
         network.authorize(&headers, "bootstrap")?;
     }
-    let expires_at = now_unix() + bootstrap.idempotency_ttl_secs;
+    let expires_at = (now_unix() + bootstrap.idempotency_ttl_secs).min(authority_expiry);
+    if expires_at <= now_unix() {
+        return Err(unavailable());
+    }
     let mut inner = state.inner.lock().await;
     if let Some((cached, cached_expiry)) = inner.relay_idempotency.get(&request_id) {
         if *cached_expiry > expires_at {
@@ -828,6 +854,57 @@ fn unavailable() -> ApiError {
         status: StatusCode::SERVICE_UNAVAILABLE,
         message: "relay provisioning is temporarily unavailable",
     }
+}
+
+#[cfg(feature = "experimental-gc2")]
+async fn gc2_bootstrap_response(
+    bootstrap: &RelayBootstrap,
+    allow_local: bool,
+) -> Result<(RelayBootstrapResponse, u64), ApiError> {
+    let mut relays: Vec<gcoms_routing::gc2::directory::Introduction> = Vec::new();
+    for relay in &bootstrap.relays {
+        let Ok(bundle) = relay.gc2_routing_bootstrap().await else {
+            continue;
+        };
+        for intro in bundle.relays {
+            if intro.entry(now_unix()).is_err()
+                || (!allow_local && !gcoms_routing::service::public_ip(intro.addr.ip()))
+            {
+                continue;
+            }
+            if !relays
+                .iter()
+                .any(|r| r.conflicts(intro.addr, intro.service_id))
+            {
+                relays.push(intro);
+            }
+            if relays.len() == 8 {
+                break;
+            }
+        }
+        if relays.len() == 8 {
+            break;
+        }
+    }
+    // Control requests can straddle a credential rollover. Never cache an
+    // already-expired response or retain it past its shortest authority.
+    relays.retain(|intro| intro.entry(now_unix()).is_ok());
+    let expiry = relays
+        .iter()
+        .map(|r| r.expires_at)
+        .min()
+        .ok_or_else(unavailable)?;
+    let bytes = gcoms_routing::gc2::directory::BootstrapBundle { relays }
+        .encode()
+        .map_err(|_| unavailable())?;
+    Ok((
+        RelayBootstrapResponse::Gc2 {
+            version: 3,
+            routing_protocol: "gc2".into(),
+            routing_bundle_b64: URL_SAFE_NO_PAD.encode(bytes),
+        },
+        expiry,
+    ))
 }
 
 fn prune_relay_idempotency(inner: &mut Inner, now: u64) {
@@ -1055,6 +1132,33 @@ impl OwnerClient {
             .decode(text)
             .map_err(|_| "invalid relay introductions")?;
         gcoms_routing::bootstrap::BootstrapBundle::decode(&bytes).map_err(|e| e.to_string())
+    }
+
+    #[cfg(feature = "experimental-gc2")]
+    async fn gc2_routing_bootstrap(
+        &self,
+    ) -> Result<gcoms_routing::gc2::directory::BootstrapBundle, String> {
+        // Control version 2 selects GCRB2. It is not HTTP envelope version 2.
+        let data = self
+            .call(json!({"cmd": "routing_bootstrap", "version": 2}))
+            .await?;
+        if data.get("version").and_then(Value::as_u64) != Some(2) {
+            return Err("relay did not provide GC/2 introductions".into());
+        }
+        let text = data
+            .get("routing_bundle_b64")
+            .and_then(Value::as_str)
+            .ok_or("relay omitted GC/2 introductions")?;
+        if text.len() > gcoms_routing::gc2::directory::MAX_BUNDLE_BYTES * 4 / 3 + 4 {
+            return Err("GC/2 relay introductions exceed limit".into());
+        }
+        let bytes = URL_SAFE_NO_PAD
+            .decode(text)
+            .map_err(|_| "invalid GC/2 introductions")?;
+        if URL_SAFE_NO_PAD.encode(&bytes) != text {
+            return Err("noncanonical GC/2 introductions".into());
+        }
+        gcoms_routing::gc2::directory::BootstrapBundle::decode(&bytes).map_err(|e| e.to_string())
     }
 
     async fn provision_private_card(&self) -> Result<String, String> {
