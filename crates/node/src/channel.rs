@@ -5,6 +5,9 @@ use sha2::{Digest, Sha256};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::Arc;
 
+pub mod metadata;
+pub use metadata::ChannelChange;
+
 pub const CHAN_TEXT: u8 = 0;
 pub const CHAN_DIR: u8 = 1;
 pub const CHAN_COMMIT_ACK: u8 = 2;
@@ -15,6 +18,7 @@ pub const CHAN_PRESENCE_LEASE: u8 = 6;
 pub const CHAN_TEXT_WITH_PRESENCE: u8 = 7;
 pub const CHAN_COMMIT_ACK_WITH_PRESENCE: u8 = 8;
 pub const CHAN_TEXT_ACK_WITH_PRESENCE: u8 = 9;
+pub const CHAN_METADATA: u8 = 10;
 // 3 is the volatile file-piece application disposition.
 pub const CHANNEL_DIRECT_PEX: u8 = 4;
 pub const CHANNEL_DIR_BATCH_LIMIT: usize = 32;
@@ -249,6 +253,7 @@ pub fn encode_presence(
 }
 
 pub enum ChannelInner {
+    Metadata(Vec<u8>),
     Text {
         ts_ms: u64,
         share_presence: bool,
@@ -279,6 +284,9 @@ pub enum ChannelInner {
 
 pub fn decode_inner(plain: &[u8]) -> Option<ChannelInner> {
     match *plain.first()? {
+        CHAN_METADATA if plain.len() <= metadata::MAX_UPDATE_BYTES + 1 => {
+            Some(ChannelInner::Metadata(plain[1..].to_vec()))
+        }
         CHAN_TEXT => {
             if plain.len() < 9 {
                 return None;
@@ -386,6 +394,88 @@ pub enum ChannelRole {
 }
 
 impl ChannelRole {
+    pub(crate) fn owner(&self) -> Option<[u8; 32]> {
+        match self {
+            Self::Owner(o) => o.channel_owner(),
+            Self::Member(m) => m.channel_owner(),
+        }
+    }
+    pub(crate) fn is_owner(&self) -> bool {
+        self.owner() == Some(self.own_pseudonym())
+    }
+    pub(crate) fn is_owner_name(&self, name: &str) -> bool {
+        self.pseudonym_for_name(name)
+            .is_some_and(|member| self.owner() == Some(member))
+    }
+    pub(crate) fn propose_owner(&mut self, next: [u8; 32]) -> Result<Vec<u8>, gcoms_mls::MlsError> {
+        match self {
+            Self::Owner(o) => o.propose_owner(next),
+            Self::Member(m) => m.propose_owner(next),
+        }
+    }
+    pub(crate) fn ownership_certificate(&self) -> Result<Vec<u8>, gcoms_mls::MlsError> {
+        match self {
+            Self::Owner(o) => o.ownership_certificate(),
+            Self::Member(m) => m.ownership_certificate(),
+        }
+    }
+    pub(crate) fn install_owner(
+        &mut self,
+        actor: [u8; 32],
+        chain: &[u8],
+    ) -> Result<(), gcoms_mls::MlsError> {
+        match self {
+            Self::Owner(o) => o.install_owner_from(actor, chain),
+            Self::Member(m) => m.install_owner_from(actor, chain),
+        }
+    }
+    pub(crate) fn stage_admit(
+        &mut self,
+        package: &[u8],
+        name: &str,
+    ) -> Result<gcoms_mls::StagedAdmission, gcoms_mls::MlsError> {
+        match self {
+            Self::Owner(o) => {
+                let invite =
+                    o.sign_invite_key_package(package, name, gcoms_mls::Caps::member(), 3600);
+                o.stage_admit(&invite, package)
+            }
+            Self::Member(m) => m.stage_admit_current(package, name),
+        }
+    }
+    pub(crate) fn stage_remove(
+        &mut self,
+        member: [u8; 32],
+    ) -> Result<gcoms_mls::StagedRemoval, gcoms_mls::MlsError> {
+        match self {
+            Self::Owner(o) => o.stage_remove(member),
+            Self::Member(m) => m.stage_remove_current(member),
+        }
+    }
+    pub(crate) fn merge_pending(&mut self) -> Result<(), gcoms_mls::MlsError> {
+        match self {
+            Self::Owner(o) => o.merge_pending(),
+            Self::Member(m) => m.merge_pending(),
+        }
+    }
+    pub(crate) fn channel_metadata(&self) -> Result<Vec<u8>, gcoms_mls::MlsError> {
+        match self {
+            Self::Owner(o) => o.channel_metadata(),
+            Self::Member(m) => m.channel_metadata(),
+        }
+    }
+    pub(crate) fn set_channel_metadata(&mut self, bytes: &[u8]) -> Result<(), gcoms_mls::MlsError> {
+        match self {
+            Self::Owner(o) => o.set_channel_metadata(bytes),
+            Self::Member(m) => m.set_channel_metadata(bytes),
+        }
+    }
+    pub(crate) fn channel_admin(&self, member: [u8; 32]) -> bool {
+        match self {
+            Self::Owner(o) => o.channel_admin(member),
+            Self::Member(m) => m.channel_admin(member),
+        }
+    }
     pub fn send(&mut self, payload: &[u8]) -> Result<Vec<u8>, gcoms_mls::MlsError> {
         match self {
             ChannelRole::Owner(o) => o.send(payload),
@@ -722,6 +812,13 @@ impl Drop for ChannelState {
 }
 
 impl ChannelState {
+    pub(crate) fn discard_forward_queue(&mut self) {
+        for pending in &mut self.pending {
+            pending.wire.fill(0);
+        }
+        self.pending.clear();
+        self.pending_bytes = 0;
+    }
     /// Queue a wire for overlay forwarding. Evicts the oldest entries when
     /// the entry or byte bound would be exceeded; never grows unbounded.
     pub fn enqueue_forward(&mut self, id: [u8; 16], wire: Vec<u8>) {
@@ -840,13 +937,17 @@ impl ChannelState {
 
     pub fn roster(&self) -> Vec<ChannelMemberSummary> {
         let own = self.role.own_pseudonym();
+        let metadata = metadata::Metadata::read(&self.role).unwrap_or_default();
         let mut roster = self
             .role
             .roster_members()
             .into_iter()
             .map(|member| ChannelMemberSummary {
                 member_id: member.pseudonym,
-                display_name: member.display_name,
+                display_name: metadata
+                    .nickname(member.pseudonym)
+                    .map(str::to_owned)
+                    .unwrap_or(member.display_name),
                 is_self: member.pseudonym == own,
                 join_order: member.leaf_index,
                 joined_at_unix: None,

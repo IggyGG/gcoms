@@ -1,3 +1,4 @@
+use crate::ChannelChange;
 use crate::{
     ActivityBucket, AutomaticJoinEndpoint, Blob, ChannelId, ChannelMemberSummary, ChannelRole,
     ChannelStatus, ChannelVisibility, ClientEvent, ContactCard, GcClient, Identity, JoinRequest,
@@ -197,6 +198,35 @@ impl GcClient for EmbeddedClient {
                     })
                     .collect()
             })
+            .map_err(SdkError::Runtime)
+    }
+
+    async fn channel_topic(&self, channel: &str) -> Result<String, SdkError> {
+        self.node
+            .list_channels()
+            .await
+            .map_err(SdkError::Runtime)?
+            .into_iter()
+            .find(|c| c.channel == channel)
+            .map(|c| c.topic)
+            .ok_or_else(|| SdkError::Runtime("no channel".into()))
+    }
+    async fn change_channel(
+        &self,
+        channel: &str,
+        change: ChannelChange,
+    ) -> Result<MessageId, SdkError> {
+        let change = match change {
+            ChannelChange::Topic(text) => gcoms_node::channel::ChannelChange::Topic(text),
+            ChannelChange::Nickname(text) => gcoms_node::channel::ChannelChange::Nickname(text),
+            ChannelChange::Transfer(member) => gcoms_node::channel::ChannelChange::Transfer(member),
+            ChannelChange::Leave => gcoms_node::channel::ChannelChange::Leave,
+            ChannelChange::Close => gcoms_node::channel::ChannelChange::Close,
+        };
+        self.node
+            .change_channel(channel, change)
+            .await
+            .map(MessageId)
             .map_err(SdkError::Runtime)
     }
 

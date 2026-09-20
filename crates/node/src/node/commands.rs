@@ -200,6 +200,47 @@ pub(crate) fn spawn_command_loop(ctx: CommandLoopContext) -> tokio::task::JoinHa
                 },
             };
             match cmd {
+                Cmd::ChangeChannel {
+                    channel,
+                    change,
+                    done,
+                } => {
+                    let key = CmdKey::Channel(channel.clone());
+                    dispatch!(
+                        key,
+                        done,
+                        split | state,
+                        scheduler,
+                        events_tx,
+                        prepare,
+                        complete | {
+                            let prepared = prepare_channel_change(&state, &channel, change)?;
+                            if let Some(cs) = state
+                                .lock()
+                                .unwrap_or_else(|p| p.into_inner())
+                                .channels
+                                .get(&channel)
+                            {
+                                if crate::channel::metadata::Metadata::read(&cs.role)
+                                    .is_ok_and(|m| m.closed())
+                                {
+                                    let _ = events_tx.send(Ev::ChannelRemoved {
+                                        channel: channel.clone(),
+                                    });
+                                } else {
+                                    let _ = events_tx.send(Ev::ChannelRosterChanged {
+                                        channel: channel.clone(),
+                                        channel_id: cs.id,
+                                    });
+                                }
+                            }
+                            let ticket = complete.register();
+                            drop(prepare);
+                            let _ticket = ticket.wait().await;
+                            complete_channel_text(&scheduler, prepared).await
+                        }
+                    );
+                }
                 Cmd::IntermediaryStats { done } => {
                     let st = state.lock().unwrap_or_else(|p| p.into_inner());
                     let _ = done.send(IntermediaryStats {
@@ -265,20 +306,29 @@ pub(crate) fn spawn_command_loop(ctx: CommandLoopContext) -> tokio::task::JoinHa
                         let st = state.lock().unwrap_or_else(|p| p.into_inner());
                         st.channels
                             .iter()
+                            .filter(|(_, state)| {
+                                !crate::channel::metadata::Metadata::read(&state.role)
+                                    .is_ok_and(|m| m.closed())
+                            })
                             .map(|(channel, state)| ChannelView {
+                                topic: crate::channel::metadata::Metadata::read(&state.role)
+                                    .map(|m| m.topic().to_string())
+                                    .unwrap_or_default(),
                                 id: state.id,
                                 channel: channel.clone(),
                                 visibility: state.visibility,
-                                status: if state.membership_outbox.is_some() {
+                                status: if state.membership_outbox.is_some()
+                                    || crate::channel::metadata::Metadata::read(&state.role)
+                                        .is_ok_and(|m| m.leaving(state.role.own_pseudonym()))
+                                {
                                     ChannelStatus::MembershipPending
                                 } else {
                                     ChannelStatus::Active
                                 },
-                                role: match state.role {
-                                    crate::channel::ChannelRole::Owner(_) => ChannelViewRole::Owner,
-                                    crate::channel::ChannelRole::Member(_) => {
-                                        ChannelViewRole::Member
-                                    }
+                                role: if state.role.is_owner() {
+                                    ChannelViewRole::Owner
+                                } else {
+                                    ChannelViewRole::Member
                                 },
                                 epoch: state.role.epoch(),
                             })
@@ -1053,10 +1103,7 @@ pub(super) fn configure_machine_routes(
         false
     };
     let retained = st.application_inbox.machine_owned || witnessed;
-    if st
-        .channels
-        .values()
-        .any(|channel| matches!(channel.role, crate::channel::ChannelRole::Owner(_)))
+    if st.channels.values().any(|channel| channel.role.is_owner())
         || (!retained && !st.channels.is_empty())
         || st
             .application_inbox

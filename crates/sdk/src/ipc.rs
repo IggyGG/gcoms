@@ -27,8 +27,8 @@ use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 #[cfg(all(any(unix, windows), feature = "ipc"))]
 use tokio::sync::{broadcast, mpsc, oneshot, watch, Mutex};
 
-pub const VERSION: u16 = 16;
-// IPC16 appends restricted bootstrap; deployed network tags remain unchanged.
+pub const VERSION: u16 = 17;
+// IPC17 appends channel metadata; all existing message tags remain unchanged.
 // new operations/capabilities/events are never admitted under an older version.
 #[cfg(all(any(unix, windows), feature = "ipc"))]
 const MIN_SERVER_VERSION: u16 = 10;
@@ -224,11 +224,19 @@ pub enum Request {
         content_type: String,
         body: Vec<u8>,
     },
+    ChannelTopic {
+        channel: String,
+    },
+    ChangeChannel {
+        channel: String,
+        change: crate::ChannelChange,
+    },
 }
 
 impl Request {
     pub fn minimum_version(&self) -> u16 {
         match self {
+            Self::ChannelTopic { .. } | Self::ChangeChannel { .. } => 17,
             Self::ConfigureCatalogOrigins { .. } | Self::CatalogHttp(_) => 15,
             Self::RecoverChannelRoute { .. } => 14,
             Self::SendDirectTracked { .. } | Self::SendChannelTracked { .. } => 13,
@@ -262,6 +270,14 @@ impl Request {
             | Self::SendDirectTracked { .. }
             | Self::SetDirectPresence { .. }
             | Self::SetDirectPresenceOptIn { .. } => Capability::DirectMessage,
+            Self::ChangeChannel {
+                change:
+                    crate::ChannelChange::Topic(_)
+                    | crate::ChannelChange::Transfer(_)
+                    | crate::ChannelChange::Close,
+                ..
+            } => Capability::ChannelAdmin,
+            Self::ChangeChannel { .. } | Self::ChannelTopic { .. } => Capability::ChannelMember,
             Self::CreateChannel { .. }
             | Self::PublicChannelDescriptor { .. }
             | Self::AdmitChannel { .. }
@@ -334,6 +350,7 @@ pub enum Response {
     ApplicationInbox(Vec<crate::ApplicationDelivery>),
     Shell(crate::shell::ShellReply),
     CatalogHttp(crate::CatalogHttpResponse),
+    ChannelTopic(String),
 }
 
 #[cfg(all(any(unix, windows), feature = "ipc"))]
@@ -905,6 +922,31 @@ impl GcClient for IpcClient {
                 "channel roster response mismatch".into(),
             )),
         }
+    }
+
+    async fn channel_topic(&self, channel: &str) -> Result<String, SdkError> {
+        match self
+            .request(Request::ChannelTopic {
+                channel: channel.into(),
+            })
+            .await?
+        {
+            Response::ChannelTopic(topic) => Ok(topic),
+            _ => Err(SdkError::Protocol("channel topic response mismatch".into())),
+        }
+    }
+    async fn change_channel(
+        &self,
+        channel: &str,
+        change: crate::ChannelChange,
+    ) -> Result<crate::MessageId, SdkError> {
+        tracked_response(
+            self.request(Request::ChangeChannel {
+                channel: channel.into(),
+                change,
+            })
+            .await,
+        )
     }
 
     async fn public_channel_descriptor(
@@ -1674,6 +1716,14 @@ pub(crate) async fn dispatch<C: GcClient>(
             .channel_roster(&channel)
             .await
             .map(Response::ChannelRoster),
+        Request::ChannelTopic { channel } => client
+            .channel_topic(&channel)
+            .await
+            .map(Response::ChannelTopic),
+        Request::ChangeChannel { channel, change } => client
+            .change_channel(&channel, change)
+            .await
+            .map(Response::MessageId),
         Request::PublicChannelDescriptor {
             channel,
             description,
@@ -1897,6 +1947,46 @@ mod tests {
         );
     }
 
+    #[test]
+    fn channel_management_requires_ipc17_and_the_correct_capability() {
+        let topic = Request::ChannelTopic {
+            channel: "test".into(),
+        };
+        assert_eq!(topic.minimum_version(), 17);
+        assert_eq!(topic.required_capability(), Capability::ChannelMember);
+        assert_eq!(postcard::to_allocvec(&topic).unwrap()[0], 37);
+        for (change, capability) in [
+            (
+                crate::ChannelChange::Nickname("Alice".into()),
+                Capability::ChannelMember,
+            ),
+            (crate::ChannelChange::Leave, Capability::ChannelMember),
+            (
+                crate::ChannelChange::Topic("New topic".into()),
+                Capability::ChannelAdmin,
+            ),
+            (
+                crate::ChannelChange::Transfer([7; 32]),
+                Capability::ChannelAdmin,
+            ),
+            (crate::ChannelChange::Close, Capability::ChannelAdmin),
+        ] {
+            let request = Request::ChangeChannel {
+                channel: "test".into(),
+                change,
+            };
+            assert_eq!(request.minimum_version(), 17);
+            assert_eq!(request.required_capability(), capability);
+            let wire = postcard::to_allocvec(&request).unwrap();
+            assert_eq!(wire[0], 38);
+            assert_eq!(postcard::from_bytes::<Request>(&wire).unwrap(), request);
+        }
+        assert_eq!(
+            postcard::to_allocvec(&Response::ChannelTopic("Topic".into())).unwrap()[0],
+            15
+        );
+    }
+
     fn cleanup_frame() -> Frame {
         Frame::Request(RequestEnvelope {
             version: VERSION,
@@ -2059,7 +2149,7 @@ mod tests {
 
     #[test]
     fn requests_declare_required_capability() {
-        assert_eq!(VERSION, 16);
+        assert_eq!(VERSION, 17);
         for request in [
             Request::SubmitDurableOpaque {
                 recipient: ContactCard(Vec::new()),

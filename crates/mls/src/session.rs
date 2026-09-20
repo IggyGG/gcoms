@@ -16,6 +16,8 @@ use sha2::{Digest, Sha256};
 use tls_codec::{Deserialize as TlsDeserializeTrait, Serialize as TlsSerializeTrait};
 use zeroize::Zeroize;
 
+mod authority;
+
 /// Domain separator for the channel group id (SPEC §9.2: the channel id is
 /// the owner key fingerprint, never the key itself).
 const GROUP_ID_DOMAIN: &[u8] = b"gc1/channel";
@@ -27,6 +29,30 @@ pub fn channel_group_id(owner_public_key: &[u8]) -> [u8; 32] {
     hasher.update(owner_public_key);
     hasher.finalize().into()
 }
+
+macro_rules! channel_metadata_api {
+    ($session:ty) => {
+        impl $session {
+            /// Opaque, bounded application metadata sealed with the MLS state.
+            pub fn channel_metadata(&self) -> Result<Vec<u8>, MlsError> {
+                self.ctx.channel_metadata()
+            }
+            /// The transport must authorize the authenticated sender before
+            /// installing metadata, then checkpoint before publishing an event.
+            pub fn set_channel_metadata(&mut self, bytes: &[u8]) -> Result<(), MlsError> {
+                self.ctx.set_channel_metadata(bytes)
+            }
+            pub fn channel_owner(&self) -> Option<[u8; 32]> {
+                self.ctx.owner_pseudonym
+            }
+            pub fn channel_admin(&self, member: [u8; 32]) -> bool {
+                self.ctx.may_remove(Some(member))
+            }
+        }
+    };
+}
+channel_metadata_api!(OwnerSession);
+channel_metadata_api!(ChannelMember);
 
 /// Upper bound on any single MLS wire we are willing to parse.
 pub const MAX_WIRE_BYTES: usize = 16 * 1024 * 1024;
@@ -104,6 +130,7 @@ pub fn ciphersuite_of_key_package(wire: &[u8]) -> Option<u16> {
 }
 
 pub fn ciphersuite_of_welcome(wire: &[u8]) -> Option<u16> {
+    let (wire, _) = authority::split_welcome(wire).ok()?;
     let message = MlsMessageIn::tls_deserialize_exact(wire).ok()?;
     let openmls::framing::MlsMessageBodyIn::Welcome(welcome) = message.extract() else {
         return None;
@@ -176,6 +203,39 @@ impl Drop for Ctx {
 }
 
 impl Ctx {
+    // Application state shares the existing sealed MLS checkpoint. Keeping it
+    // in a reserved storage namespace makes a send/receive rollback atomic
+    // with metadata, without changing old archive layouts or leaf identities.
+    fn channel_metadata(&self) -> Result<Vec<u8>, MlsError> {
+        let storage = self
+            .backend
+            .storage()
+            .values
+            .read()
+            .map_err(|_| MlsError::Encoding)?;
+        Ok(storage
+            .get(b"gcoms/channel-metadata/v1".as_slice())
+            .cloned()
+            .unwrap_or_default())
+    }
+
+    fn set_channel_metadata(&self, bytes: &[u8]) -> Result<(), MlsError> {
+        if bytes.len() > 16 * 1024 {
+            return Err(MlsError::Encoding);
+        }
+        let mut storage = self
+            .backend
+            .storage()
+            .values
+            .write()
+            .map_err(|_| MlsError::Encoding)?;
+        if let Some(mut previous) =
+            storage.insert(b"gcoms/channel-metadata/v1".to_vec(), bytes.to_vec())
+        {
+            previous.zeroize();
+        }
+        Ok(())
+    }
     fn ensure_ciphersuite(&self) -> Result<(), MlsError> {
         ensure_ciphersuite(self.group.ciphersuite())
     }
@@ -235,7 +295,9 @@ impl Ctx {
                 // from any other leaf that removes someone is discarded
                 // without merging, so a single infiltrator cannot evict the
                 // rest of the channel.
-                if sc.remove_proposals().next().is_some() && !self.may_remove(sender_pseudonym) {
+                if (sc.remove_proposals().next().is_some() || sc.add_proposals().next().is_some())
+                    && !self.may_remove(sender_pseudonym)
+                {
                     return Err(MlsError::Unauthorized);
                 }
                 if sc.self_removed() {
@@ -451,50 +513,8 @@ impl OwnerSession {
         if leaf_hash(key_package_bytes) != invite.leaf {
             return Err(MlsError::LeafMismatch);
         }
-        if self.ctx.group.members().count() >= self.capacity {
-            return Err(MlsError::GroupFull);
-        }
-        let kp_msg = MlsMessageIn::tls_deserialize_exact(key_package_bytes)
-            .map_err(|_| MlsError::Encoding)?;
-        let kp = match kp_msg.extract() {
-            openmls::framing::MlsMessageBodyIn::KeyPackage(kp) => {
-                let kp = kp
-                    .validate(self.ctx.backend.crypto(), ProtocolVersion::default())
-                    .map_err(|_| MlsError::BadInvite)?;
-                ensure_ciphersuite(kp.ciphersuite())?;
-                kp
-            }
-            _ => return Err(MlsError::Encoding),
-        };
-        if kp.leaf_node().credential().serialized_content() != invite.name.as_bytes()
-            || self
-                .ctx
-                .group
-                .members()
-                .any(|member| member.credential.serialized_content() == invite.name.as_bytes())
-        {
-            return Err(MlsError::BadInvite);
-        }
-        let (commit, welcome, _group_info) = self
-            .ctx
-            .group
-            .add_members(&self.ctx.backend, &self.ctx.signer, &[kp])
-            .map_err(|e| MlsError::OpenMls(format!("{e:?}")))?;
-        let encoded = commit
-            .tls_serialize_detached()
-            .and_then(|commit| {
-                welcome
-                    .tls_serialize_detached()
-                    .map(|welcome| StagedAdmission { commit, welcome })
-            })
-            .map_err(|_| MlsError::Encoding);
-        if encoded.is_err() {
-            self.ctx
-                .group
-                .clear_pending_commit(self.ctx.backend.storage())
-                .map_err(|e| MlsError::OpenMls(format!("{e:?}")))?;
-        }
-        encoded
+        self.ctx
+            .stage_admit(key_package_bytes, &invite.name, self.capacity)
     }
 
     pub fn remove(&mut self, member_id: [u8; 32]) -> Result<Vec<u8>, MlsError> {
@@ -504,29 +524,7 @@ impl OwnerSession {
     }
 
     pub fn stage_remove(&mut self, member_id: [u8; 32]) -> Result<StagedRemoval, MlsError> {
-        let index = self
-            .ctx
-            .group
-            .members()
-            .find(|m: &Member| m.signature_key.as_slice() == member_id)
-            .map(|m| m.index)
-            .ok_or(MlsError::MemberNotFound)?;
-        let (commit, _welcome, _group_info) = self
-            .ctx
-            .group
-            .remove_members(&self.ctx.backend, &self.ctx.signer, &[index])
-            .map_err(|e| MlsError::OpenMls(format!("{e:?}")))?;
-        let encoded = commit
-            .tls_serialize_detached()
-            .map(|commit| StagedRemoval { commit })
-            .map_err(|_| MlsError::Encoding);
-        if encoded.is_err() {
-            self.ctx
-                .group
-                .clear_pending_commit(self.ctx.backend.storage())
-                .map_err(|e| MlsError::OpenMls(format!("{e:?}")))?;
-        }
-        encoded
+        self.ctx.stage_remove(member_id)
     }
 
     pub fn merge_pending(&mut self) -> Result<(), MlsError> {
@@ -622,6 +620,7 @@ impl ChannelMember {
     }
 
     pub fn join(prepared: PreparedJoin, welcome: &[u8]) -> Result<Self, MlsError> {
+        let (welcome, authority) = authority::split_welcome(welcome)?;
         let body = MlsMessageIn::tls_deserialize_exact(welcome)
             .map_err(|_| MlsError::Encoding)?
             .extract();
@@ -644,7 +643,7 @@ impl ChannelMember {
             .members()
             .find(|member| member.index.u32() == 0)
             .and_then(|member| member.signature_key.as_slice().try_into().ok());
-        Ok(ChannelMember {
+        let mut member = ChannelMember {
             ctx: Ctx {
                 backend: prepared.backend,
                 signer: prepared.signer,
@@ -652,7 +651,9 @@ impl ChannelMember {
                 owner_pseudonym,
                 admin_pseudonyms: Vec::new(),
             },
-        })
+        };
+        authority::restore_join_authority(&mut member, authority)?;
+        Ok(member)
     }
 
     pub fn send(&mut self, payload: &[u8]) -> Result<Vec<u8>, MlsError> {
@@ -1272,5 +1273,90 @@ mod zeroize_tests {
             .insert(b"secret-key".to_vec(), b"secret-value".to_vec());
         zeroize_storage(&backend);
         assert!(backend.storage().values.read().unwrap().is_empty());
+    }
+}
+
+impl Ctx {
+    fn stage_admit(
+        &mut self,
+        key_package_bytes: &[u8],
+        member_name: &str,
+        capacity: usize,
+    ) -> Result<StagedAdmission, MlsError> {
+        if self.owner_pseudonym != Some(self.own_pseudonym()) {
+            return Err(MlsError::Unauthorized);
+        }
+        if key_package_bytes.len() > MAX_KEY_PACKAGE_BYTES {
+            return Err(MlsError::Encoding);
+        }
+        if self.group.members().count() >= capacity {
+            return Err(MlsError::GroupFull);
+        }
+        let kp_msg = MlsMessageIn::tls_deserialize_exact(key_package_bytes)
+            .map_err(|_| MlsError::Encoding)?;
+        let kp = match kp_msg.extract() {
+            openmls::framing::MlsMessageBodyIn::KeyPackage(kp) => {
+                let kp = kp
+                    .validate(self.backend.crypto(), ProtocolVersion::default())
+                    .map_err(|_| MlsError::BadInvite)?;
+                ensure_ciphersuite(kp.ciphersuite())?;
+                kp
+            }
+            _ => return Err(MlsError::Encoding),
+        };
+        if kp.leaf_node().credential().serialized_content() != member_name.as_bytes()
+            || self
+                .group
+                .members()
+                .any(|member| member.credential.serialized_content() == member_name.as_bytes())
+        {
+            return Err(MlsError::BadInvite);
+        }
+        let (commit, welcome, _group_info) = self
+            .group
+            .add_members(&self.backend, &self.signer, &[kp])
+            .map_err(|e| MlsError::OpenMls(format!("{e:?}")))?;
+        let encoded = commit
+            .tls_serialize_detached()
+            .and_then(|commit| {
+                welcome
+                    .tls_serialize_detached()
+                    .map(|welcome| StagedAdmission { commit, welcome })
+            })
+            .map_err(|_| MlsError::Encoding);
+        if encoded.is_err() {
+            self.group
+                .clear_pending_commit(self.backend.storage())
+                .map_err(|e| MlsError::OpenMls(format!("{e:?}")))?;
+        }
+        encoded.and_then(|mut staged| {
+            staged.welcome = self.wrap_welcome(staged.welcome)?;
+            Ok(staged)
+        })
+    }
+    fn stage_remove(&mut self, member_id: [u8; 32]) -> Result<StagedRemoval, MlsError> {
+        if !self.may_remove(Some(self.own_pseudonym())) || self.owner_pseudonym == Some(member_id) {
+            return Err(MlsError::Unauthorized);
+        }
+        let index = self
+            .group
+            .members()
+            .find(|m: &Member| m.signature_key.as_slice() == member_id)
+            .map(|m| m.index)
+            .ok_or(MlsError::MemberNotFound)?;
+        let (commit, _welcome, _group_info) = self
+            .group
+            .remove_members(&self.backend, &self.signer, &[index])
+            .map_err(|e| MlsError::OpenMls(format!("{e:?}")))?;
+        let encoded = commit
+            .tls_serialize_detached()
+            .map(|commit| StagedRemoval { commit })
+            .map_err(|_| MlsError::Encoding);
+        if encoded.is_err() {
+            self.group
+                .clear_pending_commit(self.backend.storage())
+                .map_err(|e| MlsError::OpenMls(format!("{e:?}")))?;
+        }
+        encoded
     }
 }

@@ -66,6 +66,11 @@ mod shutdown_tests {
 }
 
 pub enum Cmd {
+    ChangeChannel {
+        channel: String,
+        change: crate::channel::ChannelChange,
+        done: tokio::sync::oneshot::Sender<Result<[u8; 16], String>>,
+    },
     InstallRoutingBootstrap {
         bundle: gcoms_routing::bootstrap::BootstrapBundle,
         done: tokio::sync::oneshot::Sender<Result<(), String>>,
@@ -296,6 +301,7 @@ pub enum Cmd {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ChannelView {
+    pub topic: String,
     pub id: crate::channel::ChannelId,
     pub channel: String,
     pub visibility: crate::channel::ChannelVisibility,
@@ -890,6 +896,24 @@ impl NodeHandle {
             .await
             .map_err(|error| error.to_string())?;
         done_rx.await.map_err(|error| error.to_string())?
+    }
+
+    pub async fn change_channel(
+        &self,
+        channel: &str,
+        change: crate::channel::ChannelChange,
+    ) -> Result<[u8; 16], String> {
+        change.validate()?;
+        let (done, result) = tokio::sync::oneshot::channel();
+        self.cmd_tx
+            .send(Cmd::ChangeChannel {
+                channel: channel.into(),
+                change,
+                done,
+            })
+            .await
+            .map_err(|e| e.to_string())?;
+        result.await.map_err(|e| e.to_string())?
     }
 
     pub async fn public_channel_descriptor(

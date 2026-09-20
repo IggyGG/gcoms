@@ -260,6 +260,9 @@ pub(crate) fn prepare_channel_presence(
         let owner_seed = channel_seed(&st, channel);
         let (wire, targets, checkpoint) = {
             let cs = st.channels.get_mut(channel).ok_or("no channel")?;
+            if crate::channel::metadata::Metadata::read(&cs.role)?.closed() {
+                return Err("This channel is closed".into());
+            }
             if cs.membership_outbox.is_some() {
                 return Err("channel membership is still converging".into());
             }

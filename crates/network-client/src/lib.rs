@@ -277,6 +277,26 @@ impl NetworkClient {
     pub fn current_defaults(&self) -> Result<NetworkDefaults> {
         self.transaction(|state| self.selected_defaults(state, now_unix()))
     }
+    pub fn identity(&self) -> gcoms_network::NetworkIdentity {
+        gcoms_network::NetworkIdentity {
+            trusted_key_b64: self.installed.trusted_key_b64.clone(),
+            signed_defaults: self.installed.signed_defaults.clone(),
+        }
+    }
+
+    /// Public network identity only. Never exports this client's private grant.
+    pub fn shareable_identity(&self) -> Result<gcoms_network::NetworkIdentity> {
+        self.transaction(|state| {
+            self.selected_defaults(state, now_unix())?;
+            Ok(gcoms_network::NetworkIdentity {
+                trusted_key_b64: self.installed.trusted_key_b64.clone(),
+                signed_defaults: state
+                    .signed_defaults
+                    .clone()
+                    .unwrap_or_else(|| self.installed.signed_defaults.clone()),
+            })
+        })
+    }
     pub fn import_invitation(&self, code: &str) -> Result<()> {
         let now = now_unix();
         let invitation = NetworkInvitation::decode_at(code.trim(), now)?;

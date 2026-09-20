@@ -111,6 +111,14 @@ pub(crate) fn prepare_channel_direct(
             return Err("too many unacknowledged channel direct messages".into());
         }
         let channel_state = state.channels.get(channel).ok_or("no channel")?;
+        if crate::channel::metadata::Metadata::read(&channel_state.role)?.closed() {
+            return Err("This channel is closed".into());
+        }
+        if crate::channel::metadata::Metadata::read(&channel_state.role)?
+            .leaving(channel_state.role.own_pseudonym())
+        {
+            return Err("This channel has a pending leave request".into());
+        }
         if application
             && !channel_state
                 .role
@@ -229,6 +237,9 @@ pub(crate) fn handle_channel_direct(
     let Some(channel) = state.channels.get_mut(&envelope.channel) else {
         return;
     };
+    if crate::channel::metadata::Metadata::read(&channel.role).is_ok_and(|m| m.closed()) {
+        return;
+    }
     if envelope.recipient != channel.role.own_pseudonym()
         || channel
             .role

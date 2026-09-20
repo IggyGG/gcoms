@@ -5,6 +5,9 @@ use gcoms_crypto::{verify_signature, IdentityKeypair};
 use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
 
+mod invitation;
+pub use invitation::{JoinInvitation, NetworkIdentity, JOIN_INVITATION_PREFIX};
+
 pub const INVITATION_PREFIX: &str = "GCNI1-";
 pub const MAX_DOCUMENT_BYTES: usize = 128 * 1024;
 const DEFAULTS_DOMAIN: &[u8] = b"gc/network/defaults/v1\0";
@@ -271,7 +274,7 @@ impl NetworkInvitation {
 #[cfg(test)]
 mod tests {
     use super::*;
-    fn defaults() -> NetworkDefaults {
+    pub(super) fn defaults() -> NetworkDefaults {
         NetworkDefaults {
             version: 1,
             network_id: "gchat.boo".into(),

@@ -42,6 +42,37 @@ pub(crate) async fn channel_control_tick(
     scheduler: &RelayScheduler,
     events: &broadcast::Sender<Ev>,
 ) {
+    let leaving = {
+        let st = state.lock().unwrap_or_else(|p| p.into_inner());
+        if st.owner_transition_failed {
+            return;
+        }
+        st.channels
+            .iter()
+            .filter(|(_, cs)| cs.role.is_owner() && cs.membership_outbox.is_none())
+            .filter_map(|(name, cs)| {
+                crate::channel::metadata::Metadata::read(&cs.role)
+                    .ok()?
+                    .pending_leave(&cs.role)
+                    .map(|member| (name.clone(), member))
+            })
+            .collect::<Vec<_>>()
+    };
+    for (name, member) in leaving {
+        if let Ok(Some(_)) = prepare_channel_removal(state, &name, member, events) {
+            if let Some(cs) = state
+                .lock()
+                .unwrap_or_else(|p| p.into_inner())
+                .channels
+                .get(&name)
+            {
+                let _ = events.send(Ev::ChannelRosterChanged {
+                    channel: name,
+                    channel_id: cs.id,
+                });
+            }
+        }
+    }
     let control_actions = {
         let mut st = state.lock().unwrap_or_else(|p| p.into_inner());
         if st.owner_transition_failed {
@@ -369,22 +400,54 @@ pub(crate) fn deliver_mls(
             .unwrap_or_else(|_| Err(gcoms_mls::MlsError::OpenMls("panic in receive".into())));
     match recv_result {
         Err(gcoms_mls::MlsError::Removed) => {
-            st.channel_presence_opt_in.remove(chan);
-            clear_channel_presence(st, chan, events);
-            if let Some(removed) = st.channels.remove(chan) {
-                close_route_lanes(&st.scheduler, &removed.own_route);
-            }
+            let owner_seed = channel_seed(st, chan);
+            let opted_in = st.channel_presence_opt_in.remove(chan);
+            let counters = st
+                .channel_presence_counters
+                .iter()
+                .filter(|((channel, _), _)| channel == chan)
+                .map(|(k, v)| (k.clone(), *v))
+                .collect::<Vec<_>>();
+            let removed = st.channels.remove(chan).expect("received channel exists");
             st.channel_presence_counters
                 .retain(|(channel, _), _| channel != chan);
             if let Err(error) = persist_current_direct_state(st) {
+                st.channels.insert(chan.into(), removed);
+                if opted_in {
+                    st.channel_presence_opt_in.insert(chan.into());
+                }
+                st.channel_presence_counters.extend(counters);
+                if let Some(cs) = st.channels.get_mut(chan) {
+                    cs.overlay.forget_sighting(id);
+                    match cs
+                        .role
+                        .restore_checkpoint(&archive_key, &role_checkpoint, || {
+                            gcoms_crypto::IdentityKeypair::from_seed(owner_seed)
+                        }) {
+                        Ok(role) => cs.role = role,
+                        Err(_) => st.pause_failed_owner_transition(),
+                    }
+                }
                 metrics::log_event("channel_removal_persist_error", &[("e", error)]);
+                return false;
             }
+            close_route_lanes(&st.scheduler, &removed.own_route);
+            clear_channel_presence(st, chan, events);
             metrics::log_event("channel_self_removed", &[("channel", chan.to_string())]);
             let _ = events.send(Ev::ChannelRemoved {
                 channel: chan.to_string(),
             });
         }
         Err(e) => {
+            if e == gcoms_mls::MlsError::Unauthorized {
+                // An authorized new-owner commit can overtake its delegation.
+                // Retain the receive ratchet so its exact retry can succeed
+                // after the authenticated ownership record arrives.
+                if let Some(cs) = st.channels.get_mut(chan) {
+                    cs.overlay.forget_sighting(id);
+                }
+                restore_directory_receive(st, chan, &role_checkpoint);
+            }
             metrics::log_event(
                 "chan_error",
                 &[
@@ -410,11 +473,36 @@ pub(crate) fn deliver_mls(
                 .unwrap_or_default();
             let inner = crate::channel::decode_inner(&plain);
             match inner {
+                Some(crate::channel::ChannelInner::Metadata(update)) => {
+                    if !commit_channel_metadata(st, chan, id, &sender, &update, &role_checkpoint) {
+                        return false;
+                    }
+                    was_text = true;
+                    if let Some(cs) = st.channels.get(chan) {
+                        if crate::channel::metadata::Metadata::read(&cs.role)
+                            .is_ok_and(|m| m.closed())
+                        {
+                            let _ = events.send(Ev::ChannelRemoved {
+                                channel: chan.into(),
+                            });
+                        } else {
+                            let _ = events.send(Ev::ChannelRosterChanged {
+                                channel: chan.into(),
+                                channel_id: cs.id,
+                            });
+                        }
+                    }
+                }
                 Some(crate::channel::ChannelInner::Text {
                     ts_ms,
                     share_presence,
                     body,
                 }) => {
+                    if st.channels.get(chan).is_some_and(|cs| {
+                        crate::channel::metadata::Metadata::read(&cs.role).is_ok_and(|m| m.closed())
+                    }) {
+                        return false;
+                    }
                     if gcoms_core::is_volatile_application_payload(&body) {
                         return false;
                     }
@@ -447,11 +535,21 @@ pub(crate) fn deliver_mls(
                         metrics::log_event("channel_message_persist_error", &[("e", error)]);
                         return false;
                     }
+                    let display_sender = sender_pseudonym
+                        .and_then(|member| {
+                            st.channels
+                                .get(chan)
+                                .and_then(|cs| {
+                                    crate::channel::metadata::Metadata::read(&cs.role).ok()
+                                })
+                                .and_then(|metadata| metadata.nickname(member).map(str::to_owned))
+                        })
+                        .unwrap_or_else(|| sender.clone());
                     let sent_ok = events.send(Ev::ChannelMessage {
                         channel: chan.to_string(),
                         msg_id: id,
                         ts_unix: now_unix(),
-                        sender: sender.clone(),
+                        sender: display_sender,
                         channel_epoch,
                         sender_index: sender_idx,
                         text: body,
@@ -488,7 +586,7 @@ pub(crate) fn deliver_mls(
                     let authorized = st.channels.get(chan).is_some_and(|cs| {
                         let roster = cs.role.roster();
                         roster.iter().any(|(_, roster_name)| roster_name == &name)
-                            && (sender_idx == 0 || sender == name)
+                            && (cs.role.is_owner_name(&sender) || sender == name)
                             && cs.role.pseudonym_for_name(&name) == Some(route.pseudonym)
                             && cs
                                 .directory
@@ -526,16 +624,16 @@ pub(crate) fn deliver_mls(
                 Some(crate::channel::ChannelInner::DirBatch(entries)) => {
                     // Validate the entire owner-authenticated batch before
                     // installing any entry or publishing an ACK route.
-                    let authorized = sender_idx == 0
-                        && st.channels.get(chan).is_some_and(|cs| {
-                            entries.iter().all(|(name, route)| {
+                    let authorized = st.channels.get(chan).is_some_and(|cs| {
+                        cs.role.is_owner_name(&sender)
+                            && entries.iter().all(|(name, route)| {
                                 cs.role.pseudonym_for_name(name) == Some(route.pseudonym)
                                     && cs
                                         .directory
                                         .get(name)
                                         .is_none_or(|known| known.pseudonym == route.pseudonym)
                             })
-                        });
+                    });
                     if !authorized {
                         restore_directory_receive(st, chan, &role_checkpoint);
                         return false;
@@ -559,7 +657,7 @@ pub(crate) fn deliver_mls(
                     let authorized = direct_public != [0; 32]
                         && st.channels.get(chan).is_some_and(|channel| {
                             channel.role.pseudonym_for_name(&name) == Some(pseudonym)
-                                && (sender_idx == 0 || sender == name)
+                                && (channel.role.is_owner_name(&sender) || sender == name)
                                 && channel
                                     .directory
                                     .get(&name)
@@ -800,6 +898,129 @@ fn restore_directory_receive(st: &mut NodeState, chan: &str, checkpoint: &[u8]) 
             }
         }
     }
+}
+
+/// Metadata, MLS ratchets and the exact ACK enter one durable checkpoint.
+/// No ACK is submitted to the scheduler until this transaction succeeds.
+fn commit_channel_metadata(
+    st: &mut NodeState,
+    chan: &str,
+    id: [u8; 16],
+    sender: &str,
+    update: &[u8],
+    checkpoint: &[u8],
+) -> bool {
+    let Some(cs) = st.channels.get_mut(chan) else {
+        return false;
+    };
+    let Some(actor) = cs.role.pseudonym_for_name(sender) else {
+        return false;
+    };
+    let route = cs
+        .directory
+        .values()
+        .find(|r| r.pseudonym == actor)
+        .cloned();
+    let key = crate::channel::UnroutedAckKey {
+        original_id: id,
+        sender_pseudonym: actor,
+    };
+    if (route.is_some() && cs.pending_control.len() >= crate::channel::CHANNEL_ACK_LIMIT)
+        || (route.is_none() && !cs.can_journal_unrouted_ack(&key))
+    {
+        restore_directory_receive(st, chan, checkpoint);
+        return false;
+    }
+    let previous = (
+        cs.pending_control.clone(),
+        cs.commit_ack_cache.clone(),
+        cs.commit_ack_order.clone(),
+        cs.unrouted_ack_journal.clone(),
+        cs.unrouted_ack_order.clone(),
+    );
+    let mut discarded_outbox = None;
+    let mut ownership_announcement = None;
+    let staged = (|| {
+        let was_owner = cs.role.is_owner();
+        crate::channel::metadata::Metadata::receive(&mut cs.role, actor, update)?;
+        if !was_owner && cs.role.is_owner() {
+            if cs.message_outbox.len() >= 64 {
+                return Err("too many unacknowledged channel messages".into());
+            }
+            let own = cs.role.own_pseudonym();
+            let mut expected = HashMap::new();
+            for member in cs.role.roster_members() {
+                if member.pseudonym == own {
+                    continue;
+                }
+                let target = cs
+                    .directory
+                    .values()
+                    .find(|route| route.pseudonym == member.pseudonym)
+                    .ok_or("Channel routing must be complete before accepting ownership")?;
+                expected.insert(member.pseudonym, target.clone());
+            }
+            let mut payload = vec![crate::channel::CHAN_METADATA];
+            payload.extend(crate::channel::metadata::Metadata::ownership_snapshot(
+                &cs.role,
+            )?);
+            let wire = cs.role.send(&payload).map_err(|e| e.to_string())?;
+            let announcement_id = crate::channel::msg_id(chan, &wire);
+            cs.message_outbox.insert(
+                announcement_id,
+                crate::channel::ChannelMessageOutbox {
+                    wire,
+                    expected,
+                    acknowledged: HashSet::new(),
+                },
+            );
+            ownership_announcement = Some(announcement_id);
+        }
+        if crate::channel::metadata::Metadata::read(&cs.role)?.closed() {
+            discarded_outbox = Some(std::mem::take(&mut cs.message_outbox));
+        }
+        let wire = cs
+            .role
+            .send(&crate::channel::encode_text_ack(id, false))
+            .map_err(|e| e.to_string())?;
+        if let Some(route) = route {
+            cs.pending_control.push_back((route.clone(), wire.clone()));
+            cs.cache_ack(id, route, wire);
+        } else {
+            cs.journal_unrouted_ack(key, wire);
+        }
+        Ok::<(), String>(())
+    })();
+    let committed = staged.and_then(|_| persist_current_direct_state(st));
+    if let Err(error) = committed {
+        if let Some(cs) = st.channels.get_mut(chan) {
+            (
+                cs.pending_control,
+                cs.commit_ack_cache,
+                cs.commit_ack_order,
+                cs.unrouted_ack_journal,
+                cs.unrouted_ack_order,
+            ) = previous;
+            if let Some(outbox) = discarded_outbox {
+                cs.message_outbox = outbox;
+            }
+            if let Some(id) = ownership_announcement {
+                cs.message_outbox.remove(&id);
+            }
+            cs.overlay.forget_sighting(id);
+        }
+        restore_directory_receive(st, chan, checkpoint);
+        metrics::log_event("channel_metadata_rejected", &[("e", error)]);
+        return false;
+    }
+    if let Some(cs) = st
+        .channels
+        .get_mut(chan)
+        .filter(|cs| crate::channel::metadata::Metadata::read(&cs.role).is_ok_and(|m| m.closed()))
+    {
+        cs.discard_forward_queue();
+    }
+    true
 }
 
 /// Commit authenticated route descriptors together with the MLS receive state.
@@ -1323,6 +1544,9 @@ fn stage_admission_locked(
     mls_key_package: &[u8],
     member_name: &str,
 ) -> Result<StagedAdmission, String> {
+    if crate::channel::metadata::Metadata::read(&cs.role)?.closed() {
+        return Err("This channel is closed".into());
+    }
     let request_id: [u8; 32] = Sha256::digest(mls_key_package).into();
     if let Some(cached) = cs.admission_cache.get(&request_id) {
         if cached.name == member_name && cached.pseudonym == member_route.pseudonym {
@@ -1339,23 +1563,18 @@ fn stage_admission_locked(
         .filter(|route| route.pseudonym != cs.role.own_pseudonym())
         .map(|route| (route.pseudonym, route.clone()))
         .collect::<HashMap<_, _>>();
-    let crate::channel::ChannelRole::Owner(owner) = &mut cs.role else {
+    if !cs.role.is_owner() {
         return Err("not owner".into());
-    };
+    }
     if cs.directory.contains_key(member_name) {
         return Err("name taken".into());
     }
-    let invite = owner.sign_invite_key_package(
-        mls_key_package,
-        member_name,
-        gcoms_mls::Caps::member(),
-        3600,
-    );
-    let staged = owner
-        .stage_admit(&invite, mls_key_package)
+    let staged = cs
+        .role
+        .stage_admit(mls_key_package, member_name)
         .map_err(|e| e.to_string())?;
-    owner.merge_pending().map_err(|e| e.to_string())?;
-    let epoch = owner.epoch();
+    cs.role.merge_pending().map_err(|e| e.to_string())?;
+    let epoch = cs.role.epoch();
     if !expected.is_empty() {
         cs.membership_outbox = Some(crate::channel::MembershipOutbox {
             commit_id: crate::channel::msg_id(channel, &staged.commit),
@@ -1537,6 +1756,7 @@ async fn finalize_admission(
             )
             .map_err(|error| error.to_string())?;
     }
+    queue_channel_metadata_snapshot(state, channel, member_route)?;
     metrics::log_event(
         "channel_admitted",
         &[
@@ -1545,6 +1765,67 @@ async fn finalize_admission(
         ],
     );
     Ok(admission.welcome.clone())
+}
+
+fn queue_channel_metadata_snapshot(
+    state: &Arc<Mutex<NodeState>>,
+    channel: &str,
+    recipient: &crate::channel::ChannelRoute,
+) -> Result<(), String> {
+    let mut st = state.lock().unwrap_or_else(|p| p.into_inner());
+    let key = channel_archive_key(&st.identity_seed);
+    let seed = channel_seed(&st, channel);
+    let cs = st.channels.get_mut(channel).ok_or("no channel")?;
+    if cs
+        .role
+        .channel_metadata()
+        .map_err(|e| e.to_string())?
+        .is_empty()
+    {
+        return Ok(());
+    }
+    if cs.message_outbox.len() >= 64 {
+        return Err("too many unacknowledged channel messages".into());
+    }
+    let checkpoint = cs.role.checkpoint(&key).map_err(|e| e.to_string())?;
+    let mut payload = vec![crate::channel::CHAN_METADATA];
+    payload.extend(crate::channel::metadata::Metadata::snapshot(&cs.role)?);
+    let wire = match cs.role.send(&payload) {
+        Ok(wire) => wire,
+        Err(error) => {
+            cs.role = cs
+                .role
+                .restore_checkpoint(&key, &checkpoint, || {
+                    gcoms_crypto::IdentityKeypair::from_seed(seed)
+                })
+                .map_err(|e| e.to_string())?;
+            return Err(error.to_string());
+        }
+    };
+    let id = crate::channel::msg_id(channel, &wire);
+    cs.message_outbox.insert(
+        id,
+        crate::channel::ChannelMessageOutbox {
+            wire,
+            expected: HashMap::from([(recipient.pseudonym, recipient.clone())]),
+            acknowledged: HashSet::new(),
+        },
+    );
+    if let Err(error) = persist_current_direct_state(&st) {
+        let cs = st
+            .channels
+            .get_mut(channel)
+            .expect("channel retained under lock");
+        cs.message_outbox.remove(&id);
+        cs.role = cs
+            .role
+            .restore_checkpoint(&key, &checkpoint, || {
+                gcoms_crypto::IdentityKeypair::from_seed(seed)
+            })
+            .map_err(|e| e.to_string())?;
+        return Err(error);
+    }
+    Ok(())
 }
 
 /// Default lifetime of a channel invite, used when the caller passes `0`.
@@ -1574,7 +1855,10 @@ pub(crate) fn create_channel_invite(
     let Some(cs) = st.channels.get_mut(channel) else {
         return Err("no channel".into());
     };
-    if !matches!(cs.role, crate::channel::ChannelRole::Owner(_)) {
+    if crate::channel::metadata::Metadata::read(&cs.role)?.closed() {
+        return Err("This channel is closed".into());
+    }
+    if !cs.role.is_owner() {
         return Err("not owner".into());
     }
     let mut id = [0u8; 16];
@@ -1916,7 +2200,29 @@ pub(crate) fn prepare_channel_text(
     text: &[u8],
     tracked: bool,
 ) -> Result<PreparedChannelText, String> {
-    validate_application_payload(text)?;
+    prepare_channel_payload(state, channel, text, tracked, None)
+}
+
+pub(crate) fn prepare_channel_change(
+    state: &Arc<Mutex<NodeState>>,
+    channel: &str,
+    change: crate::channel::ChannelChange,
+) -> Result<PreparedChannelText, String> {
+    change.validate()?;
+    prepare_channel_payload(state, channel, &[], false, Some(change))
+}
+
+fn prepare_channel_payload(
+    state: &Arc<Mutex<NodeState>>,
+    channel: &str,
+    text: &[u8],
+    tracked: bool,
+    change: Option<crate::channel::ChannelChange>,
+) -> Result<PreparedChannelText, String> {
+    let closing = matches!(change, Some(crate::channel::ChannelChange::Close));
+    if change.is_none() {
+        validate_application_payload(text)?;
+    }
     let (wire, id, targets, durable_outbox) = {
         let mut st = state.lock().unwrap_or_else(|p| p.into_inner());
         let persistent = cfg!(feature = "client-persist") && st.durable_state_sink.is_some();
@@ -1927,13 +2233,31 @@ pub(crate) fn prepare_channel_text(
         let archive_key = channel_archive_key(&st.identity_seed);
         let owner_seed = channel_seed(&st, channel);
         let cs = st.channels.get_mut(channel).ok_or("no channel")?;
+        if crate::channel::metadata::Metadata::read(&cs.role)?.closed() {
+            return Err("This channel is closed".into());
+        }
+        if crate::channel::metadata::Metadata::read(&cs.role)?.leaving(cs.role.own_pseudonym())
+            && !matches!(change, Some(crate::channel::ChannelChange::Leave))
+        {
+            return Err("This channel has a pending leave request".into());
+        }
+        if matches!(change, Some(crate::channel::ChannelChange::Transfer(_))) {
+            if cs.visibility != crate::channel::ChannelVisibility::Private {
+                return Err("Ownership transfer currently requires a private channel".into());
+            }
+            if !cs.message_outbox.is_empty() {
+                return Err(
+                    "Wait for pending channel messages before transferring ownership".into(),
+                );
+            }
+        }
         if cs.own_route.aliases.len() != 2 {
             return Err("channel routing is recovering".into());
         }
         if cs.membership_outbox.is_some() {
             return Err("channel membership is still converging".into());
         }
-        if cs.message_outbox.len() >= 64 {
+        if cs.message_outbox.len() >= 64 && !closing {
             return Err("too many unacknowledged channel messages".into());
         }
         let own_pseudonym = cs.role.own_pseudonym();
@@ -1957,7 +2281,9 @@ pub(crate) fn prepare_channel_text(
                 Some(route) => {
                     expected.insert(pseudonym, route.clone());
                 }
-                None if tracked => return Err("channel recipient route is not ready".into()),
+                None if tracked || change.is_some() => {
+                    return Err("channel recipient route is not ready".into())
+                }
                 None => complete_roster = false,
             }
         }
@@ -1969,11 +2295,33 @@ pub(crate) fn prepare_channel_text(
             .role
             .checkpoint(&archive_key)
             .map_err(|e| e.to_string())?;
-        let wire = cs
-            .role
-            .send(&crate::channel::encode_text(text, share_presence))
-            .map_err(|e| e.to_string())?;
+        let result = (|| {
+            let payload = if let Some(change) = change {
+                let mut payload = vec![crate::channel::CHAN_METADATA];
+                payload.extend(crate::channel::metadata::Metadata::prepare(
+                    &mut cs.role,
+                    change,
+                )?);
+                payload
+            } else {
+                crate::channel::encode_text(text, share_presence)
+            };
+            cs.role.send(&payload).map_err(|e| e.to_string())
+        })();
+        let wire = match result {
+            Ok(wire) => wire,
+            Err(error) => {
+                cs.role = cs
+                    .role
+                    .restore_checkpoint(&archive_key, &checkpoint, || {
+                        gcoms_crypto::IdentityKeypair::from_seed(owner_seed)
+                    })
+                    .map_err(|e| e.to_string())?;
+                return Err(error);
+            }
+        };
         let id = crate::channel::msg_id(channel, &wire);
+        let discarded_outbox = closing.then(|| std::mem::take(&mut cs.message_outbox));
         if !expected.is_empty() {
             cs.message_outbox.insert(
                 id,
@@ -1992,6 +2340,9 @@ pub(crate) fn prepare_channel_text(
                 .get_mut(channel)
                 .expect("channel retained under lock");
             cs.message_outbox.remove(&id);
+            if let Some(outbox) = discarded_outbox {
+                cs.message_outbox = outbox;
+            }
             cs.role = cs
                 .role
                 .restore_checkpoint(&archive_key, &checkpoint, || {
@@ -2004,6 +2355,9 @@ pub(crate) fn prepare_channel_text(
             .channels
             .get_mut(channel)
             .expect("channel retained under lock");
+        if closing {
+            cs.discard_forward_queue();
+        }
         cs.overlay.first_sighting(id);
         cs.note(id, wire.clone());
         let mut targets = cs
@@ -2166,13 +2520,13 @@ pub(crate) fn valid_completed_removal_key(key: &str) -> bool {
     false
 }
 
-pub(crate) async fn remove_channel_member(
+type PreparedChannelRemoval = (Vec<u8>, Option<crate::channel::ChannelRoute>);
+fn prepare_channel_removal(
     state: &Arc<Mutex<NodeState>>,
-    scheduler: &RelayScheduler,
     channel: &str,
     member_id: [u8; 32],
     events: &broadcast::Sender<Ev>,
-) -> Result<(), String> {
+) -> Result<Option<PreparedChannelRemoval>, String> {
     let removal_key = completed_member_removal_key(&member_id);
     let (commit, removed_target) = {
         let mut st = state.lock().unwrap_or_else(|p| p.into_inner());
@@ -2183,7 +2537,7 @@ pub(crate) async fn remove_channel_member(
                 return Err("no channel".into());
             };
             if cs.completed_removals.contains(&removal_key) {
-                return Ok(());
+                return Ok(None);
             }
             if cs.membership_outbox.is_some() {
                 return Err("membership change still awaiting acknowledgements".into());
@@ -2213,15 +2567,15 @@ pub(crate) async fn remove_channel_member(
                 return Err("channel control journal is full".into());
             }
             let pending_control_len = cs.pending_control.len();
-            let crate::channel::ChannelRole::Owner(owner) = &mut cs.role else {
+            if !cs.role.is_owner() {
                 return Err("not owner".into());
-            };
-            let staged = owner.stage_remove(member_id).map_err(|e| e.to_string())?;
-            owner.merge_pending().map_err(|e| e.to_string())?;
+            }
+            let staged = cs.role.stage_remove(member_id).map_err(|e| e.to_string())?;
+            cs.role.merge_pending().map_err(|e| e.to_string())?;
             if !expected.is_empty() {
                 cs.membership_outbox = Some(crate::channel::MembershipOutbox {
                     commit_id: crate::channel::msg_id(channel, &staged.commit),
-                    epoch: owner.epoch(),
+                    epoch: cs.role.epoch(),
                     commit: staged.commit.clone(),
                     expected,
                     acknowledged: std::collections::HashSet::new(),
@@ -2272,6 +2626,21 @@ pub(crate) async fn remove_channel_member(
             .remove(&(channel.to_string(), member_id));
     };
     retain_channel_wire(state, channel, &commit);
+    Ok(Some((commit, removed_target)))
+}
+
+pub(crate) async fn remove_channel_member(
+    state: &Arc<Mutex<NodeState>>,
+    scheduler: &RelayScheduler,
+    channel: &str,
+    member_id: [u8; 32],
+    events: &broadcast::Sender<Ev>,
+) -> Result<(), String> {
+    let Some((commit, removed_target)) =
+        prepare_channel_removal(state, channel, member_id, events)?
+    else {
+        return Ok(());
+    };
     if let Some(removed_target) = removed_target {
         let _ = broadcast_chan_to_targets(
             scheduler,

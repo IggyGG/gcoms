@@ -300,6 +300,16 @@ pub struct JoinedChannel {
     pub epoch: u64,
 }
 
+/// Presentation changes keep stable MLS identities and routing names intact.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ChannelChange {
+    Topic(String),
+    Nickname(String),
+    Transfer([u8; 32]),
+    Leave,
+    Close,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ChannelStatus {
     Active,
@@ -490,6 +500,17 @@ pub trait GcClient: Send + Sync {
     async fn list_channels(&self) -> Result<Vec<JoinedChannel>, SdkError>;
 
     async fn channel_roster(&self, channel: &str) -> Result<Vec<ChannelMemberSummary>, SdkError>;
+
+    async fn channel_topic(&self, _channel: &str) -> Result<String, SdkError> {
+        Err(SdkError::PermissionDenied)
+    }
+    async fn change_channel(
+        &self,
+        _channel: &str,
+        _change: ChannelChange,
+    ) -> Result<MessageId, SdkError> {
+        Err(SdkError::PermissionDenied)
+    }
 
     async fn public_channel_descriptor(
         &self,
