@@ -1,18 +1,14 @@
 #!/usr/bin/env python3
-"""Capture real endpoint packet behavior for the GC/2 privacy gate.
+"""Capture all traffic in a disposable pooled loopback fixture for diagnosis.
 
-Each run executes the performance harness inside its own network namespace
-(`sudo -n unshare -n`), so a capture on that namespace's loopback contains
-exactly the harness traffic - no other workstation processes. One run writes a
-pcap plus a metadata JSON next to it.
-
-Usage:
-  privacy-capture.py --binary PATH --out DIR --workload idle|chat|bulk
-                     [--profile gc2|gc1] [--protected] [--seed N]
-                     [--seconds 30] [--bytes 8192]
+This is NOT an isolated client observation and cannot qualify a privacy release.
+The strict classifier rejects its scope. Shell interpolation is never used,
+children are cleaned up, failed workloads and capture loss remain in evidence,
+and existing captures cannot be overwritten.
 """
 import argparse
-import hashlib
+import sys
+from privacy_packets import sha256, write_new
 import json
 import shlex
 import subprocess
@@ -36,6 +32,9 @@ def parse_args():
     parser.add_argument("--chat-interval-ms", type=int, default=500)
     parser.add_argument("--cadence", choices=("compressed", "production"), default="compressed")
     parser.add_argument("--timeout", type=int, default=600)
+    parser.add_argument("--traffic-profile")
+    parser.add_argument("--entries", type=int, default=2)
+    parser.add_argument("--warmup-ms", type=int, default=3000)
     return parser.parse_args()
 
 
@@ -58,6 +57,9 @@ def harness_args(args):
         "--timeout",
         str(args.timeout),
     ]
+    command += ["--entries", str(args.entries), "--warmup-ms", str(args.warmup_ms)]
+    if args.traffic_profile:
+        command += ["--traffic-profile", args.traffic_profile]
     if args.protected and args.profile in ("gc2", "gchat-files"):
         command.append("--protected")
     if args.profile == "gchat-files":
@@ -87,73 +89,146 @@ def harness_args(args):
     return command
 
 
+def namespace_worker(spec):
+    """Run capture and workload with guaranteed cleanup inside unshare."""
+    import os
+    import select
+    import signal
+    def interrupted(_signal, _frame):
+        raise KeyboardInterrupt
+    signal.signal(signal.SIGTERM, interrupted)
+    signal.signal(signal.SIGINT, interrupted)
+    tcpdump = application = None
+    result = {"inner_rc": 1, "capture_returncode": None, "dropped_packets": None}
+    def stop(process, sig=signal.SIGTERM):
+        if process is None or process.poll() is not None:
+            return
+        process.send_signal(sig)
+        try:
+            process.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.wait()
+    try:
+        subprocess.run(["ip", "link", "set", "lo", "up"], check=True, capture_output=True)
+        try:
+            offload = subprocess.run(["ethtool", "-K", "lo", "tso", "off", "gso", "off", "gro", "off"], capture_output=True)
+            result["offloads_disabled"] = offload.returncode == 0
+        except FileNotFoundError:
+            result["offloads_disabled"] = False
+        with open(spec["pcap"], "wb") as capture, open(spec["stdout"], "wb") as stdout, open(spec["stderr"], "wb") as stderr:
+            tcpdump = subprocess.Popen(["tcpdump", "-n", "-U", "-i", "lo", "-s", "0", "-B", "4096",
+                                        "--time-stamp-precision=micro", "-w", "-"],
+                                       stdout=capture, stderr=subprocess.PIPE, bufsize=0)
+            initial_log = b""
+            deadline = time.monotonic() + 10
+            ready = False
+            while time.monotonic() < deadline and tcpdump.poll() is None:
+                if select.select([tcpdump.stderr], [], [], .5)[0]:
+                    line = tcpdump.stderr.readline()
+                    initial_log += line
+                    if b"listening on" in line:
+                        ready = True
+                        break
+            if not ready:
+                raise RuntimeError("packet capture never became ready")
+            result["capture_started_epoch"] = time.time()
+            application = subprocess.Popen(spec["command"], stdout=stdout, stderr=stderr)
+            try:
+                result["inner_rc"] = application.wait(timeout=spec["timeout"])
+            except subprocess.TimeoutExpired:
+                result["failure"] = "application timed out"
+                stop(application)
+                result["inner_rc"] = application.returncode
+            finally:
+                stop(tcpdump, signal.SIGINT)
+                result["capture_finished_epoch"] = time.time()
+                result["capture_returncode"] = tcpdump.returncode
+                log = (initial_log + tcpdump.stderr.read()).decode(errors="replace")
+                result["capture_log"] = log
+                import re
+                drops = re.search(r"(\d+) packets dropped by kernel", log)
+                result["dropped_packets"] = int(drops.group(1)) if drops else None
+    except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as error:
+        result["failure"] = str(error)
+    except KeyboardInterrupt:
+        result["failure"] = "capture interrupted"
+    finally:
+        stop(application)
+        stop(tcpdump, signal.SIGINT)
+    return result
+
+
 def main():
     args = parse_args()
+    if min(args.seconds, args.bytes, args.timeout) <= 0:
+        raise ValueError("duration and volume must be positive")
+    args.binary = args.binary.resolve()
     args.out.mkdir(parents=True, exist_ok=True)
     stamp = f"{args.workload}-{args.profile}-{args.seed}"
-    pcap = (args.out / f"{stamp}.pcap").resolve()
-    record = (args.out / f"{stamp}.json").resolve()
-    if pcap.exists() or record.with_suffix(".meta.json").exists():
-        raise FileExistsError("capture already exists; use a fresh run seed/output directory")
+    paths = {key: (args.out / (stamp + suffix)).resolve() for key, suffix in
+             (("pcap", ".pcap"), ("stdout", ".stdout"), ("stderr", ".stderr"), ("meta", ".meta.json"))}
+    if any(path.exists() for path in paths.values()):
+        raise ValueError("capture exists; use a new seed or output directory")
+    for key in ("pcap", "stdout", "stderr"):
+        write_new(paths[key], "")
     command = harness_args(args)
-    # The namespace contains only the harness, so capture all TCP; the relay
-    # circuits are part of the endpoint behaviour under study. Disable loopback
-    # offloads so recorded segment sizes reflect real wire segments.
-    inner = (
-        "set -e; ip link set lo up; "
-        "command -v ethtool >/dev/null && ethtool -K lo tso off gso off gro off >/dev/null 2>&1 || true; "
-        f"tcpdump -i lo -s 96 -B 4096 --time-stamp-precision=micro -w {shlex.quote(str(pcap))} tcp & "
-        "TPID=$!; trap 'kill -INT $TPID 2>/dev/null || true; wait $TPID 2>/dev/null || true' EXIT; sleep 2; "
-        + shlex.join(command)
-        + f" > {shlex.quote(str(record) + '.stdout')} 2>{shlex.quote(str(record) + '.stderr')}"
-    )
+    binary_hash = sha256(args.binary)
+    spec = {key: str(paths[key]) for key in ("pcap", "stdout", "stderr")}
+    spec.update(command=command, timeout=args.timeout)
     started = time.time()
-    result = subprocess.run(["sudo", "-n", "unshare", "-n", "--",
-                             "bash", "-c", inner],
-                            capture_output=True, text=True, timeout=args.timeout + 120)
+    try:
+        result = subprocess.run(["sudo", "-n", "unshare", "-n", "--", sys.executable,
+                                 str(Path(__file__).resolve()), "--namespace-worker"],
+                                input=json.dumps(spec), capture_output=True, text=True,
+                                timeout=args.timeout + 45)
+        worker = json.loads(result.stdout) if result.stdout.strip() else {"inner_rc": 1}
+        worker["worker_returncode"] = result.returncode
+        worker["worker_stderr"] = result.stderr[-2000:]
+    except (OSError, ValueError, subprocess.TimeoutExpired) as error:
+        worker = {"inner_rc": 1, "failure": str(error)}
     finished = time.time()
-    stdout_path = Path(str(record) + ".stdout")
-    stdout_text = stdout_path.read_text() if stdout_path.exists() else ""
-    record_value = None
-    for line in stdout_text.splitlines():
-        line = line.strip()
-        if line.startswith("{") and line.endswith("}"):
+    output = paths["stdout"].read_text(errors="replace")
+    record = None
+    for line in output.splitlines():
+        if line.startswith("{"):
             try:
-                record_value = json.loads(line)
+                record = json.loads(line)
             except json.JSONDecodeError:
                 pass
-    idle_start = next(
-        (line.split()[1] for line in stdout_text.splitlines() if line.startswith("IDLE_START ")),
-        None,
-    )
+    marker = "IDLE_START " if args.profile != "gchat-files" and args.workload in ("idle", "warm_idle") else "MEASUREMENT_START "
+    start = next((float(line.split()[1]) for line in output.splitlines() if line.startswith(marker)), None)
+    measured_end = next((float(line.split()[1]) for line in output.splitlines()
+                         if line.startswith("MEASUREMENT_END ")), None)
+    duration = min(args.seconds, int(worker.get("capture_finished_epoch", finished) - start)) if start else 0
     metadata = {
-        "workload": args.workload,
-        "profile": args.profile,
-        "protected": args.protected,
-        "seed": args.seed,
-        "seconds": args.seconds,
-        "bytes": args.bytes,
-        "chat_interval_ms": args.chat_interval_ms if args.profile == "gchat-files" or args.workload == "chat" else None,
-        "binary_sha256": hashlib.sha256(args.binary.read_bytes()).hexdigest(),
-        "cadence": args.cadence,
-        "command": command,
-        "inner_rc": result.returncode,
-        "wall_seconds": round(finished - started, 3),
-        "stderr_tail": result.stderr[-400:],
-        "pcap": pcap.name,
-        "pcap_sha256": hashlib.sha256(pcap.read_bytes()).hexdigest() if pcap.exists() else None,
-        "record": record_value,
-        "idle_start_epoch": idle_start,
-        "measurement_start_epoch": next((float(line.split()[1]) for line in stdout_text.splitlines()
-                                          if line.startswith("MEASUREMENT_START ")), None),
-        "measurement_end_epoch": next((float(line.split()[1]) for line in stdout_text.splitlines()
-                                        if line.startswith("MEASUREMENT_END ")), None),
+        "schema": 2, "capture_scope": "pooled_loopback_fixture", "diagnostic_only": True,
+        "workload": args.workload, "profile": args.profile, "seed": args.seed,
+        "protected": args.protected, "traffic_profile": args.traffic_profile, "entries": args.entries,
+        "seconds": args.seconds, "bytes": args.bytes, "cadence": args.cadence,
+        "command": command, "wall_seconds": finished - started,
+        "binary_sha256": binary_hash, "capture_script_sha256": sha256(__file__),
+        "pcap": paths["pcap"].name, "pcap_sha256": sha256(paths["pcap"]),
+        "record": record,
+        "measurement_start_epoch": start, "measurement_end_epoch": measured_end,
+        "chat_interval_ms": args.chat_interval_ms,
+        "measurement": {"start_epoch": start, "end_epoch": start + duration} if start and duration > 0 else None,
+        "idle_start_epoch": start if marker == "IDLE_START " else None,
+        **worker,
     }
-    (args.out / f"{stamp}.meta.json").write_text(json.dumps(metadata, indent=2) + "\n")
-    print(json.dumps({k: metadata[k] for k in
-                      ("workload", "profile", "seed", "inner_rc", "wall_seconds", "pcap_sha256")}))
-    return 0 if result.returncode == 0 else 1
+    if sha256(args.binary) != binary_hash:
+        metadata.update(inner_rc=1, failure="executable changed during capture")
+    metadata["workload_returncode"] = worker.get("inner_rc")
+    if metadata.get("capture_returncode") != 0 or metadata.get("dropped_packets") != 0:
+        metadata.update(inner_rc=1, failure=metadata.get("failure") or "incomplete capture or packet loss")
+    write_new(paths["meta"], json.dumps(metadata, indent=2, allow_nan=False) + "\n")
+    print(json.dumps({key: metadata.get(key) for key in ("workload", "seed", "inner_rc", "failure", "dropped_packets", "pcap_sha256")}))
+    return 0 if metadata.get("inner_rc") == 0 and metadata.get("capture_returncode") == 0 and metadata.get("dropped_packets") == 0 else 1
 
 
 if __name__ == "__main__":
+    if sys.argv[1:] == ["--namespace-worker"]:
+        result = namespace_worker(json.load(sys.stdin))
+        print(json.dumps(result))
+        raise SystemExit(0 if result.get("inner_rc") == 0 else 1)
     raise SystemExit(main())

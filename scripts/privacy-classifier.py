@@ -1,32 +1,27 @@
 #!/usr/bin/env python3
-"""Predeclared privacy classifier for the GC/2 gate (numpy only).
+"""Measure GC/2 activity separation; valid results inform the owner's decision.
 
-Pipeline (fixed before any qualification run):
-  * One-second windows over each capture's harness ports.
-  * Features per window: up/down packet counts and byte totals, up/down mean
-    and max inter-arrival seconds, size-bin counts (<100, <300, <1000, <4096),
-    packets >= 4096 bytes, SYN count and RST count.
-  * Binary labels from the workload (chat=1 vs bulk=0; idle=0 vs chat=1).
-  * Train on seed 7 captures, evaluate on held-out seed 11 captures.
-  * L2 logistic regression, zero init, full-batch gradient descent, 2000
-    iterations, learning rate 0.1, lambda 1e-3, no early stopping.
-  * ROC-AUC with a 2000-resample percentile bootstrap; the gate is the upper
-    97.5% bound <= 0.55.
-
-Independence checks from the same captures: SYN counts per run, packets
->= 4096 bytes in chat runs, and a permutation test (10000 draws) on window
-packet counts between idle and chat runs.
+Predeclared model: one-second packet windows, training-only standardization,
+L2 logistic regression (zero initialization, 2000 steps, lr=.1, lambda=.001).
+Training/evaluation seeds are disjoint. Confidence intervals resample complete
+paired runs, never adjacent windows. Unfavorable privacy results are informative;
+missing, invalid, or insufficient evidence is an execution failure.
+Historical captures can be reanalyzed with --diagnostic but cannot qualify.
+Requires numpy and tshark; reports retain versions and script hashes.
 """
 import argparse
+import ipaddress
 import json
+import math
+from pathlib import Path
 import subprocess
 import sys
-from pathlib import Path
 
 import numpy as np
+from privacy_packets import direction, endpoint, new_connections, packets, sha256, write_new
 
 FEATURE_NAMES = [
-    "up_pkts", "down_pkts", "up_bytes", "down_bytes",
+    "up_pkts", "down_pkts", "up_wire_bytes", "down_wire_bytes",
     "up_mean_iat", "up_max_iat", "down_mean_iat", "down_max_iat",
     "size_lt100", "size_lt300", "size_lt1000", "size_lt4096",
     "size_ge4096", "syn", "rst",
@@ -36,78 +31,55 @@ FEATURE_NAMES = [
 def parse_args():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--out", type=Path, required=True, help="capture directory")
-    parser.add_argument("--train-seed", type=int, default=7)
-    parser.add_argument("--eval-seed", type=int, default=11)
-    parser.add_argument("--windows", type=int, default=1)
+    parser.add_argument("--report", type=Path, required=True, help="new report; never overwrite evidence")
+    parser.add_argument("--train-seeds", default="1001:1010", help="inclusive range or comma-separated seeds")
+    parser.add_argument("--eval-seeds", default="2001:2020")
+    parser.add_argument("--windows", type=float, default=1.0)
     parser.add_argument("--bootstrap", type=int, default=2000)
-    parser.add_argument("--skip-seconds", type=float, default=0.0,
-                        help="drop this much lead-in time from every capture")
-    parser.add_argument("--idle-workload", choices=("idle", "warm_idle"), default="idle")
-    parser.add_argument("--entry-link-only", action="store_true",
-                        help="keep only packets on the client's entry link")
+    parser.add_argument("--idle-workload", choices=("idle", "warm_idle"), default="warm_idle")
+    parser.add_argument("--entry-link-only", action="store_true", help="entry-only diagnostic scope")
+    parser.add_argument("--diagnostic", action="store_true", help="historical/short runs; never release evidence")
     return parser.parse_args()
 
 
-def packets(pcap: Path):
-    text = subprocess.run(
-        ["tcpdump", "-r", str(pcap), "-nn", "-q", "-tt",
-         "--time-stamp-precision=micro", "tcp"],
-        capture_output=True, text=True, check=True,
-    ).stdout
-    rows = []
-    for line in text.splitlines():
-        parts = line.split()
-        if len(parts) < 5:
-            continue
-        try:
-            timestamp = float(parts[0])
-        except ValueError:
-            continue
-        length = 0
-        for index, part in enumerate(parts):
-            if part == "tcp" and index + 1 < len(parts):
-                try:
-                    length = int(parts[index + 1])
-                except ValueError:
-                    length = 0
-        try:
-            src_port = int(parts[2].rsplit(".", 1)[1])
-            dst_port = int(parts[4].rstrip(":").rsplit(".", 1)[1])
-        except (IndexError, ValueError):
-            continue
-        flags = " ".join(parts[5:])
-        rows.append((timestamp, src_port, dst_port, length, flags))
-    return rows
+def seeds(value):
+    if ":" in value:
+        low, high = map(int, value.split(":"))
+        if high < low or high - low > 10000:
+            raise ValueError("invalid seed range")
+        values = list(range(low, high + 1))
+    else:
+        values = list(map(int, value.split(",")))
+    if not values or len(values) != len(set(values)) or min(values) < 0:
+        raise ValueError("seeds must be unique nonnegative integers")
+    return values
 
 
-def window_features(rows, ports, windows):
-    if not rows:
-        return np.zeros((0, len(FEATURE_NAMES)), dtype=float)
-    start = rows[0][0]
-    buckets = {}
-    for timestamp, src_port, dst_port, length, flags in rows:
-        index = int((timestamp - start) // windows)
-        buckets.setdefault(index, []).append((timestamp, src_port, dst_port, length, flags))
+def window_features(rows, observer_ips, windows, start, end, entry=None):
+    if not all(math.isfinite(x) for x in (windows, start, end)) or windows <= 0 or end <= start:
+        raise ValueError("invalid observation interval")
+    count = (end - start) / windows
+    if not math.isclose(count, round(count), abs_tol=1e-4) or not 1 <= count <= 1_000_000:
+        raise ValueError("observation interval must contain complete windows")
+    buckets = [[] for _ in range(round(count))]
+    for packet in rows:
+        if start <= packet.time < end:
+            side = direction(packet, observer_ips, entry)
+            if side:
+                buckets[min(int((packet.time - start) / windows), len(buckets) - 1)].append((packet, side))
     features = []
-    for index in sorted(buckets):
-        entries = sorted(buckets[index])
-        up = [e for e in entries if e[1] not in ports]
-        down = [e for e in entries if e[2] in ports]
-        row = [len(up), len(down),
-               sum(e[3] for e in up), sum(e[3] for e in down)]
-        for direction in (up, down):
-            times = [e[0] for e in direction]
-            gaps = np.diff(times) if len(times) > 1 else np.array([])
-            row += [float(gaps.mean()) if len(gaps) else 0.0,
-                    float(gaps.max()) if len(gaps) else 0.0]
-        sizes = [e[3] for e in entries]
-        row += [sum(1 for s in sizes if s < 100),
-                sum(1 for s in sizes if 100 <= s < 300),
-                sum(1 for s in sizes if 300 <= s < 1000),
-                sum(1 for s in sizes if 1000 <= s < 4096),
-                sum(1 for s in sizes if s >= 4096),
-                sum(1 for e in entries if "S" in e[4]),
-                sum(1 for e in entries if "R" in e[4])]
+    for bucket in buckets:
+        up = [p for p, side in bucket if side == "up"]
+        down = [p for p, side in bucket if side == "down"]
+        row = [len(up), len(down), sum(p.wire_bytes for p in up), sum(p.wire_bytes for p in down)]
+        for stream in (up, down):
+            gaps = np.diff([p.time for p in stream])
+            row += [float(gaps.mean()) if len(gaps) else 0., float(gaps.max()) if len(gaps) else 0.]
+        sizes = [p.wire_bytes for p, _ in bucket]
+        row += [sum(s < 100 for s in sizes), sum(100 <= s < 300 for s in sizes),
+                sum(300 <= s < 1000 for s in sizes), sum(1000 <= s < 4096 for s in sizes),
+                sum(s >= 4096 for s in sizes), sum(p.syn and not p.ack for p, _ in bucket),
+                sum(p.rst for p, _ in bucket)]
         features.append(row)
     return np.asarray(features, dtype=float)
 
@@ -116,8 +88,8 @@ def logistic_fit(x, y):
     weights = np.zeros(x.shape[1] + 1)
     design = np.hstack([np.ones((x.shape[0], 1)), x])
     for _ in range(2000):
-        scores = design @ weights
-        probs = 1.0 / (1.0 + np.exp(-scores))
+        logits = np.clip(design @ weights, -500, 500)
+        probs = 1.0 / (1.0 + np.exp(-logits))
         gradient = design.T @ (probs - y) / len(y)
         gradient[1:] += 1e-3 * weights[1:]
         weights -= 0.1 * gradient
@@ -125,150 +97,191 @@ def logistic_fit(x, y):
 
 
 def scores(weights, x):
-    design = np.hstack([np.ones((x.shape[0], 1)), x])
-    return design @ weights
+    return np.hstack([np.ones((x.shape[0], 1)), x]) @ weights
 
 
-def roc_auc(scores_in, y):
-    order = np.argsort(scores_in, kind="mergesort")
-    ranks = np.empty(len(scores_in), dtype=float)
-    ranks[order] = np.arange(1, len(scores_in) + 1)
-    positive = ranks[y == 1].sum()
-    n_pos = int(y.sum())
-    n_neg = len(y) - n_pos
-    if n_pos == 0 or n_neg == 0:
-        return float("nan")
-    return (positive - n_pos * (n_pos + 1) / 2) / (n_pos * n_neg)
+def roc_auc(values, labels):
+    values, labels = np.asarray(values), np.asarray(labels)
+    if values.ndim != 1 or values.shape != labels.shape or not np.isfinite(values).all():
+        raise ValueError("invalid AUC inputs")
+    if not np.isin(labels, [0, 1]).all() or len(np.unique(labels)) != 2:
+        raise ValueError("AUC needs both binary classes")
+    negatives = np.sort(values[labels == 0])
+    positives = values[labels == 1]
+    below = np.searchsorted(negatives, positives, side="left")
+    equal = np.searchsorted(negatives, positives, side="right") - below
+    return float((below + .5 * equal).sum() / (len(positives) * len(negatives)))
+
+
+def run_interval(predictions, labels, groups, bootstrap):
+    if bootstrap < 100:
+        raise ValueError("at least 100 bootstrap samples required")
+    keys = np.unique(groups)
+    if len(keys) < 2:
+        return None
+    members = [np.flatnonzero(groups == key) for key in keys]
+    if any(len(np.unique(labels[index])) != 2 for index in members):
+        raise ValueError("each paired evaluation run must include both classes")
+    rng = np.random.default_rng(20260919)
+    samples = []
+    for _ in range(bootstrap):
+        index = np.concatenate([members[i] for i in rng.integers(0, len(keys), len(keys))])
+        auc = roc_auc(predictions[index], labels[index])
+        samples.append(max(auc, 1 - auc))
+    return [float(x) for x in np.percentile(samples, [2.5, 97.5])]
+
+
+def read_capture(path, args):
+    meta = json.loads(path.read_text())
+    if meta.get("inner_rc") != 0:
+        raise ValueError(f"failed capture: {path.name}")
+    pcap = path.parent / meta["pcap"]
+    if not pcap.resolve().is_relative_to(path.parent.resolve()) or sha256(pcap) != meta.get("pcap_sha256"):
+        raise ValueError(f"capture hash/path mismatch: {path.name}")
+    rows = packets(pcap)
+    if not rows:
+        raise ValueError(f"empty capture: {path.name}")
+    entry_value = (meta.get("record") or {}).get("entry_addr")
+    entry = endpoint(entry_value) if entry_value else None
+    observer_values = meta.get("observer_ips") or []
+    if not isinstance(observer_values, list):
+        raise ValueError("observer_ips must be an explicit address list")
+    observer_ips = {str(ipaddress.ip_address(value)) for value in observer_values}
+    if args.entry_link_only:
+        if not entry:
+            raise ValueError("entry-only scope requires the exact entry address")
+        rows = [p for p in rows if p.source == entry or p.destination == entry]
+    if not observer_ips and not (args.diagnostic and entry and args.entry_link_only):
+        raise ValueError("capture requires an unambiguous observer address")
+    bounds = meta.get("measurement")
+    if bounds:
+        start, end = float(bounds["start_epoch"]), float(bounds["end_epoch"])
+    elif args.diagnostic and rows:
+        start = float(meta.get("idle_start_epoch") or rows[0].time)
+        end = start + int((rows[-1].time - start) / args.windows) * args.windows
+    else:
+        raise ValueError("capture has no explicit measurement interval")
+    if not args.diagnostic:
+        if args.entry_link_only or meta.get("capture_scope") != "isolated_client_interface":
+            raise ValueError("release evidence must include all isolated client interface traffic")
+        if meta.get("cadence") != "production" or end - start < 300:
+            raise ValueError("release observation needs production cadence and >=300 seconds")
+        if meta.get("dropped_packets") != 0:
+            raise ValueError("missing capture loss accounting or packets dropped")
+        provenance = meta.get("provenance") or {}
+        if not provenance.get("build_manifest_sha256") or not provenance.get("build_manifest"):
+            raise ValueError("capture lacks build provenance")
+        manifest = path.parent / provenance["build_manifest"]
+        if not manifest.resolve().is_relative_to(path.parent.resolve()) or sha256(manifest) != provenance["build_manifest_sha256"]:
+            raise ValueError("build manifest hash/path mismatch")
+        build = json.loads(manifest.read_text())
+        if build.get("binary_sha256") != meta.get("binary_sha256") or not meta.get("binary_sha256"):
+            raise ValueError("captured executable differs from build manifest")
+        if meta.get("capture_started_epoch", math.inf) > start or meta.get("capture_finished_epoch", -math.inf) < end:
+            raise ValueError("capture does not cover the measured interval")
+    observed = [p for p in rows if start <= p.time < end and direction(p, observer_ips, entry)]
+    features = window_features(rows, observer_ips, args.windows, start, end, entry)
+    duration = end - start
+    return meta, features, {
+        "capture": path.name, "pcap_sha256": meta["pcap_sha256"], "seconds": duration,
+        "packets": len(observed), "wire_bytes": sum(p.wire_bytes for p in observed),
+        "wire_bytes_per_second": sum(p.wire_bytes for p in observed) / duration,
+        "up_wire_bytes": sum(p.wire_bytes for p in observed if direction(p, observer_ips, entry) == "up"),
+        "down_wire_bytes": sum(p.wire_bytes for p in observed if direction(p, observer_ips, entry) == "down"),
+        "estimated_decimal_gb_30_days": {
+            str(hours) + "h_per_day": sum(p.wire_bytes for p in observed) / duration * hours * 3600 * 30 / 1e9
+            for hours in (8, 24)
+        },
+        "tcp_connections": new_connections(observed),
+        "tcp_retransmitted_packets": sum(p.retransmission for p in observed),
+        "large_packets_per_second": sum(p.wire_bytes >= 4096 for p in observed) / duration,
+    }
+
+
+def analyze(args):
+    if not math.isfinite(getattr(args, "windows", 1)) or getattr(args, "windows", 1) <= 0:
+        raise ValueError("window duration must be positive and finite")
+    train, evaluation = seeds(args.train_seeds), seeds(args.eval_seeds)
+    if set(train) & set(evaluation):
+        raise ValueError("training and evaluation seeds overlap")
+    if not args.diagnostic and (len(train) < 10 or len(evaluation) < 20):
+        raise ValueError("release measurements require >=10 training and >=20 evaluation runs")
+    captures, costs, configurations = {}, [], set()
+    for path in sorted(args.out.glob("*.meta.json")):
+        meta, features, cost = read_capture(path, args)
+        key = meta["workload"], meta["seed"]
+        if key in captures:
+            raise ValueError(f"duplicate run: {key}")
+        captures[key] = features
+        costs.append(cost | {"workload": key[0], "seed": key[1]})
+        configurations.add(json.dumps({k: meta.get(k) for k in ("profile", "traffic_profile", "entries", "cadence", "network", "provenance", "binary_sha256")}, sort_keys=True))
+    if len(configurations) != 1:
+        raise ValueError("missing captures or mixed source/profile/network configurations")
+
+    def design(classes, cohort):
+        xs, ys, groups = [], [], []
+        for seed in cohort:
+            for workload, label in classes:
+                x = captures[(workload, seed)]
+                xs.append(x)
+                ys.append(np.full(len(x), label))
+                groups.append(np.full(len(x), seed))
+        return np.vstack(xs), np.concatenate(ys), np.concatenate(groups)
+
+    comparisons = {}
+    for name, classes in (("chat_vs_bulk", (("chat", 1), ("bulk", 0))),
+                          ("idle_vs_chat", ((args.idle_workload, 0), ("chat", 1)))):
+        x_train, y_train, _ = design(classes, train)
+        x_eval, y_eval, groups = design(classes, evaluation)
+        if not args.diagnostic and len({len(captures[(w, s)]) for w, _ in classes for s in train + evaluation}) != 1:
+            raise ValueError("comparison captures have unequal observation durations")
+        mean, std = x_train.mean(axis=0), x_train.std(axis=0)
+        std[std == 0] = 1
+        model = logistic_fit((x_train - mean) / std, y_train)
+        predictions = scores(model, (x_eval - mean) / std)
+        auc = roc_auc(predictions, y_eval)
+        interval = run_interval(predictions, y_eval, groups, args.bootstrap)
+        comparisons[name] = {
+            "auc": auc, "separability": max(auc, 1 - auc),
+            "separability_interval_95": interval,
+            "reference_threshold_met": interval is not None and interval[1] <= .55,
+            "training_runs_per_class": len(train), "evaluation_runs_per_class": len(evaluation),
+            "training_windows": len(y_train), "evaluation_windows": len(y_eval),
+            "training_mean": mean.tolist(), "training_std": std.tolist(),
+            "model_coefficients": model.tolist(),
+        }
+    return {
+        "schema": 2, "measurement_valid": not args.diagnostic,
+        "status": "diagnostic" if args.diagnostic else "measured",
+        "scope": "entry_only_pooled_fixture" if args.entry_link_only else "isolated_client_interface",
+        "reference_threshold": .55, "reference_threshold_is_release_veto": False,
+        "release_decision": "pending_owner_review", "comparisons": comparisons,
+        "sample_unit": "independent paired run", "window_seconds": args.windows,
+        "features": FEATURE_NAMES, "runs": costs,
+        "limitations": ["Empirical classifier result, not an anonymity proof.",
+                        "Costs count captured IP frame bytes, excluding physical preambles, gaps and unseen link overhead.",
+                        "Monthly estimates extrapolate the measured workload and connected hours; they are not idle-only allowances.",
+                        "No physical mobile energy or suspension qualification."],
+    }
 
 
 def main():
     args = parse_args()
-    captures = {}
-    for meta_path in sorted(args.out.glob("*.meta.json")):
-        meta = json.loads(meta_path.read_text())
-        if meta["inner_rc"] != 0:
-            continue
-        pcap = args.out / meta["pcap"]
-        rows = packets(pcap)
-        if args.entry_link_only:
-            entry = (meta.get("record") or {}).get("entry_addr") or ""
-            if entry:
-                try:
-                    port = int(entry.rsplit(":", 1)[1])
-                    rows = [row for row in rows if row[1] == port or row[2] == port]
-                except (IndexError, ValueError):
-                    pass
-        idle_start = meta.get("idle_start_epoch")
-        if idle_start:
-            cutoff = float(idle_start)
-            rows = [row for row in rows if row[0] >= cutoff]
-        elif args.skip_seconds > 0 and rows:
-            cutoff = rows[0][0] + args.skip_seconds
-            rows = [row for row in rows if row[0] >= cutoff]
-        captures[(meta["workload"], meta["seed"])] = rows
-
-    ports = {27101, 27102}
-    report = {"captures": sorted(f"{k[0]}/{k[1]}" for k in captures), "gates": {}}
-
-    def design(pairs):
-        rows, labels = [], []
-        for workload, seed, label in pairs:
-            features = window_features(captures[(workload, seed)], ports, args.windows)
-            if features.size:
-                rows.append(features)
-                labels.append(np.full(features.shape[0], label, dtype=float))
-        return np.vstack(rows), np.concatenate(labels)
-
-    for name, classes in (("chat_vs_bulk", (("chat", 1), ("bulk", 0))),
-                          ("idle_vs_chat", ((args.idle_workload, 0), ("chat", 1)))):
-        pairs_train = [(w, args.train_seed, l) for w, l in classes]
-        pairs_eval = [(w, args.eval_seed, l) for w, l in classes]
-        try:
-            x_train, y_train = design(pairs_train)
-            x_eval, y_eval = design(pairs_eval)
-        except KeyError as error:
-            report["gates"][name] = {"ok": False, "reason": f"missing capture {error}"}
-            continue
-        if len(np.unique(y_train)) < 2 or len(np.unique(y_eval)) < 2:
-            report["gates"][name] = {"ok": False, "reason": "single-class split"}
-            continue
-        mean, std = x_train.mean(axis=0), x_train.std(axis=0)
-        std[std == 0] = 1.0
-        weights = logistic_fit((x_train - mean) / std, y_train)
-        evaluated = scores(weights, (x_eval - mean) / std)
-        auc = roc_auc(evaluated, y_eval)
-        rng = np.random.default_rng(20260919)
-        bootstrap = []
-        for _ in range(args.bootstrap):
-            index = rng.integers(0, len(evaluated), len(evaluated))
-            if len(np.unique(y_eval[index])) < 2:
-                continue
-            sample = roc_auc(evaluated[index], y_eval[index])
-            bootstrap.append(max(sample, 1.0 - sample))
-        upper_sep = float(np.percentile(bootstrap, 97.5))
-        # Separability is two-sided: an AUC far below 0.5 is the same signal
-        # with inverted ranking, and the bootstrap is computed per resample.
-        separability = max(float(auc), 1.0 - float(auc))
-        upper = float(np.percentile(bootstrap, 97.5)) if bootstrap else float("nan")
-        report["gates"][name] = {
-            "auc": float(auc),
-            "separability": separability,
-            "separability_upper_97_5": upper_sep,
-            "windows_train": int(len(y_train)),
-            "windows_eval": int(len(y_eval)),
-            "ok": upper_sep <= 0.55,
+    try:
+        report = analyze(args)
+        report["tooling"] = {
+            "numpy": np.__version__,
+            "tshark": subprocess.check_output(["tshark", "--version"], text=True).splitlines()[0],
+            "classifier_sha256": sha256(__file__),
+            "packet_parser_sha256": sha256(Path(__file__).with_name("privacy_packets.py")),
+            "timestamp_order_policy": "stable chronological order; reject backsteps above 10 ms",
         }
-
-    # Independence checks.
-    def syn_count(workload, seed):
-        return sum(1 for row in captures.get((workload, seed), []) if "S" in row[4])
-
-    def big_count(workload, seed):
-        return sum(1 for row in captures.get((workload, seed), []) if row[3] >= 4096)
-
-    def window_counts(workload, seed):
-        features = window_features(captures.get((workload, seed), []), ports, args.windows)
-        return features[:, 0] + features[:, 1] if features.size else np.array([])
-
-    idle_syn = syn_count(args.idle_workload, args.train_seed)
-    chat_syn = syn_count("chat", args.train_seed)
-    idle_big = big_count(args.idle_workload, args.train_seed)
-    chat_big = big_count("chat", args.train_seed)
-    bulk_big = big_count("bulk", args.train_seed)
-    idle_counts = window_counts(args.idle_workload, args.train_seed)
-    chat_counts = window_counts("chat", args.train_seed)
-    p_value = None
-    if len(idle_counts) and len(chat_counts):
-        observed = abs(chat_counts.mean() - idle_counts.mean())
-        pooled = np.concatenate([idle_counts, chat_counts])
-        rng = np.random.default_rng(7)
-        hits = 0
-        for _ in range(10000):
-            rng.shuffle(pooled)
-            split = len(idle_counts)
-            if abs(pooled[split:].mean() - pooled[:split].mean()) >= observed:
-                hits += 1
-        p_value = hits / 10000
-    report["independence"] = {
-        "idle_syn": idle_syn,
-        "chat_syn": chat_syn,
-        "chat_connections_ok": chat_syn <= idle_syn,
-        "idle_packets_ge_4096": idle_big,
-        "chat_packets_ge_4096": chat_big,
-        "bulk_packets_ge_4096": bulk_big,
-        # Chat must not add bulk-sized records beyond the padded idle schedule
-        # (a 20% allowance covers cadence jitter).
-        "chat_bulk_emissions_ok": chat_big <= max(1, int(1.2 * idle_big)),
-        "window_packet_permutation_p": p_value,
-        "scheduling_independent": p_value is None or p_value >= 0.01,
-    }
-    report["qualified"] = all(
-        gate.get("ok") for gate in report["gates"].values()
-    ) and all(report["independence"][k] for k in
-              ("chat_connections_ok", "chat_bulk_emissions_ok", "scheduling_independent"))
-    (args.out / "privacy-report.json").write_text(json.dumps(report, indent=2) + "\n")
-    print(json.dumps(report, indent=2))
-    return 0 if report["qualified"] else 1
+    except (KeyError, TypeError, ValueError, OSError, subprocess.SubprocessError) as error:
+        report = {"schema": 2, "measurement_valid": False, "status": "invalid", "reason": str(error)}
+    encoded = json.dumps(report, indent=2, allow_nan=False) + "\n"
+    write_new(args.report, encoded)
+    print(encoded, end="")
+    return 0 if report.get("measurement_valid") or (args.diagnostic and report.get("status") == "diagnostic") else 1
 
 
 if __name__ == "__main__":

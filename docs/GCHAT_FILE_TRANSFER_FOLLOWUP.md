@@ -139,3 +139,20 @@ window traffic and connection-count gates must meet the upper bound. It creates
 a separate diagnostic report and refuses to overwrite one. Its
 `component_gate_passed` result cannot set `release_qualified`, which remains false. This application harness is
 component evidence; final GChat/fleet release qualification remains outstanding.
+
+The shared measurement improvements from `e7a6c09` now check exact message IDs,
+body digests, partial final chunks, receipt counts, authenticated profile IDs,
+capture loss and measurement coverage. Packet accounting uses structured frame
+lengths and complete endpoint identities, including IPv6. Validity is separate
+from the component criterion: a valid file-privacy measurement above the 0.55
+upper-confidence threshold still exits unsuccessfully, and even a passing
+component report cannot qualify release. The historical classifier remains a
+diagnostic for its different contract.
+
+The imported checks pass 115 Python cases and strict workspace Clippy. Four
+terminal-codec/archive tests now select the explicit zero-entry direct fixture;
+the independent protected-route and real cold-channel tests retain their relay
+topologies. A local mixed measurement on profile 22 verified exactly 32,769 bulk
+bytes across three chunks and two chat messages, with all five distinct receipts,
+no delivery errors and no overrun of its 60-second interval. These measurements
+do not alter the frozen fleet executables or supply privacy qualification.

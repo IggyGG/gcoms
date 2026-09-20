@@ -141,10 +141,13 @@ async fn gc2_sessions_carry_durable_applications_over_tls_and_resume_after_resta
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn gc2_natural_carrier_delivers_durable_applications_both_ways() {
+    // This terminal codec fixture has no entry/middle services. Opt in to the
+    // direct fixture explicitly; protected-route behavior is exercised by
+    // gc2_protected_route, including missing entries and delayed readiness.
     let aa = Archive::default();
     let ba = Archive::default();
-    let a = endpoint_with_profile(71, aa, None, NodeProfile::gc2_carrier_fixture(None, 1)).await;
-    let b = endpoint_with_profile(72, ba, None, NodeProfile::gc2_carrier_fixture(None, 1)).await;
+    let a = endpoint_with_profile(71, aa, None, NodeProfile::gc2_carrier_fixture(None, 0)).await;
+    let b = endpoint_with_profile(72, ba, None, NodeProfile::gc2_carrier_fixture(None, 0)).await;
     let original = b.current_info().await.unwrap();
     a.send_durable_1to1(&original, b"natural carrier delivery", None)
         .await
@@ -199,19 +202,21 @@ async fn tracked_durable_sends_return_the_ids_the_receipts_carry() {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn gc2_carrier_archive_cannot_restore_under_a_gc1_profile() {
+    // Archive discrimination does not require a protected relay topology.
+    // An empty protected directory must defer, never supply a direct fallback.
     let aa = Archive::default();
     let a = endpoint_with_profile(
         73,
         aa.clone(),
         None,
-        NodeProfile::gc2_carrier_fixture(None, 1),
+        NodeProfile::gc2_carrier_fixture(None, 0),
     )
     .await;
     let b = endpoint_with_profile(
         74,
         Archive::default(),
         None,
-        NodeProfile::gc2_carrier_fixture(None, 1),
+        NodeProfile::gc2_carrier_fixture(None, 0),
     )
     .await;
     let original = b.current_info().await.unwrap();

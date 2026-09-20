@@ -1,19 +1,18 @@
 #!/usr/bin/env python3
-"""Profile 22 privacy gate: idle/chat and identical bulk with/without chat.
+"""Profile 22 component diagnostic: idle/chat and matched bulk with/without chat.
 
 Run-independent training and evaluation, with paired-run cluster bootstrap.
-File activity and approximate volume are observable; chat privacy remains gated.
-The historical classifier/reports retain their original contract.
+File activity and approximate volume are observable. The pooled fixture cannot
+qualify client privacy; the accepted chat-separability gate remains required.
 """
 import argparse
-import hashlib
 import importlib.util
 import json
-import re
 import subprocess
 from pathlib import Path
 
 import numpy as np
+from privacy_packets import endpoint, new_connections, packets, sha256, write_new
 
 _spec = importlib.util.spec_from_file_location("historical_privacy", Path(__file__).with_name("privacy-classifier.py"))
 _base = importlib.util.module_from_spec(_spec)
@@ -23,60 +22,41 @@ MIN_RUNS = 8
 
 
 def auc(values, labels):
-    """Mann-Whitney ROC AUC, assigning average ranks to tied scores."""
-    values, labels = np.asarray(values), np.asarray(labels)
-    order = np.argsort(values, kind="mergesort")
-    ranks = np.empty(len(values), dtype=float)
-    start = 0
-    while start < len(order):
-        end = start + 1
-        while end < len(order) and values[order[end]] == values[order[start]]:
-            end += 1
-        ranks[order[start:end]] = (start + 1 + end) / 2
-        start = end
-    positive = int(labels.sum())
-    negative = len(labels) - positive
-    if not positive or not negative:
-        raise ValueError("both classes are required")
-    return float((ranks[labels == 1].sum() - positive * (positive + 1) / 2) / (positive * negative))
+    return _base.roc_auc(values, labels)
 
 
-def read_packets(path, entry_ports):
-    output = subprocess.run(
-        ["tcpdump", "-r", str(path), "-nn", "-tt", "--time-stamp-precision=micro", "tcp"],
-        capture_output=True, text=True, check=True,
-    ).stdout
-    pattern = re.compile(r"^(\d+\.\d+) IP6? \S+\.(\d+) > \S+\.(\d+):.*Flags \[([^]]*)\].*length (\d+)")
-    rows = []
-    for line in output.splitlines():
-        match = pattern.match(line)
-        if match:
-            stamp, src, dst, flags, length = match.groups()
-            if int(src) in entry_ports or int(dst) in entry_ports:
-                rows.append((float(stamp), int(src), int(dst), int(length), flags))
+def side(row, entries):
+    source, destination = row.source in entries, row.destination in entries
+    if source == destination:
+        return None  # Other traffic and links between the pooled relays.
+    return "down" if source else "up"
+
+
+def read_packets(path, entries):
+    rows = [row for row in packets(path) if side(row, entries)]
     if not rows:
         raise ValueError("no parsable packets on the declared entry link")
     return rows
 
 
-def features(rows, port, start, seconds):
+def features(rows, entries, start, seconds):
     """All fixed one-second windows, including silence, with correct directions."""
-    ports = {port} if isinstance(port, int) else set(port)
     result = []
     for index in range(seconds):
-        window = [row for row in rows if start + index <= row[0] < start + index + 1]
-        up = [row for row in window if row[2] in ports]
-        down = [row for row in window if row[1] in ports]
-        values = [len(up), len(down), sum(r[3] for r in up), sum(r[3] for r in down)]
+        window = [row for row in rows if start + index <= row.time < start + index + 1
+                  and side(row, entries)]
+        up = [row for row in window if side(row, entries) == "up"]
+        down = [row for row in window if side(row, entries) == "down"]
+        values = [len(up), len(down), sum(r.wire_bytes for r in up), sum(r.wire_bytes for r in down)]
         for direction in (up, down):
-            gaps = np.diff(sorted(r[0] for r in direction))
+            gaps = np.diff([r.time for r in direction])
             values.extend([float(gaps.mean()) if len(gaps) else 0.0,
                            float(gaps.max()) if len(gaps) else 0.0])
-        sizes = [r[3] for r in window]
+        sizes = [r.wire_bytes for r in window]
         values.extend([sum(s < 100 for s in sizes), sum(100 <= s < 300 for s in sizes),
                        sum(300 <= s < 1000 for s in sizes), sum(1000 <= s < 4096 for s in sizes),
-                       sum(s >= 4096 for s in sizes), sum("S" in r[4] for r in window),
-                       sum("R" in r[4] for r in window)])
+                       sum(s >= 4096 for s in sizes), sum(r.syn and not r.ack for r in window),
+                       sum(r.rst for r in window)])
         result.append(values)
     return np.asarray(result, dtype=float)
 
@@ -85,6 +65,8 @@ def evaluate(training, evaluation, bootstrap=2000):
     # Each list entry contains both classes from one independent, paired run.
     if len(training) < MIN_RUNS or len(evaluation) < MIN_RUNS:
         raise ValueError(f"at least {MIN_RUNS} independent paired runs per split are required")
+    if bootstrap < 100:
+        raise ValueError("at least 100 bootstrap samples required")
     x_train = np.vstack([row[0] for row in training])
     y_train = np.concatenate([row[1] for row in training])
     mean, std = x_train.mean(axis=0), x_train.std(axis=0)
@@ -116,31 +98,39 @@ def load_captures(directory, seeds):
         if key in captures or key[0] not in WORKLOADS:
             raise ValueError(f"duplicate or unsupported capture {key}")
         record = meta.get("record") or {}
-        if meta["inner_rc"] or not meta.get("protected") or meta["cadence"] != "production" or record.get("failures") != 0:
+        if (meta["inner_rc"] or not meta.get("protected") or meta["cadence"] != "production"
+                or record.get("failures") != 0 or record.get("exact_delivery") is not True
+                or record.get("measurement_overrun") is not False
+                or meta.get("capture_returncode") != 0 or meta.get("dropped_packets") != 0
+                or meta.get("workload_returncode") != 0
+                or record.get("traffic_profile_id") != 22):
             raise ValueError(f"invalid/failed capture {key}")
         expected = max(1024, meta["bytes"])
-        expected = ((expected + 1023) // 1024) * 1024
         if record.get("bulk_acked_bytes") != (expected if key[0] in ("bulk", "mixed") else 0):
             raise ValueError(f"incomplete or unmatched bulk workload {key}")
-        if record.get("chat_sent") != (max(1, meta["bytes"] // 128) if key[0] in ("chat", "mixed") else 0):
+        expected_chat = max(1, meta["bytes"] // 128) if key[0] in ("chat", "mixed") else 0
+        if record.get("chat_sent") != expected_chat or record.get("chat_acked") != expected_chat:
             raise ValueError(f"incomplete chat workload {key}")
-        identity = (meta.get("binary_sha256"), meta["seconds"], meta["bytes"], meta.get("chat_interval_ms"))
+        identity = (meta.get("binary_sha256"), meta["seconds"], meta["bytes"],
+                    meta.get("chat_interval_ms"), meta.get("entries"), meta.get("traffic_profile"))
         if not identity[0] or (common is not None and identity != common):
             raise ValueError("captures must have the same binary, duration and workload parameters")
         common = identity
         start, end = meta.get("measurement_start_epoch"), meta.get("measurement_end_epoch")
         if start is None or end is None or abs(end - start - meta["seconds"]) > 0.5:
             raise ValueError(f"missing or unequal measurement lifetime {key}")
+        if meta.get("capture_started_epoch", float("inf")) > start or meta.get("capture_finished_epoch", -float("inf")) < end:
+            raise ValueError(f"capture does not cover the workload {key}")
         pcap = directory / meta["pcap"]
-        if hashlib.sha256(pcap.read_bytes()).hexdigest() != meta["pcap_sha256"]:
+        if not pcap.resolve().is_relative_to(directory.resolve()) or sha256(pcap) != meta["pcap_sha256"]:
             raise ValueError(f"pcap digest mismatch {key}")
         # Both relay addresses can be selected as entries. Observe both, not
         # just the endpoint named "entry" by the original two-relay fixture.
-        ports = {int(record[name].rsplit(":", 1)[1]) for name in ("entry_addr", "middle_addr")}
-        rows = read_packets(pcap, ports)
-        x = features(rows, ports, start, meta["seconds"])
+        entries = {endpoint(record[name]) for name in ("entry_addr", "middle_addr")}
+        rows = read_packets(pcap, entries)
+        x = features(rows, entries, start, meta["seconds"])
         # Setup/teardown remain observable even though windows use equal lifetimes.
-        run = np.asarray([[sum("S" in r[4] for r in rows), sum("R" in r[4] for r in rows),
+        run = np.asarray([[new_connections(rows), sum(r.rst for r in rows),
                            record["entry_connections"], record["middle_connections"]]], dtype=float)
         captures[key] = (x, run)
     missing = [(w, s) for s in seeds for w in WORKLOADS if (w, s) not in captures]
@@ -157,6 +147,7 @@ def main():
     args = parser.parse_args()
     report = {"contract": "gchat-file-profile-22", "scope": "pooled_loopback_entry_links",
               "diagnostic_only": True, "release_qualified": False,
+              "measurement_valid": False, "reference_threshold_is_release_veto": True,
               "component_gate_passed": False, "gates": {}}
     try:
         train, evaluation = [list(map(int, value.split(","))) for value in (args.train_seeds, args.eval_seeds)]
@@ -171,13 +162,15 @@ def main():
                                              for label, w in enumerate(pair)])) for s in seeds]
                 report["gates"][f"{name}_{scope}"] = evaluate(design(train), design(evaluation))
         report["component_gate_passed"] = all(g["ok"] for g in report["gates"].values())
-    except (ValueError, KeyError, OSError, subprocess.CalledProcessError) as error:
+        report["measurement_valid"] = True
+        report["tooling"] = {"classifier_sha256": sha256(__file__),
+                             "packet_parser_sha256": sha256(Path(__file__).with_name("privacy_packets.py"))}
+    except (ValueError, TypeError, KeyError, OSError, subprocess.CalledProcessError) as error:
         report["error"] = str(error)
     target = args.out / "privacy-files-report.json"
-    with target.open("x") as output:
-        output.write(json.dumps(report, indent=2) + "\n")
+    write_new(target, json.dumps(report, indent=2, allow_nan=False) + "\n")
     print(json.dumps(report, indent=2))
-    return 0 if report["component_gate_passed"] else 1
+    return 0 if report["measurement_valid"] and report["component_gate_passed"] else 1
 
 
 if __name__ == "__main__":
