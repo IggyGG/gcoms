@@ -1151,6 +1151,7 @@ dependencies = [
  "bytes",
  "futures-util",
  "gcoms-core",
+ "gcoms-protocol",
  "gcoms-transport",
  "h2",
  "hmac 0.12.1",

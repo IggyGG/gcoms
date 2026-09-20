@@ -506,6 +506,41 @@ qualify consecutive expiry/maximum-carrier-lifetime turnover, the 1 GiB fleet
 transfer, aggregate latency, or privacy. Expiry-stratified measurements remain
 diagnostic; the overall acceptance gates remain unchanged.
 
+### Real wall-clock entry expiry regression
+
+`routing::gc2::owner::expiry_tests` adds a bounded loopback regression using the
+actual EntryOwner discovery loop, pinned TLS, entry/transit handlers, profile 22
+and authenticated natural subscriptions. Only the fixture shortens the shared
+credential epoch to 24 seconds. Neither Tokio time nor the workstation clock is
+changed. The production hourly credential derivation and original authenticated
+carrier deadlines are unchanged; the fixture never updates a live carrier's
+introduction to extend its authority.
+
+Interactive and Bulk each receive an exact payload before the boundary. Both
+streams must terminate when the original carrier authority expires. Background
+discovery then obtains a fresh introduction and authenticates a new entry. The
+second relay's refresh response is held: one fresh entry alone must not restore
+a route without an independent fresh middle. Releasing that response permits
+both classes to resubscribe and receive exact payloads with the same queue,
+epoch, subscription capability and lease deadline, using fresh request nonces.
+The fixture counts entry sockets, including connecting sockets, to enforce the
+one-entry bound across replacement and verifies shutdown releases them.
+
+The retained trace distinguishes refresh requests/responses, entry and transit
+authentication, original-stream closure, independent-middle availability and
+verified subscription delivery. A disposable mutation that disables the
+expiry-triggered discovery wakeup fails at reacquisition; it is retained
+separately from the candidate under `target/entry-expiry-01/`.
+
+This is carrier lifecycle coverage, alongside the real node-pump branch tests
+above. Its terminal authenticates subscription envelopes and serves known
+payloads; it is not the node queue/lease implementation, an MLS/file-transfer
+journey, or a fleet measurement. It does not reproduce production's full hourly
+epoch or 30-minute maximum lifetime, qualify repeated turnover or the unfinished
+1 GiB transfer, or explain the entire Capacity 01 recovery delay. Discovery
+errors/backoff, fresh middle availability and route readiness must be correlated
+in actual campaign evidence. Overall latency and privacy gates remain binding.
+
 ### Corrected coordination timeline and fresh production observation
 
 OpenCode session `ses_f657247f6ffe3oDxEHezkGyr1X` explicitly attributes both

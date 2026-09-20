@@ -449,6 +449,10 @@ async fn maintain_entry(
 }
 
 #[cfg(test)]
+#[path = "owner_expiry_tests.rs"]
+mod expiry_tests;
+
+#[cfg(test)]
 mod tests {
     use super::super::directory::BootstrapBundle;
     use super::*;
