@@ -67,20 +67,30 @@ No global quotas or fleet services were changed for these checks.
 These source results do not qualify the fleet or installed-client privacy. The
 older optimized MLS and 1 GiB local-storage results above retain their earlier
 source binding. See the latest [fleet results](FLEET_FILES_RESULTS.md) and the
-[traffic-path inventory](GCHAT_TRAFFIC_PATHS.md), including the remaining
-installed bootstrap and catalog migration gaps.
+[traffic-path inventory](GCHAT_TRAFFIC_PATHS.md), including the installed
+bootstrap and catalog migration gaps observed on that earlier runtime.
 
 The [current-protocol bootstrap migration](GC2_NETWORK_BOOTSTRAP.md) specifies
 HTTP envelope v3, authenticated current relay control and GChat's typed import
 and retained-directory recovery. Its local source validation is separate from
-operated-provider deployment, installed-artifact acceptance and catalog transport
-migration. It does not change the client-observer privacy release gate.
+operated-provider deployment and installed-artifact acceptance. It does not
+change the client-observer privacy release gate.
+
+The subsequent [catalog transport correction](GC2_CATALOG_TRANSPORT.md) routes
+current-profile catalog requests through existing GC/2 entries, preserves remote
+DNS and WebPKI, and rejects legacy fallback even with retained legacy directory
+state. Local validation passed 841 protocol Rust cases, 123 Python cases,
+frontend/package checks, strict workspace Clippy and 152 paired GChat cases
+with strict Clippy. Additional catalog tests verify egress-origin refusal before
+DNS and circuit release while the physical entry stays alive. These source
+results do not qualify an installed artifact, deployed catalog or client privacy.
 
 The subsequent [recovery and isolated-client capture review](GC2_CLIENT_CAPTURE_REVIEW.md)
 identifies a recovery-liveness gap in the global readiness revision and missing
 in-flight failure coverage. A disconnected local namespace smoke establishes a
 feasible client capture boundary and exposes packet-accounting/lifetime gaps;
-it is not a GChat run or privacy qualification. Runtime and fleet remain unchanged.
+it is not a GChat run or privacy qualification. That review itself changed no
+runtime or fleet state.
 
 ## Release tooling corrections
 

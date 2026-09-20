@@ -10,7 +10,7 @@ use crate::{route::now_unix, wire::Target, Result};
 use futures_util::{stream::FuturesUnordered, FutureExt, StreamExt};
 use gcoms_core::TrafficClass;
 use gcoms_transport::{
-    connector::{ConnectFuture, Connector, DirectConnector},
+    connector::{BoxStream, ConnectFuture, Connector, DirectConnector},
     Tp1Client,
 };
 use rand::{seq::SliceRandom, Rng};
@@ -71,7 +71,34 @@ pub struct ReadyConnector {
 impl ReadyConnector {
     /// Read-only route eligibility; does not dial, open a circuit or wake the owner.
     pub fn can_route(&self, terminal: (SocketAddr, [u8; 32])) -> bool {
-        self.select(terminal, &[]).is_ok()
+        self.select(
+            &Target::Relay {
+                addr: terminal.0,
+                service_id: terminal.1,
+            },
+            &[],
+        )
+        .is_ok()
+    }
+
+    /// Open an allowlisted HTTPS origin through an existing entry. Only the
+    /// last relay resolves the hostname; the caller must authenticate WebPKI.
+    /// An unavailable route never triggers an entry dial or legacy fallback.
+    pub async fn connect_https(&self, host: &str, allowed_origins: &[String]) -> Result<BoxStream> {
+        if !crate::wire::valid_host(host) || !allowed_origins.iter().any(|origin| origin == host) {
+            return Err("catalog origin is not configured".into());
+        }
+        let target = Target::Https {
+            host: host.into(),
+            port: 443,
+        };
+        let (entry, middle) = self.select(&target, &[])?;
+        timeout(
+            Duration::from_secs(45),
+            entry.connect_via(TrafficClass::Interactive, &middle, &target, &[]),
+        )
+        .await
+        .map_err(|_| "catalog circuit construction deadline exceeded")?
     }
 
     /// Local readiness changes only; applications cannot wake the entry owner.
@@ -93,22 +120,18 @@ impl ReadyConnector {
 
     fn select(
         &self,
-        terminal: (SocketAddr, [u8; 32]),
+        target: &Target,
         excluded: &[(SocketAddr, [u8; 32])],
     ) -> Result<(EntryCarrier, super::transit::TransitDescriptor)> {
         if excluded.len() > 64 {
             return Err("too many GC/2 route exclusions".into());
         }
-        Target::decode(
-            &Target::Relay {
-                addr: terminal.0,
-                service_id: terminal.1,
-            }
-            .encode(),
-        )?;
+        Target::decode(&target.encode())?;
         let now = now_unix();
         let mut available = self.directory.eligible(excluded, now)?;
-        available.retain(|relay| !relay.conflicts(terminal.0, terminal.1));
+        if let Target::Relay { addr, service_id } = target {
+            available.retain(|relay| !relay.conflicts(*addr, *service_id));
+        }
         let mut entries = self
             .state
             .entries
@@ -167,18 +190,12 @@ impl Connector for ReadyConnector {
         class: TrafficClass,
     ) -> ConnectFuture<'a> {
         Box::pin(async move {
-            let (entry, middle) = self.select((addr, pin), excluded)?;
-            entry
-                .connect_via(
-                    class,
-                    &middle,
-                    &Target::Relay {
-                        addr,
-                        service_id: pin,
-                    },
-                    excluded,
-                )
-                .await
+            let target = Target::Relay {
+                addr,
+                service_id: pin,
+            };
+            let (entry, middle) = self.select(&target, excluded)?;
+            entry.connect_via(class, &middle, &target, excluded).await
         })
     }
 }
@@ -612,13 +629,16 @@ mod tests {
         )
         .unwrap();
         let terminal = "127.0.0.9:443".parse().unwrap();
+        let origins = vec!["catalog.test".to_string()];
         assert!(ready.connect(terminal, [9; 32]).await.is_err());
+        assert!(ready.connect_https("catalog.test", &origins).await.is_err());
         assert!(attempts.lock().unwrap().is_empty());
         let task = tokio::spawn(owner.run());
         settle().await;
         let initial = attempts.lock().unwrap().len();
         assert!(initial >= 2); // independently owned renewal and entry acquisition
         for _ in 0..20 {
+            assert!(ready.connect_https("catalog.test", &origins).await.is_err());
             for class in [TrafficClass::Interactive, TrafficClass::Bulk] {
                 assert!(ready
                     .connect_with_class_excluding(terminal, [9; 32], &[], class)
@@ -637,6 +657,7 @@ mod tests {
         let stopped = attempts.lock().unwrap().len();
         tokio::time::advance(DISCOVERY_PERIOD).await;
         assert!(ready.connect(terminal, [9; 32]).await.is_err());
+        assert!(ready.connect_https("catalog.test", &origins).await.is_err());
         assert_eq!(attempts.lock().unwrap().len(), stopped);
         assert_eq!(ready.ready_entries(), 0);
     }
