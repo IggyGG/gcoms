@@ -17,7 +17,7 @@ def qualify(a, application, packages, cargo_home):
         if len(name)<=2: return str(len(name))+'/'+name
         if len(name)==3: return '3/'+name[0]+'/'+name
         return name[:2]+'/'+name[2:4]+'/'+name
-    for path in sorted(packages.glob('gcoms-*.crate')):
+    for path in sorted(packages.glob('*.crate')):
         raw=path.read_bytes()
         with tarfile.open(path) as tar:
             member=next(m for m in tar.getmembers() if m.name.count('/')==1 and m.name.endswith('/Cargo.toml'))
@@ -66,6 +66,8 @@ def qualify(a, application, packages, cargo_home):
                 elif path.startswith('/index/'):
                     key=path[len('/index/'):]
                     if '..' in key or not re.fullmatch(r'[A-Za-z0-9_/-]+',key): raise ValueError('path')
+                    if os.environ.get('GC_REGISTRY_DEBUG'):
+                        sys.stderr.write(f'registry index: {key} -> {key in entries}\n')
                     if key in entries: raw=entries[key]
                     else:
                         cache=next(iter((cargo_home/'registry/index').glob('index.crates.io-*/.cache/'+key)),None)
