@@ -181,8 +181,8 @@ leases and bundled daemon startup on Unix and Windows. The archived external con
 only a renamed `gcoms` dependency, which also checks macro path resolution.
 These are local fixtures; they do not establish live relay reachability. Windows
 execution and the separate public-network probes are recorded in
-[the qualification report](../../docs/APPLICATION_QUALIFICATION.md). macOS is
-unqualified. Release versioning and registry publication
+[the qualification report](../../docs/APPLICATION_QUALIFICATION.md). Current Linux and macOS qualification is
+tracked in the [native integration report](../../docs/RUST_INTEGRATIONS.md). Release versioning and registry publication
 remain maintainer actions; pre-publication GChat checks use `scripts/check-gchat.py`.
 
 ## Channels and files

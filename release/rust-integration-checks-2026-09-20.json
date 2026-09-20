@@ -1,0 +1,37 @@
+{
+  "schema": 1,
+  "gcoms": "6fb6159c4142da6d84935743cb602385f58a3d1e",
+  "gchat": "98c07689559d3d7aa9b09174a343010651cf48c6",
+  "linux": {
+    "workspace_before_cache_followup": {
+      "revision": "ffa2ecd",
+      "passed": 900,
+      "ignored": 7
+    },
+    "focused_after_cache_followup": {
+      "passed": 105,
+      "ignored": 2
+    },
+    "gchat_tests": {
+      "passed": 137,
+      "ignored": 0
+    },
+    "gcoms_rpc_npm_tests": 8,
+    "gchat_frontend_tests": 22,
+    "checks": {
+      "clippy": 0,
+      "cache-reconnect": 0,
+      "focused-tests": 0,
+      "gchat-tests": 0,
+      "gchat-clippy": 0,
+      "docs": 0,
+      "minimal-core": 0,
+      "minimal-sdk": 0,
+      "minimal-embedded": 0,
+      "minimal-ipc": 0,
+      "wasm": 0,
+      "generated": 0
+    }
+  },
+  "native_macos": "pending"
+}

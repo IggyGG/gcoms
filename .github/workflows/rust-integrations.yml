@@ -4,6 +4,8 @@ on:
   push:
     branches: [main]
     paths:
+      - 'Cargo.toml'
+      - 'Cargo.lock'
       - 'crates/**'
       - 'examples/rust-integration/**'
       - 'scripts/check-rust-integrations.py'

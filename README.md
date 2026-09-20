@@ -91,3 +91,5 @@ unmaintained hax/libcrux macro dependency; it does not waive runtime vulnerabili
 The application/runtime consolidation reuses existing dependencies; `sha2` derives
 a purpose-specific host cache key. TLS fixture dependencies (`rcgen`, `rustls`,
 `tokio-rustls`) are test-only in the runtime. No new third-party package is added.
+
+Native integration sizes and validation are recorded in [the Rust integration report](docs/RUST_INTEGRATIONS.md).

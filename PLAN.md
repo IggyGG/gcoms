@@ -1,16 +1,18 @@
 # Minimal Rust application integrations
 
-Implement the retained application API on the current GComs trunk and migrate
-GChat to consume it. Two explicit feature sets share messaging, channels and
-file sharing: `ipc,files` for an existing host and
-`embedded,files,gc2-carrier` for an in-process runtime/relay.
+Implemented the two explicit Rust variants on the current GComs trunk:
+`ipc,files` for an existing host, and `embedded,files,gc2-carrier` for an in-process
+protocol and relay. GChat consumes the shared runtime and file APIs while keeping
+its network configuration, archives and cache key.
 
-Implemented; validation in progress:
-- Merge retained API/runtime work with current GC/2 profile 22 and persistence.
-- Make typed RPC, journal dependencies and daemon launch opt-in; preserve unwind.
-- Move the transfer worker into GComs; retain GChat's cache path/key and UI adapter.
-- Append file sharing and network status in IPC18; preserve preceding tags.
-- Add independent consumer, graph checks, native executable size measurements.
+Completed on 2026-09-20:
+- Consolidated retained application/runtime work with current GC/2 and persistence.
+- Made RPC and daemon launch optional, removed forced multithread scheduling, and
+  selected the measured size profile while preserving unwind.
+- Added streaming file operations, IPC18 capability/version checks, host-owned
+  cache lifecycle, and regressions for reconnect, corruption and membership.
+- Passed Linux workspace, focused follow-up, GChat, lint, documentation, generated
+  contract and packaged consumer gates. IPC is 851 KiB; embedded is 8.93 MiB.
 
-Pending: finish regression and combined-source gates, native Linux/macOS size
-qualification, documentation with measured results, and land the paired changes.
+[Evidence and exact inputs](docs/RUST_INTEGRATIONS.md). Native macOS arm64/x86_64
+qualification is the remaining step; the CI matrix is included in this change.
