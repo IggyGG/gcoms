@@ -486,6 +486,37 @@ impl NodeHandle {
         }
     }
 
+    /// The endpoint scheduler selected at startup, independent of readiness.
+    pub fn uses_gc2_routing(&self) -> bool {
+        self.scheduler.is_gc2()
+    }
+
+    /// Whether the selected protocol has retained re-entry introductions.
+    /// This is not a routing-readiness check; credentials may need renewal.
+    pub fn has_routing_bootstrap(&self) -> bool {
+        #[cfg(feature = "experimental-gc2")]
+        if self.uses_gc2_routing() {
+            return self.gc2_routing_bootstrap().is_ok();
+        }
+        self.routing_bootstrap().is_ok()
+    }
+
+    #[cfg(feature = "experimental-gc2")]
+    pub fn gc2_routing_bootstrap(
+        &self,
+    ) -> Result<gcoms_routing::gc2::directory::BootstrapBundle, String> {
+        let current = self
+            .routing
+            .as_ref()
+            .and_then(|runtime| runtime.gc2.get())
+            .ok_or("GChat carrier not selected")?;
+        let bundle = gcoms_routing::gc2::directory::BootstrapBundle {
+            relays: current.directory.reentry_candidates(),
+        };
+        bundle.validate().map_err(|e| e.to_string())?;
+        Ok(bundle)
+    }
+
     pub fn transport_status(&self) -> TransportStatus {
         let mut result = TransportStatus {
             protocol: if self.scheduler.is_gc2() {

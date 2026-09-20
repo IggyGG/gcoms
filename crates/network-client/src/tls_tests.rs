@@ -67,6 +67,7 @@ struct Exchange {
 }
 #[derive(Default)]
 struct Faults {
+    bootstrap_reply: Option<Value>,
     slow_defaults: HashSet<String>,
     slow_provisions: HashSet<String>,
     lose_register_once: bool,
@@ -125,6 +126,7 @@ impl axum::serve::Listener for TlsListener {
 }
 struct Fixture {
     root: tempfile::TempDir,
+    installed: InstalledNetwork,
     backend: Arc<Backend>,
     addr: SocketAddr,
     ca: reqwest::Certificate,
@@ -161,8 +163,9 @@ impl Fixture {
         .unwrap();
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = listener.local_addr().unwrap();
+        let installed = installed();
         let backend = Arc::new(Backend {
-            signed: Mutex::new(installed().signed_defaults),
+            signed: Mutex::new(installed.signed_defaults.clone()),
             log: Mutex::new(vec![]),
             faults: Mutex::new(Faults::default()),
             names: Mutex::new(BTreeMap::new()),
@@ -189,6 +192,7 @@ impl Fixture {
         });
         Self {
             root,
+            installed,
             backend,
             addr,
             ca: reqwest::Certificate::from_der(ca.der()).unwrap(),
@@ -197,7 +201,7 @@ impl Fixture {
     }
     fn client(&self, with_ca: bool) -> NetworkClient {
         let mut client =
-            NetworkClient::open(&self.root.path().join("network"), installed()).unwrap();
+            NetworkClient::open(&self.root.path().join("network"), self.installed.clone()).unwrap();
         let mut builder = reqwest::Client::builder()
             .https_only(true)
             .redirect(reqwest::redirect::Policy::none())
@@ -253,7 +257,12 @@ async fn provision(
     Json(body): Json<Value>,
 ) -> Response {
     state
-        .record(Method::POST, "/v1/relay-provisions".into(), &headers, body)
+        .record(
+            Method::POST,
+            "/v1/relay-provisions".into(),
+            &headers,
+            body.clone(),
+        )
         .await;
     let host = headers.get("host").unwrap().to_str().unwrap();
     let slow = state.faults.lock().await.slow_provisions.contains(host);
@@ -263,7 +272,80 @@ async fn provision(
     if auth(&headers) != token(9) && auth(&headers) != token(10) {
         return StatusCode::UNAUTHORIZED.into_response();
     }
+    if let Some(reply) = state.faults.lock().await.bootstrap_reply.clone() {
+        return Json(reply).into_response();
+    }
+    #[cfg(feature = "experimental-gc2")]
+    if body["supported_versions"] == json!([3]) {
+        let intro = gcoms_routing::service::gc2_introduction_from(
+            "8.8.8.8:4433".parse().unwrap(),
+            [71; 32],
+            &[72; 32],
+            now_unix(),
+        );
+        let bundle = gcoms_routing::gc2::directory::BootstrapBundle {
+            relays: vec![intro],
+        };
+        return Json(json!({"version":3,"routing_protocol":"gc2",
+            "routing_bundle_b64":URL_SAFE_NO_PAD.encode(bundle.encode().unwrap())}))
+        .into_response();
+    }
     Json(json!({"version":2,"routing_bundle_b64":encoded(&listener(4433))})).into_response()
+}
+
+#[cfg(feature = "experimental-gc2")]
+#[tokio::test]
+async fn current_bootstrap_authenticates_failover_and_retained_invitation_without_downgrade() {
+    let fixture = Fixture::new().await;
+    let client = fixture.client(true);
+    fixture.invite(&client, 9);
+    fixture
+        .backend
+        .faults
+        .lock()
+        .await
+        .slow_provisions
+        .insert(HEL.into());
+    let bundle = client
+        .fetch_gc2_routing(Instant::now() + Duration::from_millis(900))
+        .await
+        .unwrap();
+    assert_eq!(bundle.relays.len(), 1);
+    assert_eq!(&bundle.encode().unwrap()[..5], b"GCRB\x02");
+    let log = fixture.backend.log.lock().await;
+    let requests: Vec<_> = log
+        .iter()
+        .filter(|e| e.path == "/v1/relay-provisions")
+        .collect();
+    assert_eq!(requests.len(), 2);
+    assert_eq!(requests[0].body, requests[1].body);
+    assert_eq!(requests[0].body["supported_versions"], json!([3]));
+    assert!(requests
+        .iter()
+        .all(|e| e.authorization == format!("Bearer {}", token(9))));
+    drop(log);
+    drop(client);
+    fixture.backend.faults.lock().await.slow_provisions.clear();
+    let reopened = fixture.client(true);
+    assert!(reopened.has_invitation().unwrap());
+    assert!(reopened.fetch_gc2_routing(deadline()).await.is_ok());
+    assert!(fixture
+        .client(false)
+        .fetch_gc2_routing(Instant::now() + Duration::from_millis(500))
+        .await
+        .is_err());
+    fixture.backend.faults.lock().await.bootstrap_reply = Some(json!({
+        "version":2,"routing_bundle_b64":encoded(&listener(4433))}));
+    let error = reopened.fetch_gc2_routing(deadline()).await.unwrap_err();
+    assert!(error.contains("GC/2"));
+    assert!(fixture
+        .backend
+        .log
+        .lock()
+        .await
+        .iter()
+        .filter(|e| e.path == "/v1/relay-provisions")
+        .all(|e| e.body["supported_versions"] == json!([3])));
 }
 async fn register(
     HttpState(state): HttpState<Arc<Backend>>,

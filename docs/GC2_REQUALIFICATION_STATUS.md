@@ -34,6 +34,54 @@ GChat's paired input receipt is under
 Earlier failures remain available, including the incomplete generated API
 export that the full GChat gate caught before the successful run.
 
+## Renewal repair integration
+
+The fleet worker's subscription repair `d6f5d97` and carrier-startup integration
+`200cd7a` were reconciled into GComs
+`7657081784562e0c6ed4eb66ad25ee747dba5503` and GChat
+`a0da5659941d32845a7d0828b61ebbf0d6115c2e`. Their complete Linux CI entrypoints
+passed with both sources unchanged. GComs passed 833 Rust cases (six ignored)
+and 119 Python checks, plus Rustdoc, strict Clippy, generated contracts, vectors,
+minimal features, packaged consumers and dependency policy. GChat passed 151
+Rust cases, 49 Python checks and 17 frontend tests, plus strict Clippy, generated
+contracts, desktop checking, the Linux release application build and both
+dependency policies. The application build did not create an installer bundle.
+
+The node regression preserves contact and channel authority when entries are
+unavailable. The real cold-bootstrap/invitation/channel-file test also passed,
+including authenticated Bulk delivery after subscription renewal. GChat's PTY
+test verifies that explicit carrier selection survives automatic daemon startup
+and archive reopen. The merged file classifier retains the accepted 0.55 veto,
+separate measurement validity and both branches' policy regressions.
+
+An initial GComs compilation exhausted its managed 16 GiB artifact quota before
+Rust tests ran. The passing retry used an exact VCS-preserving snapshot in a
+fresh managed 8 GiB slot, with incremental compilation disabled and dev/test
+debug symbols omitted. Both the canonical source and snapshot remained unchanged.
+The original failure, peer red/green logs and successful receipts are retained in
+`target/gc2-requalification/renewal-integration/`. GChat's paired receipt is
+`gchat-provenance/native-ci.json` there, SHA-256
+`48c32b21dba04beb375f32e3256bbd3cdacddd39310b937f9163dc936b14ec4c`.
+No global quotas or fleet services were changed for these checks.
+
+These source results do not qualify the fleet or installed-client privacy. The
+older optimized MLS and 1 GiB local-storage results above retain their earlier
+source binding. See the latest [fleet results](FLEET_FILES_RESULTS.md) and the
+[traffic-path inventory](GCHAT_TRAFFIC_PATHS.md), including the remaining
+installed bootstrap and catalog migration gaps.
+
+The [current-protocol bootstrap migration](GC2_NETWORK_BOOTSTRAP.md) specifies
+HTTP envelope v3, authenticated current relay control and GChat's typed import
+and retained-directory recovery. Its local source validation is separate from
+operated-provider deployment, installed-artifact acceptance and catalog transport
+migration. It does not change the client-observer privacy release gate.
+
+The subsequent [recovery and isolated-client capture review](GC2_CLIENT_CAPTURE_REVIEW.md)
+identifies a recovery-liveness gap in the global readiness revision and missing
+in-flight failure coverage. A disconnected local namespace smoke establishes a
+feasible client capture boundary and exposes packet-accounting/lifetime gaps;
+it is not a GChat run or privacy qualification. Runtime and fleet remain unchanged.
+
 ## Release tooling corrections
 
 Native Windows 10 checks verified a PE signed by the pinned Gh0st certificate.
@@ -61,6 +109,24 @@ rules and mounted test volumes; the production-stability check failed for one
 host. Its production service was subsequently observed active after an orderly
 stop/start with a changed binary hash. This session made no fleet changes.
 That run does not qualify transfer capacity or receiver reopen behavior.
+
+The production changes were subsequently attributed by direct acknowledgment to
+OpenCode session `ses_f657247f6ffe3oDxEHezkGyr1X`. It confirmed r4-only deployments
+at 02:30:25 CEST (`dfaf5e620e3920b4…`) and 02:46:05 CEST
+(`acd8ced269996ab7…`) on September 20. The latter running hash and service start
+were also observed read-only. The owner reports original Coms `e2e858a` plus
+uncommitted lease-promotion, subscription-diagnostic and logging changes. That
+binary is outside the qualified separated-source pair above. The owner committed
+to no further production changes until explicit coordination. Deployment end and
+traffic cessation are separate. The owner subsequently confirmed its final mint
+at approximately 03:16:02 CEST, payload traffic ending at 03:16:30, and residual
+listener/bridge lease replays and reconnects stopping at **03:24:03 CEST**. It
+holds both production changes and relay-impacting test traffic until fleet-files
+explicitly coordinates a new window. This is the owner's activity acknowledgment;
+each isolated run still needs a fresh observed production baseline and its
+abort-on-change monitor. The exact attribution and quiet-window messages are
+retained under
+`target/gc2-requalification/rollout-quiet-window-acknowledgment.json`.
 
 The other session subsequently completed canary 15 with its frozen GComs
 `628ec44` / GChat `36a96ae` binaries and controller `5d8846e`. A 64 KiB file
