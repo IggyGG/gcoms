@@ -1311,8 +1311,11 @@ impl NodeHandle {
         done_rx.await.map_err(|e| e.to_string())?
     }
 
-    /// Send channel text. A committed persistent outbox covering the complete
-    /// recipient roster preserves local acceptance if the first hop fails.
+    /// Send channel text. Even this untracked API preserves local acceptance
+    /// after a successful persistent commit covering the complete, nonempty
+    /// remote recipient roster if the first hop fails. Without that durable
+    /// outbox, hop failures remain errors. Unlike the tracked variant, this API
+    /// does not require persistence or a complete roster before attempting send.
     /// This does not assert recipient delivery; observe `Ev::ChannelDelivery`.
     pub async fn send_channel_text(&self, channel: &str, text: &[u8]) -> Result<(), String> {
         validate_application_payload(text)?;

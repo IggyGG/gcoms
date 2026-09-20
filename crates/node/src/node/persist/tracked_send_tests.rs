@@ -99,6 +99,85 @@ async fn volatile_channel_send_still_reports_a_failed_first_hop() {
 }
 
 #[tokio::test]
+async fn untracked_incomplete_recipient_identity_does_not_claim_durable_acceptance() {
+    let (mut node, _, _) = channel_member_fixture("incomplete-send");
+    // A directory entry with the right display name but the wrong authenticated
+    // identity is not a complete recipient roster, even with a persistent sink.
+    node.channels
+        .get_mut("incomplete-send")
+        .unwrap()
+        .directory
+        .insert("owner".into(), route(44, [0xE1; 32]));
+    let saved = Arc::new(Mutex::new(Vec::new()));
+    let capture = saved.clone();
+    node.durable_state_sink = Some(Arc::new(move |bytes| {
+        capture.lock().unwrap().push(bytes);
+        Ok(())
+    }));
+    let scheduler = node.scheduler.clone();
+    scheduler.shutdown();
+    let state = Arc::new(Mutex::new(node));
+    assert!(
+        send_channel_text(&state, &scheduler, "incomplete-send", b"incomplete roster")
+            .await
+            .unwrap_err()
+            .contains("channel send failed")
+    );
+    assert_eq!(saved.lock().unwrap().len(), 1);
+    assert!(state.lock().unwrap().channels["incomplete-send"]
+        .message_outbox
+        .is_empty());
+}
+
+#[test]
+fn both_channel_send_apis_reject_failed_native_commits_and_retain_only_successful_wire() {
+    for tracked in [true, false] {
+        let (mut node, mut owner, owner_route) = channel_member_fixture("failed-native");
+        node.channels
+            .get_mut("failed-native")
+            .unwrap()
+            .directory
+            .insert("owner".into(), owner_route);
+        node.durable_state_sink = Some(Arc::new(|_| Err("native commit failed".into())));
+        let state = Arc::new(Mutex::new(node));
+        let failure =
+            prepare_channel_text(&state, "failed-native", b"must not be admitted", tracked);
+        assert!(matches!(failure, Err(error) if error == "native commit failed"));
+        {
+            let node = state.lock().unwrap();
+            assert!(node.channels["failed-native"].message_outbox.is_empty());
+            assert!(node.last_channel_send.is_none());
+        }
+        let saved = Arc::new(Mutex::new(Vec::new()));
+        let capture = saved.clone();
+        state.lock().unwrap().durable_state_sink = Some(Arc::new(move |bytes| {
+            capture.lock().unwrap().push(bytes);
+            Ok(())
+        }));
+        // Only the subsequent successful preparation may be retained and
+        // authenticate as application data against the original receiver.
+        let prepared =
+            prepare_channel_text(&state, "failed-native", b"actual admission", tracked).unwrap();
+        drop(prepared); // Cancellation before network completion is not delivery.
+        let archive = decode_v2(&saved.lock().unwrap()[0], &TEST_SEED).unwrap();
+        let (id, pending) = &archive.channels[0].message_outbox[0];
+        assert_eq!(crate::channel::msg_id("failed-native", &pending.wire), *id);
+        assert!(pending.acknowledged.is_empty());
+        let gcoms_mls::ReceiveOutcome::Application { payload, .. } =
+            owner.receive_outcome(&pending.wire).unwrap()
+        else {
+            panic!("only the successfully committed application may be received");
+        };
+        assert!(matches!(crate::channel::decode_inner(&payload),
+            Some(crate::channel::ChannelInner::Text { body, .. }) if body == b"actual admission"));
+        assert_eq!(
+            state.lock().unwrap().channels["failed-native"].message_outbox[id].wire,
+            pending.wire
+        );
+    }
+}
+
+#[tokio::test]
 async fn tracked_channel_send_requires_complete_roster_and_persistence() {
     let (node, _, owner_route) = channel_member_fixture("tracked");
     let state = Arc::new(Mutex::new(node));

@@ -532,7 +532,8 @@ An independent local regression reproduced the terminal channel-send error:
 `prepare_channel_text` had committed the exact MLS wire and recipient outbox,
 but `complete_channel_text` discarded local acceptance when the first hop
 failed. It now retains acceptance only when a persistent commit covers the
-complete, nonempty recipient roster. Ordinary maintenance retries the same
+complete, nonempty recipient roster. This applies to both tracked and untracked
+native sends, not only the tracked API. Ordinary maintenance retries the same
 wire; authenticated recipient ACKs still exclusively determine delivery.
 Sends without that durable outbox retain their previous failure behavior.
 Failed persistence and missing tracked recipient routes remain failures.
@@ -545,6 +546,19 @@ an actual offline-recipient send followed by both encrypted-profile reopens,
 plaintext reception and a matching delivery ACK. These local checks do not
 qualify consecutive protected-carrier turnover or complete the failed 1 GiB
 fleet transfer. Capacity 02 remains failed, and its evidence is unchanged.
+
+The follow-up contract review retains that broader native behavior. GChat still
+calls its untracked embedded send followed by a separate fallible profile save;
+it has neither switched to tracked sending nor removed that wrapper save.
+New regressions separately fail that real atomic replacement or cancel the
+caller after native admission. The fault remains through shutdown, then the
+original admitted encrypted profile is reopened and must deliver without a new
+submission. Save errors and cancellation remain visible/ambiguous; neither is
+converted to a delivery claim. Native compatibility checks cover a missing sink,
+an incomplete authenticated recipient identity and failed commits for both APIs.
+See GChat `docs/PERSISTENCE.md` and the source-bound local receipts under
+`target/channel-acceptance-contract-01/`. The separate chat-archive save-error
+publication issue is not repaired by these checks.
 
 ### Local subscription failure coverage after capacity 02
 
