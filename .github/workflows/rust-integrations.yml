@@ -9,6 +9,7 @@ on:
       - 'crates/**'
       - 'examples/rust-integration/**'
       - 'scripts/check-rust-integrations.py'
+      - 'scripts/prepare-rust-tests.py'
       - '.github/workflows/rust-integrations.yml'
 permissions:
   contents: read
@@ -18,26 +19,29 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        runner: [ubuntu-24.04, macos-15, macos-15-intel]
+        runner: [ubuntu-24.04, macos-15, macos-15-intel, windows-2022]
     runs-on: ${{ matrix.runner }}
     steps:
+      - name: Preserve source bytes on every platform
+        run: git config --global core.autocrlf false
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           persist-credentials: false
       - name: Install pinned Rust
-        run: rustup toolchain install 1.98.0 --profile minimal && rustup default 1.98.0
+        run: |
+          rustup toolchain install 1.98.0 --profile minimal
+          rustup default 1.98.0
       - name: Prepare short private test directory
-        run: mkdir -p /tmp/gcoms-tests && chmod 700 /tmp/gcoms-tests
+        run: ${{ runner.os == 'Windows' && 'python' || 'python3' }} scripts/prepare-rust-tests.py
       - name: Check real native backends
         env:
           CARGO_BUILD_JOBS: '2'
           CARGO_PROFILE_DEV_DEBUG: '0'
-          TMPDIR: /tmp/gcoms-tests
         run: cargo test --locked -p gcoms -p gcoms-runtime -p gcoms-sdk -p gcoms-file-transfer --all-features -- --test-threads=1
       - name: Check and measure isolated consumer graphs
         env:
           CARGO_BUILD_JOBS: '2'
-        run: python3 scripts/check-rust-integrations.py --measure --output integration-evidence
+        run: ${{ runner.os == 'Windows' && 'python' || 'python3' }} scripts/check-rust-integrations.py --measure --output integration-evidence
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: rust-integrations-${{ matrix.runner }}-${{ github.sha }}
