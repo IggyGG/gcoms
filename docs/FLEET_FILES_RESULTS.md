@@ -336,12 +336,17 @@ campaign evidence remains under `test-evidence/files-capacity-01`.
 
 The shared protocol worker obtained the rollout owner's acknowledgment of both
 production replacements on host 4 and a hold on further deployments and
-relay-impacting tests. Residual test traffic ended at 03:24:03 CEST. Its exact
-acknowledgments remain in the protocol task's private evidence, referenced by
-commit `0cdd640`. This coordinated window supplements each run's fresh baseline
-and automatic production-change stop; it does not qualify the production binary.
+relay-impacting tests. Its initial acknowledgment claimed residual traffic ended
+at 03:24:03 CEST. A later owner process inventory explicitly corrected that
+claim: additional clients continued contacting four production relays, with
+relay-facing work stopped at 07:10:44 and the last detached bridge at 07:11:39
+CEST. The earlier acknowledgment is retained as historical evidence, not proof
+of a quiet window. Both capacity runs overlap this disclosed coexistence period;
+their performance observations do not establish isolated performance. The
+inventory does not establish whether that traffic caused either failure.
 
-Capacity 02 (`ff-20260920-033236`) starts in that window with immutable
+Capacity 02 (`ff-20260920-033236`) started after the earlier, incomplete
+acknowledgment with immutable
 `fleet-build-11`, GComs `d6f5d97` and GChat `200cd7a`. The build snapshots and
 all executable hashes pass. Local validation covers 287 node-library cases
 (one ignored), eight cold-channel/protected-route/session cases, the legacy
@@ -355,9 +360,9 @@ The repeated 64 KiB canary verified in 5.435 seconds after acceptance. A separat
 receiver reopen retained the same identity and verified another export. Subsequent independent exports
 verified 4 MiB in 20.915 seconds, 32 MiB in 119.022 seconds and 256 MiB in
 1,019.896 seconds (17 minutes). The 256 MiB SHA-256 matches the deterministic
-fixture recorded above. Different route choices and the coordinated quiet
-window also differ from capacity 01; these timings do not isolate the repair's
-effect on throughput.
+fixture recorded above. Route choices differ from capacity 01, and both runs
+overlap the later-disclosed production client activity. These timings do not
+isolate the repair's effect on throughput.
 
 The initial credential expired at 04:00 CEST, elapsed 1,643.268 seconds. Both
 clients briefly reported zero Interactive subscriptions, then reported ready
@@ -440,3 +445,40 @@ an actual offline-recipient send followed by both encrypted-profile reopens,
 plaintext reception and a matching delivery ACK. These local checks do not
 qualify consecutive protected-carrier turnover or complete the failed 1 GiB
 fleet transfer. Capacity 02 remains failed, and its evidence is unchanged.
+
+### Corrected coordination timeline and fresh production observation
+
+OpenCode session `ses_f657247f6ffe3oDxEHezkGyr1X` explicitly attributes both
+r4 replacements to itself: `dfaf5e620e3920b4` at 02:30:25 CEST and
+`acd8ced269996ab7` at 02:46:05. These deployments affected r4 only; its later
+client activity reached four production relays. Its last known fresh mint is
+approximately 03:16:02, payload stop 03:16:30, and the first listener/bridge stop
+03:24:03. That first pair had continued 120-second lease-create replays and
+subscription reconnects. Fresh mint time, last replay/control request and last
+successful relay-state mutation are distinct; the latter remains unknown.
+
+The owner's later acknowledgment `msg_0bd3a843f001tOXmiJ7fRf05tx` reports the
+additional surviving clients and the final 07:11:39 stop. This is owner-reported
+quiet, not independent verification of every possible writer. The all-eight
+hold covers relay-facing traffic, provisioning and service changes. Exact
+acknowledgments and their ordering are retained under
+`target/canary14-cleanup-reconciliation/`; delayed 03:24 notices do not supersede
+the later process inventory.
+
+A fresh read-only SSH inventory at 07:16 CEST found all eight production
+services active/running with stable identities during observation and no change
+to the service identity fields recorded before capacity 02. r4 still runs
+SHA-256 `acd8ced269996ab71312c789a6bfbd502e794eddec257585f587c0841b6c777c`;
+the other seven run
+`6e4a6cb12713cba6f7bf871100f45ca26078a398d0ceccde97506fe57e6c1c31`.
+No listener was present on either reserved test port, 24433 or 29443, on any
+host. The receipt, per-host observations and exact read-only probe are retained
+in `target/canary14-cleanup-reconciliation/production-baseline-20260920T051645878448Z/`.
+The inventory sent no relay protocol/control requests and changed no services.
+
+This observation does not qualify r4's reported `e2e858a` plus dirty activity
+promotion/diagnostics binary. Its as-built patch manifest is unavailable and
+the related promotion previously failed expiry/replay checks. No rollback was
+requested or performed. Canary 14's production-change gate remains failed.
+The campaign remains idle; the next run must refresh its own observed baseline
+and retain automatic abort-on-production-change behavior.
