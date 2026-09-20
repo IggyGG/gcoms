@@ -23,8 +23,11 @@ use zeroize::Zeroizing;
 /// The shared executable is supplied by the application bundle, never downloaded.
 #[derive(Clone, Debug)]
 pub enum Backend {
-    #[cfg(feature = "embedded")]
+    #[cfg(any(feature = "embedded", feature = "network-client"))]
     Embedded,
+    /// Outbound protocol client; inboxes are hosted by remote relays.
+    #[cfg(any(feature = "embedded", feature = "network-client"))]
+    NetworkClient,
     #[cfg(feature = "launch")]
     Shared {
         executable: PathBuf,
@@ -44,7 +47,7 @@ pub struct ApplicationBuilder {
     carrier: sdk::CarrierProfile,
     advertise: Option<std::net::SocketAddr>,
     relay: Option<sdk::RelayCard>,
-    #[cfg(feature = "embedded")]
+    #[cfg(any(feature = "embedded", feature = "network-client"))]
     storage: Option<(
         Arc<dyn gcoms_runtime::store::ProfileStorage>,
         gcoms_runtime::store::ProtocolData,
@@ -73,7 +76,7 @@ impl ApplicationBuilder {
         self.relay = value;
         self
     }
-    #[cfg(feature = "embedded")]
+    #[cfg(any(feature = "embedded", feature = "network-client"))]
     pub fn legacy_storage(
         mut self,
         storage: Arc<dyn gcoms_runtime::store::ProfileStorage>,
@@ -181,8 +184,10 @@ impl ApplicationBuilder {
         if create == exists {
             return Err("profile creation state changed; open existing profiles explicitly".into());
         }
-        #[cfg(feature = "embedded")]
-        if self.storage.is_some() && !matches!(self.backend, Backend::Embedded) {
+        #[cfg(any(feature = "embedded", feature = "network-client"))]
+        if self.storage.is_some()
+            && !matches!(self.backend, Backend::Embedded | Backend::NetworkClient)
+        {
             return Err("legacy storage adapters require an embedded runtime".into());
         }
         let token = control::registration(&profile, &self.application)?;
@@ -202,8 +207,9 @@ impl ApplicationBuilder {
             providers: self.providers.clone(),
         };
         let (sdk, backing): (Arc<dyn GcClient>, Backing) = match &self.backend {
-            #[cfg(feature = "embedded")]
-            Backend::Embedded => {
+            #[cfg(any(feature = "embedded", feature = "network-client"))]
+            Backend::Embedded | Backend::NetworkClient => {
+                let client_only = matches!(self.backend, Backend::NetworkClient);
                 let network = self
                     .network
                     .as_ref()
@@ -219,7 +225,24 @@ impl ApplicationBuilder {
                 };
                 let runtime = match self.storage {
                     Some((store, data)) => {
-                        gcoms_runtime::ProtocolRuntime::from_storage(store, data, options).await?
+                        if client_only {
+                            gcoms_runtime::ProtocolRuntime::from_client_storage(
+                                store, data, options,
+                            )
+                            .await?
+                        } else {
+                            gcoms_runtime::ProtocolRuntime::from_storage(store, data, options)
+                                .await?
+                        }
+                    }
+                    None if client_only => {
+                        gcoms_runtime::ProtocolRuntime::open_client_options(
+                            &profile,
+                            &self.secret,
+                            create,
+                            options,
+                        )
+                        .await?
                     }
                     None => {
                         gcoms_runtime::ProtocolRuntime::open_options(
@@ -410,7 +433,7 @@ pub(crate) fn validate_application(value: &str) -> Result<(), String> {
     }
 }
 enum Backing {
-    #[cfg(feature = "embedded")]
+    #[cfg(any(feature = "embedded", feature = "network-client"))]
     Embedded(gcoms_runtime::ProtocolRuntime),
     #[cfg(feature = "ipc")]
     Shared {
@@ -423,7 +446,7 @@ enum Backing {
 impl Backing {
     async fn close(&self, _stop: bool) -> Result<(), String> {
         match self {
-            #[cfg(feature = "embedded")]
+            #[cfg(any(feature = "embedded", feature = "network-client"))]
             Self::Embedded(runtime) => runtime.clone().shutdown().await,
             #[cfg(feature = "ipc")]
             Self::Shared {
@@ -487,7 +510,7 @@ impl Drop for Inner {
                 });
             }
             match &self.backing {
-                #[cfg(feature = "embedded")]
+                #[cfg(any(feature = "embedded", feature = "network-client"))]
                 Backing::Embedded(runtime) => {
                     let runtime = runtime.clone();
                     handle.spawn(async move {
@@ -511,7 +534,12 @@ impl Application {
     pub fn builder(application: impl Into<String>) -> ApplicationBuilder {
         #[cfg(feature = "embedded")]
         let backend = Backend::Embedded;
-        #[cfg(all(not(feature = "embedded"), feature = "ipc"))]
+        #[cfg(all(not(feature = "embedded"), feature = "network-client"))]
+        let backend = Backend::NetworkClient;
+        #[cfg(all(
+            not(any(feature = "embedded", feature = "network-client")),
+            feature = "ipc"
+        ))]
         let backend = Backend::Attach {
             endpoint: PathBuf::new(),
         };
@@ -526,7 +554,7 @@ impl Application {
             carrier: sdk::CarrierProfile::default(),
             advertise: None,
             relay: None,
-            #[cfg(feature = "embedded")]
+            #[cfg(any(feature = "embedded", feature = "network-client"))]
             storage: None,
             network: None,
             network_recovery: true,
@@ -566,7 +594,7 @@ impl Application {
             );
         }
         match &self.0.backing {
-            #[cfg(feature = "embedded")]
+            #[cfg(any(feature = "embedded", feature = "network-client"))]
             Backing::Embedded(runtime) => runtime
                 .configure_file_cache(path, key, config)
                 .await
@@ -704,7 +732,7 @@ impl Application {
         }
         Ok(())
     }
-    #[cfg(feature = "embedded")]
+    #[cfg(any(feature = "embedded", feature = "network-client"))]
     pub fn embedded_runtime(&self) -> Option<&gcoms_runtime::ProtocolRuntime> {
         match &self.0.backing {
             Backing::Embedded(runtime) => Some(runtime),
@@ -800,12 +828,18 @@ async fn pump(
     jobs.abort_all();
     while jobs.join_next().await.is_some() {}
 }
-#[cfg(any(feature = "rpc", all(feature = "embedded", feature = "ipc")))]
+#[cfg(any(
+    feature = "rpc",
+    all(any(feature = "embedded", feature = "network-client"), feature = "ipc")
+))]
 fn sha2_digest(bytes: &[u8]) -> [u8; 32] {
     use sha2::{Digest, Sha256};
     Sha256::digest(bytes).into()
 }
-#[cfg(any(feature = "rpc", all(feature = "embedded", feature = "ipc")))]
+#[cfg(any(
+    feature = "rpc",
+    all(any(feature = "embedded", feature = "network-client"), feature = "ipc")
+))]
 pub(crate) fn digest_name(bytes: &[u8]) -> String {
     sha2_digest(bytes)
         .iter()

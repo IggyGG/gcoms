@@ -32,12 +32,8 @@ pub(crate) struct CommandLoopContext {
     pub(crate) frwd_admitted: Arc<std::sync::atomic::AtomicU64>,
     pub(crate) scheduler: RelayScheduler,
     pub(crate) events_tx: broadcast::Sender<Ev>,
-    pub(crate) leases: Arc<Mutex<LeaseStore>>,
-    pub(crate) registry: TokenRegistry,
-    pub(crate) authorities: Arc<Mutex<ProvisionAuthorities>>,
-    pub(crate) relay_target: RelayTarget,
-    pub(crate) relay_identity_pk: Vec<u8>,
-    pub(crate) relay_bundle: Vec<u8>,
+    #[cfg(feature = "relay-host")]
+    pub(crate) relay_host: Option<Arc<super::host::RelayHost>>,
     pub(crate) cmd_rx: mpsc::Receiver<Cmd>,
 }
 
@@ -134,12 +130,8 @@ pub(crate) fn spawn_command_loop(ctx: CommandLoopContext) -> tokio::task::JoinHa
             frwd_admitted: frwd_admitted_counter,
         scheduler,
         events_tx,
-        leases: leases_for_cmd,
-        registry: registry_for_cmd,
-        authorities: authorities_for_cmd,
-        relay_target: relay_target_for_cmd,
-        relay_identity_pk,
-        relay_bundle,
+        #[cfg(feature = "relay-host")]
+        relay_host,
         mut cmd_rx,
     } = ctx;
     tokio::spawn(async move {
@@ -513,15 +505,13 @@ pub(crate) fn spawn_command_loop(ctx: CommandLoopContext) -> tokio::task::JoinHa
                     }
                 }
                 Cmd::ProvisionClientRelay { done } => {
-                    let result = provision_relay(
-                        &leases_for_cmd,
-                        &registry_for_cmd,
-                        &authorities_for_cmd,
-                        &relay_target_for_cmd,
-                        &relay_identity_pk,
-                        &relay_bundle,
-                        false,
-                    );
+                    #[cfg(feature = "relay-host")]
+                    let result = relay_host
+                        .as_ref()
+                        .ok_or_else(|| "relay hosting is disabled".to_string())
+                        .and_then(|host| host.provision(false));
+                    #[cfg(not(feature = "relay-host"))]
+                    let result = Err("relay hosting is not compiled in".to_string());
                     let _ = done.send(result);
                 }
                 Cmd::CreateChannel {

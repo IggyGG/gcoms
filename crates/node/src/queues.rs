@@ -14,8 +14,7 @@ use std::fmt;
 #[cfg(feature = "experimental-gc2")]
 pub mod gc2;
 
-pub const DEFAULT_QUEUE_CELLS: u16 = 256;
-pub const DEFAULT_QUEUE_BYTES: u64 = 4 * 1024 * 1024;
+pub use crate::lease::{DEFAULT_QUEUE_BYTES, DEFAULT_QUEUE_CELLS};
 pub const DEFAULT_MAX_GRANTS: usize = 1024;
 pub const DEFAULT_MAX_QUEUES: usize = 1024;
 pub const DEFAULT_MAX_REPLAY_NONCES: usize = 4096;

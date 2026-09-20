@@ -456,6 +456,7 @@ pub struct TransportStatus {
 pub struct NodeHandle {
     pub(crate) state: std::sync::Weak<Mutex<NodeState>>,
     pub(crate) listener_addr: SocketAddr,
+    #[cfg(feature = "relay-host")]
     pub(crate) connectivity: Arc<tokio::sync::Mutex<Option<crate::connectivity::RuntimeTask>>>,
     pub(crate) routing: Option<Arc<super::routing::RoutingRuntime>>,
     pub info: NodeInfo,
@@ -466,7 +467,7 @@ pub struct NodeHandle {
     pub(crate) tasks: Arc<tokio::sync::Mutex<Option<Vec<tokio::task::JoinHandle<()>>>>>,
     pub(crate) workers: Arc<tokio::sync::Mutex<Option<Vec<ShutdownTask>>>>,
     pub(crate) scheduler: RelayScheduler,
-    pub(crate) transit_scheduler: RelayScheduler,
+    pub(crate) transit_scheduler: Option<RelayScheduler>,
     pub(crate) transport: Arc<tokio::sync::Mutex<Option<ShutdownTask>>>,
 }
 
@@ -475,7 +476,9 @@ impl NodeHandle {
     /// Startup work may already be admitted before counters are enabled.
     pub fn enable_diagnostics(&self) {
         self.scheduler.enable_diagnostics();
-        self.transit_scheduler.enable_diagnostics();
+        if let Some(relay) = &self.transit_scheduler {
+            relay.enable_diagnostics();
+        }
     }
 
     /// Approximate during concurrent updates; quiesce before reconciling counts.
@@ -484,9 +487,17 @@ impl NodeHandle {
             transport: self.transport_status(),
             resources: self.scheduler.combined_resource_snapshot(),
             client: self.scheduler.diagnostics_snapshot(),
-            relay: self.transit_scheduler.diagnostics_snapshot(),
+            relay: self
+                .transit_scheduler
+                .as_ref()
+                .map(|s| s.diagnostics_snapshot())
+                .unwrap_or_default(),
             client_resources: self.scheduler.resource_snapshot(),
-            relay_resources: self.transit_scheduler.resource_snapshot(),
+            relay_resources: self
+                .transit_scheduler
+                .as_ref()
+                .map(|s| s.resource_snapshot())
+                .unwrap_or_default(),
         }
     }
 
@@ -584,12 +595,19 @@ impl NodeHandle {
     pub fn gc2_relay_introduction(
         &self,
     ) -> Result<gcoms_routing::gc2::directory::Introduction, String> {
-        let runtime = self.routing.as_ref().ok_or("routing not enabled")?;
-        let guard = runtime.service.lock().unwrap_or_else(|p| p.into_inner());
-        Ok(guard
-            .as_ref()
-            .ok_or("relay service not ready")?
-            .gc2_introduction(now_unix()))
+        #[cfg(feature = "relay-host")]
+        {
+            let runtime = self.routing.as_ref().ok_or("routing not enabled")?;
+            let guard = runtime.service.lock().unwrap_or_else(|p| p.into_inner());
+            Ok(guard
+                .as_ref()
+                .ok_or("relay service not ready")?
+                .gc2_introduction(now_unix()))
+        }
+        #[cfg(not(feature = "relay-host"))]
+        {
+            Err("relay hosting is not compiled in".into())
+        }
     }
 
     #[cfg(feature = "experimental-gc2")]
@@ -603,13 +621,18 @@ impl NodeHandle {
             .directory
             .remember(bundle, now_unix())
             .map_err(|e| e.to_string())?;
-        let guard = runtime.service.lock().unwrap_or_else(|p| p.into_inner());
-        guard
+        #[cfg(feature = "relay-host")]
+        if let Some(service) = runtime
+            .service
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
             .as_ref()
-            .ok_or("relay service not ready")?
-            .gc2_directory()
-            .remember(bundle, now_unix())
-            .map_err(|e| e.to_string())?;
+        {
+            service
+                .gc2_directory()
+                .remember(bundle, now_unix())
+                .map_err(|e| e.to_string())?;
+        }
         Ok(())
     }
 
@@ -695,14 +718,12 @@ impl NodeHandle {
         let Some(runtime) = &self.routing else {
             return Ok(None);
         };
-        let service = runtime.service.lock().unwrap_or_else(|p| p.into_inner());
         if !runtime.published.load(std::sync::atomic::Ordering::Acquire) {
             return Ok(None);
         }
-        let own = service
-            .as_ref()
-            .ok_or("published listener has no local relay service")?
-            .introduction(now_unix());
+        let own = runtime
+            .own_introduction()
+            .ok_or("published listener has no local relay service")?;
         let bundle = gcoms_routing::bootstrap::BootstrapBundle { relays: vec![own] };
         bundle.validate().map_err(|e| e.to_string())?;
         Ok(Some(bundle))
@@ -714,11 +735,9 @@ impl NodeHandle {
             .routing
             .as_ref()
             .ok_or("relay routing is not enabled")?;
-        let guard = runtime.service.lock().unwrap_or_else(|p| p.into_inner());
-        let relay = guard
-            .as_ref()
-            .ok_or("relay service is not ready")?
-            .introduction(now_unix());
+        let relay = runtime
+            .own_introduction()
+            .ok_or("relay service is not ready")?;
         relay.validate().map_err(|e| e.to_string())?;
         Ok(relay)
     }
@@ -734,6 +753,7 @@ impl NodeHandle {
             .routing
             .as_ref()
             .ok_or("catalog routing is not enabled")?;
+        #[cfg(feature = "relay-host")]
         if let Some(service) = runtime
             .service
             .lock()
@@ -1081,6 +1101,7 @@ impl NodeHandle {
         if let Some(runtime) = &self.routing {
             runtime.stop_publication();
         }
+        #[cfg(feature = "relay-host")]
         if let Some(connectivity) = self.connectivity.lock().await.take() {
             connectivity.shutdown().await;
         }
@@ -1089,7 +1110,9 @@ impl NodeHandle {
             let _ = transport.task.await;
         }
         self.scheduler.shutdown();
-        self.transit_scheduler.shutdown();
+        if let Some(relay) = &self.transit_scheduler {
+            relay.shutdown();
+        }
         // These parents own subscription/invitation tasks. Let them abort and
         // join their children before acknowledging shutdown to the profile owner.
         if let Some(workers) = self.workers.lock().await.take() {

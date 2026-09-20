@@ -8,6 +8,12 @@ RPC and automatic daemon launch are optional. GChat consumes the same API.
 Windows x64 MSVC is included in the native integration workflow. Android/iOS
 client and relay SDKs, with optional app-operated push delivery, are being added
 as a preview; their qualification status is tracked in [PLAN.md](PLAN.md).
+The `network-client,files` feature set adds a self-contained outbound protocol
+client. Select `Backend::NetworkClient` when combining it with `embedded` in one
+build. It hosts its inbox on remote relays and excludes local queue hosting,
+forwarding and NAT mapping from a client-only build. Existing embedded and IPC
+feature combinations retain their behavior. The SDK's `in-process` feature is
+the shared adapter; `embedded` additionally enables relay hosting.
 
 **GComs** is a Rust communication protocol for secure connections, with typed
 service APIs for addon and client integration. **GChat** is its separate reference

@@ -212,7 +212,7 @@ impl PublicChannelDescriptor {
         Some(payload)
     }
 
-    #[cfg(any(feature = "embedded", feature = "descriptor-verification"))]
+    #[cfg(any(feature = "in-process", feature = "descriptor-verification"))]
     pub fn verify_at(&self, now_unix: u64) -> bool {
         self.version == 1
             && self.expires_at_unix > now_unix
@@ -238,13 +238,13 @@ pub struct CatalogResponse {
     pub next_cursor: Option<String>,
 }
 
-#[cfg(any(feature = "embedded", feature = "descriptor-verification"))]
+#[cfg(any(feature = "in-process", feature = "descriptor-verification"))]
 #[derive(Default)]
 pub struct InMemoryCatalog {
     descriptors: std::sync::RwLock<Vec<PublicChannelDescriptor>>,
 }
 
-#[cfg(any(feature = "embedded", feature = "descriptor-verification"))]
+#[cfg(any(feature = "in-process", feature = "descriptor-verification"))]
 impl InMemoryCatalog {
     pub fn publish(
         &self,

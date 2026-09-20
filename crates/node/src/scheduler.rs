@@ -636,6 +636,14 @@ impl RelayScheduler {
         Ok(Self::with_profile(client, profile))
     }
 
+    #[cfg(feature = "experimental-gc2")]
+    pub(crate) fn with_gc2_client(client: Arc<Tp1Client>) -> Self {
+        let mut profile = SchedulerProfile::production().with_pipelining();
+        profile.natural = true;
+        profile.emit_cover = false;
+        Self::with_profile(client, profile)
+    }
+
     pub fn is_gc2(&self) -> bool {
         self.inner.natural
     }
@@ -654,6 +662,7 @@ impl RelayScheduler {
         Self::with_budget(client, profile, budget)
     }
 
+    #[cfg(any(test, feature = "relay-host"))]
     pub(crate) fn with_transit(
         client: Arc<Tp1Client>,
         transit: Arc<Tp1Client>,
@@ -668,6 +677,7 @@ impl RelayScheduler {
     }
 
     #[cfg(feature = "experimental-gc2")]
+    #[cfg(any(test, feature = "relay-host"))]
     pub(crate) fn with_gc2_transit(
         client: Arc<Tp1Client>,
         transit: Arc<Tp1Client>,

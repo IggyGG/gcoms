@@ -2599,7 +2599,7 @@ mod tests {
     }
 }
 
-#[cfg(all(test, windows, feature = "embedded", feature = "ipc"))]
+#[cfg(all(test, windows, feature = "in-process", feature = "ipc"))]
 mod windows_pipe_tests {
     use super::*;
     use crate::{EmbeddedClient, GcClient, LocalEndpoint};
@@ -2818,7 +2818,7 @@ mod disconnect_tests {
     }
 }
 
-#[cfg(all(test, any(unix, windows), feature = "ipc", feature = "embedded"))]
+#[cfg(all(test, any(unix, windows), feature = "ipc", feature = "in-process"))]
 mod compatible_machine_clients {
     use super::*;
     #[tokio::test]
@@ -3085,7 +3085,7 @@ mod compatible_machine_clients {
     }
 }
 
-#[cfg(all(test, unix, feature = "ipc", feature = "embedded"))]
+#[cfg(all(test, unix, feature = "ipc", feature = "in-process"))]
 mod owned_listener_tests {
     use super::*;
     use crate::{EmbeddedClient, GcClient};
@@ -3184,7 +3184,7 @@ mod owned_listener_tests {
     }
 }
 
-#[cfg(all(test, feature = "ipc", feature = "embedded", any(unix, windows)))]
+#[cfg(all(test, feature = "ipc", feature = "in-process", any(unix, windows)))]
 mod route_recovery_compatibility_tests {
     use super::*;
     fn recovery() -> Request {
@@ -3375,7 +3375,7 @@ mod route_recovery_compatibility_tests {
     }
 }
 
-#[cfg(all(test, any(unix, windows), feature = "ipc", feature = "embedded"))]
+#[cfg(all(test, any(unix, windows), feature = "ipc", feature = "in-process"))]
 #[path = "ipc/bootstrap_compat_tests.rs"]
 mod bootstrap_compat_tests;
 

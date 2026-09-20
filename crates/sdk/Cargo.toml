@@ -12,7 +12,8 @@ publish.workspace = true
 
 [features]
 default = ["embedded", "ipc", "descriptor-verification"]
-embedded = ["dep:gcoms-node", "dep:gcoms-crypto"]
+in-process = ["dep:gcoms-node", "dep:gcoms-crypto"]
+embedded = ["in-process", "gcoms-node/relay-host"]
 ipc = []
 client-persist = ["embedded", "gcoms-node/client-persist"]
 descriptor-verification = ["dep:gcoms-crypto"]

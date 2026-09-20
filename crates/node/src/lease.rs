@@ -1,6 +1,10 @@
 //! Compatibility path; shared wire codecs and retained-binding checks live in core.
 pub use gcoms_core::lease::*;
 
+/// Default remote-inbox request limits, shared with the optional relay host.
+pub const DEFAULT_QUEUE_CELLS: u16 = 256;
+pub const DEFAULT_QUEUE_BYTES: u64 = 4 * 1024 * 1024;
+
 #[cfg(feature = "client-persist")]
 pub(crate) fn validate_retained_alias(
     alias: &crate::alias::OwnedAlias,

@@ -14,6 +14,7 @@ license = "MIT OR Apache-2.0"
 default = []
 ipc = ["gcoms/ipc"]
 embedded = ["gcoms/embedded", "gcoms/gc2-carrier"]
+network-client = ["gcoms/network-client"]
 
 [dependencies]
 gcoms = { version = "0.1.0", path = "../../crates/application", default-features = false, features = ["files"] }

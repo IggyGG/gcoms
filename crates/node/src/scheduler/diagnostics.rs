@@ -56,7 +56,7 @@ impl Latency {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Default, Serialize)]
 pub struct SchedulerSnapshot {
     pub enabled: bool,
     pub accepted: u64,

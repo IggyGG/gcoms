@@ -5,7 +5,7 @@
 //! cryptographic internals.
 
 mod catalog_http;
-#[cfg(feature = "embedded")]
+#[cfg(feature = "in-process")]
 mod embedded;
 pub mod ipc;
 #[cfg(all(any(unix, windows), feature = "ipc"))]
@@ -14,7 +14,7 @@ pub mod machine;
 mod types;
 pub use catalog_http::{CatalogHttpRequest, CatalogHttpResponse};
 
-#[cfg(feature = "embedded")]
+#[cfg(feature = "in-process")]
 pub use embedded::EmbeddedClient;
 pub use gcoms_core::APPLICATION_PAYLOAD_LIMIT;
 #[cfg(all(unix, feature = "ipc"))]
@@ -23,7 +23,7 @@ pub use ipc::serve_unix;
 pub use ipc::{serve_local, IpcClient};
 #[cfg(all(any(unix, windows), feature = "ipc"))]
 pub use local::LocalEndpoint;
-#[cfg(any(feature = "embedded", feature = "descriptor-verification"))]
+#[cfg(any(feature = "in-process", feature = "descriptor-verification"))]
 pub use types::InMemoryCatalog;
 pub use types::{
     application_body_limit, ActivityBucket, ApplicationDelivery, ApplicationMessage,

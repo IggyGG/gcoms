@@ -17,7 +17,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--measure', action='store_true')
     parser.add_argument('--profiles', nargs='+', choices=('3', 's', 'z'), default=['3', 's', 'z'])
-    parser.add_argument('--modes', nargs='+', choices=('ipc', 'embedded'), default=['ipc', 'embedded'])
+    parser.add_argument('--modes', nargs='+', choices=('ipc', 'embedded', 'network-client'), default=['ipc', 'embedded', 'network-client'])
     parser.add_argument('--output', type=Path, default=ROOT / 'target/rust-integration-evidence')
     args = parser.parse_args()
     output = args.output.resolve()
@@ -52,6 +52,11 @@ def main():
             forbidden = {'gcoms-node', 'gcoms-runtime', 'gcoms-file-transfer', 'gcoms-crypto', 'gcoms-mls', 'gcoms-routing', 'gcoms-rpc', 'gcoms-rpc-macros', 'reqwest', 'rustls', 'aes-gcm', 'argon2'}
             if forbidden & graph.keys():
                 raise RuntimeError(f'IPC unexpectedly links host dependencies: {sorted(forbidden & graph.keys())}')
+        if mode == 'network-client':
+            if any('relay-host' in graph.get(name, []) for name in ('gcoms-node', 'gcoms-runtime')):
+                raise RuntimeError('Network client unexpectedly includes relay hosting')
+            if 'quick-xml' in graph or 'embedded' in graph.get('gcoms-sdk', []):
+                raise RuntimeError('Network client unexpectedly includes the legacy host dependency graph')
         if 'rt-multi-thread' in graph.get('tokio', []):
             raise RuntimeError(f'{mode} forces a multithread Tokio runtime')
         if 'gcoms-rpc' in graph:

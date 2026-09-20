@@ -54,6 +54,7 @@ impl Budget {
 
     /// Endpoint and authorized-transit schedulers share the node allowance,
     /// while retaining separate diagnostics and independent attempt identities.
+    #[cfg(any(test, feature = "relay-host"))]
     pub(super) fn pair(cover_limit: usize) -> (Self, Self) {
         assert!(cover_limit <= super::MAX_LANES);
         let shared = Arc::new(Mutex::new(State {
