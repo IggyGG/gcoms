@@ -11,8 +11,8 @@
 > [implementation and remaining gates](GCHAT_FILE_TRANSFER_FOLLOWUP.md).
 
 **Full fleet qualification has not passed.** Canary 15 passes the standard
-64 KiB transfer and receiver reopen. The subsequent capacity run verifies 4 MiB
-and 32 MiB exports, but exposes excessive chat latency during hourly routing
+64 KiB transfer and receiver reopen. The subsequent capacity run verifies files
+through 256 MiB, but exposes excessive chat latency during hourly routing
 credential renewal. The 16-client ramp, 56 transfer pairs, 30-minute baseline,
 four-hour mixed workload and fault matrix remain unqualified. Historical failures
 below are retained; see [the runbook](FLEET_FILES.md) for the exact campaign.
@@ -298,11 +298,13 @@ four-hour mixed run, faults and privacy qualification remain separate gates.
 
 ## Capacity 01 exposes renewal interruption — 2026-09-20
 
-Run `ff-20260920-024634` uses the same immutable `fleet-build-10`. Its repeated
+Run `ff-20260920-024634` used the same immutable `fleet-build-10`. Its repeated
 64 KiB canary and receiver reopen passed, followed by a 300.9-second chat
 baseline. Independent export hashes verified 4 MiB in 31.183 seconds and 32 MiB
-in 326.997 seconds after acceptance. Larger transfers remain in progress at this
-checkpoint; these observations do not establish the 1 GiB capacity gate.
+in 326.997 seconds after acceptance. The 256 MiB export subsequently verified in
+1,408.153 seconds (23 minutes 28 seconds), with SHA-256
+`629fbd96de7a30ce0b3c7b34f9bd183c73104863453d766ca2647b2f9895957e`.
+These observations do not establish the 1 GiB capacity gate.
 
 The initial introduction expires at elapsed 805.835 seconds. Both clients then
 report `no ready independent GC/2 route`, lose subscriptions and enter inbox
@@ -311,7 +313,13 @@ recovery. The sender becomes route-ready near 857 seconds and the receiver near
 verified progress. Chat acknowledgement latency reaches 129.700 seconds, above
 the fixed 120-second maximum; the measured baseline p95 was 16.486 seconds.
 This run cannot pass the mixed-traffic gate, regardless of subsequent file
-completion. Production service state remains unchanged at this checkpoint.
+completion. The controller was deliberately interrupted after the 256 MiB
+export to retest the repaired candidate. Four final chat acknowledgements were
+still pending; the original failed report retains both the interruption and
+missing acknowledgements. No 1 GiB file was offered. All eight cleanup receipts
+passed, including unchanged production state. Observed file-engine buffers stayed
+below 4 MiB; the receiver verified 1,169 pieces with no rejected pieces and eight
+retries. These are aggregate process counters, including the receiver reopen.
 
 The subscription pumps treated a temporarily unavailable protected route as lost
 terminal authority. A local regression reproduces this inbox invalidation. The
@@ -323,3 +331,19 @@ independent channel-control retry regression. The repair still needs a rebuilt
 fleet run across credential expiry. Live observations are retained privately in
 `target/protocol-plan-capacity01-live/renewal-observations.json`; the complete
 campaign evidence remains under `test-evidence/files-capacity-01`.
+
+The shared protocol worker obtained the rollout owner's acknowledgment of both
+production replacements on host 4 and a hold on further deployments and
+relay-impacting tests. Residual test traffic ended at 03:24:03 CEST. Its exact
+acknowledgments remain in the protocol task's private evidence, referenced by
+commit `0cdd640`. This coordinated window supplements each run's fresh baseline
+and automatic production-change stop; it does not qualify the production binary.
+
+Capacity 02 (`ff-20260920-033236`) starts in that window with immutable
+`fleet-build-11`, GComs `d6f5d97` and GChat `200cd7a`. The build snapshots and
+all executable hashes pass. Local validation covers 287 node-library cases
+(one ignored), eight cold-channel/protected-route/session cases, the legacy
+control retry, both strict Clippy checks, all 151 GChat cases and packaged Rust,
+npm, frontend and desktop consumers. Both source snapshots remained unchanged
+during the paired checks. Capacity 02 is still in progress; its planned 1 GiB
+transfer and expiry crossing must be observed before claiming success.

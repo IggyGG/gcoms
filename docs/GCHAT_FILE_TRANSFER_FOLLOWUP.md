@@ -170,3 +170,11 @@ Subscription pumps now retain their authority through unavailable or replaced
 entry routes and retry through the background owner's ready set. A red/green
 regression covers both pumps. See the retained [fleet findings](FLEET_FILES_RESULTS.md);
 local regression success does not qualify the repair on the fleet.
+The old run subsequently verified 256 MiB in 1,408.153 seconds, then was stopped
+for retest; every isolated deployment cleaned up with production unchanged.
+The repaired pair `d6f5d97` / `200cd7a` passes 287 node-library cases (one ignored),
+eight channel/route/session cases, the legacy control retry, both strict Clippy
+checks, all 151 GChat cases and the package/frontend/desktop consumers. Its
+source-bound `fleet-build-11` is now running capacity 02 in the quiet window
+coordinated by the other protocol worker. No actual 1 GiB result or whole-client
+privacy qualification has been recorded yet.
