@@ -70,6 +70,12 @@ source binding. See the latest [fleet results](FLEET_FILES_RESULTS.md) and the
 [traffic-path inventory](GCHAT_TRAFFIC_PATHS.md), including the remaining
 installed bootstrap and catalog migration gaps.
 
+The subsequent [recovery and isolated-client capture review](GC2_CLIENT_CAPTURE_REVIEW.md)
+identifies a recovery-liveness gap in the global readiness revision and missing
+in-flight failure coverage. A disconnected local namespace smoke establishes a
+feasible client capture boundary and exposes packet-accounting/lifetime gaps;
+it is not a GChat run or privacy qualification. Runtime and fleet remain unchanged.
+
 ## Release tooling corrections
 
 Native Windows 10 checks verified a PE signed by the pinned Gh0st certificate.
