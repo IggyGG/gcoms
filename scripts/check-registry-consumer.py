@@ -44,7 +44,7 @@ def qualify(a, application, packages, cargo_home):
     for i,block in enumerate(blocks[1:],1):
         name=re.search(r'^name = "([^"]+)"',block,re.M).group(1)
         version=re.search(r'^version = "([^"]+)"',block,re.M).group(1)
-        if name == 'gcoms' or name.startswith('gcoms-'):
+        if (name,version) in checksums:
             checksum=checksums[(name,version)]
             block=re.sub(r'^(source|checksum) = .*\n','',block,flags=re.M)
             block=block.replace('version = "'+version+'"\n','version = "'+version+'"\nsource = "registry+https://github.com/rust-lang/crates.io-index"\nchecksum = "'+checksum+'"\n',1)
