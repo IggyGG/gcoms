@@ -156,20 +156,28 @@ async fn cold_both_expired_channel_queues_recover_over_bound_base_contact() {
         assert_eq!(retained.channels[0].message_outbox.len(), 1);
         let before_wire = retained.channels[0].message_outbox[0].0;
         assert_eq!(accepted, before_wire);
-        assert!(
+        // Observe both queues before repair: an early delivery notification
+        // must not sit in the sender queue and satisfy the later ACK wait.
+        let blocked: Result<(), _> =
             tokio::time::timeout(Duration::from_millis(400), async {
                 loop {
-                    if let Some(Ev::ChannelMessage { text, .. }) = member.next_event().await {
-                        if text == b"pending across route repair" {
-                            break;
-                        }
+                    tokio::select! {
+                        event = member.next_event() => match event.expect("receiver event stream remains open") {
+                            Ev::ChannelMessage { text, .. } => assert_ne!(text.as_slice(), b"pending across route repair",
+                                "expired peer queues unexpectedly delivered before recovery"),
+                            Ev::Lagged { .. } => panic!("receiver observation lost events"),
+                            _ => {}
+                        },
+                        event = owner.next_event() => match event.expect("sender event stream remains open") {
+                            Ev::ChannelDelivery { msg_id, .. } => assert_ne!(msg_id, accepted,
+                                "sender claimed delivery before route repair and authenticated ACK"),
+                            Ev::Lagged { .. } => panic!("sender observation lost events"),
+                            _ => {}
+                        },
                     }
                 }
-            })
-            .await
-            .is_err(),
-            "expired peer queues unexpectedly delivered before recovery"
-        );
+            }).await;
+        assert!(blocked.is_err(), "observe the full blocked interval");
         let announced = owner
             .recover_channel_route(name, id, epoch, &welcome, &peer)
             .await?;
