@@ -149,5 +149,26 @@ class PrivacyFilesTest(unittest.TestCase):
                     privacy.load_captures(root, [1])
 
 
+class FilePrivacyPolicyTests(unittest.TestCase):
+    def test_valid_measurement_still_requires_component_gate_and_never_qualifies_release(self):
+        captures={(workload,seed):(np.zeros((1,3)),np.zeros((1,4)))
+                  for workload in privacy.WORKLOADS for seed in range(16)}
+        for meets_threshold in (False,True):
+            with self.subTest(meets_threshold=meets_threshold), tempfile.TemporaryDirectory() as folder:
+                arguments=['privacy-files-classifier.py','--out',folder,
+                           '--train-seeds',','.join(map(str,range(8))),
+                           '--eval-seeds',','.join(map(str,range(8,16)))]
+                with patch.object(sys,'argv',arguments), \
+                     patch.object(privacy,'load_captures',return_value=captures), \
+                     patch.object(privacy,'evaluate',return_value={'ok':meets_threshold}), \
+                     patch('builtins.print'):
+                    self.assertEqual(privacy.main(),0 if meets_threshold else 1)
+                report=json.loads((Path(folder)/'privacy-files-report.json').read_text())
+                self.assertTrue(report['measurement_valid'])
+                self.assertEqual(report['component_gate_passed'],meets_threshold)
+                self.assertTrue(report['reference_threshold_is_release_veto'])
+                self.assertFalse(report['release_qualified'])
+
+
 if __name__ == "__main__":
     unittest.main()

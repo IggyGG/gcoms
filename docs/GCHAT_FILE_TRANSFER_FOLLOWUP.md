@@ -142,3 +142,42 @@ component evidence; final GChat/fleet release qualification remains outstanding.
 An invalid measurement or a failed component bound returns a failing exit status;
 valid unfavorable measurements are retained in the report. General exploratory
 classifiers and their informative thresholds cannot waive this file-profile gate.
+
+The shared measurement improvements from `e7a6c09` now check exact message IDs,
+body digests, partial final chunks, receipt counts, authenticated profile IDs,
+capture loss and measurement coverage. Packet accounting uses structured frame
+lengths and complete endpoint identities, including IPv6. Validity is separate
+from the component criterion: a valid file-privacy measurement above the 0.55
+upper-confidence threshold still exits unsuccessfully, and even a passing
+component report cannot qualify release. The historical classifier remains a
+diagnostic for its different contract.
+
+The imported checks pass 115 Python cases and strict workspace Clippy. Four
+terminal-codec/archive tests now select the explicit zero-entry direct fixture;
+the independent protected-route and real cold-channel tests retain their relay
+topologies. A local mixed measurement on profile 22 verified exactly 32,769 bulk
+bytes across three chunks and two chat messages, with all five distinct receipts,
+no delivery errors and no overrun of its 60-second interval. These measurements
+do not alter the frozen fleet executables or supply privacy qualification.
+
+The full workspace subsequently passes 832 cases (six ignored) on `5d60225`.
+GChat `200cd7a` incorporates the shared desktop/service carrier-forwarding fix
+and passes all 151 cases against that unchanged GComs snapshot. An immutable
+profile-22 capture verifies exact workload accounting, capture coverage and zero
+packet drops; one seed is instrumentation evidence, not a privacy gate result.
+
+Capacity 01 exposes a separate hourly-renewal interruption after verified 4 MiB
+and 32 MiB exports. Missing protected entries incorrectly trigger inbox and
+channel reprovisioning, and one chat acknowledgement exceeds 120 seconds.
+Subscription pumps now retain their authority through unavailable or replaced
+entry routes and retry through the background owner's ready set. A red/green
+regression covers both pumps. See the retained [fleet findings](FLEET_FILES_RESULTS.md);
+local regression success does not qualify the repair on the fleet.
+The old run subsequently verified 256 MiB in 1,408.153 seconds, then was stopped
+for retest; every isolated deployment cleaned up with production unchanged.
+The repaired pair `d6f5d97` / `200cd7a` passes 287 node-library cases (one ignored),
+eight channel/route/session cases, the legacy control retry, both strict Clippy
+checks, all 151 GChat cases and the package/frontend/desktop consumers. Its
+source-bound `fleet-build-11` is now running capacity 02 in the quiet window
+coordinated by the other protocol worker. No actual 1 GiB result or whole-client
+privacy qualification has been recorded yet.
