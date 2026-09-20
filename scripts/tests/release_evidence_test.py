@@ -90,6 +90,25 @@ class EvidenceTests(unittest.TestCase):
         with self.assertRaisesRegex(release.EvidenceError, "preview channel"):
             release.validate_publication(config, "gchat", "0.1.0")
 
+    def test_production_removes_timed_privacy_gates_without_claiming_them_passed(self):
+        self.candidate.update(channel="production", release_policy="production-minutes-v1",
+                              targets=["linux-x86_64"], privacy_qualified=False,
+                              privacy_improvements=["Whole-client traffic analysis remains open"])
+        for check in list(self.candidate["checks"]):
+            if check not in release.required_checks(self.candidate, "candidate"):
+                self.candidate["checks"].pop(check)
+        self.assertEqual(self.errors(), [])
+        checks = release.required_checks(dict(self.candidate, wire_profile="GC/2"), "candidate")
+        self.assertFalse(checks & {"privacy.gc2-client", "soak.application", "security.fuzz",
+                                   "fleet.gc2-files", "integration.gc2-turnover"})
+        self.assertIn("integration.gchat", checks)
+        self.assertIn("installed.gc2-network.linux-x86_64", checks)
+        self.candidate["privacy_qualified"] = True
+        self.assertTrue(any("privacy improvements" in e for e in self.errors()))
+        self.candidate["privacy_qualified"] = False
+        self.candidate["checks"].pop("integration.gchat")
+        self.assertTrue(any("integration.gchat" in e for e in self.errors()))
+
     def test_truthy_strings_and_booleans_cannot_replace_success(self):
         check = "native.gcoms.linux-x86_64"
         original = copy.deepcopy(self.reports[check])

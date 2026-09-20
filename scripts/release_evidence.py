@@ -248,11 +248,27 @@ def validate_report(check, report, candidate, base, artifacts):
         gc2.validate(check, report, candidate, base, artifacts, require, file_reference, read_json)
 
 
+def required_checks(candidate, stage):
+    required = {"candidate": CANDIDATE, "preflight": PREFLIGHT, "published": PUBLISHED}[stage]
+    if candidate["wire_profile"] == "GC/2":
+        required = required | gc2.CHECKS
+    if candidate.get("channel") == "production":
+        # Owner decision 2026-09-20: Linux production, bounded acceptance;
+        # statistical/privacy matrices and timed campaigns are not release gates.
+        deferred = {"security.fuzz", "soak.application", "privacy.gc2-client",
+                    "fleet.gc2-files", "integration.gc2-turnover"}
+        targets = set(candidate["targets"])
+        required = {check for check in required if check not in deferred and
+                    not any(check.endswith("." + target) for target in set(TARGETS) - targets)}
+        required -= {"signing.windows", "signing.macos"}
+    return required
+
+
 def validate_publication(config, project, version):
     require(config.get("project") == project and config.get("version") == version, "publication identity/version mismatch")
     require(config.get("publication_status") == "approved_by_owner", "public publication remains deferred")
     policy = config.get("signing_policy", "publicly-trusted")
-    require(policy in {"publicly-trusted", "self-signed-preview"}, "unknown signing policy")
+    require(policy in {"publicly-trusted", "self-signed-preview", "self-signed"}, "unknown signing policy")
     if policy == "self-signed-preview":
         require(config.get("channel") == "developer-preview", "self-signed distribution requires preview channel")
     for key in ("public_repository_url", "companion_url"):
@@ -277,12 +293,15 @@ def validate(candidate, base, stage="candidate", repositories=None, publication=
         require(isinstance(candidate, dict) and type(candidate.get("schema_version")) is int and
                 (candidate["schema_version"], candidate.get("wire_profile")) in {(1, "GC/1"), (2, "GC/2")},
                 "unsupported candidate schema/profile")
-        require(candidate.get("channel") == "developer-preview", "candidate is not a developer preview")
+        require(candidate.get("channel") in {"developer-preview", "production"}, "unsupported release channel")
+        if candidate["channel"] == "production":
+            require(candidate.get("release_policy") == "production-minutes-v1", "production requires the explicit owner policy")
+            require(candidate.get("privacy_qualified") is False and bool(candidate.get("privacy_improvements")), "production must disclose outstanding privacy improvements")
         if candidate["wire_profile"] == "GC/2":
             gc2.contract(candidate, base, require, file_reference, read_json)
         require(nonempty(candidate.get("version")), "missing candidate version")
-        require(candidate.get("signing_policy", "publicly-trusted") in {"publicly-trusted", "self-signed-preview"}, "unsupported candidate signing policy")
-        require(candidate.get("targets") == list(TARGETS), "candidate must retain Linux, Windows, and both macOS qualification targets")
+        require(candidate.get("signing_policy", "publicly-trusted") in {"publicly-trusted", "self-signed-preview", "self-signed"}, "unsupported candidate signing policy")
+        require(candidate.get("targets") == (["linux-x86_64"] if candidate["channel"] == "production" else list(TARGETS)), "candidate targets differ from release policy (preview requires Linux, Windows, and both macOS qualification targets)")
         validate_sources(candidate, base, repositories)
         artifacts = candidate.get("artifacts")
         require(isinstance(artifacts, dict) and artifacts, "no release artifacts recorded")
@@ -297,16 +316,14 @@ def validate(candidate, base, stage="candidate", repositories=None, publication=
         }.items():
             actual = {name for name, artifact in artifacts.items() if artifact.get("project") == "gcoms" and artifact.get("kind") == kind}
             require(actual == names, f"{kind} artifact inventory differs from the 0.1 release package set")
-        for target in TARGETS:
+        for target in candidate["targets"]:
             names = {name.lower() for name, artifact in artifacts.items() if artifact.get("kind") == "installer" and artifact.get("project") == "gchat" and artifact.get("target") == target}
             suffixes = (".deb", ".appimage") if target.startswith("linux") else (".dmg",) if target.startswith("macos") else (".exe",)
             require(all(any(name.endswith(suffix) for name in names) for suffix in suffixes), f"missing installer artifacts: {target}")
         require(isinstance(candidate.get("checks"), dict), "missing check inventory")
     except (EvidenceError, OSError, ValueError, TypeError) as error:
         return [str(error)]
-    required = {"candidate": CANDIDATE, "preflight": PREFLIGHT, "published": PUBLISHED}[stage]
-    if candidate["wire_profile"] == "GC/2":
-        required = required | gc2.CHECKS
+    required = required_checks(candidate, stage)
     for check in sorted(required):
         try:
             reference = candidate["checks"].get(check)

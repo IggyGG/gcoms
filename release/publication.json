@@ -1,6 +1,6 @@
 {
   "project": "gcoms",
-  "channel": "developer-preview",
+  "channel": "production",
   "version": "0.1.0",
   "companion_url": "https://github.com/IggyGG/gchat",
   "security_contact": "iggy@gchat.boo",
@@ -57,13 +57,23 @@
     }
   },
   "qualification_targets": [
-    "linux-x86_64",
-    "windows-x86_64",
-    "macos-x86_64",
-    "macos-aarch64"
+    "linux-x86_64"
   ],
-  "unqualified_targets": {},
+  "unqualified_targets": {
+    "windows-x86_64": "Deferred by owner for Linux-first production rollout; no installer qualification claimed.",
+    "macos-x86_64": "Deferred by owner for Linux-first production rollout; no installer qualification claimed.",
+    "macos-aarch64": "Deferred by owner for Linux-first production rollout; no installer qualification claimed."
+  },
   "public_repository_url": "https://github.com/IggyGG/gcoms",
   "security_reporting_url": "https://github.com/IggyGG/gcoms/security/advisories/new",
-  "signing_policy": "self-signed-preview"
+  "signing_policy": "self-signed",
+  "release_policy": {
+    "name": "production-minutes-v1",
+    "decision_date": "2026-09-20",
+    "statistical_privacy_is_release_gate": false,
+    "24_hour_campaigns_required": false,
+    "privacy_qualified": false,
+    "privacy_improvements": "docs/PRODUCTION_RELEASE.md",
+    "historical_receipts_unchanged": true
+  }
 }
