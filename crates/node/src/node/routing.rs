@@ -993,3 +993,7 @@ async fn resume_owner(
     }
     Ok(())
 }
+
+#[cfg(all(test, feature = "experimental-gc2"))]
+#[path = "gc2_inbox_tests.rs"]
+mod gc2_inbox_tests;
