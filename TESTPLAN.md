@@ -5,6 +5,8 @@
   multithread runtimes in either integration.
 - Run SDK version/capability tests and facade backend tests, including encrypted
   cache reopen, bounded upload/export, forbidden scope and destination overwrite.
+- Verify a disconnected local probe cannot stop the listener; macOS peer PID
+  lookup can fail after disconnect, and only that connection must be rejected.
 - Retain runtime durability/shutdown/GC2 bootstrap tests extracted from GChat.
   Verify file receive progress while outbound receipts are stalled.
 - Run existing swarm corruption, quota, resumability and membership tests.
