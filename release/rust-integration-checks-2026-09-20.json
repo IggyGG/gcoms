@@ -43,5 +43,28 @@
     "status": "passed",
     "revision": "da12b45156ae59cc59a818d040ea3f3bc47af306",
     "record": "rust-integration-native-2026-09-20.json"
+  },
+  "combined_trunk": {
+    "revision": "846b6ab85dba0eaba859aa5c5232e17ba2ab363f",
+    "merged_crypto_commits": [
+      "7ac9f2e",
+      "992982e"
+    ],
+    "rust_tests": {
+      "passed": 157,
+      "ignored": 2
+    },
+    "scope": [
+      "gcoms",
+      "gcoms-runtime",
+      "gcoms-sdk",
+      "gcoms-file-transfer",
+      "gcoms-crypto"
+    ],
+    "strict_clippy_exit_code": 0,
+    "logs_sha256": {
+      "combined-trunk-tests.log": "1c9b4333150b91d100a00d800c0d0ac156e6dd2b424fe6e8cda9917491c7cc57",
+      "combined-trunk-clippy.log": "625ca04cb05dc8f60355aed05cdb7259cfc5ad99da690904d797449a85de24d7"
+    }
   }
 }

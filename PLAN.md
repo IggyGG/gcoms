@@ -19,3 +19,7 @@ Completed on 2026-09-20:
 qualification is complete: 106 focused tests passed on each target, and the
 CI matrix measured both consumers at opt-level 3/s/z. The macOS disconnected-peer
 listener regression is fixed and covered on every target.
+
+The subsequent concurrent crypto merge was preserved and validated with 157
+combined Linux tests and strict Clippy; the native size record retains its exact
+measured revision.

@@ -92,5 +92,10 @@ retain those tested revisions. The isolated production bootstrap fixture also
 passed on Linux before the cache follow-up; its host evidence remains under
 `target/bootstrap-integration-evidence`.
 
+Concurrent crypto work was merged after the native measurement run. The combined
+source at `846b6ab` passed 157 Linux tests across the application, runtime,
+SDK, swarm and crypto suites (two explicit ignores) and strict Clippy. The native measurements
+and per-platform test records above remain pinned to `da12b45`.
+
 These fixtures qualify native integration behavior. Operated-network
 reachability and GChat desktop release packaging have separate qualification.

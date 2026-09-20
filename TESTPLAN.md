@@ -24,3 +24,7 @@ generated contracts and the packaged desktop check. The final native follow-up
 passed 106 focused tests per target on Linux x86_64 and macOS arm64/x86_64,
 including the disconnected-peer regression. Size checks passed for all three
 optimization levels; downloaded binary and source hashes were independently verified.
+
+After the concurrent crypto merge, the combined application/runtime/SDK/swarm/crypto
+suites passed 157 Linux tests (two explicit ignores) and strict Clippy. Native results remain bound
+to their recorded source revision.
