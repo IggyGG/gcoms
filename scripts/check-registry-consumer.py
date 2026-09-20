@@ -33,6 +33,10 @@ def qualify(a, application, packages, cargo_home):
         key=(pkg['name'],pkg['version']);archives[key]=raw;checksums[key]=checksum
         entries[index_path(pkg['name'])]=json.dumps({'name':pkg['name'],'vers':pkg['version'],'deps':deps,'cksum':checksum,'features':{},'features2':manifest.get('features',{}),'yanked':False,'links':pkg.get('links'),'rust_version':pkg.get('rust-version'),'v':2}).encode()+b'\n'
     assert entries, 'no package archives supplied'
+    # Cargo may reuse a sparse-index cache without contacting this server. A
+    # recycled loopback port must never identify different preview archives.
+    identity=json.dumps([[name,version,checksum] for (name,version),checksum in sorted(checksums.items())],separators=(',',':'))
+    registry_prefix='/preview/'+hashlib.sha256(identity.encode()).hexdigest()
     lock_path=(application/a.manifest).parent/'Cargo.lock'
     lock=lock_path.read_text()
     lock=re.sub(r'\n\[\[patch\.unused\]\][\s\S]*','\n',lock)
@@ -54,8 +58,10 @@ def qualify(a, application, packages, cargo_home):
         def do_GET(self):
             path=unquote(self.path).split('?',1)[0]
             try:
+                if not path.startswith(registry_prefix+'/'): raise ValueError('registry identity')
+                path=path[len(registry_prefix):]
                 if path=='/index/config.json':
-                    raw=json.dumps({'dl':f'http://127.0.0.1:{self.server.server_port}/crates/{{crate}}/{{version}}/download'}).encode()
+                    raw=json.dumps({'dl':f'http://127.0.0.1:{self.server.server_port}{registry_prefix}/crates/{{crate}}/{{version}}/download'}).encode()
                 elif path.startswith('/index/'):
                     key=path[len('/index/'):]
                     if '..' in key or not re.fullmatch(r'[A-Za-z0-9_/-]+',key): raise ValueError('path')
@@ -81,7 +87,7 @@ def qualify(a, application, packages, cargo_home):
     try:
         with tempfile.TemporaryDirectory(prefix='gcoms-registry-') as temporary:
             config=Path(temporary)/'registry.toml'
-            config.write_text('[source.crates-io]\nreplace-with="preview"\n[source.preview]\nregistry="sparse+http://127.0.0.1:'+str(server.server_port)+'/index/"\n')
+            config.write_text('[source.crates-io]\nreplace-with="preview"\n[source.preview]\nregistry="sparse+http://127.0.0.1:'+str(server.server_port)+registry_prefix+'/index/"\n')
             args=['cargo',a.command,'--config',str(config),'--manifest-path',a.manifest,'--locked']
             if a.command=='metadata': args+=['--all-features','--format-version=1']
             else: args+=['--workspace','--all-features','--target-dir',str(a.target_dir.resolve())]
