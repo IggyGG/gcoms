@@ -5,6 +5,10 @@ one dependency for messaging, channels and files. Select `ipc,files` for a small
 client of an existing host, or `embedded,files,gc2-carrier` for an in-process relay.
 RPC and automatic daemon launch are optional. GChat consumes the same API.
 
+Windows x64 MSVC is included in the native integration workflow. Android/iOS
+client and relay SDKs, with optional app-operated push delivery, are being added
+as a preview; their qualification status is tracked in [PLAN.md](PLAN.md).
+
 **GComs** is a Rust communication protocol for secure connections, with typed
 service APIs for addon and client integration. **GChat** is its separate reference
 application, with a desktop UI, terminal UI and local service.

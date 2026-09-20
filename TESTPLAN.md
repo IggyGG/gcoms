@@ -1,5 +1,13 @@
 # Rust integration qualification
 
+Windows/mobile follow-up (in progress): run the native backend and size matrix
+on Windows x64 MSVC as well as Linux/macOS. The private temporary-root helper
+must preserve current-user ownership and remove inherited Windows grants.
+Qualify outbound-only runtime behavior, mobile ABI cancellation/lifecycle,
+Android emulator/iOS simulator consumers and simulated APNs/FCM providers.
+Measure the base SDK and optional push adapter independently. These additions
+do not establish physical-device or live-provider qualification.
+
 - Compile independent `ipc,files` and `embedded,files,gc2-carrier` consumers.
   Reject host/crypto/MLS/RPC dependencies in the IPC graph and forced Tokio
   multithread runtimes in either integration.

@@ -1,3 +1,15 @@
+# Windows and mobile integrations
+
+In progress (2026-09-21, Codex): native Windows x64 qualification; an outbound
+network-client backend with relay hosting compiled out; minimal Kotlin/Swift
+client and relay packages; optional app-operated APNs/FCM gateway. Mobile
+acceptance uses Android emulator/iOS simulator and simulated push providers.
+Physical-device, battery and live push qualification remain deferred.
+
+Implementation order: Windows native gate, Rust role separation, mobile ABI and
+packages, push registration/relay notifications, integrated qualification and
+per-platform size evidence. Preserve the existing IPC and embedded consumers.
+
 # Minimal Rust application integrations
 
 Implemented the two explicit Rust variants on the current GComs trunk:
