@@ -25,6 +25,10 @@ const CHANNEL_BUFFER: usize = 32 * 1024;
 const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(30);
 pub const MAX_LIFETIME: Duration = Duration::from_secs(1800);
 
+#[cfg(test)]
+#[path = "entry_lifetime_tests.rs"]
+mod lifetime_tests;
+
 /// Explicit GC/2 entry authority. It is deliberately a distinct type from a
 /// GC/1 relay introduction; there is no implicit compatibility conversion.
 #[derive(Clone)]

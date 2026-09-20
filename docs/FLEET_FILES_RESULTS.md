@@ -1,5 +1,33 @@
 # Fleet file-transfer findings — 2026-09-20
 
+## Separate carrier-cap component gate — 2026-09-20
+
+`crates/routing/src/gc2/entry_lifetime_tests.rs` independently exercises the
+client and server 1,800-second carrier caps with credential authority valid for
+another two hours of wall time. Both tests initialize real pinned TLS, both
+profile-22 class channels and their multiplexors, exchange exact bytes before
+and near the deadline, then require stream termination, refusal of further
+circuits and resource reclamation. Each fixture peer deliberately omits its own
+outer cap so it cannot hide a missing deadline on the side under test.
+
+Tokio's monotonic clock is paused and advanced; SystemTime is unchanged. These
+are timer-path component receipts, not 30 minutes of elapsed operation, node
+queue/MLS/file-engine turnover, or fleet qualification. The separate
+three-real-credential-expiry fixture remains in the routing suite. No production
+constant, authority deadline, retry pacing or ready-set publication changed.
+
+Managed validation retained under `target/entry-lifetime-01` passed all 51 routing
+tests, strict all-feature/all-target routing Clippy, workspace formatting and the
+478-path source inventory. Source hashes were unchanged throughout. Separate
+disposable client and server mutations lengthened only that side's deadline to
+3,600 seconds; each corresponding test failed at the original cap, with retained
+logs. Original sources and `MAX_LIFETIME` were unchanged by those controls.
+
+The actual-node, admitted MLS and file turnover gate remains open, as does
+bounded genuine recovery during unrelated published-entry churn. Capacity 02
+remains failed; these local checks authorize no fleet continuation or production
+action. Receipt: `target/entry-lifetime-01/summary.json`.
+
 > **Candidate update (2026-09-20).** The current implementation adds explicit
 > GCRB2 provisioning, channel bulk transport, both subscription classes,
 > shared profile 22, pipelined piece requests and retained send ownership. Local node
