@@ -323,6 +323,41 @@ passed, including unchanged production state. Observed file-engine buffers staye
 below 4 MiB; the receiver verified 1,169 pieces with no rejected pieces and eight
 retries. These are aggregate process counters, including the receiver reopen.
 
+The separate `test-evidence/files-capacity-01/coexistence-annotation.json`
+maps the original events to the owner's reported activity boundaries. Its
+hashes bind the unchanged manifest, event log, failed report and retained
+controller/worker, plus the later owner acknowledgment. Wall times below are
+approximate: they add monotonic event deltas to the manifest's wall-clock start;
+the startup offset and cross-host clock uncertainty were not measured.
+
+| Observed interval | Approximate CEST interval | Before first listener/bridge stop at 03:24:03 | After that stop |
+| --- | --- | --- | --- |
+| Chat baseline | 02:51:58–02:56:59 | Entire 300.891 seconds | None |
+| 4 MiB acceptance to verified export | 02:56:59–02:57:31 | Entire 31.183 seconds | None |
+| 32 MiB acceptance to verified export | 02:57:33–03:03:00 | Entire 326.997 seconds | None |
+| 256 MiB acceptance to verified export | 03:03:11–03:26:40 | About 1,251.5 seconds | About 156.6 seconds |
+
+The observed mixed workload runs from the first mixed chat send near 02:56:59
+to the retained interruption near 03:26:40; it has no completed mixed-window
+event. All 20 baseline messages were acknowledged before 03:24:03. Of 116 mixed
+sends, 102 were sent and acknowledged before that boundary, two acknowledgments
+crossed it, eight sends and acknowledgments were entirely after it, and four
+sends remained unacknowledged (two on each side). The annotation retains every
+message's send/ACK pair, including missing ACKs, rather than classifying a late
+ACK as a new post-stop send.
+
+The 256 MiB interval also spans the approximate 03:16:02 last fresh mint and
+03:16:30 payload stop. The later surviving-client inventory places all of these
+intervals before the final 07:11:39 stop; the post-03:24 samples therefore cannot
+be called quiet. These are coexistence boundaries, not measurements of constant
+background load. An unchanged production PID does not establish matched load.
+Baseline-versus-mixed performance acceptance remains unqualified: repeat the
+full affected comparison under a freshly coordinated and observed quiet window,
+record background conditions across both intervals, and retain abort-on-change.
+No subset of this run is promoted to a controlled comparison. Delivery/reopen
+receipts, the latency failure and all four missing ACKs remain intact; this
+annotation neither cancels nor restarts the already completed run.
+
 The subscription pumps treated a temporarily unavailable protected route as lost
 terminal authority. A local regression reproduces this inbox invalidation. The
 repair waits for usable entries before opening subscriptions and retains inbox
