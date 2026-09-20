@@ -674,3 +674,78 @@ The receipt's repeated 03:24:03 quiet claim remains superseded by the later
 owner inventory and 07:11:39 stop acknowledgment above. No new fleet observation,
 deployment, rollback, traffic, or release of the coordinated hold occurred during
 this review. The local correction does not clear Canary 14 or qualify production.
+
+### Isolated actual-daemon capture validity calibration
+
+The local capture driver and observer parser are committed in `04c1ac7`, with
+phase-bounded IPC, private-input bindings and retained-script reanalysis in
+`a12af3c`. These changes are kept local. The actual application artifacts are
+still immutable **build 11**, GComs `d6f5d97` / GChat `200cd7a`; this is not an
+application validation receipt for later runtime or installed-bootstrap changes.
+
+`target/client-capture-calibration-02/quartet.json` passes one matched
+idle/chat/bulk/mixed **validity** quartet with an actual owner-UID sending GChat
+daemon, Unix owner IPC, four local production-profile relays and an unobserved
+peer. Both veth ends and public-policy-valid relay addresses exist only in
+disconnected ephemeral namespaces. All four runs use fresh identities/state,
+GCRB2/profile 22, a fixed 180-second startup allowance and 60-second measurement.
+No private-address forwarding exception, host network mutation or production
+relay is involved.
+
+| Workload | Captured = filter-received = decoded frames | Non-IP frames | Chat ACKs | Independent file export |
+| --- | ---: | ---: | ---: | --- |
+| idle | 5,088 | 10 | 0/0 | none |
+| chat | 5,222 | 10 | 2/2 | none |
+| bulk | 5,210 | 10 | 0/0 | exact 64 KiB |
+| mixed | 5,229 | 10 | 2/2 | exact matching 64 KiB |
+
+All 20,749 frames are attributed, with zero capture drops, malformed or truncated
+frames. IPv4/IPv6 pre/post sentinels are present; fixture-only sentinels remain
+absent. Both file workloads have the same file identity and SHA-256
+`92fa9d0e333bfc22bb8970f580d97440059222c08359040bd87e6ca6991de51d`.
+Observed process lifetimes range from 240.064 to 240.096 seconds. Every daemon
+exits normally; all children stop without forced kills and all host interface
+identity comparisons pass. Packet-derived features include FIN/RST, TCP tuple
+reuse/retransmissions and explicitly censored lifetime lower bounds; internal
+relay counters remain correctness diagnostics only.
+
+Independent retained-evidence CLI reanalysis reproduces the quartet report
+exactly, SHA-256
+`ef9f346d5fd295948ea60885254a2720fd7101ab01885d124bf50926b54c9395`.
+Twenty-one corrupted or wrongly scoped copies are rejected; two valid controls
+pass, including a changed internal counter that leaves all classifier inputs
+unchanged. Those checks are retained under `target/client-capture-checks-02/`.
+The earlier socket smoke's 25 frames also decode completely, including the
+previously omitted non-IP and multicast observations.
+
+The first partial attempt, `client-capture-calibration-01`, remains failed and
+unchanged: mixed/chat passed individual validity, then idle setup hit the
+controller's unrelated 35-second `/join` response timeout, before measurement;
+bulk was not attempted. All children stopped and host links were unchanged.
+The regression fails on that controller and passes after IPC waits use the
+declared phase budget. The retry uses a longer equal startup allowance for
+**all** workloads, without reusing the earlier passing captures or weakening a
+privacy/performance gate. Its joins exceeding 35 seconds completed within the
+new declared setup budget.
+
+This quartet has no training/held-out separability estimate. It remains
+`diagnostic_only:true`, `component_gate_passed:false`, `release_qualified:false`;
+the <=0.55 upper-95% gates remain binding for both idle/chat and matched
+bulk/mixed, including window and connection observations. Installed-default
+bootstrap/catalog/desktop paths, statistical qualification, actual unrelated
+ready-entry churn coverage and the failed fleet capacity gates remain separate
+work. No fleet campaign, deployment, rollback or coordinated-window release
+occurred. See [capture scope and commands](GCHAT_CLIENT_CAPTURE.md).
+
+Final validation passes all **137 Python cases**, including CLI rejection of a
+pooled quartet, and the 472-path source audit. The receipt is
+`target/client-capture-checks-02/final.json`. An earlier suite run exposed a
+separate preview-registry cache collision: reusing a loopback port for different
+archives of the same package version caused Cargo to reject the new checksum
+without contacting the server. `e632541` binds the registry URL to the supplied
+archive hashes. Its real Cargo regression fails before the fix and then passes
+both dependency executions at the same port, preserving original source locks
+and checksum enforcement. The failed suite, deterministic reproduction,
+red/green logs and one managed-run admission failure are retained. No global
+cache deletion or quota change was used; the capture binaries and raw evidence
+remain unchanged by this tooling correction.

@@ -187,3 +187,26 @@ application crosses entry→middle→terminal with dispatch counters. The first
 protected measurements fail the performance bounds (per-deposit circuit
 establishment); the numbers are recorded in `docs/GC2_IMPLEMENTATION.md` and
 `target/gc2-status-20260918.md`.
+
+## Actual GChat client capture calibration
+
+[The disconnected calibration driver](docs/GCHAT_CLIENT_CAPTURE.md) observes one
+actual sending daemon through startup, fixed measurement and shutdown. It uses
+source-bound binaries, production profile 22 and explicit GCRB2 bootstrap, with
+all application processes running as the owner in disposable local namespaces.
+The one idle/chat/bulk/mixed quartet requires full packet accounting, private
+configuration bindings, exact file export, returned chat acknowledgments and
+complete cleanup. It always remains diagnostic and does not run a privacy matrix.
+
+Packet and manifest regressions are part of the existing Python suite:
+
+```sh
+python3 -m unittest discover -s scripts/tests -p 'privacy*_test.py' -v
+```
+
+They cover multicast/non-IP accounting, truncation and unknown link sources,
+SYN retransmission/tuple reuse, FIN/RST and censored lifetimes, pooled-scope
+rejection, matched lifecycle/file requirements, and IPC waits bounded by the
+declared phase rather than an unrelated controller timeout. Use the managed
+runner on the workstation. Native namespace/capture tools are needed only for
+the separate actual-daemon calibration command, not these unit tests.

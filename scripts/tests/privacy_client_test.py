@@ -4,6 +4,7 @@ import importlib.util
 import json
 from pathlib import Path
 import struct
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -153,6 +154,27 @@ class ClientManifestTest(unittest.TestCase):
             self.assertFalse(result['measurement_valid'])
             self.assertIn('pooled', result['error'])
             self.assertFalse(result['release_qualified'])
+
+    def test_client_validator_cli_rejects_pooled_quartet_with_nonzero_exit(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            order = ['idle', 'chat', 'bulk', 'mixed']
+            (root / 'plan.json').write_text(json.dumps({'scope': SCOPE, 'order': order}))
+            for workload in order:
+                case = root / workload
+                case.mkdir()
+                (case / 'worker.json').write_text(json.dumps({
+                    'schema': 1, 'scope': 'pooled_loopback_fixture', 'workload': workload}))
+                for name in ('outer', 'spec'):
+                    (case / (name + '.json')).write_text('{}')
+            report = root / 'review.json'
+            result = subprocess.run([sys.executable, str(SCRIPTS / 'privacy_client_manifest.py'),
+                '--root', str(root), '--output', str(report)], capture_output=True, text=True)
+            self.assertEqual(result.returncode, 1, result.stderr)
+            data = json.loads(report.read_text())
+            self.assertFalse(data['measurement_valid'])
+            self.assertFalse(data['release_qualified'])
+            self.assertTrue(all('pooled' in r['error'] for r in data['workloads']))
 
     def test_lifecycle_must_include_startup_shutdown_and_equal_window(self):
         names = ['capture_started_epoch', 'application_started_epoch', 'measurement_started_epoch',
