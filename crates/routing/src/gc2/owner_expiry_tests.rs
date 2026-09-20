@@ -124,7 +124,28 @@ async fn relay(
     first_refreshed: Arc<AtomicUsize>,
     release_middle: watch::Receiver<bool>,
     trace: Trace,
-) -> [Introduction; 2] {
+) -> Vec<Introduction> {
+    relay_epochs(
+        tasks,
+        index,
+        &[expiry, expiry + 180],
+        first_refreshed,
+        release_middle,
+        trace,
+    )
+    .await
+}
+
+async fn relay_epochs(
+    tasks: &mut JoinSet<()>,
+    index: usize,
+    expiries: &[u64],
+    first_refreshed: Arc<AtomicUsize>,
+    release_middle: watch::Receiver<bool>,
+    trace: Trace,
+) -> Vec<Introduction> {
+    assert!(!expiries.is_empty());
+    assert!(expiries.windows(2).all(|pair| pair[0] < pair[1]));
     let identity = TlsIdentity::generate().unwrap();
     let server = bind(
         if index == 0 {
@@ -141,13 +162,17 @@ async fn relay(
         reentry_cap: rand::random(),
         entry_cap: rand::random(),
         transit_cap: rand::random(),
-        expires_at: expiry,
+        expires_at: expiries[0],
     };
-    let mut new = old.clone();
-    new.entry_cap = rand::random();
-    new.transit_cap = rand::random();
-    new.expires_at = expiry + 180;
-    let introductions = [old, new];
+    let introductions: Vec<_> = expiries
+        .iter()
+        .map(|&expires_at| Introduction {
+            entry_cap: rand::random(),
+            transit_cap: rand::random(),
+            expires_at,
+            ..old.clone()
+        })
+        .collect();
     let fixture = introductions.clone();
     let connect: TargetConnector = Arc::new(|target, _| {
         Box::pin(async move {
@@ -169,7 +194,12 @@ async fn relay(
         let release_middle = release_middle.clone();
         let trace = trace.clone();
         Arc::new(move |path: &str, _: bool| {
-            let generation = usize::from(now_unix() >= expiry);
+            let Some(generation) = fixture
+                .iter()
+                .position(|introduction| now_unix() < introduction.expires_at)
+            else {
+                return Dispatch::Rejected;
+            };
             let intro = fixture[generation].clone();
             let cap = gcoms_transport::decode_b64url(path).unwrap_or_default();
             let requested = if cap == intro.entry_cap {
@@ -537,6 +567,153 @@ async fn real_expiry_reacquires_carrier_and_both_retained_subscriptions() {
     );
     assert_eq!(ready.ready_entries(), 1);
     drop((interactive, bulk, client, original, reacquired));
+    tasks.shutdown().await;
+    assert_eq!(counts.live.load(Ordering::SeqCst), 0);
+    assert_eq!(ready.ready_entries(), 0);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn three_real_expiries_keep_authority_and_reacquire_both_classes() {
+    let mut tasks = JoinSet::new();
+    let trace = Trace {
+        start: Instant::now(),
+        events: Arc::new(Mutex::new(Vec::new())),
+    };
+    // Issuers release only the current epoch. These are real SystemTime
+    // deadlines, not paused Tokio time or edits to production credential TTLs.
+    let first_expiry = now_unix() + 24;
+    let expiries = [
+        first_expiry,
+        first_expiry + 40,
+        first_expiry + 80,
+        first_expiry + 260,
+    ];
+    let first_refreshed = Arc::new(AtomicUsize::new(usize::MAX));
+    let (_release, available) = watch::channel(true);
+    let a = relay_epochs(
+        &mut tasks,
+        0,
+        &expiries,
+        first_refreshed.clone(),
+        available.clone(),
+        trace.clone(),
+    )
+    .await;
+    let b = relay_epochs(
+        &mut tasks,
+        1,
+        &expiries,
+        first_refreshed,
+        available,
+        trace.clone(),
+    )
+    .await;
+    let terminal = Terminal::new(&mut tasks, first_expiry + 300, trace.clone()).await;
+    let directory = Arc::new(Directory::for_loopback_fixture());
+    directory
+        .remember(
+            &BootstrapBundle {
+                relays: vec![a[0].clone(), b[0].clone()],
+            },
+            now_unix(),
+        )
+        .unwrap();
+    directory
+        .set_guards(vec![a[0].service_id, b[0].service_id])
+        .unwrap();
+    let guards = directory.guards();
+    let (mut owner, ready) =
+        EntryOwner::new(directory.clone(), CandidateProfile::file_transfer(), 2).unwrap();
+    let counts = Arc::new(Dials::default());
+    owner.dial = Arc::new(DialsConnector(counts.clone()));
+    tasks.spawn(async move { owner.run().await.unwrap() });
+    let client = Tp1Client::with_connector(ready.clone()).unwrap();
+
+    for (generation, &expiry) in expiries.iter().enumerate() {
+        until(
+            || {
+                let entries = ready.state.entries.read().unwrap();
+                entries.len() == 2
+                    && entries
+                        .iter()
+                        .all(|entry| entry.introduction.expires_at == expiry)
+                    && directory.eligible(&[], now_unix()).unwrap().len() == 2
+            },
+            "both fresh authenticated entries after each turnover",
+        )
+        .await;
+        assert!(ready.can_route((terminal.addr, terminal.pin)));
+        let original = ready.state.entries.read().unwrap().clone();
+        let (mut interactive, mut bulk) = tokio::join!(
+            terminal.delivered(&client, TrafficClass::Interactive),
+            terminal.delivered(&client, TrafficClass::Bulk),
+        );
+        assert!(now_unix() < expiry, "payloads arrive in their live epoch");
+        assert_eq!(directory.guards(), guards);
+        assert_eq!(counts.peak.load(Ordering::SeqCst), 2);
+        trace.record(format!(
+            "both classes delivered generation={generation} original_expiry={expiry}"
+        ));
+        if generation == expiries.len() - 1 {
+            break;
+        }
+
+        // Keep both streams and the original carrier objects through expiry.
+        // Refreshed directory entries must not extend their authenticated life.
+        tokio::time::sleep(
+            crate::gc2::remaining_authority_at(expiry, SystemTime::now())
+                + Duration::from_millis(10),
+        )
+        .await;
+        assert!(now_unix() >= expiry);
+        let (interactive_end, bulk_end) = tokio::join!(
+            timeout(WAIT, interactive.recv()),
+            timeout(WAIT, bulk.recv()),
+        );
+        assert!(interactive_end
+            .unwrap()
+            .is_none_or(|result| result.is_err()));
+        assert!(bulk_end.unwrap().is_none_or(|result| result.is_err()));
+        for entry in original {
+            assert!(entry.introduction.entry(now_unix()).is_err());
+            for class in [TrafficClass::Interactive, TrafficClass::Bulk] {
+                assert!(entry
+                    .carrier
+                    .open(
+                        class,
+                        &Target::Relay {
+                            addr: terminal.addr,
+                            service_id: terminal.pin,
+                        },
+                    )
+                    .await
+                    .is_err());
+            }
+        }
+        trace.record(format!(
+            "both original subscriptions and carriers expired generation={generation}"
+        ));
+    }
+
+    let received = terminal.subscriptions.lock().unwrap().clone();
+    assert_eq!(received.len(), 8);
+    for class in [TrafficClass::Interactive, TrafficClass::Bulk] {
+        assert_eq!(received.iter().filter(|sub| sub.class == class).count(), 4);
+    }
+    assert_eq!(
+        received
+            .iter()
+            .map(|sub| sub.nonce)
+            .collect::<HashSet<_>>()
+            .len(),
+        8
+    );
+    // Terminal::delivered authenticates the same queue, capability, epoch and
+    // expiry every time. Only request nonces and entry/transit epochs rotate.
+    assert!(counts.total.load(Ordering::SeqCst) >= 8);
+    assert_eq!(counts.peak.load(Ordering::SeqCst), 2);
+    assert_eq!(directory.guards(), guards);
+    drop(client);
     tasks.shutdown().await;
     assert_eq!(counts.live.load(Ordering::SeqCst), 0);
     assert_eq!(ready.ready_entries(), 0);

@@ -603,10 +603,51 @@ This is carrier lifecycle coverage, alongside the real node-pump branch tests
 above. Its terminal authenticates subscription envelopes and serves known
 payloads; it is not the node queue/lease implementation, an MLS/file-transfer
 journey, or a fleet measurement. It does not reproduce production's full hourly
-epoch or 30-minute maximum lifetime, qualify repeated turnover or the unfinished
-1 GiB transfer, or explain the entire Capacity 01 recovery delay. Discovery
+epoch or 30-minute maximum lifetime, qualify application-level repeated turnover
+or the unfinished 1 GiB transfer, or explain the entire Capacity 01 recovery delay. Discovery
 errors/backoff, fresh middle availability and route readiness must be correlated
 in actual campaign evidence. Overall latency and privacy gates remain binding.
+
+### Three consecutive credential expiries (local component)
+
+`three_real_expiries_keep_authority_and_reacquire_both_classes` extends the
+fixture to four authenticated credential generations and three real wall-clock
+boundaries. The first deadline is 24 seconds after setup; the next two are
+40 seconds apart. Issuers expose only the current generation. The owner,
+profile 22, TLS, entry/transit handlers and subscription framing remain unchanged.
+
+Both Interactive and Bulk deliver an exact independently checked payload in
+every generation. At each boundary, the original streams terminate and both
+classes are refused on the expired carrier objects. The background owner must
+obtain two fresh entries and an independent route before resubscription. All
+eight subscriptions retain the same terminal queue, capability, epoch and
+deadline, while using distinct authenticated nonces. Retained guards stay
+unchanged, live entry sockets including pending connections never exceed two,
+and shutdown releases both sockets and ready slots.
+
+The candidate delivered both classes after the third replacement at 110.888
+seconds. All 49 routing library tests and strict routing Clippy with all features
+and targets passed on the unchanged source snapshot; workspace formatting and
+the checkout source audit passed. A disposable negative control keeps the first
+expiry wakeup but stops scheduling it after the first successful renewal. It
+delivers both classes in generations zero and one, then fails the new test at
+the second boundary's reacquisition deadline. This demonstrates that a single
+successful renewal cannot satisfy this regression.
+
+Receipts, complete traces and the failing disposable source are retained under
+`target/repeated-entry-expiry-01/`. The first wrapper's source audit was run in
+an exported snapshot without a Git inventory and failed with `empty source
+inventory`; that failure is retained separately from the passing audit against
+the unchanged checkout. The first negative-control build admission was refused;
+a smaller managed allowance succeeded without cache deletion or global quota
+changes.
+
+This is a test-only change. The fixture terminal authenticates subscription
+envelopes and serves known payloads; it does not exercise the node's durable
+queue implementation, admitted MLS chat, the GChat file engine or installed
+artifacts. Actual-GChat repeated-expiry delivery/reopen, original hourly epochs
+and the 1,800-second carrier lifetime remain outstanding. The failed Capacity 02
+and the production/traffic hold are unchanged.
 
 ### Corrected coordination timeline and fresh production observation
 
