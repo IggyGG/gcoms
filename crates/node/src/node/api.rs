@@ -609,6 +609,47 @@ impl NodeHandle {
             .bootstrap()
     }
 
+    /// Attach the selected carrier's bootstrap without downgrading its authority.
+    pub fn channel_invite_link(
+        &self,
+        invite: &crate::channel_invite::ChannelInvite,
+    ) -> Result<String, String> {
+        #[cfg(feature = "experimental-gc2")]
+        if let Some(current) = self.routing.as_ref().and_then(|runtime| runtime.gc2.get()) {
+            let bundle = gcoms_routing::gc2::directory::BootstrapBundle {
+                relays: current.directory.reentry_candidates(),
+            };
+            bundle.validate().map_err(|e| e.to_string())?;
+            return invite
+                .to_link_with_gc2_bootstrap(bundle)
+                .ok_or_else(|| "invite is too large to encode".into());
+        }
+        let link = if self.uses_onion_routing() {
+            invite.to_link_with_bootstrap(self.routing_bootstrap()?)
+        } else {
+            invite.to_link()
+        };
+        link.ok_or_else(|| "invite is too large to encode".into())
+    }
+
+    /// Install only bootstrap material compatible with this runtime's carrier.
+    pub async fn install_invite_bootstrap(
+        &self,
+        envelope: &crate::channel_invite::InviteEnvelope,
+    ) -> Result<(), String> {
+        #[cfg(feature = "experimental-gc2")]
+        if let Some(bundle) = &envelope.gc2_bootstrap {
+            if envelope.bootstrap.is_some() {
+                return Err("invite contains conflicting bootstrap versions".into());
+            }
+            return self.install_gc2_routing_bootstrap(bundle);
+        }
+        if let Some(bundle) = &envelope.bootstrap {
+            self.install_routing_bootstrap(bundle.clone()).await?;
+        }
+        Ok(())
+    }
+
     /// Private local proof material for an explicitly enabled naming worker.
     /// Returns only this listener's introduction after an independent pinned
     /// probe authenticated the current candidate. Never serialize into SDK
@@ -723,6 +764,7 @@ impl NodeHandle {
                             .recovering_owner
                             .load(std::sync::atomic::Ordering::Acquire)
                     })
+                    && (!self.scheduler.is_gc2() || self.transport_status().routing_ready)
                 {
                     return Ok(());
                 }

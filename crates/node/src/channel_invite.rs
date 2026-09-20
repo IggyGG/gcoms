@@ -17,14 +17,18 @@ use gcoms_transport::{decode_b64url, encode_b64url};
 /// Wire/format version. Bump on any breaking change to the layout below.
 pub const INVITE_VERSION: u8 = 1;
 pub const BOOTSTRAP_INVITE_VERSION: u8 = 2;
+pub const GCHAT_BOOTSTRAP_INVITE_VERSION: u8 = 3;
 /// Bound decoding before allocating the base64 body. Existing v1 format stays
-/// readable; v2 wraps it without adding fields to `ChannelInvite`.
+/// readable; v2 (legacy routing) and v3 (GChat) wrap it without adding fields to
+/// `ChannelInvite`. Their bootstrap authorities cannot be interchanged.
 const MAX_INVITE_BYTES: usize = 128 * 1024;
 
 #[derive(Clone, Debug)]
 pub struct InviteEnvelope {
     pub invite: ChannelInvite,
     pub bootstrap: Option<gcoms_routing::bootstrap::BootstrapBundle>,
+    #[cfg(feature = "experimental-gc2")]
+    pub gc2_bootstrap: Option<gcoms_routing::gc2::directory::BootstrapBundle>,
 }
 
 /// A decoded invite link. `owner` is the owner's public contact card (identity
@@ -68,7 +72,10 @@ impl ChannelInvite {
         if buf.len() > MAX_INVITE_BYTES {
             return None;
         }
-        if buf.first() == Some(&BOOTSTRAP_INVITE_VERSION) {
+        if matches!(
+            buf.first(),
+            Some(&BOOTSTRAP_INVITE_VERSION | &GCHAT_BOOTSTRAP_INVITE_VERSION)
+        ) {
             return InviteEnvelope::decode(buf).map(|envelope| envelope.invite);
         }
         let mut p = 0usize;
@@ -123,6 +130,21 @@ impl ChannelInvite {
         InviteEnvelope {
             invite: self.clone(),
             bootstrap: Some(bootstrap),
+            #[cfg(feature = "experimental-gc2")]
+            gc2_bootstrap: None,
+        }
+        .to_link()
+    }
+
+    #[cfg(feature = "experimental-gc2")]
+    pub fn to_link_with_gc2_bootstrap(
+        &self,
+        bootstrap: gcoms_routing::gc2::directory::BootstrapBundle,
+    ) -> Option<String> {
+        InviteEnvelope {
+            invite: self.clone(),
+            bootstrap: None,
+            gc2_bootstrap: Some(bootstrap),
         }
         .to_link()
     }
@@ -137,15 +159,21 @@ impl InviteEnvelope {
             return Some(Self {
                 invite: ChannelInvite::decode(bytes)?,
                 bootstrap: None,
+                #[cfg(feature = "experimental-gc2")]
+                gc2_bootstrap: None,
             });
         }
-        if bytes.first() != Some(&BOOTSTRAP_INVITE_VERSION) {
+        let version = *bytes.first()?;
+        if !matches!(
+            version,
+            BOOTSTRAP_INVITE_VERSION | GCHAT_BOOTSTRAP_INVITE_VERSION
+        ) {
             return None;
         }
         let invite_len = u32::from_be_bytes(bytes.get(1..5)?.try_into().ok()?) as usize;
         let invite_end = 5usize.checked_add(invite_len)?;
         let inner = bytes.get(5..invite_end)?;
-        // A v2 envelope must contain v1, never another recursively nested v2.
+        // Every envelope contains v1, never another recursively nested envelope.
         if inner.first() != Some(&INVITE_VERSION) {
             return None;
         }
@@ -156,30 +184,59 @@ impl InviteEnvelope {
         if bytes.len() != bundle_start.checked_add(bundle_len)? {
             return None;
         }
-        let bootstrap =
-            gcoms_routing::bootstrap::BootstrapBundle::decode(bytes.get(bundle_start..)?).ok()?;
+        let bundle = bytes.get(bundle_start..)?;
+        #[cfg(feature = "experimental-gc2")]
+        if version == GCHAT_BOOTSTRAP_INVITE_VERSION {
+            return Some(Self {
+                invite,
+                bootstrap: None,
+                gc2_bootstrap: Some(
+                    gcoms_routing::gc2::directory::BootstrapBundle::decode(bundle).ok()?,
+                ),
+            });
+        }
+        if version != BOOTSTRAP_INVITE_VERSION {
+            return None;
+        }
+        let bootstrap = gcoms_routing::bootstrap::BootstrapBundle::decode(bundle).ok()?;
         Some(Self {
             invite,
             bootstrap: Some(bootstrap),
+            #[cfg(feature = "experimental-gc2")]
+            gc2_bootstrap: None,
         })
     }
 
     pub fn encode(&self) -> Option<Vec<u8>> {
         let inner = self.invite.encode()?;
+        #[cfg(feature = "experimental-gc2")]
+        if let Some(bootstrap) = &self.gc2_bootstrap {
+            if self.bootstrap.is_some() {
+                return None;
+            }
+            return Self::wrap(
+                &inner,
+                &bootstrap.encode().ok()?,
+                GCHAT_BOOTSTRAP_INVITE_VERSION,
+            );
+        }
         let Some(bootstrap) = &self.bootstrap else {
             return Some(inner);
         };
-        let bundle = bootstrap.encode().ok()?;
+        Self::wrap(&inner, &bootstrap.encode().ok()?, BOOTSTRAP_INVITE_VERSION)
+    }
+
+    fn wrap(inner: &[u8], bundle: &[u8], version: u8) -> Option<Vec<u8>> {
         let total = 7usize.checked_add(inner.len())?.checked_add(bundle.len())?;
         if total > MAX_INVITE_BYTES {
             return None;
         }
         let mut bytes = Vec::with_capacity(total);
-        bytes.push(BOOTSTRAP_INVITE_VERSION);
+        bytes.push(version);
         bytes.extend_from_slice(&(inner.len() as u32).to_be_bytes());
-        bytes.extend_from_slice(&inner);
+        bytes.extend_from_slice(inner);
         bytes.extend_from_slice(&(bundle.len() as u16).to_be_bytes());
-        bytes.extend_from_slice(&bundle);
+        bytes.extend_from_slice(bundle);
         Some(bytes)
     }
 
@@ -321,5 +378,44 @@ mod tests {
         let mut overflow = raw;
         overflow[1..5].copy_from_slice(&u32::MAX.to_be_bytes());
         assert!(InviteEnvelope::decode(&overflow).is_none());
+    }
+
+    #[cfg(feature = "experimental-gc2")]
+    #[test]
+    fn gchat_envelope_preserves_eight_introductions_and_rejects_version_confusion() {
+        let invite = sample(IpAddr::V4(Ipv4Addr::new(9, 9, 9, 9)));
+        let bundle = gcoms_routing::gc2::directory::BootstrapBundle {
+            relays: (1..=8)
+                .map(|n| {
+                    gcoms_routing::service::gc2_introduction_from(
+                        format!("192.0.2.{n}:443").parse().unwrap(),
+                        [n; 32],
+                        &[n + 10; 32],
+                        1_800_000_000,
+                    )
+                })
+                .collect(),
+        };
+        let expected = bundle.encode().unwrap();
+        let link = invite.to_link_with_gc2_bootstrap(bundle).unwrap();
+        let raw = decode_b64url(&link).unwrap();
+        assert_eq!(raw[0], GCHAT_BOOTSTRAP_INVITE_VERSION);
+        assert_eq!(ChannelInvite::from_link(&link), Some(invite));
+        let decoded = InviteEnvelope::from_link(&link).unwrap();
+        assert!(decoded.bootstrap.is_none());
+        assert!(decoded.invite.owner.provisioning.is_none());
+        assert_eq!(decoded.gc2_bootstrap.unwrap().encode().unwrap(), expected);
+        for n in 0..raw.len() {
+            assert!(InviteEnvelope::decode(&raw[..n]).is_none());
+        }
+        let mut wrong = raw.clone();
+        wrong[0] = BOOTSTRAP_INVITE_VERSION;
+        assert!(InviteEnvelope::decode(&wrong).is_none());
+        wrong = raw.clone();
+        wrong[5] = GCHAT_BOOTSTRAP_INVITE_VERSION;
+        assert!(InviteEnvelope::decode(&wrong).is_none());
+        wrong = raw;
+        wrong.push(0);
+        assert!(InviteEnvelope::decode(&wrong).is_none());
     }
 }

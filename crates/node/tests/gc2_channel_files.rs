@@ -86,11 +86,41 @@ async fn scenario() {
         .await
         .unwrap();
     eprintln!("channel created");
-    let request = receiver.prepare_channel_join("receiver").await.unwrap();
+    // Exercise the actual shareable invitation path. Direct owner admission
+    // bypasses bootstrap export and previously hid a legacy-directory lookup.
+    let (id, secret, expiry) = sender.create_channel_invite("files", 240).await.unwrap();
+    let invitation = gcoms_node::channel_invite::ChannelInvite {
+        owner: sender.current_info().await.unwrap(),
+        channel: "files".into(),
+        id,
+        secret,
+        expiry,
+    };
+    let link = sender.channel_invite_link(&invitation).unwrap();
+    let envelope = gcoms_node::channel_invite::InviteEnvelope::from_link(&link).unwrap();
+    assert!(envelope.bootstrap.is_none());
+    assert!(envelope.gc2_bootstrap.is_some());
+    receiver.install_invite_bootstrap(&envelope).await.unwrap();
+    receiver
+        .wait_for_inbox(tokio::time::Instant::now() + Duration::from_secs(90))
+        .await
+        .unwrap();
+    let request = receiver
+        .prepare_channel_join("receiver")
+        .await
+        .unwrap_or_else(|error| panic!("prepare join: {error}; {:?}", receiver.transport_status()));
     eprintln!("join prepared");
     let package = receiver.channel_key_package(request).await.unwrap();
-    let welcome = sender
-        .admit_channel("files", &package, "receiver")
+    let welcome = receiver
+        .redeem_invite_remote(
+            envelope.invite.owner,
+            "files",
+            "receiver",
+            &package,
+            id,
+            secret,
+            90,
+        )
         .await
         .unwrap();
     eprintln!("member admitted");

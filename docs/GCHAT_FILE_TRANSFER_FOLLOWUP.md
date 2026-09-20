@@ -78,8 +78,22 @@ documentation, minimal core and SDK IPC checks. The paired GChat source at
 unchanged during validation. Python validation passes 95 GComs and 36 GChat
 cases; the generated contracts and frontend checks also pass. A node-library
 run interrupted by a workstation missing-quota error is retained and superseded
-by the complete successful retry. Package-archive staging and the final fleet
-binary still require their own qualification.
+by the complete successful retry. The paired archive consumers, GChat frontend
+and standalone desktop checks subsequently passed on `ea9157f` / `a3c125c`,
+with unchanged source snapshots (`target/protocol-plan-packages/summary.json`).
+The source-bound release build in `target/fleet-build-09` also passed.
+
+Fleet canary 13 reached eight ready relays and two clients with observed profile
+22, GCRB2 routes and both subscription classes. It then exposed a separate invite
+migration defect: GChat's `/invite` still requested a legacy bootstrap from the
+empty legacy directory. No file was offered. Every host passed cleanup and its
+production relay state remained unchanged. The invitation path now chooses its
+bootstrap through the Node runtime: v3 carries GCRB2, while existing v1 and v2
+links retain their formats. The cold channel regression now joins through remote
+invitation redemption before sending file application traffic.
+That expanded scenario passed in 146.74 seconds, including file delivery after
+subscription renewal. Its first attempt retained a route-readiness failure after
+invitation import; the shared GChat inbox wait now also requires a usable route.
 
 Preserve earlier fleet failures, including the current-protocol bootstrap failure
 in `files-canary-12`. Rebuild both repositories together and require the ordinary

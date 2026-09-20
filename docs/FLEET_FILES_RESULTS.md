@@ -224,3 +224,26 @@ carrier bootstrap the harness can generate without production identities. Until
 that gate passes, the standard canary cannot measure file transfer on the
 carrier profile. Both runs cleaned up every host and left production relay state
 unchanged.
+
+## GChat file-profile canary 13 — 2026-09-20
+
+Run `ff-20260920-014950` used the frozen `fleet-build-09` candidate, GComs
+`ea9157f` and GChat `a3c125c`. All eight relays were ready after 78.4 seconds.
+Clients 0 and 8 proved GCRB2/profile-22 readiness at 136.3 and 182.3 seconds:
+each had two ready entries, one usable terminal route, and both Interactive and
+Bulk subscriptions, with no inbox recovery in progress.
+
+Channel creation succeeded, but `/invite` repeatedly failed with
+`routing bootstrap bundle exceeds bounds`. The invitation exporter still read
+the legacy directory even when the selected carrier populated the GChat
+directory. The run failed at 378.9 seconds before any file offer. This is a
+failed canary, not a transfer capacity observation. Evidence remains in
+`test-evidence/files-canary-13`; all eight cleanup receipts passed, including
+unchanged production service identity and restart counts.
+
+The fix uses a version-3 invitation envelope carrying GCRB2 and delegates export
+and installation to the selected Node runtime. Existing v1/v2 links remain
+readable. The local channel test now redeems a shareable invitation remotely
+before its first file message, instead of bypassing that path with direct owner
+admission. A rebuilt candidate must pass the normal canary and receiver reopen
+before the capacity phase can start.
