@@ -2,8 +2,9 @@
 """Profile 22 component diagnostic: idle/chat and matched bulk with/without chat.
 
 Run-independent training and evaluation, with paired-run cluster bootstrap.
-File activity and approximate volume are observable. The pooled fixture cannot
-qualify client privacy; the accepted chat-separability gate remains required.
+File activity and approximate volume are observable. The accepted file profile
+requires the 0.55 bound for chat activity, including matched bulk workloads.
+The pooled fixture cannot qualify client privacy even when this component passes.
 """
 import argparse
 import importlib.util
@@ -147,7 +148,9 @@ def main():
     args = parser.parse_args()
     report = {"contract": "gchat-file-profile-22", "scope": "pooled_loopback_entry_links",
               "diagnostic_only": True, "release_qualified": False,
-              "measurement_valid": False, "reference_threshold_is_release_veto": True,
+              "measurement_valid": False, "reference_threshold": 0.55,
+              "reference_threshold_is_release_veto": True,
+              "release_decision": "not_qualified_component_scope",
               "component_gate_passed": False, "gates": {}}
     try:
         train, evaluation = [list(map(int, value.split(","))) for value in (args.train_seeds, args.eval_seeds)]

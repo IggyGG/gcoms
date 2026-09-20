@@ -5,6 +5,8 @@ import hashlib
 import json
 import os
 from pathlib import Path
+
+NPM = 'npm.cmd' if os.name == 'nt' else 'npm'
 import shutil
 import subprocess
 import sys
@@ -26,15 +28,15 @@ def install_snapshot_npm(chat, archives, offline, run):
         options.append('--offline')
     # A local root requirement satisfies the workspace's versioned requirement.
     # npm updates this copy's lock/checksums; release manifests remain untouched.
-    run(['npm', 'install', *options, '--package-lock-only', *archives], chat)
-    run(['npm', 'ci', *options], chat)
+    run([NPM, 'install', *options, '--package-lock-only', *archives], chat)
+    run([NPM, 'ci', *options], chat)
 
 
 def prepare_gchat_resources(chat, config, archives, args, out, env, run, report):
     install_snapshot_npm(chat, archives, args.offline, run)
-    run(['npm', 'run', 'check'], chat)
-    run(['npm', 'test'], chat)
-    run(['npm', 'run', 'build'], chat)
+    run([NPM, 'run', 'check'], chat)
+    run([NPM, 'test'], chat)
+    run([NPM, 'run', 'build'], chat)
     report['gchat_frontend'] = 'passed'
     # Resolve the standalone desktop lock in its disposable copy before the
     # notice collector's locked metadata step. Only the build target's graph
@@ -120,19 +122,19 @@ def qualify(root, chat, args, out, env, report):
         if chat:
             run(base + ['--workspace', '--all-features'], chat)
             report['gchat_rust'] = 'passed'
-        npm_ci = ['npm', 'ci', '--ignore-scripts', '--no-audit', '--no-fund']
+        npm_ci = [NPM, 'ci', '--ignore-scripts', '--no-audit', '--no-fund']
         if args.offline:
             npm_ci += ['--offline']
         run(npm_ci)
-        run(['npm', 'run', 'build'])
-        run(['npm', 'pack', '--workspace', '@gcoms/rpc', '--workspace', '@gcoms/rpc-codegen', '--pack-destination', out])
+        run([NPM, 'run', 'build'])
+        run([NPM, 'pack', '--workspace', '@gcoms/rpc', '--workspace', '@gcoms/rpc-codegen', '--pack-destination', out])
         archives = [out / 'gcoms-rpc-0.1.0.tgz', out / 'gcoms-rpc-codegen-0.1.0.tgz']
         report['archive_sha256'].update({
             p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in archives
         })
         npm = temp / 'npm'; npm.mkdir()
         (npm / 'package.json').write_text('{"private":true,"type":"module"}\n')
-        install = ['npm', 'install', '--ignore-scripts', '--no-audit', '--no-fund', out / 'gcoms-rpc-0.1.0.tgz', out / 'gcoms-rpc-codegen-0.1.0.tgz']
+        install = [NPM, 'install', '--ignore-scripts', '--no-audit', '--no-fund', out / 'gcoms-rpc-0.1.0.tgz', out / 'gcoms-rpc-codegen-0.1.0.tgz']
         if args.offline:
             install += ['--offline']
         run(install, npm)

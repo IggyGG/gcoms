@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
 """Resolve unpublished GComs tarballs through a loopback-only staging registry."""
+import os
 import argparse, base64, hashlib, http.server, json, subprocess, tarfile, threading, tempfile, uuid
 from source_snapshot import snapshot, unchanged
 from pathlib import Path
+
+NPM = 'npm.cmd' if os.name == 'nt' else 'npm'
 from urllib.parse import unquote
 p=argparse.ArgumentParser()
 p.add_argument('--gchat',type=Path,required=True)
@@ -53,10 +56,10 @@ try:
             item['integrity']='sha512-'+base64.b64encode(hashlib.sha512(data).digest()).decode()
         lock_path.write_text(json.dumps(lock,indent=2)+'\n')
         flags=['--ignore-scripts','--no-audit','--no-fund',f'--@gcoms:registry=http://127.0.0.1:{server.server_port}/']
-        subprocess.run(['npm','install','--package-lock-only',*flags],cwd=workspace,check=True)
-        subprocess.run(['npm','ci',*flags],cwd=workspace,check=True)
+        subprocess.run([NPM,'install','--package-lock-only',*flags],cwd=workspace,check=True)
+        subprocess.run([NPM,'ci',*flags],cwd=workspace,check=True)
         for action in ('check','test','build'):
-            subprocess.run(['npm','run',action],cwd=workspace,check=True)
+            subprocess.run([NPM,'run',action],cwd=workspace,check=True)
         lock=json.loads(lock_path.read_text())
         for name,(path,meta,data) in archives.items():
             item=lock['packages']['node_modules/'+name]

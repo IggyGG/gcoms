@@ -1,10 +1,12 @@
 import importlib.util
+import io
 import json
 import sys
 import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
+from contextlib import redirect_stdout
 
 import numpy as np
 sys.path.insert(0, str(Path(__file__).parents[1]))
@@ -48,6 +50,43 @@ class PrivacyFilesTest(unittest.TestCase):
         self.assertFalse(privacy.evaluate(signal, signal, bootstrap=100)["ok"])
         with self.assertRaisesRegex(ValueError, "independent"):
             privacy.evaluate(identical[:1], identical, bootstrap=100)
+
+    def test_component_cli_enforces_both_chat_gates_without_qualifying_release(self):
+        expected = {f"{comparison}_{scope}" for comparison in
+                    ("idle_vs_chat", "matched_bulk_vs_mixed")
+                    for scope in ("windows", "connections")}
+        evaluate = privacy.evaluate
+        for signal in (None, "idle_vs_chat_windows", "matched_bulk_vs_mixed_connections"):
+            with self.subTest(signal=signal), tempfile.TemporaryDirectory() as directory:
+                captures = {}
+                for seed in range(1, 17):
+                    for workload in privacy.WORKLOADS:
+                        windows = np.ones((2, 2))
+                        connections = np.ones((1, 3))
+                        if signal == "idle_vs_chat_windows" and workload == "chat":
+                            windows *= 20
+                        if signal == "matched_bulk_vs_mixed_connections" and workload == "mixed":
+                            connections *= 20
+                        captures[(workload, seed)] = (windows, connections)
+                argv = ["privacy-files-classifier.py", "--out", directory,
+                        "--train-seeds", ",".join(map(str, range(1, 9))),
+                        "--eval-seeds", ",".join(map(str, range(9, 17)))]
+                with patch.object(sys, "argv", argv), \
+                     patch.object(privacy, "load_captures", return_value=captures), \
+                     patch.object(privacy, "evaluate", side_effect=lambda a, b: evaluate(a, b, bootstrap=100)), \
+                     redirect_stdout(io.StringIO()):
+                    status = privacy.main()
+                report = json.loads((Path(directory) / "privacy-files-report.json").read_text())
+                self.assertTrue(report["measurement_valid"])
+                self.assertTrue(report["reference_threshold_is_release_veto"])
+                self.assertTrue(report["diagnostic_only"])
+                self.assertFalse(report["release_qualified"])
+                self.assertEqual(report["release_decision"], "not_qualified_component_scope")
+                self.assertEqual(set(report["gates"]), expected)
+                self.assertEqual(status, 0 if signal is None else 1)
+                self.assertEqual(report["component_gate_passed"], signal is None)
+                if signal:
+                    self.assertFalse(report["gates"][signal]["ok"])
 
     def captures(self, root):
         pcap = root / "capture.pcap"

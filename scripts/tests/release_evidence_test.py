@@ -47,6 +47,10 @@ class EvidenceTests(unittest.TestCase):
                       "measurements": {"workload_seconds": 86400, "clients": 16, "channels": 4,
                                        "durable_operations_accounted": True, "archives_intact": True,
                                        "resource_bounds_held": True, "fault_recovery_passed": True}}
+            if check == "stress.files-streaming":
+                report["steps"][0]["command"] = ["cargo", "test", "-p", "gcoms-file-transfer",
+                    "--release", "--test", "swarm", "--locked", "gib_import_resume_export_is_streaming",
+                    "--", "--ignored", "--exact", "--test-threads=1"]
             self.reports[check] = report
             self.save(check)
 
@@ -67,6 +71,24 @@ class EvidenceTests(unittest.TestCase):
     def test_complete_fixture_passes_private_gate_without_public_contacts(self):
         self.assertEqual(self.errors(), [])
         self.assertTrue(release.validate(self.candidate, self.base, "preflight"))
+
+    def test_unknown_signing_policy_and_preview_publication_mismatch_fail(self):
+        self.candidate["signing_policy"] = "unsigned"
+        self.assertTrue(any("signing policy" in error for error in self.errors()))
+        config = {
+            "project": "gchat", "version": "0.1.0", "channel": "developer-preview",
+            "publication_status": "approved_by_owner", "signing_policy": "self-signed-preview",
+            "public_repository_url": "https://github.com/IggyGG/gchat",
+            "companion_url": "https://github.com/IggyGG/gcoms",
+            "security_contact": "iggy@gchat.boo", "conduct_contact": "iggy@gchat.boo",
+            "maintainers": ["IggyGG"],
+            "publisher_identities": {platform: {"name": "Gh0st", "certificate_fingerprint": "A" * 40}
+                                     for platform in ("linux", "windows", "macos")},
+        }
+        release.validate_publication(config, "gchat", "0.1.0")
+        config["channel"] = "stable"
+        with self.assertRaisesRegex(release.EvidenceError, "preview channel"):
+            release.validate_publication(config, "gchat", "0.1.0")
 
     def test_truthy_strings_and_booleans_cannot_replace_success(self):
         check = "native.gcoms.linux-x86_64"
@@ -140,6 +162,28 @@ class EvidenceTests(unittest.TestCase):
         self.assertTrue(any("reviewed qualification policy" in error for error in self.errors()))
         self.reports[check]["duration_seconds"] = float("inf"); self.save(check)
         self.assertTrue(any("invalid JSON constant" in error for error in self.errors()))
+
+    def test_streaming_exclusion_requires_its_separate_gate(self):
+        native = "native.gcoms.linux-x86_64"
+        self.reports[native]["tests"].update(ignored=1, excluded=[{
+            "name": "gib_import_resume_export_is_streaming", "reason": "stress.files-streaming"}])
+        self.save(native)
+        self.assertEqual(self.errors(), [])
+        del self.candidate["checks"]["stress.files-streaming"]
+        self.assertTrue(any("stress.files-streaming: no report" in error for error in self.errors()))
+
+    def test_streaming_gate_rejects_filtered_or_unexecuted_tests(self):
+        check = "stress.files-streaming"
+        original = copy.deepcopy(self.reports[check])
+        for counts in [{"passed": 0}, {"passed": True}, {"failed": False}, {"ignored": 1},
+                       {"failed": 1}, {"incomplete": ["timeout"]}]:
+            self.reports[check] = copy.deepcopy(original)
+            self.reports[check]["tests"].update(counts); self.save(check)
+            self.assertTrue(any("streaming qualification" in error for error in self.errors()))
+        for option in ("--release", "--ignored", "--exact", "gib_import_resume_export_is_streaming"):
+            self.reports[check] = copy.deepcopy(original)
+            self.reports[check]["steps"][0]["command"].remove(option); self.save(check)
+            self.assertTrue(any("exact 1 GiB release test" in error for error in self.errors()))
 
     def test_evidence_paths_cannot_escape_bundle(self):
         self.candidate["checks"]["packages.rust"]["path"] = "../outside.json"

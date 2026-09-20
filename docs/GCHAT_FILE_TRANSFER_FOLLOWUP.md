@@ -145,6 +145,10 @@ a separate diagnostic report and refuses to overwrite one. Its
 `component_gate_passed` result cannot set `release_qualified`, which remains false. This application harness is
 component evidence; final GChat/fleet release qualification remains outstanding.
 
+An invalid measurement or a failed component bound returns a failing exit status;
+valid unfavorable measurements are retained in the report. General exploratory
+classifiers and their informative thresholds cannot waive this file-profile gate.
+
 The shared measurement improvements from `e7a6c09` now check exact message IDs,
 body digests, partial final chunks, receipt counts, authenticated profile IDs,
 capture loss and measurement coverage. Packet accounting uses structured frame
@@ -180,9 +184,11 @@ for retest; every isolated deployment cleaned up with production unchanged.
 The repaired pair `d6f5d97` / `200cd7a` passes 287 node-library cases (one ignored),
 eight channel/route/session cases, the legacy control retry, both strict Clippy
 checks, all 151 GChat cases and the package/frontend/desktop consumers. Its
-source-bound `fleet-build-11` is now running capacity 02 in the quiet window
-coordinated by the other protocol worker. No actual 1 GiB result or whole-client
-privacy qualification has been recorded yet.
+source-bound `fleet-build-11` completed capacity 02 with a failed verdict: exports
+through 256 MiB verified, but the 1 GiB transfer had no final export after a
+second-rollover interruption. All eight hosts cleaned up; no follow-on campaign
+started. The original failed report remains retained. Whole-client privacy and
+repeated-rollover reliability remain unqualified.
 
 Measured capacity also exposed a harness mismatch: partial-progress fault cases
 allowed only 900 seconds for a whole 256 MiB export, shorter than the 1,408-second
