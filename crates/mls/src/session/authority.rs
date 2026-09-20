@@ -42,7 +42,7 @@ fn root_size(chain: &[u8]) -> Result<usize, MlsError> {
 
 fn verify(chain: &[u8], group: &MlsGroup) -> Result<([u8; 32], usize), MlsError> {
     let root = root_size(chain)?;
-    if (chain.len() - root) % TRANSFER_BYTES != 0
+    if !(chain.len() - root).is_multiple_of(TRANSFER_BYTES)
         || chain.len() > root + MAX_TRANSFERS * TRANSFER_BYTES
     {
         return Err(MlsError::Encoding);
