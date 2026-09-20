@@ -76,6 +76,17 @@ class EvidenceTests(unittest.TestCase):
         events.append({'event':'cancelled','transfer':'a','client':1,'elapsed':2})
         self.assertEqual(analyze({'phase':'canary'},events)['verdict'],'incomplete')
 
+    def test_removed_isolation_does_not_excuse_changed_production(self):
+        events=[dict(event='cleanup',host=i,passed=i!=3,errors=[],
+            namespace_removed=True,veth_removed=True,rules_removed=True,volume_unmounted=True)
+            for i in range(8)]
+        report=analyze({'phase':'canary'},events)
+        self.assertTrue(report['isolated_resources_removed'])
+        self.assertFalse(report['cleanup_complete'])
+        self.assertFalse(report['phase_passed'])
+        events[0]['namespace_removed']=False
+        self.assertFalse(analyze({'phase':'canary'},events)['isolated_resources_removed'])
+
     def test_missing_or_short_runtime_never_passes(self):
         for duration in (0,1,14399):
             report=analyze({'phase':'campaign'},[{'event':'window_end','name':'mixed','duration':duration,'elapsed':duration}])
@@ -177,6 +188,24 @@ class ScenarioTests(unittest.TestCase):
         self.campaign.jobs.shutdown()
         self.campaign.chat_jobs.shutdown()
         self.folder.cleanup()
+
+    def test_monitor_stop_is_distinct_from_a_readiness_deadline(self):
+        c=self.campaign
+        with self.assertRaisesRegex(RuntimeError,'readiness: deadline exceeded'):
+            c.until(lambda:False,0,'readiness')
+        def monitor_stopped():
+            c.stop.set()
+            return False
+        with self.assertRaisesRegex(RuntimeError,'readiness: campaign stopped'):
+            c.until(monitor_stopped,120,'readiness')
+
+    def test_monitor_stop_is_distinct_from_a_transfer_deadline(self):
+        c=self.campaign
+        with self.assertRaisesRegex(RuntimeError,'did not complete by deadline'):
+            c.finish_transfer({'id':'test'},0,0)
+        c.stop.set()
+        with self.assertRaisesRegex(RuntimeError,'transfer test: campaign stopped'):
+            c.finish_transfer({'id':'test'},0,float('inf'))
 
     def test_admission_waits_for_real_slot_before_acceptance(self):
         c=self.campaign

@@ -85,6 +85,10 @@ def analyze(manifest, events):
         failures.append({'event':'failure','error':'mixed chat latency gate failed'})
     cleanup = {e['host']:e for e in events if e['event']=='cleanup'}
     clean = set(cleanup)==set(range(8)) and all(e.get('passed') for e in cleanup.values())
+    isolated_removed = set(cleanup)==set(range(8)) and all(
+        not e.get('errors') and all(e.get(key) is True for key in
+            ('namespace_removed','veth_removed','rules_removed','volume_unmounted'))
+        for e in cleanup.values())
     ready={e['client'] for e in events if e['event']=='client_ready'}
     traffic={e['host'] for e in events if e['event']=='relay_traffic' and e.get('events',{}).get('gchat_sub_attached',0)>0}
     protocol_ready = {e['client'] for e in events if e['event']=='client_ready' and qualified_transport(e.get('transport', {}))}
@@ -174,7 +178,8 @@ def analyze(manifest, events):
             'transfers':transfers,'file_metrics_by_size':file_metrics,
             'file_diagnostics_by_host':{str(e['host']):e.get('file_diagnostics',{}) for e in events if e['event']=='relay_traffic'},
             'chat':{'sent':len(sent),'acknowledged':len(acknowledged),
-            'baseline_p95_seconds':b95,'mixed_p95_seconds':m95},'cleanup_complete':clean}
+            'baseline_p95_seconds':b95,'mixed_p95_seconds':m95},'cleanup_complete':clean,
+            'isolated_resources_removed':isolated_removed}
 
 def qualified_transport(status):
     return (status.get('protocol') == 'gchat' and status.get('profile_id') == 22
@@ -280,7 +285,8 @@ class Campaign:
                 if value: return value
             except Exception as exc: last = str(exc)
             self.stop.wait(interval)
-        raise RuntimeError(f'{label}: deadline exceeded'+(f' ({last})' if last else ''))
+        reason = 'campaign stopped' if self.stop.is_set() else 'deadline exceeded'
+        raise RuntimeError(f'{label}: {reason}'+(f' ({last})' if last else ''))
 
     def prepare(self, build):
         report = json.loads((build/'build.json').read_text())
@@ -468,6 +474,8 @@ class Campaign:
                 if time.monotonic()>self.fault_until: raise
                 self.event('expected_fault_observation',client=receiver,error=str(exc))
             self.stop.wait(5)
+        if self.stop.is_set():
+            raise RuntimeError(f'transfer {transfer["id"]}: campaign stopped')
         raise RuntimeError(f'transfer {transfer["id"]} did not complete by deadline')
 
     def transfer(self, sender, receiver, size, channel, label, timeout=300):
