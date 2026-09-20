@@ -1,4 +1,5 @@
 //! Exercise the real subscription pumps across changes to the ready entry set.
+
 use super::*;
 use gcoms_core::{gc2::NaturalCell, TrafficClass};
 use gcoms_protocol::relay::gc2::Subscription;
@@ -11,7 +12,7 @@ use gcoms_routing::{
     RelayService, ServicePolicy,
 };
 use gcoms_transport::server::{AcceptedDuplex, Dispatch, DuplexHandler};
-use std::sync::atomic::Ordering;
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use tokio::{
     sync::{oneshot, watch},
     task::JoinSet,
@@ -25,10 +26,28 @@ struct Attempt {
     respond: oneshot::Sender<bool>,
 }
 
+struct EntryConnection {
+    selected: AtomicBool,
+    closed: Arc<AtomicUsize>,
+}
+impl EntryConnection {
+    fn selected(&self) {
+        self.selected.store(true, Ordering::SeqCst);
+    }
+}
+impl Drop for EntryConnection {
+    fn drop(&mut self) {
+        if self.selected.load(Ordering::SeqCst) {
+            self.closed.fetch_add(1, Ordering::SeqCst);
+        }
+    }
+}
+
 struct Fixture {
     tasks: JoinSet<()>,
     ready: Arc<ReadyConnector>,
-    second_entry: watch::Sender<bool>,
+    second_entry: watch::Sender<Option<bool>>,
+    second_entry_closed: Arc<AtomicUsize>,
     scheduler: RelayScheduler,
     state: Arc<Mutex<NodeState>>,
     runtime: Arc<super::super::super::routing::RoutingRuntime>,
@@ -41,7 +60,8 @@ struct Fixture {
 impl Fixture {
     async fn new(two_entries: bool) -> Self {
         let mut tasks = JoinSet::new();
-        let (second_entry, held_entry) = watch::channel(false);
+        let (second_entry, held_entry) = watch::channel(None);
+        let second_entry_closed = Arc::new(AtomicUsize::new(0));
         let mut introductions = Vec::new();
         for (index, ip) in ["127.0.0.102", "127.0.0.103"].into_iter().enumerate() {
             let identity = TlsIdentity::generate().unwrap();
@@ -62,24 +82,37 @@ impl Fixture {
             introductions.push(introduction);
             let factory = relay.gc2_handler_factory();
             let held = held_entry.clone();
+            let closed = second_entry_closed.clone();
             let server = server.with_dispatch_factory(Arc::new(move || {
                 let handler = factory();
                 let entry_path = entry_path.clone();
                 let held = held.clone();
+                let connection = EntryConnection {
+                    selected: AtomicBool::new(false),
+                    closed: closed.clone(),
+                };
                 Arc::new(move |path, registered| {
                     let dispatch = handler(path, registered);
                     if index != 1 || path != entry_path {
                         return dispatch;
                     }
+                    connection.selected();
                     match dispatch {
                         Dispatch::Accepted(accepted) => {
                             let mut held = held.clone();
-                            Dispatch::Accepted(Box::new(move |body, response| {
+                            Dispatch::Accepted(Box::new(move |body, mut response| {
                                 Box::pin(async move {
-                                    while !*held.borrow_and_update() {
+                                    while held.borrow_and_update().is_none() {
                                         if held.changed().await.is_err() {
                                             return;
                                         }
+                                    }
+                                    if *held.borrow() == Some(false) {
+                                        let _ = response.send_response(
+                                            http::Response::builder().status(404).body(()).unwrap(),
+                                            true,
+                                        );
+                                        return;
                                     }
                                     accepted(body, response).await;
                                 })
@@ -251,6 +284,7 @@ impl Fixture {
             tasks,
             ready,
             second_entry,
+            second_entry_closed,
             scheduler,
             state,
             runtime,
@@ -362,7 +396,7 @@ async fn changed_ready_revision_retries_identical_subscription_authority() {
     assert!(fixture.state.lock().unwrap().subscribed_classes.is_empty());
     // Every original request is already in flight, and its response is held.
     // Complete a second real entry handshake without losing the original route.
-    fixture.second_entry.send(true).unwrap();
+    fixture.second_entry.send(Some(true)).unwrap();
     timeout(WAIT, async {
         while fixture.ready.ready_entries() != 2 {
             tokio::time::sleep(Duration::from_millis(10)).await;
@@ -453,6 +487,55 @@ async fn unchanged_ready_route_failure_requests_inbox_and_channel_recovery() {
     })
     .await
     .expect("usable unchanged route must not suppress ordinary authority recovery");
+    assert_eq!(fixture.ready.readiness_revision(), revision);
+    assert!(fixture
+        .ready
+        .can_route((target.address, target.relay_service_id)));
+    fixture.assert_authority();
+    fixture.finish().await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn failed_unpublished_entry_cannot_suppress_subscription_recovery() {
+    let mut fixture = Fixture::new(true).await;
+    let first = fixture.subscriptions().await;
+    let revision = fixture.ready.readiness_revision();
+    let target = fixture.inbox.aliases[0].contact.target.clone();
+    assert_eq!(fixture.ready.ready_entries(), 1);
+    assert!(fixture
+        .ready
+        .can_route((target.address, target.relay_service_id)));
+    // Fail the other entry's held handshake while every inbox/channel class
+    // subscription is in flight through the retained healthy entry.
+    fixture.second_entry.send(Some(false)).unwrap();
+    timeout(WAIT, async {
+        while fixture.second_entry_closed.load(Ordering::SeqCst) == 0 {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .expect("unpublished entry connection ended");
+    assert_eq!(fixture.ready.ready_entries(), 1);
+    assert!(fixture
+        .ready
+        .can_route((target.address, target.relay_service_id)));
+    for attempt in first {
+        attempt.respond.send(false).unwrap();
+    }
+    timeout(WAIT, async {
+        while !fixture.runtime.recovering_owner.load(Ordering::Acquire)
+            || fixture
+                .runtime
+                .channel_ready
+                .lock()
+                .unwrap()
+                .contains("files")
+        {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .expect("failed unpublished entry must not suppress ordinary subscription recovery");
     assert_eq!(fixture.ready.readiness_revision(), revision);
     assert!(fixture
         .ready

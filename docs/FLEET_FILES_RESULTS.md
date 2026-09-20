@@ -540,6 +540,39 @@ qualify consecutive expiry/maximum-carrier-lifetime turnover, the 1 GiB fleet
 transfer, aggregate latency, or privacy. Expiry-stratified measurements remain
 diagnostic; the overall acceptance gates remain unchanged.
 
+### Unpublished entry failures and recovery liveness
+
+The independent review identified a further local counterexample: dropping a
+failed entry attempt advanced the global readiness revision even if that
+attempt had never published a ready carrier. With a healthy retained entry,
+this unrelated churn could make terminal subscription failures appear to have
+crossed a route change and repeatedly suppress ordinary inbox/channel recovery.
+This is a source-derived liveness issue, not an observed cause of Capacity 02.
+
+The new owner regression reproduces three failed unpublished dials across two
+30-second retry ticks without publishing a ready entry. The old code advances
+the revision three times. A separate real-loopback pump regression holds all
+eight inbox/channel class subscriptions in flight through a healthy route,
+rejects the second entry's pending handshake, then fails the held subscriptions.
+The old code fails to request ordinary recovery; the corrected code does so
+while preserving exact queue authority. This test uses explicit terminal
+refusal, not a claimed reproduction of the full 60-second setup timeout.
+Both failures and their passing reruns are retained under
+`target/failed-entry-revision-01/`.
+
+Ready-set revisions now advance only when a carrier is actually published or
+removed. Publication/removal and revision updates share the same write lock;
+the pumps obtain usable-route eligibility and revision through one read-locked
+`route_revision` observation. This closes the publication/read inconsistency
+without adding request-triggered dials or changing retry periods, authenticated
+deadlines, capabilities or cover scheduling. It remains a point-in-time local
+observation: it neither identifies the exact circuit used by a later request
+nor proves terminal health or covers every possible concurrent route failure.
+The prior unavailable-entry, in-flight revision-change and stable-route recovery
+regressions remain required. The packet-derived client capture proposal,
+including FIN/connection lifetime features, is separate work; no privacy gate
+or fleet acceptance is inferred from this repair.
+
 ### Real wall-clock entry expiry regression
 
 `routing::gc2::owner::expiry_tests` adds a bounded loopback regression using the

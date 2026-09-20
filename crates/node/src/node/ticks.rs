@@ -19,10 +19,7 @@ impl SubscriptionRoute {
     fn prepare(state: &NodeState, target: &RelayTarget) -> Option<Self> {
         #[cfg(feature = "experimental-gc2")]
         if let Some(entry) = &state.gc2_carrier {
-            let revision = entry.readiness_revision();
-            if !entry.can_route((target.address, target.relay_service_id)) {
-                return None;
-            }
+            let revision = entry.route_revision((target.address, target.relay_service_id))?;
             return Some(Self {
                 entry: Some((entry.clone(), revision)),
             });
@@ -36,8 +33,8 @@ impl SubscriptionRoute {
     fn unchanged(&self, target: &RelayTarget) -> bool {
         #[cfg(feature = "experimental-gc2")]
         if let Some((entry, revision)) = &self.entry {
-            return *revision == entry.readiness_revision()
-                && entry.can_route((target.address, target.relay_service_id));
+            return entry.route_revision((target.address, target.relay_service_id))
+                == Some(*revision);
         }
         let _ = target;
         true

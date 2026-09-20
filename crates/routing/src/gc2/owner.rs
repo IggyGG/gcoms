@@ -74,11 +74,25 @@ impl ReadyConnector {
         self.select(terminal, &[]).is_ok()
     }
 
-    /// Local readiness changes only; applications cannot wake the entry owner.
+    /// Published ready-set changes only; failed unpublished attempts do not
+    /// advance this revision. Applications cannot wake the entry owner.
     pub fn readiness_revision(&self) -> u64 {
         self.state
             .revision
             .load(std::sync::atomic::Ordering::Acquire)
+    }
+
+    /// Observe usable-route eligibility and its published entry-set revision
+    /// under one read lock. This is a local point-in-time observation, not proof
+    /// of terminal availability or of which route a later request will use.
+    pub fn route_revision(&self, terminal: (SocketAddr, [u8; 32])) -> Option<u64> {
+        let entries = self.state.entries.read().unwrap_or_else(|p| p.into_inner());
+        self.select_from(&entries, terminal, &[]).ok()?;
+        Some(
+            self.state
+                .revision
+                .load(std::sync::atomic::Ordering::Acquire),
+        )
     }
 
     /// Local aggregate only; this is not a promise that a particular excluded
@@ -96,6 +110,16 @@ impl ReadyConnector {
         terminal: (SocketAddr, [u8; 32]),
         excluded: &[(SocketAddr, [u8; 32])],
     ) -> Result<(EntryCarrier, super::transit::TransitDescriptor)> {
+        let entries = self.state.entries.read().unwrap_or_else(|p| p.into_inner());
+        self.select_from(&entries, terminal, excluded)
+    }
+
+    fn select_from(
+        &self,
+        ready: &[ReadyEntry],
+        terminal: (SocketAddr, [u8; 32]),
+        excluded: &[(SocketAddr, [u8; 32])],
+    ) -> Result<(EntryCarrier, super::transit::TransitDescriptor)> {
         if excluded.len() > 64 {
             return Err("too many GC/2 route exclusions".into());
         }
@@ -109,12 +133,7 @@ impl ReadyConnector {
         let now = now_unix();
         let mut available = self.directory.eligible(excluded, now)?;
         available.retain(|relay| !relay.conflicts(terminal.0, terminal.1));
-        let mut entries = self
-            .state
-            .entries
-            .read()
-            .unwrap_or_else(|p| p.into_inner())
-            .clone();
+        let mut entries = ready.to_vec();
         // Random tie order spreads circuits over the already fixed entry set.
         // Neither load nor traffic can increase that set or restart a carrier.
         entries.shuffle(&mut rand::thread_rng());
@@ -408,14 +427,20 @@ struct ReadySlot {
 }
 impl Drop for ReadySlot {
     fn drop(&mut self) {
-        self.state
+        let mut entries = self
+            .state
             .entries
             .write()
-            .unwrap_or_else(|p| p.into_inner())
-            .retain(|entry| entry.introduction.service_id != self.pin);
-        self.state
-            .revision
-            .fetch_add(1, std::sync::atomic::Ordering::Release);
+            .unwrap_or_else(|p| p.into_inner());
+        let before = entries.len();
+        entries.retain(|entry| entry.introduction.service_id != self.pin);
+        if entries.len() != before {
+            // Publish removal and revision together. A failed dial/handshake
+            // that never made the ready set says nothing about healthy routes.
+            self.state
+                .revision
+                .fetch_add(1, std::sync::atomic::Ordering::Release);
+        }
     }
 }
 async fn maintain_entry(
@@ -434,17 +459,16 @@ async fn maintain_entry(
     let driver = entry::run(socket, descriptor, profile, send);
     tokio::pin!(driver);
     let carrier = tokio::select! { result = &mut driver => return result, ready = ready => ready? };
-    state
-        .entries
-        .write()
-        .unwrap_or_else(|p| p.into_inner())
-        .push(ReadyEntry {
+    {
+        let mut entries = state.entries.write().unwrap_or_else(|p| p.into_inner());
+        entries.push(ReadyEntry {
             introduction,
             carrier,
         });
-    state
-        .revision
-        .fetch_add(1, std::sync::atomic::Ordering::Release);
+        state
+            .revision
+            .fetch_add(1, std::sync::atomic::Ordering::Release);
+    }
     driver.await
 }
 
@@ -567,6 +591,38 @@ mod tests {
         for _ in 0..30 {
             tokio::task::yield_now().await;
         }
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn failed_unpublished_dials_do_not_change_ready_revision() {
+        let attempts = Arc::new(Mutex::new(Vec::new()));
+        let (owner, ready) = EntryOwner::with_entry_connector(
+            directory(),
+            CandidateProfile::file_transfer(),
+            1,
+            Arc::new(FailingDial {
+                attempts: attempts.clone(),
+            }),
+        )
+        .unwrap();
+        let before = ready.readiness_revision();
+        // Only retry/setup timers advance; this test does not simulate a
+        // SystemTime credential epoch or claim real carrier-expiry coverage.
+        let task = tokio::spawn(async move { owner.entries_loop().await });
+        settle().await;
+        for _ in 0..2 {
+            tokio::time::advance(RETRY_PERIOD).await;
+            settle().await;
+        }
+        assert_eq!(attempts.lock().unwrap().len(), 3);
+        assert_eq!(ready.ready_entries(), 0);
+        assert_eq!(
+            ready.readiness_revision(),
+            before,
+            "failed unpublished entries must not masquerade as ready-route changes"
+        );
+        task.abort();
+        assert!(task.await.unwrap_err().is_cancelled());
     }
 
     #[tokio::test(start_paused = true)]
