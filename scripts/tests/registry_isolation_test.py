@@ -21,7 +21,7 @@ class RegistryIsolationTests(unittest.TestCase):
         subprocess.run(["git", "init", "-q", str(application)], check=True)
         (application / "Cargo.toml").write_text(
             '[package]\nname="isolated-consumer"\nversion="0.0.0"\nedition="2021"\n'
-            '[dependencies]\ngcoms-fixture="=0.1.0"\n')
+            '[dependencies]\ngcoms-fixture="=0.1.0"\n[workspace]\n')
         (application / "src/lib.rs").write_text(source)
         original = ('version = 4\n\n[[package]]\nname = "isolated-consumer"\nversion = "0.0.0"\n'
                     'dependencies = ["gcoms-fixture"]\n\n[[package]]\nname = "gcoms-fixture"\n'
@@ -63,6 +63,7 @@ class RegistryIsolationTests(unittest.TestCase):
             application, packages, _, original = self.fixture(root, 'pub fn broken() { missing_function(); }\n')
             result = self.run_check(root, application, packages)
             self.assertNotEqual(result.returncode, 0)
+            self.assertIn("missing_function", result.stderr)
             self.assertEqual((application / "Cargo.lock").read_text(), original)
             report_path, = (root / "build/reports").glob("*/summary.json")
             report = json.loads(report_path.read_text())

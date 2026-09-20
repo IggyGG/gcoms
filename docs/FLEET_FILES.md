@@ -129,6 +129,15 @@ addition to passing scenario labels. A 30-minute measured baseline is mandatory,
 as is the full four-hour mixed window. An already complete fixture or two
 advertised sources cannot supply the missing fault evidence.
 
+Partial-progress recovery cases record a separate `recovery_progress` observation
+within 300 seconds of restoration (including receiver/relay startup and readiness).
+Pause and quota recovery start this timer after download admission resumes.
+Already completed data must still pass an independent export hash. Completing a
+fresh 256 MiB recovery fixture uses the capacity phase's 3,600-second budget;
+the earlier 900-second whole-file timeout was shorter than the measured healthy
+256 MiB transfer. The four-hour mixed window still stops unfinished work. Reports
+require both the timed recovery observation and its matching verified export.
+
 ## Carrier policy and readiness
 
 GCRB2 introductions must be exported explicitly and installed before the owner

@@ -34,6 +34,42 @@ GChat's paired input receipt is under
 Earlier failures remain available, including the incomplete generated API
 export that the full GChat gate caught before the successful run.
 
+## Renewal repair integration
+
+The fleet worker's subscription repair `d6f5d97` and carrier-startup integration
+`200cd7a` were reconciled into GComs
+`7657081784562e0c6ed4eb66ad25ee747dba5503` and GChat
+`a0da5659941d32845a7d0828b61ebbf0d6115c2e`. Their complete Linux CI entrypoints
+passed with both sources unchanged. GComs passed 833 Rust cases (six ignored)
+and 119 Python checks, plus Rustdoc, strict Clippy, generated contracts, vectors,
+minimal features, packaged consumers and dependency policy. GChat passed 151
+Rust cases, 49 Python checks and 17 frontend tests, plus strict Clippy, generated
+contracts, desktop checking, the Linux release application build and both
+dependency policies. The application build did not create an installer bundle.
+
+The node regression preserves contact and channel authority when entries are
+unavailable. The real cold-bootstrap/invitation/channel-file test also passed,
+including authenticated Bulk delivery after subscription renewal. GChat's PTY
+test verifies that explicit carrier selection survives automatic daemon startup
+and archive reopen. The merged file classifier retains the accepted 0.55 veto,
+separate measurement validity and both branches' policy regressions.
+
+An initial GComs compilation exhausted its managed 16 GiB artifact quota before
+Rust tests ran. The passing retry used an exact VCS-preserving snapshot in a
+fresh managed 8 GiB slot, with incremental compilation disabled and dev/test
+debug symbols omitted. Both the canonical source and snapshot remained unchanged.
+The original failure, peer red/green logs and successful receipts are retained in
+`target/gc2-requalification/renewal-integration/`. GChat's paired receipt is
+`gchat-provenance/native-ci.json` there, SHA-256
+`48c32b21dba04beb375f32e3256bbd3cdacddd39310b937f9163dc936b14ec4c`.
+No global quotas or fleet services were changed for these checks.
+
+These source results do not qualify the fleet or installed-client privacy. The
+older optimized MLS and 1 GiB local-storage results above retain their earlier
+source binding. See the latest [fleet results](FLEET_FILES_RESULTS.md) and the
+[traffic-path inventory](GCHAT_TRAFFIC_PATHS.md), including the remaining
+installed bootstrap and catalog migration gaps.
+
 ## Release tooling corrections
 
 Native Windows 10 checks verified a PE signed by the pinned Gh0st certificate.

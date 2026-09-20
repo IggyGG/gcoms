@@ -22,6 +22,8 @@ import uuid
 from fleet_files_remote import IPS, GIB
 
 ROOT = Path(__file__).resolve().parents[1]
+CAPACITY_CASES = ((4*1024*1024,600),(32*1024*1024,1200),
+                  (256*1024*1024,3600),(GIB,14400))
 REQUIRED_CASES = ['coverage', 'boundaries', 'unaccepted', 'pause_resume', 'receiver_restart',
                   'import_resume', 'source_change', 'relay_restart', 'path_outage', 'loss_delay',
                   'multisource_late_join', 'multisource_simultaneous', 'missing_source', 'corruption', 'disk_full',
@@ -105,6 +107,7 @@ def analyze(manifest, events):
     pairs={(t['sender']//2,int(client)//2) for t in transfers.values() if t.get('label','').startswith('coverage-') for client,receipt in t['receivers'].items() if receipt.get('valid')}
     covered=pairs=={(a,b) for a in range(8) for b in range(8) if a!=b}
     partial_cases=('pause_resume','receiver_restart','quota','relay_restart','path_outage','loss_delay')
+    recovery_evidence={name:False for name in partial_cases}
     fault_evidence={name:False for name in (*partial_cases,'missing_source','multisource_late_join','multisource_simultaneous')}
     for e in events:
         t=transfers.get(e.get('transfer'),{})
@@ -112,6 +115,20 @@ def analyze(manifest, events):
             valid=t.get('label')==e['name'] and e.get('size')==t.get('size') and 0<e.get('verified_bytes',0)<t.get('size',0) and e.get('state') in ('downloading','waiting_for_peers')
             receipt=t.get('receivers',{}).get(str(e.get('client')), {})
             fault_evidence[e['name']] |= valid and receipt.get('valid',False) and receipt['accepted']<=e['elapsed']<receipt['exported']
+        if e['event']=='recovery_progress' and e.get('name') in partial_cases:
+            receipt=t.get('receivers',{}).get(str(e.get('client')), {})
+            before,after=e.get('verified_before',-1),e.get('verified_after',-1)
+            started,seconds=e.get('started_elapsed',-1),e.get('seconds',-1)
+            progressed=0<=before<after<=t.get('size',0)
+            completed=e.get('state')=='complete' and before==after==t.get('size',-1)
+            precondition=any(p['event']=='fault_precondition' and p.get('name')==e['name']
+                and p.get('transfer')==e.get('transfer') and p.get('client')==e.get('client')
+                and p.get('elapsed',float('inf'))<=started for p in events)
+            recovery_evidence[e['name']] |= (t.get('label')==e['name'] and precondition
+                and receipt.get('valid',False) and (progressed or completed)
+                and e.get('state') in ('downloading','waiting_for_peers','complete')
+                and 0<=seconds<=300 and abs(e['elapsed']-started-seconds)<=0.02
+                and receipt['accepted']<=started<=e['elapsed']<=receipt['exported'])
         if e['event']=='source_unavailable':
             receipt=t.get('receivers',{}).get(str(e.get('client')), {})
             fault_evidence['missing_source'] |= t.get('label')=='missing-source' and e.get('stopped_before_acceptance') is True and e.get('verified_bytes')==0 and receipt.get('valid',False) and receipt['accepted']<=e['elapsed']<receipt['exported']
@@ -138,6 +155,7 @@ def analyze(manifest, events):
     complete = manifest['phase']=='campaign' and measured>=14400 and windows.get('baseline',{}).get('duration',0)>=1800 and covered and ready==set(range(16)) and diagnostic_clients==set(range(16)) and traffic==set(range(8)) and corpus and all(v=='pass' for v in cases.values()) and all(fault_evidence.values()) and clean and b95 is not None and m95 is not None
     cross_host=any(t.get('sender') is not None and t['sender']//2!=int(client)//2 and receipt.get('valid') for t in transfers.values() for client,receipt in t['receivers'].items())
     complete = complete and observed_protocol
+    complete = complete and all(recovery_evidence.values())
     reopened=any(e['event']=='canary_reopen' and e.get('verified') is True
                  and e.get('same_instance') is True and e.get('size')==65536
                  and transfers.get(e.get('transfer'),{}).get('size')==65536
@@ -175,6 +193,7 @@ def analyze(manifest, events):
             'largest_verified_file_bytes':max(map(int,timings),default=0),
             'observed_mixed_seconds':measured,'verified_directed_host_pairs':len(pairs),'cases':cases,'failures':failures,
             'fault_evidence':fault_evidence,
+            'recovery_progress_evidence':recovery_evidence,
             'transfers':transfers,'file_metrics_by_size':file_metrics,
             'file_diagnostics_by_host':{str(e['host']):e.get('file_diagnostics',{}) for e in events if e['event']=='relay_traffic'},
             'chat':{'sent':len(sent),'acknowledged':len(acknowledged),
@@ -588,8 +607,7 @@ class Campaign:
     def capacity(self, channel):
         self.channels['loadcapacity']={'id':channel,'members':[0,8]}
         self.chat_window('baseline',300)
-        for size,timeout in ((4*1024*1024,600),(32*1024*1024,1200),
-                             (256*1024*1024,3600),(GIB,14400)):
+        for size,timeout in CAPACITY_CASES:
             t=self.prepare_transfer(0,[8],size,channel,f'capacity-{size}')
             self.accept(t,8)
             start=time.monotonic(); deadline=start+timeout; next_send=start
@@ -696,16 +714,34 @@ class Campaign:
         if self.info(client,t['id'])['verified_bytes']!=first['verified_bytes']:
             raise RuntimeError('paused transfer advanced')
         self.activate(t,client,'resume')
-        self.finish_transfer(t,client,time.monotonic()+900)
+        self.finish_recovery(t,client,'pause_resume')
+
+    def finish_recovery(self, transfer, receiver, name, started=None):
+        # Progress must resume within five minutes of restoration. Completing
+        # the fresh 256 MiB fixture uses the same budget as capacity qualification.
+        started=time.monotonic() if started is None else started
+        before=int(self.info(receiver,transfer['id'])['verified_bytes'])
+        def progressed():
+            info=self.info(receiver,transfer['id'])
+            current=int(info['verified_bytes'])
+            return info if current!=before or (info['state']=='complete' and current==transfer['size']) else None
+        info=self.until(progressed,max(0,started+300-time.monotonic()),name+' recovery progress')
+        observed=time.monotonic()
+        if observed>started+300: raise RuntimeError(name+' recovery progress: deadline exceeded')
+        if int(info['verified_bytes'])<before: raise RuntimeError('recovery lost verified pieces')
+        self.event('recovery_progress',name=name,transfer=transfer['id'],client=receiver,
+                   elapsed=round(observed-self.start,3),started_elapsed=started-self.start,seconds=observed-started,
+                   verified_before=before,verified_after=int(info['verified_bytes']),state=info['state'])
+        self.finish_transfer(transfer,receiver,started+dict(CAPACITY_CASES)[transfer['size']])
 
     def receiver_restart(self):
         client=9; t=self.active_transfer(1,client,'receiver_restart')
         before=int(self.info(client,t['id'])['verified_bytes'])
+        started=time.monotonic()
         self.restart(client,kill=True)
         after=int(self.info(client,t['id'])['verified_bytes'])
         if after<before: raise RuntimeError('restart lost verified pieces')
-        self.until(lambda:int(self.info(client,t['id'])['verified_bytes'])>after or self.info(client,t['id'])['state']=='complete',300,'restart progress')
-        self.finish_transfer(t,client,time.monotonic()+900)
+        self.finish_recovery(t,client,'receiver_restart',started)
 
     def partial_import(self, label, client=7):
         ident=uuid.uuid4().hex; name=f'{label}-{ident}.bin'; channel=self.channels['fleet']['id']
@@ -737,11 +773,12 @@ class Campaign:
     def relay_restart(self):
         t=self.active_transfer(7,15,'relay_restart')
         self.remote(3,'fault',kind='stop_relay'); self.stop.wait(60)
+        started=time.monotonic()
         self.remote(3,'relay')
         self.until(lambda:self.remote(3,'control',command='status'),120,'relay restart')
         # Client 15's assigned inbox is relay 3, so this proves recovery of an
         # affected receiver rather than an unrelated healthy pair.
-        self.finish_transfer(t,15,time.monotonic()+900)
+        self.finish_recovery(t,15,'relay_restart',started)
         self.transfer(7,15,65536,self.channels['fleet']['id'],'after-relay-restart')
 
     def network_fault(self, kind, seconds):
@@ -749,8 +786,10 @@ class Campaign:
         try:
             self.remote(5,'fault',kind=kind)
             self.stop.wait(seconds)
-        finally: self.remote(5,'fault',kind='clear_netem')
-        self.finish_transfer(t,2,time.monotonic()+900)
+        finally:
+            started=time.monotonic()
+            self.remote(5,'fault',kind='clear_netem')
+        self.finish_recovery(t,2,'path_outage' if kind=='blackhole' else 'loss_delay',started)
         self.transfer(10,2,65536,self.channels['fleet']['id'],'after-'+kind)
 
     def multisource(self, simultaneous=False):
@@ -862,7 +901,7 @@ class Campaign:
             if int(after['verified_bytes'])<int(before['verified_bytes']): raise RuntimeError('quota evicted active data')
         finally: self.files(client,'configure',quota_bytes=str(8*GIB),retention_days=7)
         self.activate(t,client,'resume')
-        self.finish_transfer(t,client,time.monotonic()+900)
+        self.finish_recovery(t,client,'quota')
 
     def membership(self):
         channel=self.channel('revocation',[1,5,9])

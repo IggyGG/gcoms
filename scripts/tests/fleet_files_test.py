@@ -148,6 +148,27 @@ class EvidenceTests(unittest.TestCase):
             report=analyze({'phase':'campaign'},transfer+[exported]+parts)
             self.assertEqual(report['fault_evidence']['multisource_late_join'],expected)
 
+    def test_recovery_requires_timed_progress_and_matching_export(self):
+        transfer=self.transfer(); transfer[0]['label']='pause_resume'
+        partial={'event':'fault_precondition','name':'pause_resume','transfer':'a',
+                 'client':1,'elapsed':2,'state':'downloading','verified_bytes':1,'size':4}
+        resumed={'event':'recovery_progress','name':'pause_resume','transfer':'a','client':1,
+                 'elapsed':10,'started_elapsed':3,'seconds':7,'verified_before':1,
+                 'verified_after':2,'state':'downloading'}
+        exported={'event':'export_verified','transfer':'a','client':1,'elapsed':11,
+                  'verified':True,'size':4,'sha256':'abcd'}
+        for change,expected in (({},True),({'seconds':301},False),({'seconds':0},False),
+                                ({'client':2},False),({'verified_after':1},False),
+                                ({'verified_before':3},False),({'verified_after':5},False),
+                                ({'started_elapsed':1},False),
+                                ({'verified_before':4,'verified_after':4,'state':'complete'},True)):
+            with self.subTest(change=change):
+                result=analyze({'phase':'campaign'},transfer+[partial,dict(resumed,**change),exported])
+                self.assertEqual(result['recovery_progress_evidence']['pause_resume'],expected)
+        for missing in (partial,exported):
+            events=transfer+[e for e in (partial,resumed,exported) if e is not missing]
+            self.assertFalse(analyze({'phase':'campaign'},events)['recovery_progress_evidence']['pause_resume'])
+
     def test_generic_partial_progress_cannot_replace_specialized_source_evidence(self):
         for name in ('missing_source','multisource_late_join','multisource_simultaneous'):
             transfer=self.transfer()
@@ -244,6 +265,54 @@ class ScenarioTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError,'partial progress missing'):
                 c.active_transfer(0,8,'pause_resume')
         self.assertFalse(any(e['event']=='fault_precondition' for e in c.events))
+
+    def test_recovery_progress_includes_reopen_time_and_has_separate_capacity_budget(self):
+        c=self.campaign; c.start=1000; clock=[1120.]
+        t={'id':'file','size':256*1024*1024}
+        before={'state':'downloading','verified_bytes':'262144'}
+        after=dict(before,verified_bytes='524288')
+        def until(predicate,timeout,label):
+            self.assertEqual(timeout,180)
+            clock[0]+=2
+            return predicate()
+        with patch('fleet_files.time.monotonic',side_effect=lambda:clock[0]), \
+             patch.object(c,'info',side_effect=[before,after]),patch.object(c,'until',side_effect=until), \
+             patch.object(c,'finish_transfer') as finish:
+            c.finish_recovery(t,9,'receiver_restart',started=1000)
+        finish.assert_called_once_with(t,9,4600)
+        event=c.events[-1]
+        self.assertEqual(event['seconds'],122)
+        self.assertEqual(event['started_elapsed'],0)
+        self.assertEqual(event['verified_after'],524288)
+
+    def test_recovery_cannot_use_late_or_regressed_progress(self):
+        for observed,after,message in ((1301,'524288','deadline exceeded'),
+                                       (1002,'0','lost verified pieces')):
+            c=self.campaign; clock=[1000.]
+            def until(predicate,*args):
+                clock[0]=observed
+                return predicate()
+            with self.subTest(message=message), \
+                 patch('fleet_files.time.monotonic',side_effect=lambda:clock[0]), \
+                 patch.object(c,'info',side_effect=[{'state':'downloading','verified_bytes':'262144'},
+                                                   {'state':'downloading','verified_bytes':after}]), \
+                 patch.object(c,'until',side_effect=until),patch.object(c,'finish_transfer') as finish:
+                with self.assertRaisesRegex(RuntimeError,message):
+                    c.finish_recovery({'id':'file','size':256*1024*1024},8,'pause_resume')
+            finish.assert_not_called()
+        self.assertFalse(any(e['event']=='recovery_progress' for e in c.events))
+
+    def test_recovery_does_not_extend_the_progress_deadline_while_waiting(self):
+        c=self.campaign; clock=[1000.]
+        def wait(seconds): clock[0]+=seconds
+        with patch('fleet_files.time.monotonic',side_effect=lambda:clock[0]), \
+             patch.object(c.stop,'wait',side_effect=wait), \
+             patch.object(c,'info',return_value={'state':'waiting_for_peers','verified_bytes':'262144'}), \
+             patch.object(c,'finish_transfer') as finish:
+            with self.assertRaisesRegex(RuntimeError,'recovery progress: deadline exceeded'):
+                c.finish_recovery({'id':'file','size':256*1024*1024},8,'pause_resume')
+        self.assertEqual(clock[0],1300)
+        finish.assert_not_called()
 
     def test_late_join_precedes_seeding_and_complementary_sources_never_overlap(self):
         c=self.campaign; states={4:'complete',8:'complete'}; seed_stopped=False
