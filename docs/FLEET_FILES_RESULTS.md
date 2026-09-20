@@ -749,3 +749,37 @@ and checksum enforcement. The failed suite, deterministic reproduction,
 red/green logs and one managed-run admission failure are retained. No global
 cache deletion or quota change was used; the capture binaries and raw evidence
 remain unchanged by this tooling correction.
+
+### Recovery clock includes resume and quota restoration
+
+The peer's local review reproduced a controller accounting gap in
+`scripts/fleet_files.py` SHA-256
+`daf75b807e9f96f231205b528fc977130f36f734331a1b634bd53393d732abef`:
+pause/resume and quota started the recovery clock after admission, excluding a
+possible 900-second admission/RPC wait. This was a source/controller finding,
+not a newly observed fleet failure.
+
+The corrected scenarios start the monotonic clock before resume admission and
+before restoring quota respectively. One absolute 300-second deadline passes
+through admission locks, slot polling, configuration/resume RPCs, verified-byte
+queries and restart readiness. Each SSH request receives only the remaining
+allowance; polling rejects late successful responses and cannot restart the
+clock. `finish_recovery` now requires the original start timestamp. The separate
+3,600-second full-export budget remains anchored to that same timestamp.
+
+Scenario regressions use the real controller and RPC wrappers with a simulated
+clock and SSH boundary. They reject 301-second lock/slot/resume/progress delays,
+quota restoration that exhausts the budget, and multiple individually shorter
+actions that cumulatively exceed it. A full admission queue stops at 300 seconds;
+progress observed at exactly 300 seconds still passes. Receiver restart tests
+consume 240 seconds before transport readiness and verify that its RPC gets only
+60 seconds. The initial four regressions fail on the retained old controller
+(11 failing subcases); all seven new scenario tests pass after correction.
+
+All **144 Python tests**, the 472-path source audit and diff checks pass. Source,
+red/green logs and validation hashes are retained in
+`target/recovery-resume-deadline-01/receipt.json`. These checks establish local
+controller accounting and timeout propagation. A timed-out RPC remains a failed
+observation, not proof that its remote mutation was cancelled. Frozen builds,
+raw fleet reports, Capacity 02's controller and failed verdict remain unchanged.
+No fleet traffic, production action, publication or quiet-window release occurred.

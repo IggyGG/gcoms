@@ -251,7 +251,13 @@ class Campaign:
         if p.returncode: raise RuntimeError(f'host {host+1}: command failed ({p.returncode}): {p.stderr[-1000:]} {p.stdout[-1000:]}')
         return p.stdout
 
-    def remote(self, host, action, **values):
+    def remaining(self, deadline, label):
+        if self.stop.is_set(): raise RuntimeError(label+': campaign stopped')
+        seconds=deadline-time.monotonic()
+        if seconds<=0: raise RuntimeError(label+': deadline exceeded')
+        return seconds
+
+    def remote(self, host, action, *, deadline=None, **values):
         node = self.nodes[host]
         role = None
         if action == 'fault' and values.get('kind') in ('stop_client','kill_client','stop_relay'):
@@ -261,24 +267,27 @@ class Campaign:
         if role:
             with self.lock: self.intended_stops.add((host,role))
         request = {'run_id':self.run_id,'host':host,'base':node['base'],'action':action,**values}
-        result = json.loads(self.ssh(host,['python3',node['root']+'/worker.py'],json.dumps(request)))
+        timeout=1000 if deadline is None else min(1000,self.remaining(deadline,action))
+        result = json.loads(self.ssh(host,['python3',node['root']+'/worker.py'],json.dumps(request),timeout=timeout))
+        if deadline is not None and time.monotonic()>deadline:
+            raise RuntimeError(action+': deadline exceeded')
         if not result.get('ok'): raise RuntimeError(f'host {host+1}: {result.get("error")}')
         if action in ('client','relay','bootstrap'):
             role = f'client{values["slot"]}' if action=='client' else 'relay'
             with self.lock: self.intended_stops.discard((host,role))
         return result['value']
 
-    def probe(self, client, payload):
-        result = self.remote(client//2,'probe',slot=client%2,payload=payload)
+    def probe(self, client, payload, *, deadline=None):
+        result = self.remote(client//2,'probe',slot=client%2,payload=payload,deadline=deadline)
         if not result.get('ok'): raise RuntimeError(f'client {client}: {result.get("error")}')
         return result['value']
 
-    def request(self, client, kind, **values):
-        return self.probe(client,{'action':'request','request':{'kind':kind,**values}})
+    def request(self, client, kind, *, deadline=None, **values):
+        return self.probe(client,{'action':'request','request':{'kind':kind,**values}},deadline=deadline)
 
-    def files(self, client, action='list', **values):
+    def files(self, client, action='list', *, deadline=None, **values):
         if action=='list': values.setdefault('conversation',None)
-        return self.request(client,'files',request={'action':action,**values})['snapshot']
+        return self.request(client,'files',request={'action':action,**values},deadline=deadline)['snapshot']
 
     def submit(self, client, text, conversation=None):
         started=time.monotonic()
@@ -295,15 +304,16 @@ class Campaign:
         futures = [self.jobs.submit(call) for call in calls]
         return [future.result() for future in futures]
 
-    def until(self, function, timeout, label, interval=2):
-        deadline = time.monotonic()+timeout
+    def until(self, function, timeout, label, interval=2, *, deadline=None):
+        deadline = min(time.monotonic()+timeout, float('inf') if deadline is None else deadline)
         last = None
         while time.monotonic()<deadline and not self.stop.is_set():
             try:
                 value = function()
+                if time.monotonic()>deadline: raise RuntimeError('response arrived after deadline')
                 if value: return value
             except Exception as exc: last = str(exc)
-            self.stop.wait(interval)
+            self.stop.wait(min(interval,max(0,deadline-time.monotonic())))
         reason = 'campaign stopped' if self.stop.is_set() else 'deadline exceeded'
         raise RuntimeError(f'{label}: {reason}'+(f' ({last})' if last else ''))
 
@@ -408,15 +418,16 @@ class Campaign:
         status = self.wait_transport(client)
         self.event('client_ready',client=client,inbox_host=relay,transport=status)
 
-    def wait_transport(self, client):
+    def wait_transport(self, client, *, deadline=None):
         started = time.time()
+        deadline=min(time.monotonic()+120,float('inf') if deadline is None else deadline)
         def observation():
-            latest = self.remote(client//2, 'traffic')['file_diagnostics'][str(client%2)].get('latest') or {}
+            latest = self.remote(client//2, 'traffic',deadline=deadline)['file_diagnostics'][str(client%2)].get('latest') or {}
             status = (latest.get('protocol') or {}).get('transport') or {}
             if latest.get('unix_seconds', 0) < started or not qualified_transport(status):
                 raise RuntimeError('client has no fresh usable GChat route and both-class subscriptions')
             return status
-        return self.until(observation, 120, 'GChat transport readiness')
+        return self.until(observation, 120, 'GChat transport readiness',deadline=deadline)
 
     def channel(self, title, members):
         owner=members[0]
@@ -452,20 +463,22 @@ class Campaign:
         if info['state']!='offered' or info['verified_bytes']!='0': raise RuntimeError('offer downloaded without acceptance')
         return info
 
-    def activate(self, transfer, receiver, action='accept'):
+    def activate(self, transfer, receiver, action='accept', *, deadline=None):
         # Serialize local admission on each receiver, including fault resumes.
-        # Network completion never holds this lock. Admission delay is separate
-        # from the unchanged five-minute transfer deadline.
-        started=time.monotonic(); deadline=started+900
+        # Network completion never holds this lock. Fault recovery includes
+        # admission in the caller's restoration deadline; initial admission
+        # retains its separate fifteen-minute allowance.
+        started=time.monotonic(); deadline=min(started+900,float('inf') if deadline is None else deadline)
         lock=self.admission_locks[receiver]
-        if not lock.acquire(timeout=900): raise RuntimeError('file admission lock deadline')
+        if not lock.acquire(timeout=self.remaining(deadline,'file admission lock')):
+            raise RuntimeError('file admission lock deadline')
         try:
             def slot():
-                active=[f for f in self.files(receiver)['files']
+                active=[f for f in self.files(receiver,deadline=deadline)['files']
                         if f['id']!=transfer['id'] and f['state'] in ('downloading','waiting_for_peers')]
                 return len(active)<2
-            self.until(slot,max(0,deadline-time.monotonic()),'file admission slot')
-            self.files(receiver,action,id=transfer['id'])
+            self.until(slot,self.remaining(deadline,'file admission slot'),'file admission slot',deadline=deadline)
+            self.files(receiver,action,id=transfer['id'],deadline=deadline)
             self.event('admission',transfer=transfer['id'],client=receiver,action=action,
                        seconds=time.monotonic()-started)
             if action=='accept': self.event('accepted',transfer=transfer['id'],client=receiver)
@@ -673,14 +686,14 @@ class Campaign:
         self.event('case',name='credential_renewal',result='pass' if after==set(range(16)) else 'fail',clients_after_initial_expiry=sorted(after))
         self.event('case',name='chat_mixed',result='pass' if any(e['event']=='chat_ack' and e['phase']=='mixed' for e in self.events) else 'fail')
 
-    def info(self, client, ident):
-        return next(f for f in self.files(client)['files'] if f['id']==ident)
+    def info(self, client, ident, *, deadline=None):
+        return next(f for f in self.files(client,deadline=deadline)['files'] if f['id']==ident)
 
-    def restart(self, client, kill=False):
-        self.remote(client//2,'fault',kind='kill_client' if kill else 'stop_client',slot=client%2)
-        self.remote(client//2,'client',slot=client%2)
-        self.until(lambda:self.request(client,'snapshot'),120,'retained client reopen')
-        self.wait_transport(client)
+    def restart(self, client, kill=False, *, deadline=None):
+        self.remote(client//2,'fault',kind='kill_client' if kill else 'stop_client',slot=client%2,deadline=deadline)
+        self.remote(client//2,'client',slot=client%2,deadline=deadline)
+        self.until(lambda:self.request(client,'snapshot',deadline=deadline),120,'retained client reopen',deadline=deadline)
+        self.wait_transport(client,deadline=deadline)
 
     def expect_error(self, function, text=None):
         try: function()
@@ -713,19 +726,20 @@ class Campaign:
         self.stop.wait(10)
         if self.info(client,t['id'])['verified_bytes']!=first['verified_bytes']:
             raise RuntimeError('paused transfer advanced')
-        self.activate(t,client,'resume')
-        self.finish_recovery(t,client,'pause_resume')
+        started=time.monotonic()
+        self.activate(t,client,'resume',deadline=started+300)
+        self.finish_recovery(t,client,'pause_resume',started)
 
-    def finish_recovery(self, transfer, receiver, name, started=None):
+    def finish_recovery(self, transfer, receiver, name, started):
         # Progress must resume within five minutes of restoration. Completing
         # the fresh 256 MiB fixture uses the same budget as capacity qualification.
-        started=time.monotonic() if started is None else started
-        before=int(self.info(receiver,transfer['id'])['verified_bytes'])
+        deadline=started+300
+        before=int(self.info(receiver,transfer['id'],deadline=deadline)['verified_bytes'])
         def progressed():
-            info=self.info(receiver,transfer['id'])
+            info=self.info(receiver,transfer['id'],deadline=deadline)
             current=int(info['verified_bytes'])
             return info if current!=before or (info['state']=='complete' and current==transfer['size']) else None
-        info=self.until(progressed,max(0,started+300-time.monotonic()),name+' recovery progress')
+        info=self.until(progressed,max(0,deadline-time.monotonic()),name+' recovery progress',deadline=deadline)
         observed=time.monotonic()
         if observed>started+300: raise RuntimeError(name+' recovery progress: deadline exceeded')
         if int(info['verified_bytes'])<before: raise RuntimeError('recovery lost verified pieces')
@@ -738,8 +752,8 @@ class Campaign:
         client=9; t=self.active_transfer(1,client,'receiver_restart')
         before=int(self.info(client,t['id'])['verified_bytes'])
         started=time.monotonic()
-        self.restart(client,kill=True)
-        after=int(self.info(client,t['id'])['verified_bytes'])
+        self.restart(client,kill=True,deadline=started+300)
+        after=int(self.info(client,t['id'],deadline=started+300)['verified_bytes'])
         if after<before: raise RuntimeError('restart lost verified pieces')
         self.finish_recovery(t,client,'receiver_restart',started)
 
@@ -774,8 +788,8 @@ class Campaign:
         t=self.active_transfer(7,15,'relay_restart')
         self.remote(3,'fault',kind='stop_relay'); self.stop.wait(60)
         started=time.monotonic()
-        self.remote(3,'relay')
-        self.until(lambda:self.remote(3,'control',command='status'),120,'relay restart')
+        self.remote(3,'relay',deadline=started+300)
+        self.until(lambda:self.remote(3,'control',command='status',deadline=started+300),120,'relay restart',deadline=started+300)
         # Client 15's assigned inbox is relay 3, so this proves recovery of an
         # affected receiver rather than an unrelated healthy pair.
         self.finish_recovery(t,15,'relay_restart',started)
@@ -788,7 +802,7 @@ class Campaign:
             self.stop.wait(seconds)
         finally:
             started=time.monotonic()
-            self.remote(5,'fault',kind='clear_netem')
+            self.remote(5,'fault',kind='clear_netem',deadline=started+300)
         self.finish_recovery(t,2,'path_outage' if kind=='blackhole' else 'loss_delay',started)
         self.transfer(10,2,65536,self.channels['fleet']['id'],'after-'+kind)
 
@@ -899,9 +913,11 @@ class Campaign:
             self.expect_error(lambda:self.files(client,'prepare',id=uuid.uuid4().hex,conversation=self.channels['fleet']['id'],name='quota.bin',size_bytes=str(2*1024*1024)))
             after=self.info(client,t['id'])
             if int(after['verified_bytes'])<int(before['verified_bytes']): raise RuntimeError('quota evicted active data')
-        finally: self.files(client,'configure',quota_bytes=str(8*GIB),retention_days=7)
-        self.activate(t,client,'resume')
-        self.finish_recovery(t,client,'quota')
+        finally:
+            started=time.monotonic()
+            self.files(client,'configure',quota_bytes=str(8*GIB),retention_days=7,deadline=started+300)
+        self.activate(t,client,'resume',deadline=started+300)
+        self.finish_recovery(t,client,'quota',started)
 
     def membership(self):
         channel=self.channel('revocation',[1,5,9])

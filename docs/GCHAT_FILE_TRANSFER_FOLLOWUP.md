@@ -198,6 +198,16 @@ Receiver/relay startup time counts toward that progress bound, and reports must
 bind observed recovery to the same transfer's independent export. This tooling
 change applies to later campaigns; capacity 02 keeps its recorded coordinator.
 
+The restoration clock also begins **before** pause/resume admission and, for
+quota recovery, before the quota-restoration RPC. Admission locks, slot polling,
+resume/configuration RPCs and recovery observations share its remaining budget;
+receiver reopen and transport readiness inherit that same deadline. Late RPC
+results cannot supply passing recovery evidence. `finish_recovery` requires the
+original start timestamp. Scenario tests exercise the real controller paths with
+a simulated clock and SSH boundary, including a cumulative deadline, delayed
+quota restoration, and the inclusive 300-second progress boundary. This is local
+controller validation; no retained fleet run is reclassified.
+
 The separate [isolated daemon capture calibration](GCHAT_CLIENT_CAPTURE.md)
 implements the proposed single-client boundary and packet-derived connection
 features. Its one-quartet validity check does not qualify privacy, installed

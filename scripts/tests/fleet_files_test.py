@@ -4,7 +4,7 @@ from pathlib import Path
 import sys
 import tempfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 SCRIPTS=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(SCRIPTS))
@@ -271,8 +271,9 @@ class ScenarioTests(unittest.TestCase):
         t={'id':'file','size':256*1024*1024}
         before={'state':'downloading','verified_bytes':'262144'}
         after=dict(before,verified_bytes='524288')
-        def until(predicate,timeout,label):
+        def until(predicate,timeout,label,**kwargs):
             self.assertEqual(timeout,180)
+            self.assertEqual(kwargs['deadline'],1300)
             clock[0]+=2
             return predicate()
         with patch('fleet_files.time.monotonic',side_effect=lambda:clock[0]), \
@@ -289,7 +290,7 @@ class ScenarioTests(unittest.TestCase):
         for observed,after,message in ((1301,'524288','deadline exceeded'),
                                        (1002,'0','lost verified pieces')):
             c=self.campaign; clock=[1000.]
-            def until(predicate,*args):
+            def until(predicate,*args,**kwargs):
                 clock[0]=observed
                 return predicate()
             with self.subTest(message=message), \
@@ -298,7 +299,7 @@ class ScenarioTests(unittest.TestCase):
                                                    {'state':'downloading','verified_bytes':after}]), \
                  patch.object(c,'until',side_effect=until),patch.object(c,'finish_transfer') as finish:
                 with self.assertRaisesRegex(RuntimeError,message):
-                    c.finish_recovery({'id':'file','size':256*1024*1024},8,'pause_resume')
+                    c.finish_recovery({'id':'file','size':256*1024*1024},8,'pause_resume',started=1000)
             finish.assert_not_called()
         self.assertFalse(any(e['event']=='recovery_progress' for e in c.events))
 
@@ -310,9 +311,150 @@ class ScenarioTests(unittest.TestCase):
              patch.object(c,'info',return_value={'state':'waiting_for_peers','verified_bytes':'262144'}), \
              patch.object(c,'finish_transfer') as finish:
             with self.assertRaisesRegex(RuntimeError,'recovery progress: deadline exceeded'):
-                c.finish_recovery({'id':'file','size':256*1024*1024},8,'pause_resume')
+                c.finish_recovery({'id':'file','size':256*1024*1024},8,'pause_resume',started=1000)
         self.assertEqual(clock[0],1300)
         finish.assert_not_called()
+
+    def resume_scenario(self, name, delays, fails=False):
+        # Run the real scenario, admission, RPC wrappers, polling and recovery.
+        # Only the SSH boundary, clock and final capacity transfer are replaced.
+        c=self.campaign; c.start=1000; clock=[1000.]; calls=[]
+        client=8 if name=='pause_resume' else 13
+        started=1010. if name=='pause_resume' else 1000.
+        transfer={'id':'file','size':256*1024*1024}
+        state={'admitting':False,'resumed':False,'progress_reads':0}
+        lock=Mock()
+        def acquire(timeout):
+            calls.append(('lock',clock[0],timeout))
+            state['admitting']=True
+            clock[0]+=delays.get('lock',0)
+            return True
+        lock.acquire.side_effect=acquire
+        c.admission_locks[client]=lock
+        c.nodes=[{'base':'/var/tmp','root':'/var/tmp/fixture'} for _ in range(8)]
+        def ssh(host,argv,payload=None,timeout=1000):
+            request=json.loads(payload)['payload']['request']['request']
+            self.assertNotIn('deadline',request)
+            action=request['action']; stage=None
+            if action=='configure' and request['quota_bytes']==str(8*1024**3): stage='restore'
+            elif action=='resume': stage='resume'
+            elif action=='list' and state['admitting'] and not state['resumed']: stage='slot'
+            elif action=='list' and state['resumed']: stage='progress'
+            calls.append((stage or action,clock[0],timeout))
+            clock[0]+=delays.get(stage,0)
+            if action=='prepare':
+                return json.dumps({'ok':True,'value':{'ok':False,'error':'quota exceeded'}})
+            if action=='resume': state['resumed']=True
+            info={'id':'file','state':'paused','verified_bytes':'262144'}
+            if state['resumed']:
+                info['state']='downloading'
+                if action=='list': state['progress_reads']+=1
+                if state['progress_reads']>=2: info['verified_bytes']='524288'
+            files=[info]
+            if stage=='slot' and delays.get('occupied'):
+                files.extend({'id':str(i),'state':'downloading'} for i in range(2))
+            return json.dumps({'ok':True,'value':{'ok':True,'value':{'snapshot':{'files':files}}}})
+        def wait(seconds): clock[0]+=seconds
+        with patch('fleet_files.time.monotonic',side_effect=lambda:clock[0]), \
+             patch.object(c.stop,'wait',side_effect=wait),patch.object(c,'active_transfer',return_value=transfer), \
+             patch.object(c,'ssh',side_effect=ssh),patch.object(c,'finish_transfer') as finish:
+            if fails:
+                with self.assertRaisesRegex(RuntimeError,'deadline'):
+                    getattr(c,name)()
+                finish.assert_not_called()
+                self.assertFalse(any(e['event']=='recovery_progress' for e in c.events))
+            else:
+                getattr(c,name)()
+                finish.assert_called_once_with(transfer,client,started+3600)
+                event=next(e for e in c.events if e['event']=='recovery_progress')
+                self.assertEqual(event['started_elapsed'],started-c.start)
+                self.assertEqual(event['seconds'],clock[0]-started)
+                self.assertEqual(event['verified_after'],524288)
+        return calls,clock[0],lock
+
+    def test_resume_scenarios_include_restore_admission_and_rpc_time(self):
+        for name in ('pause_resume','quota'):
+            with self.subTest(name=name):
+                self.campaign.events.clear()
+                calls,_,lock=self.resume_scenario(name,{'restore':35,'lock':20,'slot':25,'resume':40,'progress':2})
+                started=1010 if name=='pause_resume' else 1000
+                for stage,when,timeout in calls:
+                    if stage in ('restore','lock','slot','resume','progress'):
+                        self.assertEqual(timeout,started+300-when,(stage,calls))
+                lock.release.assert_called_once()
+
+    def test_resume_scenarios_reject_late_activation_and_progress_responses(self):
+        for name in ('pause_resume','quota'):
+            for stage in ('lock','slot','resume','progress'):
+                with self.subTest(name=name,stage=stage):
+                    self.campaign.events.clear()
+                    calls,_,lock=self.resume_scenario(name,{stage:301},fails=True)
+                    self.assertIn(stage,[row[0] for row in calls])
+                    lock.release.assert_called_once()
+
+    def test_quota_restoration_must_finish_before_resume_deadline(self):
+        calls,_,lock=self.resume_scenario('quota',{'restore':301},fails=True)
+        self.assertNotIn('resume',[row[0] for row in calls])
+        lock.acquire.assert_not_called()
+
+    def test_resume_scenarios_cannot_reset_deadline_waiting_for_admission(self):
+        for name in ('pause_resume','quota'):
+            with self.subTest(name=name):
+                self.campaign.events.clear()
+                calls,finished,lock=self.resume_scenario(name,{'occupied':True},fails=True)
+                self.assertEqual(finished,1310 if name=='pause_resume' else 1300)
+                self.assertNotIn('resume',[row[0] for row in calls])
+                lock.release.assert_called_once()
+
+    def test_resume_scenarios_share_one_deadline_across_short_actions(self):
+        for name in ('pause_resume','quota'):
+            with self.subTest(name=name):
+                self.campaign.events.clear()
+                calls,finished,_=self.resume_scenario(name,{'lock':100,'slot':100,'resume':101},fails=True)
+                self.assertEqual(finished,1311 if name=='pause_resume' else 1301)
+                self.assertEqual([timeout for stage,_,timeout in calls if stage in ('lock','slot','resume')],
+                                 [300,200,100])
+
+    def test_resume_scenarios_accept_progress_observed_at_exactly_300_seconds(self):
+        for name in ('pause_resume','quota'):
+            with self.subTest(name=name):
+                self.campaign.events.clear()
+                self.resume_scenario(name,{'lock':100,'slot':100,'resume':98,'progress':1})
+                self.assertEqual(self.campaign.events[-1]['seconds'],300)
+
+    def test_receiver_reopen_readiness_uses_the_remaining_recovery_budget(self):
+        for ready_delay in (20,61):
+            with self.subTest(ready_delay=ready_delay):
+                c=self.campaign; c.events.clear(); c.start=1000; clock=[1000.]; timeouts=[]
+                c.nodes=[{'base':'/var/tmp','root':'/var/tmp/fixture'} for _ in range(8)]
+                t={'id':'file','size':256*1024*1024}
+                before={'state':'downloading','verified_bytes':'262144'}
+                after=dict(before,verified_bytes='524288')
+                def ssh(host,argv,payload=None,timeout=1000):
+                    request=json.loads(payload); action=request['action']; timeouts.append(timeout)
+                    self.assertNotIn('deadline',request)
+                    clock[0]+={'fault':190,'client':10,'probe':40,'traffic':ready_delay}[action]
+                    if action=='probe': value={'ok':True,'value':{'ready':True}}
+                    elif action=='traffic':
+                        value={'file_diagnostics':{'1':{'latest':{'unix_seconds':clock[0],
+                            'protocol':{'transport':EvidenceTests().transport()}}}}}
+                    else: value=True
+                    return json.dumps({'ok':True,'value':value})
+                with patch('fleet_files.time.monotonic',side_effect=lambda:clock[0]), \
+                     patch('fleet_files.time.time',side_effect=lambda:clock[0]), \
+                     patch.object(c,'active_transfer',return_value=t),patch.object(c,'ssh',side_effect=ssh), \
+                     patch.object(c,'info',side_effect=[before,before,before,after]), \
+                     patch.object(c,'finish_transfer') as finish:
+                    if ready_delay==20:
+                        c.receiver_restart()
+                        finish.assert_called_once_with(t,9,4600)
+                        self.assertEqual(c.events[-1]['seconds'],260)
+                    else:
+                        with self.assertRaisesRegex(RuntimeError,'readiness: deadline exceeded'):
+                            c.receiver_restart()
+                        finish.assert_not_called()
+                        self.assertFalse(any(e['event']=='recovery_progress' for e in c.events))
+                self.assertEqual(timeouts,[300,110,100,60])
 
     def test_late_join_precedes_seeding_and_complementary_sources_never_overlap(self):
         c=self.campaign; states={4:'complete',8:'complete'}; seed_stopped=False
