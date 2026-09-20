@@ -314,6 +314,9 @@ recovery. The sender becomes route-ready near 857 seconds and the receiver near
 932 seconds. The 32 MiB transfer has a 129-second interval without new observed
 verified progress. Chat acknowledgement latency reaches 129.700 seconds, above
 the fixed 120-second maximum; the measured baseline p95 was 16.486 seconds.
+The terminal mixed p95 is 45.3865 seconds, above its 32.9727-second limit;
+the terminal ledger retains 132 acknowledgments for 136 sends. Intermediate
+percentiles are not substituted for this final result.
 This run cannot pass the mixed-traffic gate, regardless of subsequent file
 completion. The controller was deliberately interrupted after the 256 MiB
 export to retest the repaired candidate. Four final chat acknowledgements were
@@ -480,6 +483,28 @@ an actual offline-recipient send followed by both encrypted-profile reopens,
 plaintext reception and a matching delivery ACK. These local checks do not
 qualify consecutive protected-carrier turnover or complete the failed 1 GiB
 fleet transfer. Capacity 02 remains failed, and its evidence is unchanged.
+
+### Local subscription failure coverage after capacity 02
+
+Two additional regressions exercise the real contact and channel subscription
+pumps through loopback entry/middle relays and an authenticated terminal. Each
+covers Interactive and Bulk for every inbox and channel alias. The first holds
+all initial responses, makes a second real entry ready, then fails the in-flight
+subscriptions while a usable route remains. The pumps preserve exact authority
+and successfully resubscribe using fresh request nonces. The second fails those
+requests with an unchanged usable route and asserts ordinary inbox and channel
+recovery. It therefore checks that retaining authority during entry changes
+does not suppress genuine recovery on a stable route.
+
+All four tick tests pass, including the prior unavailable-entry and stalled
+channel-control cases. In separate disposable copies, ignoring readiness
+revision makes the first new test fail; suppressing ordinary recovery makes the
+second fail. Those deliberate failures and the passing candidate are retained
+separately under `target/subscription-recovery-01/`. No runtime scheduling,
+padding, renewal timing or lease policy changed. These local branches do not
+qualify consecutive expiry/maximum-carrier-lifetime turnover, the 1 GiB fleet
+transfer, aggregate latency, or privacy. Expiry-stratified measurements remain
+diagnostic; the overall acceptance gates remain unchanged.
 
 ### Corrected coordination timeline and fresh production observation
 

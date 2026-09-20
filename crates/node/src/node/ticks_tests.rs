@@ -5,6 +5,10 @@ use tokio::net::TcpListener;
 use tokio_rustls::TlsAcceptor;
 
 #[cfg(feature = "experimental-gc2")]
+#[path = "ticks_route_tests.rs"]
+mod protected_routes;
+
+#[cfg(feature = "experimental-gc2")]
 #[tokio::test]
 async fn unavailable_entries_preserve_inbox_and_channel_authority() {
     use std::sync::atomic::Ordering;
