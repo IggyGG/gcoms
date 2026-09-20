@@ -17,6 +17,10 @@ use super::*;
 /// Result of minting an invite: `(invite_id, invite_secret, expiry_unix)`.
 pub type CreatedInvite = ([u8; 16], [u8; 32], u64);
 
+#[cfg(all(test, feature = "experimental-gc2"))]
+#[path = "catalog_tests.rs"]
+mod catalog_tests;
+
 #[cfg(test)]
 mod shutdown_tests {
     use super::*;
@@ -762,6 +766,18 @@ impl NodeHandle {
             .lock()
             .unwrap_or_else(|p| p.into_inner())
             .clone();
+        #[cfg(feature = "experimental-gc2")]
+        if self.uses_gc2_routing() {
+            let current = runtime
+                .gc2
+                .get()
+                .ok_or("GC/2 catalog routing is not initialized")?;
+            let response =
+                gcoms_routing::catalog::request_gc2(&current.ready, &origins, method, url, body)
+                    .await
+                    .map_err(|e| e.to_string())?;
+            return Ok((response.status, response.body));
+        }
         let response = gcoms_routing::catalog::request(
             &runtime.discovery.connector,
             &origins,

@@ -69,6 +69,64 @@ pub async fn request(
     value: &str,
     body: &[u8],
 ) -> Result<Response> {
+    request_with_connector(
+        CatalogConnector::Legacy(connector),
+        origins,
+        method,
+        value,
+        body,
+    )
+    .await
+}
+
+/// Catalog access over an already-established GC/2 entry. No legacy or direct
+/// connection is available to this path, including while entries are unavailable.
+#[cfg(feature = "experimental-gc2")]
+pub async fn request_gc2(
+    connector: &crate::gc2::owner::ReadyConnector,
+    origins: &[String],
+    method: &str,
+    value: &str,
+    body: &[u8],
+) -> Result<Response> {
+    request_with_connector(
+        CatalogConnector::Gc2(connector),
+        origins,
+        method,
+        value,
+        body,
+    )
+    .await
+}
+
+#[derive(Clone, Copy)]
+enum CatalogConnector<'a> {
+    Legacy(&'a OnionConnector),
+    #[cfg(feature = "experimental-gc2")]
+    Gc2(&'a crate::gc2::owner::ReadyConnector),
+}
+
+impl CatalogConnector<'_> {
+    async fn connect_https(
+        &self,
+        host: &str,
+        origins: &[String],
+    ) -> Result<gcoms_transport::connector::BoxStream> {
+        match self {
+            Self::Legacy(connector) => connector.connect_https(host, origins).await,
+            #[cfg(feature = "experimental-gc2")]
+            Self::Gc2(connector) => connector.connect_https(host, origins).await,
+        }
+    }
+}
+
+async fn request_with_connector(
+    connector: CatalogConnector<'_>,
+    origins: &[String],
+    method: &str,
+    value: &str,
+    body: &[u8],
+) -> Result<Response> {
     let roots = rustls::RootCertStore::from_iter(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
     let mut tls = rustls::ClientConfig::builder_with_provider(Arc::new(
         rustls::crypto::aws_lc_rs::default_provider(),
@@ -81,7 +139,7 @@ pub async fn request(
 }
 
 async fn request_with_tls(
-    connector: &OnionConnector,
+    connector: CatalogConnector<'_>,
     origins: &[String],
     method: &str,
     value: &str,
@@ -179,6 +237,18 @@ mod tests {
     }
     #[tokio::test]
     async fn https_uses_remote_dns_and_end_to_end_certificate_validation() {
+        https_scenario(false).await;
+    }
+
+    #[cfg(feature = "experimental-gc2")]
+    #[tokio::test]
+    async fn gc2_https_uses_ready_entries_remote_dns_and_end_to_end_certificate_validation() {
+        https_scenario(true).await;
+    }
+
+    async fn https_scenario(current: bool) {
+        #[cfg(not(feature = "experimental-gc2"))]
+        assert!(!current);
         use crate::{
             carrier::CarrierConfig, route::now_unix, Directory, RelayService, ServicePolicy,
         };
@@ -269,6 +339,12 @@ mod tests {
                 .install(service.introduction(now_unix()), now_unix())
                 .unwrap();
             let server = server.with_duplex(service.handler());
+            #[cfg(feature = "experimental-gc2")]
+            let server = if current {
+                server.with_dispatch_factory(service.gc2_handler_factory())
+            } else {
+                server
+            };
             servers.push(tokio::spawn(async move {
                 server
                     .run_until(std::future::pending::<()>())
@@ -280,10 +356,45 @@ mod tests {
         let connector = OnionConnector::new(directory)
             .with_carrier_config(CarrierConfig::fixture())
             .unwrap();
+        #[cfg(feature = "experimental-gc2")]
+        let gc2_owner = if current {
+            use crate::gc2::{directory, owner::EntryOwner, CandidateProfile};
+            let directory = Arc::new(directory::Directory::for_loopback_fixture());
+            directory
+                .remember(
+                    &directory::BootstrapBundle {
+                        relays: services
+                            .iter()
+                            .map(|service| service.gc2_introduction(now_unix()))
+                            .collect(),
+                    },
+                    now_unix(),
+                )
+                .unwrap();
+            let (owner, ready) =
+                EntryOwner::new(directory, CandidateProfile::file_transfer(), 1).unwrap();
+            let task = tokio::spawn(owner.run());
+            tokio::time::timeout(Duration::from_secs(10), async {
+                while ready.ready_entries() != 1 {
+                    tokio::task::yield_now().await;
+                }
+            })
+            .await
+            .unwrap();
+            Some((task, ready))
+        } else {
+            None
+        };
+        let connector = CatalogConnector::Legacy(&connector);
+        #[cfg(feature = "experimental-gc2")]
+        let connector = match &gc2_owner {
+            Some((_, ready)) => CatalogConnector::Gc2(ready),
+            None => connector,
+        };
         let origins = vec!["catalog.test".into(), "other.test".into()];
         // The normal roots reject this private certificate through the same circuit.
-        assert!(request(
-            &connector,
+        assert!(request_with_connector(
+            connector,
             &origins,
             "GET",
             "https://catalog.test/v1/catalog?limit=1",
@@ -306,7 +417,7 @@ mod tests {
         // Trusting the certificate must not bypass validation of the requested
         // hostname. Egress DNS resolves it, but no HTTP request may be sent.
         let mismatch = request_with_tls(
-            &connector,
+            connector,
             &origins,
             "GET",
             "https://other.test/v1/catalog?limit=1",
@@ -319,7 +430,7 @@ mod tests {
         assert!(format!("{mismatch:?}").contains("NotValidForName"));
         assert_eq!(requests.load(Ordering::SeqCst), 0);
         let response = request_with_tls(
-            &connector,
+            connector,
             &origins,
             "GET",
             "https://catalog.test/v1/catalog?limit=1",
@@ -332,8 +443,8 @@ mod tests {
         assert_eq!(response.body, b"{}");
         assert_eq!(requests.load(Ordering::SeqCst), 1);
         assert_eq!(resolved.load(Ordering::SeqCst), 3);
-        assert!(request(
-            &connector,
+        assert!(request_with_connector(
+            connector,
             &[],
             "GET",
             "https://catalog.test/v1/catalog",
@@ -346,14 +457,52 @@ mod tests {
             3,
             "unconfigured origin never reaches DNS"
         );
+        // A client allowlist cannot override the egress relay's policy.
+        assert!(request_with_connector(
+            connector,
+            &["denied.test".into()],
+            "GET",
+            "https://denied.test/v1/catalog",
+            &[],
+        )
+        .await
+        .is_err());
+        assert_eq!(
+            resolved.load(Ordering::SeqCst),
+            3,
+            "egress refuses before DNS"
+        );
         origin_task.await.unwrap();
-        tokio::time::timeout(Duration::from_secs(3), async {
+        // Requests must release both hops while the physical entry stays alive;
+        // stopping its owner must not conceal leaked circuit permits.
+        tokio::time::timeout(Duration::from_secs(10), async {
             while services.iter().any(|s| s.active_circuits() != 0) {
-                tokio::task::yield_now().await;
+                tokio::time::sleep(Duration::from_millis(10)).await;
             }
         })
         .await
         .unwrap();
+        #[cfg(feature = "experimental-gc2")]
+        if let Some((task, ready)) = gc2_owner {
+            assert_eq!(ready.ready_entries(), 1);
+            task.abort();
+            assert!(task.await.unwrap_err().is_cancelled());
+            assert_eq!(ready.ready_entries(), 0);
+            assert!(request_gc2(
+                &ready,
+                &origins,
+                "GET",
+                "https://catalog.test/v1/catalog",
+                &[]
+            )
+            .await
+            .is_err());
+            assert_eq!(
+                resolved.load(Ordering::SeqCst),
+                3,
+                "stopped entries cannot fall back"
+            );
+        }
         for server in servers {
             server.abort();
             let _ = server.await;
