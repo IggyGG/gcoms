@@ -55,6 +55,11 @@ protected file profile and the isolated relay harness select the file policy;
 
 ## Evidence and remaining qualification
 
+The [traffic-path inventory](GCHAT_TRAFFIC_PATHS.md) distinguishes the current
+natural scheduler from the retained hybrid measurement fixture. It traces GChat
+piece messages through authenticated Bulk delivery and records remaining
+installed-bootstrap/catalog migration and whole-client capture requirements.
+
 Focused tests cover the receipt stall, ambiguous checkpoint errors, framing
 compatibility, idle/unpaced bulk behavior, out-of-order piece delivery, duplicates,
 missing offsets and retained outgoing reservations. The cold GCRB2 test uses
