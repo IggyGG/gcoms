@@ -11,9 +11,11 @@
 > [implementation and remaining gates](GCHAT_FILE_TRANSFER_FOLLOWUP.md).
 
 **Full fleet qualification has not passed.** Canary 15 passes the standard
-64 KiB transfer and receiver reopen. The subsequent capacity run verifies files
-through 256 MiB, but exposes excessive chat latency during hourly routing
-credential renewal. The 16-client ramp, 56 transfer pairs, 30-minute baseline,
+64 KiB transfer and receiver reopen. Capacity 01 verifies files through 256 MiB
+but exposes excessive chat latency during routing credential renewal. Capacity
+02 retains authority through the first rollover and again verifies 256 MiB,
+then fails during a 1 GiB transfer near the second rollover. Both capacity runs
+ended and cleaned up all eight hosts. The 16-client ramp, 56 transfer pairs, 30-minute baseline,
 four-hour mixed workload and fault matrix remain unqualified. Historical failures
 below are retained; see [the runbook](FLEET_FILES.md) for the exact campaign.
 
@@ -28,7 +30,7 @@ below are retained; see [the runbook](FLEET_FILES.md) for the exact campaign.
 
 ## Real fleet observations
 
-All runs used eight isolated test relay listeners on the recorded Hetzner hosts,
+Runs 01–10 used eight isolated test relay listeners on the recorded Hetzner hosts,
 two application clients, fresh test identities, and the retired legacy scheduler
 (the carrier profile had not been integrated at that point).
 Production relay services were not restarted or reconfigured. All ten runs
@@ -366,18 +368,49 @@ largest interval between new verified-byte observations near this rollover was
 30.997 seconds, versus the 129-second interruption in capacity 01. Live evidence
 remains in `target/protocol-plan-capacity02-live/renewal-observations.json`.
 
-The actual 1 GiB transfer was accepted at elapsed 1,824.069 seconds and is still
-running. At the retained 1,927-second checkpoint, mixed chat had 86 acknowledged
+The actual 1 GiB transfer was accepted at elapsed 1,824.069 seconds. At the
+retained 1,927-second checkpoint, mixed chat had 86 acknowledged
 messages, p95 9.904 seconds and maximum 40.241 seconds; baseline p95 was 18.555
 seconds. No failure or production-change stop had occurred. This is an interim
 observation, not a capacity-phase pass or a cleanup result.
 
-The workstation continuation waits for the capacity report, then runs coverage
-and the full campaign serially on the same frozen binaries. Each transition
-requires a passing phase, no reported failures, all eight cleanup checks and
-unchanged bound controller/worker/build inputs. The full campaign retains the
+The workstation continuation was configured to wait for a passing capacity
+report before running coverage and the full campaign serially on the same
+frozen binaries. Each transition requires a passing phase, no reported failures,
+all eight cleanup checks and unchanged bound controller/worker/build inputs.
+The full campaign retains the
 30-minute baseline, four-hour mixed window and original capacity/chat gates.
-Its state and stop control remain in the ignored task-local
-`target/protocol-plan-fleet-sequence-01.*` files. Phase completion or failure
-notifies both coordinating Codex threads; release of the production quiet window
-still requires an explicit handoff. No later phase has started yet.
+The final failed capacity result stopped this continuation; neither coverage nor
+the full campaign started. Its retained state remains in the ignored task-local
+`target/protocol-plan-fleet-sequence-01.*` files.
+
+## Capacity 02 final failure and cleanup — 2026-09-20
+
+At elapsed 3,450.699 seconds, client 0 reported an `outcome_unknown` channel send:
+the operation was interrupted after admission and failed for one target. The
+receiver's last observed verified progress was 297,795,584 bytes (284 MiB),
+at elapsed 3,441.921 seconds. The 1 GiB file has no export receipt and must not
+be counted as a completed transfer. The largest independently verified export
+remains 256 MiB.
+
+The interruption coincided with the second entry/bootstrap rollover, at
+04:30 CEST. Both clients lost entry/subscription readiness without reporting
+inbox recovery. This is a correlation requiring a targeted reproduction, not
+proof of the remaining root cause. The first-rollover authority repair does not
+establish repeated-rollover reliability or justify weakening lease expiry.
+
+The final report records 204 chat sends and 202 acknowledgments. Its acknowledged
+mixed samples have p95 8.158 seconds, but two missing acknowledgments and the
+admitted-send failure make the run fail regardless of that percentile.
+`test-evidence/files-capacity-02/report.json` records `verdict: fail`,
+`phase_passed: false`, `cleanup_complete: true` and
+`isolated_resources_removed: true`. All eight host cleanup events passed,
+including unchanged production state. Complete logs and the original manifest,
+events and failed report remain retained; the immutable build is unchanged.
+
+Before another capacity attempt, reproduce consecutive rollovers with both
+Interactive and Bulk subscriptions and an admitted channel send in flight,
+then validate the combined source pair and coordinate an isolated test window.
+Owner profile/migration selection gates production rollout; this experimental
+isolated test profile is not a production selection. No later campaign or
+production rollout is implied by the passing small-file canary.
