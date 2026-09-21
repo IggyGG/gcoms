@@ -45,6 +45,14 @@ fn port() -> u16 {
         .unwrap()
         .port()
 }
+
+#[test]
+fn application_startup_future_fits_nested_client_adapters() {
+    // Startup is nested inside consumer/UI futures on default-sized threads.
+    // Keep the public future small rather than increasing every caller's stack.
+    let startup = Application::builder("stack-budget").open();
+    assert!(std::mem::size_of_val(&startup) < 16 * 1024);
+}
 async fn daemon(
     dir: &Path,
 ) -> (
