@@ -205,7 +205,9 @@ async fn server_drops_a_silent_peer_after_the_handshake_deadline() {
     assert_eq!(read, 0);
 }
 
-#[tokio::test(start_paused = true)]
+// Real sockets must deliver the queued headers before the server starts its
+// body timer. A paused runtime can advance the guard ahead of that OS I/O.
+#[tokio::test]
 async fn server_deadline_bounds_an_unfinished_request_body() {
     let registry = TokenRegistry::new();
     let token = generate_token();
