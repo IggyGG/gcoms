@@ -6,6 +6,13 @@ client and relay packages; optional app-operated APNs/FCM gateway. Mobile
 acceptance uses Android emulator/iOS simulator and simulated push providers.
 Physical-device, battery and live push qualification remain deferred.
 
+Checkpoint: outbound messaging/channel/file/reopen integration passed on Linux,
+along with 504 application/runtime/SDK/node/file tests (three explicit ignores).
+The native mobile ABI and Kotlin sources compile; the relay ABI fixture verifies
+channel/file operations and suspend/reopen. Swift packaging and emulator/simulator
+execution remain in progress. The optional gateway's five simulations pass;
+owner-authorized relay bindings and platform push adapters are still being wired.
+
 Implementation order: Windows native gate, Rust role separation, mobile ABI and
 packages, push registration/relay notifications, integrated qualification and
 per-platform size evidence. Preserve the existing IPC and embedded consumers.

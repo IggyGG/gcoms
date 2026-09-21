@@ -5,6 +5,12 @@ one dependency for messaging, channels and files. Select `ipc,files` for a small
 client of an existing host, or `embedded,files,gc2-carrier` for an in-process relay.
 RPC and automatic daemon launch are optional. GChat consumes the same API.
 
+The new `network-client,files` integration runs the outbound protocol without
+compiling relay hosting or NAT mapping. Unlike IPC, it connects to remote inbox
+relays itself. The Linux relay/client regression suites passed 504 tests (three
+explicit ignores); cross-platform qualification remains in progress.
+See [mobile SDK sources and current status](mobile/README.md).
+
 Windows x64 MSVC is included in the native integration workflow. Android/iOS
 client and relay SDKs, with optional app-operated push delivery, are being added
 as a preview; their qualification status is tracked in [PLAN.md](PLAN.md).

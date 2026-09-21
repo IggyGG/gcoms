@@ -60,7 +60,7 @@ pub enum Command {
     },
     Inbox {
         after: u64,
-        limit: u32,
+        limit: u16,
     },
     Acknowledge {
         sequence: u64,
@@ -183,15 +183,15 @@ impl State {
             Command::Identity => value(app.identity()),
             Command::Trust { peer } => {
                 let peer: sdk::Peer = peer.into();
-                app.trust_peer(peer.clone()).await.map_err(err)?;
-                if !self
+                let exists = self
                     .peers
                     .iter()
-                    .any(|p| p.identity == peer.identity && p.component == peer.component)
-                {
-                    if self.peers.len() >= 256 {
-                        return Err("too many peers".into());
-                    }
+                    .any(|p| p.identity == peer.identity && p.component == peer.component);
+                if !exists && self.peers.len() >= 256 {
+                    return Err("too many peers".into());
+                }
+                app.trust_peer(peer.clone()).await.map_err(err)?;
+                if !exists {
                     self.peers.push(peer);
                 }
                 Ok(Value::Null)

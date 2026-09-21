@@ -16,14 +16,13 @@ pub(crate) use runtime::{initial_candidate, spawn, RuntimeTask};
 use gcoms_transport::server::Tp1Server;
 use hmac::{Hmac, Mac};
 use sha2::Sha256;
-#[cfg(feature = "relay-host")]
-use std::net::SocketAddr;
 use std::{
     fs::File,
-    io,
     path::{Path, PathBuf},
     sync::Arc,
 };
+#[cfg(feature = "relay-host")]
+use std::{io, net::SocketAddr};
 #[cfg(feature = "relay-host")]
 use tokio::net::TcpListener;
 use zeroize::Zeroizing;

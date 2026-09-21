@@ -10,7 +10,10 @@ do not establish physical-device or live-provider qualification.
 
 - Compile independent `ipc,files` and `embedded,files,gc2-carrier` consumers.
   Reject host/crypto/MLS/RPC dependencies in the IPC graph and forced Tokio
-  multithread runtimes in either integration.
+  multithread runtimes in either integration. Also check `network-client,files`
+  without `relay-host`, SDK `embedded` or `quick-xml`. Exercise two outbound
+  clients through remote inboxes, trusted delivery, channel joining, encrypted
+  profile/cache reopen and refusal of local relay provisioning.
 - Run SDK version/capability tests and facade backend tests, including encrypted
   cache reopen, bounded upload/export, forbidden scope and destination overwrite.
 - Verify a disconnected local probe cannot stop the listener; macOS peer PID
