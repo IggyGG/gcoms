@@ -1,33 +1,16 @@
 //! Durable application messages over the existing SDK. Run one pump per
 //! component inbox. Trusted bindings supply both identities and reply cards.
 use crate::*;
-use gcoms_sdk::{ApplicationDelivery, ApplicationMessage, ContactCard, GcClient, IpcClient};
+use gcoms_sdk::{ApplicationDelivery, ApplicationMessage, GcClient, IpcClient};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{BTreeMap, BTreeSet},
-    sync::{Arc, Mutex},
+    sync::{Arc, Mutex, RwLock},
     time::Duration,
 };
 use tokio::sync::{oneshot, Semaphore};
 
-#[derive(Clone)]
-pub struct Peer {
-    pub identity: Vec<u8>,
-    pub contact: ContactCard,
-    pub component: Option<[u8; 16]>,
-}
-impl Peer {
-    pub fn principal(&self) -> String {
-        format!(
-            "gc:{}:{}",
-            hex(&self.identity),
-            self.component.map(|c| hex(&c)).unwrap_or_default()
-        )
-    }
-}
-fn hex(bytes: &[u8]) -> String {
-    bytes.iter().map(|b| format!("{b:02x}")).collect()
-}
+pub use gcoms_sdk::Peer;
 fn transport(e: impl std::fmt::Display) -> RpcError {
     RpcError::new(ErrorCode::Transport, e.to_string())
 }
@@ -52,7 +35,12 @@ impl Link for DirectLink {
     }
     async fn verify_peer(&self, peer: &Peer) -> Result<(), RpcError> {
         if peer.component.is_some()
-            || self.0.contact_identity(&peer.contact).map_err(transport)? != peer.identity
+            || self
+                .0
+                .resolve_contact_identity(&peer.contact)
+                .await
+                .map_err(transport)?
+                != peer.identity
         {
             return Err(RpcError::invalid("peer card and identity do not match"));
         }
@@ -145,9 +133,9 @@ struct Pending {
 
 pub struct GcEndpoint {
     link: Arc<dyn Link>,
-    peers: BTreeMap<String, Peer>,
+    peers: RwLock<BTreeMap<String, Peer>>,
     content_types: BTreeSet<String>,
-    router: Option<Arc<Router>>,
+    router: RwLock<Option<Arc<Router>>>,
     pending: Mutex<BTreeMap<OperationId, Pending>>,
     pumping: std::sync::atomic::AtomicBool,
 }
@@ -173,12 +161,31 @@ impl GcEndpoint {
         let content_types = services.iter().map(|(s, v)| content_type(s, *v)).collect();
         Ok(Arc::new(Self {
             link,
-            peers: bindings,
+            peers: RwLock::new(bindings),
             content_types,
-            router,
+            router: RwLock::new(router),
             pending: Mutex::new(BTreeMap::new()),
             pumping: std::sync::atomic::AtomicBool::new(false),
         }))
+    }
+    /// Stop an application-owned endpoint and release its service journals.
+    pub async fn shutdown(&self) -> Result<(), RpcError> {
+        self.pending.lock().map_err(transport)?.clear();
+        let router = self.router.write().map_err(transport)?.take();
+        if let Some(router) = router {
+            router.shutdown().await;
+        }
+        Ok(())
+    }
+    /// Install an explicitly trusted binding, or refresh that identity's contact route.
+    pub async fn trust_peer(&self, peer: Peer) -> Result<(), RpcError> {
+        self.link.verify_peer(&peer).await?;
+        let mut peers = self.peers.write().map_err(transport)?;
+        if peers.len() >= 64 && !peers.contains_key(&peer.principal()) {
+            return Err(RpcError::invalid("too many GC bindings"));
+        }
+        peers.insert(peer.principal(), peer);
+        Ok(())
     }
     pub fn transport(
         self: &Arc<Self>,
@@ -188,7 +195,13 @@ impl GcEndpoint {
     ) -> Result<GcTransport, RpcError> {
         let principal = peer.principal();
         let content_type = content_type(service, version);
-        if !self.peers.contains_key(&principal) || !self.content_types.contains(&content_type) {
+        if !self
+            .peers
+            .read()
+            .map_err(transport)?
+            .contains_key(&principal)
+            || !self.content_types.contains(&content_type)
+        {
             return Err(RpcError::new(
                 ErrorCode::Unauthorized,
                 "GC route not configured",
@@ -208,6 +221,37 @@ impl GcEndpoint {
             limit,
         })
     }
+    /// Dispatch one authenticated delivery when an application owns the shared inbox pump.
+    /// False leaves unrelated application content untouched. Receipt follows durable reply.
+    pub async fn dispatch_delivery(
+        &self,
+        delivery: &ApplicationDelivery,
+    ) -> Result<bool, RpcError> {
+        let Some(peer) = self
+            .peers
+            .read()
+            .map_err(transport)?
+            .values()
+            .find(|p| {
+                p.identity == delivery.peer_identity
+                    && p.component == delivery.source_component
+                    && self.link.local_component() == delivery.destination_component
+            })
+            .cloned()
+        else {
+            return Ok(false);
+        };
+        let Ok(application) = ApplicationMessage::decode(&delivery.body) else {
+            return Ok(false);
+        };
+        if !self.content_types.contains(&application.content_type) {
+            return Ok(false);
+        }
+        self.process(&peer, &application).await?;
+        self.link.commit(delivery).await?;
+        Ok(true)
+    }
+
     pub async fn run<F: std::future::Future<Output = ()>>(
         self: &Arc<Self>,
         stop: F,
@@ -240,7 +284,7 @@ impl GcEndpoint {
                     let count = deliveries.len();
                     for delivery in deliveries {
                         after = after.max(delivery.sequence);
-                        let Some(peer) = self.peers.values().find(|p| p.identity == delivery.peer_identity && p.component == delivery.source_component && self.link.local_component() == delivery.destination_component).cloned() else { continue; };
+                        let Some(peer) = self.peers.read().map_err(transport)?.values().find(|p| p.identity == delivery.peer_identity && p.component == delivery.source_component && self.link.local_component() == delivery.destination_component).cloned() else { continue; };
                         let Ok(application) = ApplicationMessage::decode(&delivery.body) else { continue; };
                         if !self.content_types.contains(&application.content_type) { continue; }
                         let Ok(permit) = slots.clone().try_acquire_owned() else { continue; };
@@ -285,7 +329,7 @@ impl GcEndpoint {
                 if content_type(&request.service, request.version) != application.content_type {
                     return Ok(());
                 }
-                let Some(router) = &self.router else {
+                let Some(router) = self.router.read().map_err(transport)?.clone() else {
                     return Ok(());
                 };
                 let limit = self.link.limit(&application.content_type)?;
@@ -375,11 +419,14 @@ impl Transport for GcTransport {
         let peer = self
             .endpoint
             .peers
+            .read()
+            .map_err(transport)?
             .get(&self.peer)
+            .cloned()
             .ok_or_else(|| RpcError::new(ErrorCode::Unauthorized, "GC peer removed"))?;
         self.endpoint
             .link
-            .send(peer, &self.content_type, &bytes)
+            .send(&peer, &self.content_type, &bytes)
             .await?;
         tokio::time::timeout(Duration::from_secs(30), receiver)
             .await
@@ -396,6 +443,7 @@ impl Transport for GcTransport {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use gcoms_sdk::ContactCard;
     use std::sync::atomic::{AtomicBool, Ordering};
 
     #[derive(Default)]

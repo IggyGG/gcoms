@@ -1,7 +1,7 @@
 # Protocol ownership after the split
 
 GComs is the protocol and SDK source of truth. GChat is the reference application
-and consumes `gcoms-*` packages. New transport work belongs in GComs; application
+and consumes the `gcoms` application facade. New transport work belongs in GComs; application
 configuration, status presentation and chat behavior belong in GChat.
 
 The split imported original coms revision

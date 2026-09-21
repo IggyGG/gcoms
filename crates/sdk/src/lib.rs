@@ -5,7 +5,7 @@
 //! cryptographic internals.
 
 mod catalog_http;
-#[cfg(feature = "embedded")]
+#[cfg(feature = "in-process")]
 mod embedded;
 pub mod ipc;
 #[cfg(all(any(unix, windows), feature = "ipc"))]
@@ -14,7 +14,7 @@ pub mod machine;
 mod types;
 pub use catalog_http::{CatalogHttpRequest, CatalogHttpResponse};
 
-#[cfg(feature = "embedded")]
+#[cfg(feature = "in-process")]
 pub use embedded::EmbeddedClient;
 pub use gcoms_core::APPLICATION_PAYLOAD_LIMIT;
 #[cfg(all(unix, feature = "ipc"))]
@@ -23,14 +23,15 @@ pub use ipc::serve_unix;
 pub use ipc::{serve_local, IpcClient};
 #[cfg(all(any(unix, windows), feature = "ipc"))]
 pub use local::LocalEndpoint;
-#[cfg(any(feature = "embedded", feature = "descriptor-verification"))]
+#[cfg(any(feature = "in-process", feature = "descriptor-verification"))]
 pub use types::InMemoryCatalog;
 pub use types::{
     application_body_limit, ActivityBucket, ApplicationDelivery, ApplicationMessage,
-    AutomaticJoinEndpoint, Blob, CatalogRequest, CatalogResponse, ChannelChange, ChannelId,
-    ChannelMemberSummary, ChannelRole, ChannelStatus, ChannelVisibility, ClientEvent, ContactCard,
-    GcClient, Identity, JoinRequest, JoinedChannel, MessageId, PresenceMode,
-    PublicChannelDescriptor, Reachability, SdkError,
+    AutomaticJoinEndpoint, Blob, CarrierProfile, CatalogRequest, CatalogResponse, ChannelChange,
+    ChannelId, ChannelInvitation, ChannelMemberSummary, ChannelRole, ChannelStatus,
+    ChannelVisibility, ClientEvent, ConnectionState, ContactCard, GcClient, Identity, JoinRequest,
+    JoinedChannel, MessageId, NetworkNameStatus, Peer, PresenceMode, PublicChannelDescriptor,
+    Reachability, RelayCard, RelayState, RuntimeStatus, SdkError,
 };
 
 pub use gcoms_core::component;
@@ -46,3 +47,7 @@ pub use gcoms_core::file_stream;
 pub mod bootstrap;
 #[cfg(all(any(unix, windows), feature = "ipc"))]
 pub mod local_rpc;
+
+mod network_status;
+pub mod sharing;
+pub use network_status::{NetworkState, NetworkStatus};

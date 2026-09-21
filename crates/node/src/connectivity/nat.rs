@@ -25,26 +25,7 @@ const SERVICES: [&str; 3] = [
     "urn:schemas-upnp-org:service:WANPPPConnection:1",
 ];
 
-#[derive(Clone, Debug)]
-pub struct NatConfig {
-    pub gateway: Option<Ipv4Addr>,
-    pub requested_lifetime: Duration,
-    pub request_timeout: Duration,
-    pub discovery_timeout: Duration,
-    pub operation_timeout: Duration,
-}
-
-impl Default for NatConfig {
-    fn default() -> Self {
-        Self {
-            gateway: None,
-            requested_lifetime: Duration::from_secs(1200),
-            request_timeout: Duration::from_secs(2),
-            discovery_timeout: Duration::from_secs(2),
-            operation_timeout: Duration::from_secs(30),
-        }
-    }
-}
+pub use super::nat_config::NatConfig;
 
 impl NatConfig {
     fn validate(&self) -> Result<(), String> {
@@ -1678,7 +1659,11 @@ mod tests {
     async fn stop_fixture(tasks: Vec<tokio::task::JoinHandle<()>>) {
         for task in tasks {
             task.abort();
-            assert!(task.await.unwrap_err().is_cancelled());
+            // A socket task can already have returned after a peer closes
+            // (notably a delayed UDP reset on Windows). Still surface panics.
+            if let Err(error) = task.await {
+                assert!(error.is_cancelled(), "fixture task failed: {error}");
+            }
         }
     }
 

@@ -1,0 +1,224 @@
+{
+  "schema": 1,
+  "revision": "da12b45156ae59cc59a818d040ea3f3bc47af306",
+  "run_url": "https://github.com/IggyGG/gcoms/actions/runs/35537851752",
+  "build": {
+    "panic": "unwind",
+    "lto": true,
+    "codegen_units": 1,
+    "stripped": true
+  },
+  "native": [
+    {
+      "runner": "macos-15",
+      "system": "Darwin",
+      "machine": "arm64",
+      "rustc": "rustc 1.98.0 (88d9e12ae 2026-08-18)\nbinary: rustc\ncommit-hash: 88d9e12ae178fab0fb5cc050a94da85685d449ea\ncommit-date: 2026-08-18\nhost: aarch64-apple-darwin\nrelease: 1.98.0\nLLVM version: 22.1.8\n",
+      "job_url": "https://github.com/IggyGG/gcoms/actions/runs/35537851752/job/106149987293",
+      "tests": {
+        "passed": 106,
+        "ignored": 1
+      },
+      "summary_sha256": "963a7dabb61cf4b03799199614aa07e2cee33e10b72ae8fe436601a99357d10d",
+      "source_hashes_verified_against_revision": true,
+      "binaries_verified_against_artifacts": true,
+      "graphs": {
+        "ipc": 54,
+        "embedded": 250
+      },
+      "binaries": [
+        {
+          "mode": "ipc",
+          "opt_level": "3",
+          "bytes": 1066496,
+          "sha256": "7a645a733d738d1adc3e06bfe0b07cd6e36debe3a90e728477eb79a282b3e91a",
+          "artifact": "ipc-opt-3"
+        },
+        {
+          "mode": "ipc",
+          "opt_level": "s",
+          "bytes": 868432,
+          "sha256": "3d8245ff1ce8ff2f22b689cbc6f3bf61def6f222f8981fe532a61fdbb04b467e",
+          "artifact": "ipc-opt-s"
+        },
+        {
+          "mode": "ipc",
+          "opt_level": "z",
+          "bytes": 737872,
+          "sha256": "3687351a00729a44d118479db566768fe0a79427d31c228f95fd32069fa1f449",
+          "artifact": "ipc-opt-z"
+        },
+        {
+          "mode": "embedded",
+          "opt_level": "3",
+          "bytes": 12869840,
+          "sha256": "7b54b3ab2b485d02580e794e9b66bc32de0dd8a936980c8a97c94a20d5b399e6",
+          "artifact": "embedded-opt-3"
+        },
+        {
+          "mode": "embedded",
+          "opt_level": "s",
+          "bytes": 8709472,
+          "sha256": "45e5114aed2da9fc9f37a1b46e16226edae6b1322762b02e7a13a23883335f68",
+          "artifact": "embedded-opt-s"
+        },
+        {
+          "mode": "embedded",
+          "opt_level": "z",
+          "bytes": 6753008,
+          "sha256": "42f49a8f8c757752cc57b3059e715a25d1770160ce95af646abc73398d70f9b8",
+          "artifact": "embedded-opt-z"
+        },
+        {
+          "mode": "host",
+          "opt_level": "s",
+          "bytes": 8958048,
+          "sha256": "75cada4bcd709a0b418aae6d6a27207869cbab89abe989b4d9b29eb297e4433c",
+          "artifact": "host-opt-s"
+        }
+      ]
+    },
+    {
+      "runner": "macos-15-intel",
+      "system": "Darwin",
+      "machine": "x86_64",
+      "rustc": "rustc 1.98.0 (88d9e12ae 2026-08-18)\nbinary: rustc\ncommit-hash: 88d9e12ae178fab0fb5cc050a94da85685d449ea\ncommit-date: 2026-08-18\nhost: x86_64-apple-darwin\nrelease: 1.98.0\nLLVM version: 22.1.8\n",
+      "job_url": "https://github.com/IggyGG/gcoms/actions/runs/35537851752/job/106149987460",
+      "tests": {
+        "passed": 106,
+        "ignored": 1
+      },
+      "summary_sha256": "26a18e2e91a08dd2b2d63fa5cdddb311dd0f6bb94a72e342167297362e757ac3",
+      "source_hashes_verified_against_revision": true,
+      "binaries_verified_against_artifacts": true,
+      "graphs": {
+        "ipc": 54,
+        "embedded": 251
+      },
+      "binaries": [
+        {
+          "mode": "ipc",
+          "opt_level": "3",
+          "bytes": 1095112,
+          "sha256": "3a735959bbd3c2af6a68dcb74b6db0a6c405e5aef1842350bdd93a287eddb918",
+          "artifact": "ipc-opt-3"
+        },
+        {
+          "mode": "ipc",
+          "opt_level": "s",
+          "bytes": 865736,
+          "sha256": "7ed93df2f7b4ce79c660edc6639ba9653e3f2cbc6a9838ded42ec134df474cae",
+          "artifact": "ipc-opt-s"
+        },
+        {
+          "mode": "ipc",
+          "opt_level": "z",
+          "bytes": 800432,
+          "sha256": "cb6c3a2084dc971aa19a59e2f2ac58f8373f10d7c9429dbb9914001378f02d8d",
+          "artifact": "ipc-opt-z"
+        },
+        {
+          "mode": "embedded",
+          "opt_level": "3",
+          "bytes": 15117760,
+          "sha256": "885c8f1c4daeea39567cdff7d825854e0e91706eedb46e1057d62d4dfda62d15",
+          "artifact": "embedded-opt-3"
+        },
+        {
+          "mode": "embedded",
+          "opt_level": "s",
+          "bytes": 9625112,
+          "sha256": "b97188ab9e87c2c35e4df576be32e776bee2a517f975a6e22e13d193d834f52d",
+          "artifact": "embedded-opt-s"
+        },
+        {
+          "mode": "embedded",
+          "opt_level": "z",
+          "bytes": 8443272,
+          "sha256": "98d184b427c2e1b3bc0d5fd6028a7c46188bb08a4c982f50dff03ea6eb5722d1",
+          "artifact": "embedded-opt-z"
+        },
+        {
+          "mode": "host",
+          "opt_level": "s",
+          "bytes": 9879624,
+          "sha256": "267f7c46abe5f719d74e5d5c331da2a1069779895d651151e395894ab45d1957",
+          "artifact": "host-opt-s"
+        }
+      ]
+    },
+    {
+      "runner": "ubuntu-24.04",
+      "system": "Linux",
+      "machine": "x86_64",
+      "rustc": "rustc 1.98.0 (88d9e12ae 2026-08-18)\nbinary: rustc\ncommit-hash: 88d9e12ae178fab0fb5cc050a94da85685d449ea\ncommit-date: 2026-08-18\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.0\nLLVM version: 22.1.8\n",
+      "job_url": "https://github.com/IggyGG/gcoms/actions/runs/35537851752/job/106149987518",
+      "tests": {
+        "passed": 106,
+        "ignored": 2
+      },
+      "summary_sha256": "2eeb7ad12e9bc58a37f1d0044d173db9929022ce73547341534e579c5b30cef7",
+      "source_hashes_verified_against_revision": true,
+      "binaries_verified_against_artifacts": true,
+      "graphs": {
+        "ipc": 54,
+        "embedded": 251
+      },
+      "binaries": [
+        {
+          "mode": "ipc",
+          "opt_level": "3",
+          "bytes": 1147680,
+          "sha256": "5f8fdd70b13877799a06c7577d683a595eb3666006dbf1ec6da9df77c29574a4",
+          "artifact": "ipc-opt-3"
+        },
+        {
+          "mode": "ipc",
+          "opt_level": "s",
+          "bytes": 919944,
+          "sha256": "c2d6167c8b4ed4240c403bb9c97fb3889ae7c2538032899d4c6a51b47a0f70d0",
+          "artifact": "ipc-opt-s"
+        },
+        {
+          "mode": "ipc",
+          "opt_level": "z",
+          "bytes": 871096,
+          "sha256": "0568ea4f09eeae6bd73cceab54aaccce8800efad485e1c5894458af612cf1702",
+          "artifact": "ipc-opt-z"
+        },
+        {
+          "mode": "embedded",
+          "opt_level": "3",
+          "bytes": 15547456,
+          "sha256": "3f88577af27c773a3cbc8040ff0bfc3bb66697121c64ee6cb272bec27203f173",
+          "artifact": "embedded-opt-3"
+        },
+        {
+          "mode": "embedded",
+          "opt_level": "s",
+          "bytes": 9989424,
+          "sha256": "dc1e0953018c592a62a912aedd107952ed244d1b9adbf634687d7333d034bff5",
+          "artifact": "embedded-opt-s"
+        },
+        {
+          "mode": "embedded",
+          "opt_level": "z",
+          "bytes": 9360448,
+          "sha256": "8099cb1e31b2198a0fd60cabffefeeb43cd29cf18a73290e7c53995dae6e3e4f",
+          "artifact": "embedded-opt-z"
+        },
+        {
+          "mode": "host",
+          "opt_level": "s",
+          "bytes": 10255672,
+          "sha256": "36182d4c12285901d86daaee32f0cc5880ac7d7a3bf82008e33f59f3e838628f",
+          "artifact": "host-opt-s"
+        }
+      ]
+    }
+  ],
+  "changes_from_local_linux_record": [
+    "crates/sdk/src/local.rs",
+    "crates/sdk/tests/local_unix.rs"
+  ]
+}

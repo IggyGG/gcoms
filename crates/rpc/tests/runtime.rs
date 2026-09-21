@@ -552,3 +552,60 @@ fn native_handle_storage_survives_reopen_and_simultaneous_views() {
         .unwrap()
         .contains("args"));
 }
+
+#[tokio::test]
+async fn shutdown_joins_admitted_handler_and_preserves_unknown_outcome() {
+    struct Waiting(Arc<tokio::sync::Notify>, Arc<AtomicBool>);
+    #[async_trait]
+    impl Counter for Waiting {
+        async fn read(&self) -> Result<u32, CounterError> {
+            Ok(0)
+        }
+        async fn add(&self, _: CallContext, _: u32) -> Result<u32, CounterError> {
+            struct Exited(Arc<AtomicBool>);
+            impl Drop for Exited {
+                fn drop(&mut self) {
+                    self.0.store(true, Ordering::SeqCst);
+                }
+            }
+            let _exited = Exited(self.1.clone());
+            self.0.notify_one();
+            std::future::pending().await
+        }
+    }
+    let entered = Arc::new(tokio::sync::Notify::new());
+    let exited = Arc::new(AtomicBool::new(false));
+    let store = Arc::new(MemoryStore::default());
+    let mut router = Router::new("instance-a", 2, LOCAL_FRAME_LIMIT);
+    router
+        .register(
+            Arc::new(CounterDispatcher(Waiting(entered.clone(), exited.clone()))),
+            store.clone(),
+            Arc::new(|_: &Caller, _: &str, _: u16, _: &str| true),
+        )
+        .unwrap();
+    let router = Arc::new(router);
+    let first = client(router.clone());
+    let prepared = first.prepare_add(1).unwrap();
+    assert_eq!(
+        first.inner.start(&prepared).await.unwrap(),
+        ReplyBody::Running
+    );
+    entered.notified().await;
+    router.shutdown().await;
+    assert!(
+        exited.load(Ordering::SeqCst),
+        "shutdown joined the cancelled handler"
+    );
+    let count = Arc::new(AtomicU32::new(0));
+    let reopened = client(self::router(
+        store,
+        count.clone(),
+        Arc::new(AtomicBool::new(true)),
+    ));
+    assert_eq!(
+        reopened.inner.start(&prepared).await.unwrap(),
+        ReplyBody::OutcomeUnknown
+    );
+    assert_eq!(count.load(Ordering::SeqCst), 0);
+}

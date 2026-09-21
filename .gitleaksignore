@@ -1,3 +1,17 @@
 # Reviewed false positives: libcrux-secrets dependency names in Cargo lockfiles.
 # Exact historical fingerprints only; new findings still fail publication.
 f8a648be4686fe9dba7c6bb31d9ca2435203bf8e:Cargo.lock:generic-api-key:2093
+
+# Reviewed source-file SHA-256 digests in the Rust integration evidence.
+# Each digest was recomputed from the recorded GComs/GChat commit; these exact
+# historical findings are public content hashes, not credentials.
+f96b601ae7afdf319f56684c4a654bbc4458917d:release/rust-integration-linux-2026-09-20.json:generic-api-key:1280
+f96b601ae7afdf319f56684c4a654bbc4458917d:release/rust-integration-linux-2026-09-20.json:generic-api-key:1288
+f96b601ae7afdf319f56684c4a654bbc4458917d:release/rust-integration-linux-2026-09-20.json:generic-api-key:1481
+f96b601ae7afdf319f56684c4a654bbc4458917d:release/rust-integration-packages-2026-09-20.json:generic-api-key:160
+f96b601ae7afdf319f56684c4a654bbc4458917d:release/rust-integration-packages-2026-09-20.json:generic-api-key:168
+f96b601ae7afdf319f56684c4a654bbc4458917d:release/rust-integration-packages-2026-09-20.json:generic-api-key:397
+f96b601ae7afdf319f56684c4a654bbc4458917d:release/rust-integration-packages-2026-09-20.json:generic-api-key:454
+f96b601ae7afdf319f56684c4a654bbc4458917d:release/rust-integration-packages-2026-09-20.json:generic-api-key:811
+f96b601ae7afdf319f56684c4a654bbc4458917d:release/rust-integration-packages-2026-09-20.json:generic-api-key:861
+f96b601ae7afdf319f56684c4a654bbc4458917d:release/rust-integration-packages-2026-09-20.json:generic-api-key:867

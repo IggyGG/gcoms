@@ -682,6 +682,9 @@ async fn dispatch(
             let st = state.lock().unwrap_or_else(|p| p.into_inner());
             Ok(json!({"info_b64": b64_info(&st.info)}))
         }
+        #[cfg(not(feature = "relay-host"))]
+        "routing_bootstrap" => Err("relay hosting is not compiled in".into()),
+        #[cfg(feature = "relay-host")]
         "routing_bootstrap" => {
             // This authenticated operator interface exports only independent
             // relay introductions, never a user's inbox ownership or identity.

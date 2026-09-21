@@ -1,4 +1,5 @@
 use crate::*;
+use futures_util::FutureExt;
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, sync::Arc};
 use tokio::sync::{Mutex, Semaphore};
@@ -251,16 +252,31 @@ pub struct Router {
     workers: Arc<Semaphore>,
     active: Mutex<BTreeMap<OperationKey, ()>>,
     frame_limit: usize,
+    tasks: Mutex<Option<tokio::task::JoinSet<()>>>,
+    stopped: std::sync::atomic::AtomicBool,
 }
 impl Router {
     pub fn new(instance: impl Into<String>, workers: usize, frame_limit: usize) -> Self {
         Self {
+            tasks: Mutex::new(Some(tokio::task::JoinSet::new())),
+            stopped: std::sync::atomic::AtomicBool::new(false),
             instance: instance.into(),
             services: BTreeMap::new(),
             workers: Arc::new(Semaphore::new(workers.clamp(1, 256))),
             active: Mutex::new(BTreeMap::new()),
             frame_limit: frame_limit.clamp(1024, LOCAL_FRAME_LIMIT),
         }
+    }
+    /// Cancel and join admitted workers. Incomplete admissions retain uncertain outcomes.
+    pub async fn shutdown(&self) {
+        self.stopped
+            .store(true, std::sync::atomic::Ordering::Release);
+        let tasks = self.tasks.lock().await.take();
+        if let Some(mut tasks) = tasks {
+            tasks.abort_all();
+            while tasks.join_next().await.is_some() {}
+        }
+        self.active.lock().await.clear();
     }
     pub fn instance(&self) -> &str {
         &self.instance
@@ -314,6 +330,9 @@ impl Router {
         caller: &Caller,
         request: &Request,
     ) -> Result<ReplyBody, RpcError> {
+        if self.stopped.load(std::sync::atomic::Ordering::Acquire) {
+            return Err(RpcError::new(ErrorCode::Transport, "service stopped"));
+        }
         if serde_json::to_vec(request).map_or(true, |v| v.len() > self.frame_limit) {
             return Err(RpcError::new(
                 ErrorCode::PayloadTooLarge,
@@ -377,6 +396,11 @@ impl Router {
                     operation: operation.clone(),
                 };
                 if let Some(operation) = operation {
+                    let mut tasks_guard = self.tasks.lock().await;
+                    let tasks = tasks_guard
+                        .as_mut()
+                        .ok_or_else(|| RpcError::new(ErrorCode::Transport, "service stopped"))?;
+                    while tasks.try_join_next().is_some() {}
                     let key = OperationKey::new(caller, request, &operation.id);
                     let digest = registration.dispatch.digest(&request.method, &args)?;
                     let mut active = self.active.lock().await;
@@ -412,12 +436,12 @@ impl Router {
                     let bound_request = request.clone();
                     // The worker owns execution after admission; cancellation of an
                     // HTTP/IPC request does not abort it or authorize repetition.
-                    tokio::spawn(async move {
-                        let result =
-                            tokio::spawn(
-                                async move { handler.invoke(context, &method, args).await },
-                            )
-                            .await;
+                    tasks.spawn(async move {
+                        let result = std::panic::AssertUnwindSafe(async move {
+                            handler.invoke(context, &method, args).await
+                        })
+                        .catch_unwind()
+                        .await;
                         let body = match result {
                             Ok(Ok(outcome)) => ReplyBody::Done { outcome },
                             // An infrastructure/serialization error does not

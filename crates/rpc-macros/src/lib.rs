@@ -70,10 +70,14 @@ fn expand(
 ) -> syn::Result<proc_macro2::TokenStream> {
     let rpc_name = match proc_macro_crate::crate_name("gcoms-rpc") {
         Ok(proc_macro_crate::FoundCrate::Name(name)) => name,
-        _ => "gcoms_rpc".into(),
+        Ok(proc_macro_crate::FoundCrate::Itself) => "gcoms_rpc".into(),
+        Err(_) => match proc_macro_crate::crate_name("gcoms") {
+            Ok(proc_macro_crate::FoundCrate::Name(name)) => format!("{name}::rpc"),
+            Ok(proc_macro_crate::FoundCrate::Itself) => "gcoms::rpc".into(),
+            Err(_) => "gcoms_rpc".into(),
+        },
     };
-    let rpc_ident = format_ident!("{}", rpc_name);
-    let rpc = quote!(::#rpc_ident);
+    let rpc: syn::Path = syn::parse_str(&format!("::{rpc_name}"))?;
     let serde_crate = format!("{rpc_name}::serde");
     let schema_crate = format!("{rpc_name}::schemars");
     let ts_crate = format!("{rpc_name}::ts_rs");

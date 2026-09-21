@@ -100,6 +100,13 @@ async fn ipc_backend_matches_embedded_messages_and_events() {
         None
     );
     assert_eq!(ipc.identity(), alice.identity());
+    let shared = std::sync::Arc::new(ipc.clone());
+    shared
+        .change_channel("ops", gcoms_sdk::ChannelChange::Topic("IPC19 topic".into()))
+        .await
+        .unwrap();
+    assert_eq!(shared.channel_topic("ops").await.unwrap(), "IPC19 topic");
+    assert_eq!(alice.channel_topic("ops").await.unwrap(), "IPC19 topic");
     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
     alice.node().renew_contacts_now().await.unwrap();
     assert_eq!(

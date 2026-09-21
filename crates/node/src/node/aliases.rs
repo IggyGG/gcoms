@@ -124,8 +124,8 @@ async fn provision_contact_alias(
     );
     let limits = saved.map_or(
         LeaseLimits {
-            max_queue_cells: crate::queues::DEFAULT_QUEUE_CELLS,
-            max_queue_bytes: crate::queues::DEFAULT_QUEUE_BYTES,
+            max_queue_cells: crate::lease::DEFAULT_QUEUE_CELLS,
+            max_queue_bytes: crate::lease::DEFAULT_QUEUE_BYTES,
         },
         |alias| alias.limits,
     );
@@ -281,8 +281,8 @@ pub(crate) async fn provision_channel_route(
         let queue_id = random_nonzero();
         let epoch = u64::from_be_bytes(random_nonzero());
         let limits = LeaseLimits {
-            max_queue_cells: crate::queues::DEFAULT_QUEUE_CELLS,
-            max_queue_bytes: crate::queues::DEFAULT_QUEUE_BYTES,
+            max_queue_cells: crate::lease::DEFAULT_QUEUE_CELLS,
+            max_queue_bytes: crate::lease::DEFAULT_QUEUE_BYTES,
         };
         let request = DynamicGrantRequest {
             authority_queue_id: authority.contact.queue_id,
@@ -1106,8 +1106,7 @@ pub(crate) async fn install_inbox_relay(
         let st = state.lock().unwrap_or_else(|p| p.into_inner());
         preflight_inbox_replacement(&st)?;
         if let Some(runtime) = &st.routing {
-            let service = runtime.service.lock().unwrap_or_else(|p| p.into_inner());
-            if let Some(own) = service.as_ref().map(|s| s.introduction(now_unix())) {
+            if let Some(own) = runtime.own_introduction() {
                 if card
                     .aliases
                     .iter()

@@ -171,8 +171,9 @@ impl LocalListener {
     ) -> Result<(ServerStream, LocalPeer), SdkError> {
         loop {
             let (stream, _) = self.0.accept().await.map_err(runtime_error)?;
-            // A disconnected credential probe is a rejected connection, not a
-            // failed listener. macOS may return ENOTCONN for this stream.
+            // Credentials belong to this connection, not the listener. macOS
+            // can return ENOTCONN if a probe closes before we inspect its PID.
+            // Reject that stream and keep accepting authenticated clients.
             let Ok(credentials) = stream.peer_cred() else {
                 continue;
             };

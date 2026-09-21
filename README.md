@@ -1,5 +1,26 @@
 # GComs
 
+Rust applications start with the [`gcoms` application API](crates/application/README.md):
+one dependency for messaging, channels and files. Select `ipc,files` for a small
+client of an existing host, or `embedded,files,gc2-carrier` for an in-process relay.
+RPC and automatic daemon launch are optional. GChat consumes the same API.
+
+The new `network-client,files` integration runs the outbound protocol without
+compiling relay hosting or NAT mapping. Unlike IPC, it connects to remote inbox
+relays itself. The Linux relay/client regression suites passed 504 tests (three
+explicit ignores); cross-platform qualification remains in progress.
+See [mobile SDK sources and current status](mobile/README.md).
+
+Windows x64 MSVC is included in the native integration workflow. Android/iOS
+client and relay SDKs, with optional app-operated push delivery, are being added
+as a preview; their qualification status is tracked in [PLAN.md](PLAN.md).
+The `network-client,files` feature set adds a self-contained outbound protocol
+client. Select `Backend::NetworkClient` when combining it with `embedded` in one
+build. It hosts its inbox on remote relays and excludes local queue hosting,
+forwarding and NAT mapping from a client-only build. Existing embedded and IPC
+feature combinations retain their behavior. The SDK's `in-process` feature is
+the shared adapter; `embedded` additionally enables relay hosting.
+
 **GComs** is a Rust communication protocol for secure connections, with typed
 service APIs for addon and client integration. **GChat** is its separate reference
 application, with a desktop UI, terminal UI and local service.
@@ -82,3 +103,10 @@ The preview pins rustls >=0.23.45 and quick-xml >=0.41 for current advisory fixe
 uses rustls-pki-types' PEM parser, and disables unused postcard heapless defaults.
 `deny.toml` records exact transitive-version exceptions and one reviewed build-time
 unmaintained hax/libcrux macro dependency; it does not waive runtime vulnerabilities.
+
+The application/runtime consolidation reuses existing dependencies; `sha2` derives
+a purpose-specific host cache key. TLS fixture dependencies (`rcgen`, `rustls`,
+`tokio-rustls`) are test-only in the runtime. No new third-party package is added.
+
+Both Rust integrations are tested natively on Linux x86_64 and macOS arm64/x86_64.
+Measured sizes and exact validation inputs are in [the Rust integration report](docs/RUST_INTEGRATIONS.md).

@@ -23,7 +23,11 @@ module (historical API name). The host configures these grants locally; a client
 cannot choose its identity or grant itself capabilities through request fields.
 Reserved shell/file/bootstrap wire types do not supply a managed implementation.
 
-IPC v16 uses bounded length-delimited frames with a 16 MiB ceiling. Application
+IPC v17 adds credential-bound application profiles, runtime management and channel
+invitations. Existing request tags and older server-side clients remain compatible.
+The high-level `gcoms` facade owns profile startup and inbox consumption.
+
+IPC uses bounded length-delimited frames with a 16 MiB ceiling. Application
 bodies retain the smaller GC/1 limit. `ComponentLink` in `gcoms-rpc` preserves the
 component grants when transporting typed service calls. Delivery receipts remain
 distinct from an application operation's durable outcome.

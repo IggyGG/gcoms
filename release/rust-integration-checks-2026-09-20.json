@@ -1,0 +1,70 @@
+{
+  "schema": 1,
+  "gcoms": "6fb6159c4142da6d84935743cb602385f58a3d1e",
+  "gchat": "98c07689559d3d7aa9b09174a343010651cf48c6",
+  "linux": {
+    "workspace_before_cache_followup": {
+      "revision": "ffa2ecd",
+      "passed": 900,
+      "ignored": 7
+    },
+    "focused_after_cache_followup": {
+      "passed": 105,
+      "ignored": 2
+    },
+    "gchat_tests": {
+      "passed": 137,
+      "ignored": 0
+    },
+    "gcoms_rpc_npm_tests": 8,
+    "gchat_frontend_tests": 22,
+    "checks": {
+      "clippy": 0,
+      "cache-reconnect": 0,
+      "focused-tests": 0,
+      "gchat-tests": 0,
+      "gchat-clippy": 0,
+      "docs": 0,
+      "minimal-core": 0,
+      "minimal-sdk": 0,
+      "minimal-embedded": 0,
+      "minimal-ipc": 0,
+      "wasm": 0,
+      "generated": 0
+    },
+    "native_listener_followup": {
+      "revision": "da12b45156ae59cc59a818d040ea3f3bc47af306",
+      "passed": 106,
+      "ignored": 2,
+      "record": "rust-integration-native-2026-09-20.json"
+    }
+  },
+  "native_macos": {
+    "status": "passed",
+    "revision": "da12b45156ae59cc59a818d040ea3f3bc47af306",
+    "record": "rust-integration-native-2026-09-20.json"
+  },
+  "combined_trunk": {
+    "revision": "846b6ab85dba0eaba859aa5c5232e17ba2ab363f",
+    "merged_crypto_commits": [
+      "7ac9f2e",
+      "992982e"
+    ],
+    "rust_tests": {
+      "passed": 157,
+      "ignored": 2
+    },
+    "scope": [
+      "gcoms",
+      "gcoms-runtime",
+      "gcoms-sdk",
+      "gcoms-file-transfer",
+      "gcoms-crypto"
+    ],
+    "strict_clippy_exit_code": 0,
+    "logs_sha256": {
+      "combined-trunk-tests.log": "1c9b4333150b91d100a00d800c0d0ac156e6dd2b424fe6e8cda9917491c7cc57",
+      "combined-trunk-clippy.log": "625ca04cb05dc8f60355aed05cdb7259cfc5ad99da690904d797449a85de24d7"
+    }
+  }
+}

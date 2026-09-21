@@ -34,7 +34,7 @@ for name in paths:
                         resolved = (path.parent / value['path']).resolve()
                         if not resolved.is_relative_to(root):
                             errors.append(f'{name}: dependency escapes repository')
-                        if actual.startswith('gcoms-') and 'version' not in value and 'fuzz' not in path.parts:
+                        if (actual == 'gcoms' or actual.startswith('gcoms-')) and 'version' not in value and 'fuzz' not in path.parts:
                             errors.append(f'{name}: unversioned GComs dependency')
     if path.name == 'package-lock.json':
         for key, item in json.loads(data).get('packages', {}).items():

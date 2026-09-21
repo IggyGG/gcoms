@@ -37,6 +37,35 @@ This staging check does not publish anything or require registry credentials.
 Use `--consumer-target-dir` to reuse a Cargo build cache while retaining a fresh
 archive/evidence directory for each `--release` check.
 
+## Application facade
+
+`gcoms` is the public application dependency. The [application guide](crates/application/README.md)
+covers embedded and shared runtimes, bundled daemon startup, private profiles,
+authenticated peers, and durable operation recovery. GChat uses this facade.
+
+`cargo test -p gcoms --all-features --locked -- --test-threads=1` exercises both
+backends with real encrypted profiles: typed queries and durable operations,
+mixed message delivery, channel invitations, profile restart and replay,
+credential/capability denial, exclusive inbox attachment, and bundled daemon startup.
+A reconnection timeout is recovered with the original operation handle; the
+handler effect must remain single. Runtime storage and shutdown regressions now
+live in `gcoms-runtime`. IPC18 appends file sharing/network status after IPC17
+without changing GC/1 or GCPRT1. Control protocol 2 carries explicit carrier
+selection and owner-authenticated legacy file-cache configuration.
+
+Also compile the facade with `--no-default-features --features ipc`,
+`--no-default-features --features embedded`, and
+`--no-default-features --features wasm --target wasm32-unknown-unknown`.
+The isolated archive consumer uses only a renamed `gcoms` dependency.
+These local fixtures do not qualify operated-network reachability. Linux execution
+alone does not establish Windows runtime behavior.
+
+The [2026-09-18 application qualification](docs/APPLICATION_QUALIFICATION.md)
+records their execution in the private Windows GNU VM, the IPC detach correction,
+full workspace results, original failures and follow-up runs. It separately records
+public bootstrap/TLS probes and the invitation needed to finish authenticated live
+traffic. The historical platform counts below refer to their original sources.
+
 ## Current-source GChat integration and relay research
 
 Use `python3 scripts/check-gchat.py --gchat /path/to/gchat --offline` to test the
@@ -210,3 +239,17 @@ rejection, matched lifecycle/file requirements, and IPC waits bounded by the
 declared phase rather than an unrelated controller timeout. Use the managed
 runner on the workstation. Native namespace/capture tools are needed only for
 the separate actual-daemon calibration command, not these unit tests.
+
+## Minimal native Rust integrations
+
+Run `python3 scripts/check-rust-integrations.py` for isolated consumer graph checks,
+or add `--measure` for stripped opt-level 3/s/z executables. The standalone example
+has its own lockfile and enables only `files` plus the selected backend. Reports
+record native OS/architecture, toolchain, source revision, consumer hashes and byte
+counts. `.github/workflows/rust-integrations.yml` executes backend/SDK/swarm tests
+and these measurements on Linux, macOS arm64 and macOS x86_64. A successful local
+Linux run does not substitute for those native macOS jobs.
+
+The relocated production bootstrap fixture runs with
+`scripts/test-bootstrap-namespace.py --binary <gcoms-runtime-test-binary> --output <evidence-directory>`.
+It remains isolated from operated networks and retains its own bounded deadline.

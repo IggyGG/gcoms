@@ -1,0 +1,2497 @@
+{
+  "date": "2026-09-18",
+  "scope": "Private application runtime execution and public endpoint probes; no release attestation or publication",
+  "source": {
+    "base_commit": "b831d978ff63cabead8c6a20d6b4ec729cbe1eb0",
+    "files_sha256": {
+      "crates/sdk/src/ipc.rs": "f0570c9d93a7bb866351d00b178486de9fac0d89042386a81ec1f09f4ad8b76a",
+      "crates/application/Cargo.toml": "dd55f3d27eb9363fabba5a049b10d2f4bfa11426f0dc826d77983f506ff273b1",
+      "crates/application/tests/backends.rs": "7b4615463128f91824c7cf423ea65fa763fd88daf9ba0af82fe918396a567774",
+      "crates/node/src/connectivity/nat.rs": "3b367b8619d9f2cf5133fcdbe65b617740d3eadb525507c4e37fce54b44499d5"
+    }
+  },
+  "gchat_source": "b94e4008ff4a5fe47589159fe917c16d01c86e8d",
+  "snapshot_manifests_sha256": {
+    "sources.json": "6514969564427c66401f5159891dd491012c14aa0939d13fbef7e39e841adc9d",
+    "sources-fixed.json": "61775f930fb492cf38154a753cf252c3ea82e01277fe9ab6623aab0d1f424e8f"
+  },
+  "windows_host": {
+    "name": "gcoms-gchat-validation",
+    "system": "Windows 10 x86_64 build 19045",
+    "memory_gib": 12,
+    "virtual_cpus": 6,
+    "compiler": "Rust 1.98; x86_64-pc-windows-gnu cross-built on Linux",
+    "execution": "Native Windows processes; binary/source SHA-256 verified in guest",
+    "network": "Existing restricted QEMU user network; loopback SSH forwarding; pinned SSH host key",
+    "test_threads": 1,
+    "harness_timeout_seconds": 900
+  },
+  "windows": {
+    "runs": [
+      {
+        "label": "gcoms",
+        "exit_code": 1,
+        "counts": {
+          "passed": 611,
+          "failed": 4,
+          "ignored": 5
+        },
+        "results": [
+          {
+            "name": "backends",
+            "binary": "backends-931bfc4975d5c3e0",
+            "status": "failed",
+            "exit_code": 101,
+            "passed": 3,
+            "failed": 2,
+            "ignored": 0,
+            "seconds": 87.576
+          },
+          {
+            "name": "gcoms_runtime",
+            "binary": "gcoms_runtime-c64f911c85de5c19",
+            "status": "passed",
+            "exit_code": 0,
+            "passed": 15,
+            "failed": 0,
+            "ignored": 0,
+            "seconds": 10.84
+          },
+          {
+            "name": "gcoms_sdk",
+            "binary": "gcoms_sdk-26f58de9dcb9a9e6",
+            "status": "passed",
+            "exit_code": 0,
+            "passed": 40,
+            "failed": 0,
+            "ignored": 0,
+            "seconds": 5.057
+          },
+          {
+            "name": "gcoms_private_fs",
+            "binary": "gcoms_private_fs-d3943c580a0f7afd",
+            "status": "passed",
+            "exit_code": 0,
+            "passed": 1,
+            "failed": 0,
+            "ignored": 0,
+            "seconds": 0.268
+          },
+          {
+            "name": "runtime",
+            "binary": "runtime-6e0e3149de173273",
+            "status": "passed",
+            "exit_code": 0,
+            "passed": 11,
+            "failed": 0,
+            "ignored": 0,
+            "seconds": 3.211
+          },
+          {
+            "name": "gc_peers",
+            "binary": "gc_peers-ebce7c754085980c",
+            "status": "passed",
+            "exit_code": 0,
+            "passed": 1,
+            "failed": 0,
+            "ignored": 0,
+            "seconds": 8.219
+          },
+          {
+            "name": "camouflage",
+            "binary": "camouflage-566916127ca9424c",
+            "status": "passed",
+            "exit_code": 0,
+            "passed": 1,
+            "failed": 0,
+            "ignored": 0,
+            "seconds": 2.358
+          },
+          {
+            "name": "cells",
+            "binary": "cells-68a8b7fce0d562e0",
+            "status": "passed",
+            "exit_code": 0,
+            "passed": 2,
+            "failed": 0,
+            "ignored": 0,
+            "seconds": 0.557
+          },
+          {
+            "name": "channel",
+            "binary": "channel-8eb7d11671a1c716",
+            "status": "passed",
+            "exit_code": 0,
+            "passed": 13,
+            "failed": 0,
+            "ignored": 1,
+            "seconds": 8.922
+          },
+          {
+            "name": "circuits",
+            "binary": "circuits-824c4a8b5943969c",
+            "status": "passed",
+            "exit_code": 0,
+            "passed": 11,
+            "failed": 0,
+            "ignored": 0,
+            "seconds": 23.407
+          },
+          {
+            "name": "cli",
+            "binary": "cli-0e93bbc8b29aec62",
+            "status": "passed",
+            "exit_code": 0,
+            "passed": 1,
+            "failed": 0,
+            "ignored": 0,
+            "seconds": 0.972
+          },
+          {
+            "name": "compile",
+            "binary": "compile-7e6312134836e816",
+            "status": "not_run",
+            "reason": "Compiler UI harness requires the Windows C toolchain and dependency cache"
+          },
+          {
+            "name": "embedded",
+            "binary": "embedded-430545f906ab3636",
+            "status": "passed",
+            "exit_code": 0,
+            "passed": 7,
+            "failed": 0,
+            "ignored": 0,
+            "seconds": 6.095
+          },
+          {
+            "name": "gates",
+            "binary": "gates-9775bfb4d45378d9",
+            "status": "passed",
+            "exit_code": 0,
+            "passed": 3,
+            "failed": 0,
+            "ignored": 0,
+            "seconds": 2.171
+          },
+          {
+            "name": "gcflow",
+            "binary": "gcflow-214a5996107bf9ef",
+            "status": "no_cases",
+            "exit_code": 0,
+            "passed": 0,
+            "failed": 0,
+            "ignored": 0,
+            "seconds": 0.201
+          },
+          {
+            "name": "gcfuzz",
+            "binary": "gcfuzz-37dc22218dae0555",
+            "status": "no_cases",
+            "exit_code": 0,
+            "passed": 0,
+            "failed": 0,
+            "ignored": 0,
+            "seconds": 0.147
+          },
+          {
+            "name": "gc-network-operator",
+            "binary": "gc_network_operator-c6da23dc28825b0f",
+            "status": "no_cases",
+            "exit_code": 0,
+            "passed": 0,
+            "failed": 0,
+            "ignored": 0,
+            "seconds": 0.224
+          },
+          {
+            "name": "gcnode",
+            "binary": "gcnode-d344c9f8ad5a6d70",
+            "status": "passed",
+            "exit_code": 0,
+            "passed": 12,
+            "failed": 0,
+            "ignored": 0,
+            "seconds": 3.181
+          },
+          {
+            "name": "gcoms",
+            "binary": "gcoms-5691d9b135662a1a",
+            "status": "no_cases",
+            "exit_code": 0,
+            "passed": 0,
+            "failed": 0,
+            "ignored": 0,
+            "seconds": 1.711
+          },
+          {
+            "name": "gcoms_addon_example",
+            "binary": "gcoms_addon_example-cd42b656a7559266",
+            "status": "no_cases",
+            "exit_code": 0,
+            "passed": 0,
+            "failed": 0,
+            "ignored": 0,
+            "seconds": 0.121
+          },
+          {
+            "name": "gcoms_catalog",
+            "binary": "gcoms_catalog-cdc76c516012e520",
+            "status": "passed",
+            "exit_code": 0,
+            "passed": 3,
+            "failed": 0,
+            "ignored": 0,
+            "seconds": 4.34
+          },
+          {
+            "name": "gcoms_conformance",
+            "binary": "gcoms_conformance-384e77b2cecec461",
+            "status": "passed",
+            "exit_code": 0,
+            "passed": 2,
+            "failed": 0,
+            "ignored": 0,
+            "seconds": 1.881
+          },
+          {
+            "name": "gcoms_core",
+            "binary": "gcoms_core-0ea3391c51af8ef0",
+            "status": "passed",
+            "exit_code": 0,
+            "passed": 41,
+            "failed": 0,
+            "ignored": 0,
+            "seconds": 0.198
+          },
+          {
+            "name": "gcoms_crypto",
+            "binary": "gcoms_crypto-7f02fdb8acea6ee4",
+            "status": "passed",
+            "exit_code": 0,
+            "passed": 24,
+            "failed": 0,
+            "ignored": 0,
+            "seconds": 2.108
+          },
+          {
+            "name": "gcoms_file_transfer",
+            "binary": "gcoms_file_transfer-68c530e50b0d2d0e",
+            "status": "passed",
+            "exit_code": 0,
+            "passed": 2,
+            "failed": 0,
+            "ignored": 0,
+            "seconds": 0.366
+          },
+          {
+            "name": "gcoms_fuzz",
+            "binary": "gcoms_fuzz-8e3c42e7a33fa6ff",
+            "status": "passed",
+            "exit_code": 0,
+            "passed": 2,
+            "failed": 0,
+            "ignored": 0,
+            "seconds": 129.473
+          },
+          {
+            "name": "gcoms_gossip",
+            "binary": "gcoms_gossip-d1c182c95681be08",
+            "status": "passed",
+            "exit_code": 0,
+            "passed": 12,
+            "failed": 0,
+            "ignored": 0,
+            "seconds": 0.529
+          },
+          {
+            "name": "gcoms_mls",
+            "binary": "gcoms_mls-cead1003a4658507",
+            "status": "passed",
+            "exit_code": 0,
+            "passed": 11,
+            "failed": 0,
+            "ignored": 0,
+            "seconds": 4.595
+          },
+          {
+            "name": "gcoms_network",
+            "binary": "gcoms_network-4cd5dfb05207331d",
+            "status": "passed",
+            "exit_code": 0,
+            "passed": 2,
+            "failed": 0,
+            "ignored": 0,
+            "seconds": 1.227
+          },
+          {
+            "name": "gcoms_network_client",
+            "binary": "gcoms_network_client-bee814f2038fa157",
+            "status": "failed",
+            "exit_code": 101,
+            "passed": 12,
+            "failed": 1,
+            "ignored": 0,
+            "seconds": 41.873
+          },
+          {
+            "name": "gcoms_node",
+            "binary": "gcoms_node-0d268b30e2a423c5",
+            "status": "failed",
+            "exit_code": 101,
+            "passed": 203,
+            "failed": 1,
+            "ignored": 1,
+            "seconds": 255.566
+          },
+          {
+            "name": "gcoms_protocol",
+            "binary": "gcoms_protocol-b091b1fdab36d66c",
+            "status": "passed",
+            "exit_code": 0,
+            "passed": 25,
+            "failed": 0,
+            "ignored": 0,
+            "seconds": 0.672
+          },
+          {
+            "name": "gcoms_renamed_dependency_check",
+            "binary": "gcoms_renamed_dependency_check-439cba775c5028f2",
+            "status": "no_cases",
+            "exit_code": 0,
+            "passed": 0,
+            "failed": 0,
+            "ignored": 0,
+            "seconds": 0.666
+          },
+          {
+            "name": "gcoms_routing",
+            "binary": "gcoms_routing-8c692437c60a285f",
+            "status": "passed",
+            "exit_code": 0,
+            "passed": 6,
+            "failed": 0,
+            "ignored": 0,
+            "seconds": 2.442
+          },
+          {
+            "name": "gcoms_rpc",
+            "binary": "gcoms_rpc-1c18e46fa5e2c8f1",
+            "status": "passed",
+            "exit_code": 0,
+            "passed": 3,
+            "failed": 0,
+            "ignored": 0,
+            "seconds": 2.255
+          },
+          {
+            "name": "gcoms_rpc_contract",
+            "binary": "gcoms_rpc_contract-ddce848d671a6eb7",
+            "status": "passed",
+            "exit_code": 0,
+            "passed": 2,
+            "failed": 0,
+            "ignored": 0,
+            "seconds": 0.328
+          },
+          {
+            "name": "gcoms_rpc_macros",
+            "binary": "gcoms_rpc_macros-f5e83151977c7d07",
+            "status": "not_run",
+            "reason": "Host proc-macro harness is a Linux executable"
+          },
+          {
+            "name": "gcoms_sim",
+            "binary": "gcoms_sim-7d44334a3ae48f6c",
+            "status": "no_cases",
+            "exit_code": 0,
+            "passed": 0,
+            "failed": 0,
+            "ignored": 0,
+            "seconds": 0.138
+          },
+          {
+            "name": "gcoms_transport",
+            "binary": "gcoms_transport-e2de55017647b43e",
+            "status": "passed",
+            "exit_code": 0,
+            "passed": 20,
+            "failed": 0,
+            "ignored": 0,
+            "seconds": 3.787
+          },
+          {
+            "name": "gcoms-catalog",
+            "binary": "gcoms_catalog-3435625f1a71780c",
+            "status": "no_cases",
+            "exit_code": 0,
+            "passed": 0,
+            "failed": 0,
+            "ignored": 0,
+            "seconds": 0.16
+          },
+          {
+            "name": "gcoms-conformance",
+            "binary": "gcoms_conformance-aaef46e94a8d5084",
+            "status": "no_cases",
+            "exit_code": 0,
+            "passed": 0,
+            "failed": 0,
+            "ignored": 0,
+            "seconds": 0.159
+          },
+          {
+            "name": "gcomsd",
+            "binary": "gcomsd-1c8c6b67338886e4",
+            "status": "no_cases",
+            "exit_code": 0,
+            "passed": 0,
+            "failed": 0,
+            "ignored": 0,
+            "seconds": 0.2
+          },
+          {
+            "name": "gcoms-sim",
+            "binary": "gcoms_sim-7dd8222ffd716ef9",
+            "status": "no_cases",
+            "exit_code": 0,
+            "passed": 0,
+            "failed": 0,
+            "ignored": 0,
+            "seconds": 0.187
+          },
+          {
+            "name": "gcramcheck",
+            "binary": "gcramcheck-d188976246d410b7",
+            "status": "passed",
+            "exit_code": 0,
+            "passed": 2,
+            "failed": 0,
+            "ignored": 0,
+            "seconds": 2.92
+          },
+          {
+            "name": "gc-rpc-types",
+            "binary": "gc_rpc_types-7ef04a7fb10558fb",
+            "status": "no_cases",
+            "exit_code": 0,
+            "passed": 0,
+            "failed": 0,
+            "ignored": 0,
+            "seconds": 0.201
+          },
+          {
+            "name": "ipc_unix",
+            "binary": "ipc_unix-532ae8a69aafeabe",
+            "status": "no_cases",
+            "exit_code": 0,
+            "passed": 0,
+            "failed": 0,
+            "ignored": 0,
+            "seconds": 0.132
+          },
+          {
+            "name": "kat",
+            "binary": "kat-6fa93ded1dab7b19",
+            "status": "passed",
+            "exit_code": 0,
+            "passed": 2,
+            "failed": 0,
+            "ignored": 0,
+            "seconds": 0.748
+          },
+          {
+            "name": "minimal_tls",
+            "binary": "minimal_tls-995304df3c64beea",
+            "status": "passed",
+            "exit_code": 0,
+            "passed": 2,
+            "failed": 0,
+            "ignored": 3,
+            "seconds": 1.45
+          },
+          {
+            "name": "node_1to1",
+            "binary": "node_1to1-037d4239f5ca2fa3",
+            "status": "passed",
+            "exit_code": 0,
+            "passed": 11,
+            "failed": 0,
+            "ignored": 0,
+            "seconds": 36.592
+          },
+          {
+            "name": "node_alias",
+            "binary": "node_alias-a6a8306edcc662dc",
+            "status": "passed",
+            "exit_code": 0,
+            "passed": 4,
+            "failed": 0,
+            "ignored": 0,
+            "seconds": 47.157
+          },
+          {
+            "name": "node_bounds",
+            "binary": "node_bounds-9237dc9a323d824d",
+            "status": "passed",
+            "exit_code": 0,
+            "passed": 1,
+            "failed": 0,
+            "ignored": 0,
+            "seconds": 41.075
+          },
+          {
+            "name": "node_channel",
+            "binary": "node_channel-3a07618fea028147",
+            "status": "passed",
+            "exit_code": 0,
+            "passed": 6,
+            "failed": 0,
+            "ignored": 0,
+            "seconds": 25.24
+          },
+          {
+            "name": "node_concurrency",
+            "binary": "node_concurrency-40ec6ac614c2e6f3",
+            "status": "passed",
+            "exit_code": 0,
+            "passed": 1,
+            "failed": 0,
+            "ignored": 0,
+            "seconds": 103.267
+          },
+          {
+            "name": "node_connectivity",
+            "binary": "node_connectivity-8f2e13b076b6cf65",
+            "status": "passed",
+            "exit_code": 0,
+            "passed": 3,
+            "failed": 0,
+            "ignored": 0,
+            "seconds": 17.612
+          },
+          {
+            "name": "node_cover",
+            "binary": "node_cover-421372682f0f8c2b",
+            "status": "passed",
+            "exit_code": 0,
+            "passed": 1,
+            "failed": 0,
+            "ignored": 0,
+            "seconds": 6.395
+          },
+          {
+            "name": "node_e2e",
+            "binary": "node_e2e-6132dcd3cdb2945b",
+            "status": "passed",
+            "exit_code": 0,
+            "passed": 1,
+            "failed": 0,
+            "ignored": 0,
+            "seconds": 6.717
+          },
+          {
+            "name": "node_injection",
+            "binary": "node_injection-6eea8e2a6f516402",
+            "status": "passed",
+            "exit_code": 0,
+            "passed": 1,
+            "failed": 0,
+            "ignored": 0,
+            "seconds": 2.688
+          },
+          {
+            "name": "node_intermediary",
+            "binary": "node_intermediary-e95f64bf77fb33f7",
+            "status": "passed",
+            "exit_code": 0,
+            "passed": 2,
+            "failed": 0,
+            "ignored": 0,
+            "seconds": 7.135
+          },
+          {
+            "name": "node_invite",
+            "binary": "node_invite-2ac7116f8fd5eddb",
+            "status": "passed",
+            "exit_code": 0,
+            "passed": 9,
+            "failed": 0,
+            "ignored": 0,
+            "seconds": 19.612
+          },
+          {
+            "name": "node_onion",
+            "binary": "node_onion-291f1e880e7951a5",
+            "status": "passed",
+            "exit_code": 0,
+            "passed": 2,
+            "failed": 0,
+            "ignored": 0,
+            "seconds": 26.754
+          },
+          {
+            "name": "node_overlay",
+            "binary": "node_overlay-d2b26544b730b61d",
+            "status": "passed",
+            "exit_code": 0,
+            "passed": 1,
+            "failed": 0,
+            "ignored": 0,
+            "seconds": 340.894
+          },
+          {
+            "name": "node_profile",
+            "binary": "node_profile-a39c621c38f1323f",
+            "status": "passed",
+            "exit_code": 0,
+            "passed": 3,
+            "failed": 0,
+            "ignored": 0,
+            "seconds": 3.776
+          },
+          {
+            "name": "node_shutdown",
+            "binary": "node_shutdown-24426e5c6b4e4e4f",
+            "status": "passed",
+            "exit_code": 0,
+            "passed": 1,
+            "failed": 0,
+            "ignored": 0,
+            "seconds": 3.726
+          },
+          {
+            "name": "operator",
+            "binary": "operator-e8bb3f8cdbcf1cd9",
+            "status": "passed",
+            "exit_code": 0,
+            "passed": 1,
+            "failed": 0,
+            "ignored": 0,
+            "seconds": 14.744
+          },
+          {
+            "name": "portable",
+            "binary": "portable-b68e898bc7f81f7c",
+            "status": "passed",
+            "exit_code": 0,
+            "passed": 3,
+            "failed": 0,
+            "ignored": 0,
+            "seconds": 2.839
+          },
+          {
+            "name": "service",
+            "binary": "service-61d666e8deaafbaf",
+            "status": "passed",
+            "exit_code": 0,
+            "passed": 12,
+            "failed": 0,
+            "ignored": 0,
+            "seconds": 16.376
+          },
+          {
+            "name": "session",
+            "binary": "session-1828b284fe287378",
+            "status": "passed",
+            "exit_code": 0,
+            "passed": 22,
+            "failed": 0,
+            "ignored": 0,
+            "seconds": 4.517
+          },
+          {
+            "name": "tp1",
+            "binary": "tp1-bde9d55ac145632a",
+            "status": "passed",
+            "exit_code": 0,
+            "passed": 29,
+            "failed": 0,
+            "ignored": 0,
+            "seconds": 2.237
+          },
+          {
+            "name": "tracked_send",
+            "binary": "tracked_send-67ca0cd9bccd69a0",
+            "status": "no_cases",
+            "exit_code": 0,
+            "passed": 0,
+            "failed": 0,
+            "ignored": 0,
+            "seconds": 0.303
+          },
+          {
+            "name": "typed-addon-server",
+            "binary": "typed_addon_server-56e31ff17fc657ac",
+            "status": "no_cases",
+            "exit_code": 0,
+            "passed": 0,
+            "failed": 0,
+            "ignored": 0,
+            "seconds": 0.275
+          },
+          {
+            "name": "typed-addon-types",
+            "binary": "typed_addon_types-24dbe2eb136a514e",
+            "status": "no_cases",
+            "exit_code": 0,
+            "passed": 0,
+            "failed": 0,
+            "ignored": 0,
+            "seconds": 0.284
+          }
+        ],
+        "files_manifest_sha256": "c7c27367c02a3b4eae3ff6b712654da8cf3877306440a99e3d6853a96540187b",
+        "test_manifest_sha256": "4a0aac09c9a85bc131f8ca55e0bd920a22c1f589bbacef7b92c78009f3e0393a"
+      },
+      {
+        "label": "gcoms-fixes",
+        "exit_code": 1,
+        "counts": {
+          "passed": 80,
+          "failed": 2,
+          "ignored": 0
+        },
+        "results": [
+          {
+            "name": "backends",
+            "binary": "backends-de6fe1e07cdcf01d",
+            "status": "failed",
+            "exit_code": 101,
+            "passed": 3,
+            "failed": 2,
+            "ignored": 0,
+            "seconds": 185.695
+          },
+          {
+            "name": "gcoms_runtime",
+            "binary": "gcoms_runtime-cfa02b110f23ecd9",
+            "status": "passed",
+            "exit_code": 0,
+            "passed": 15,
+            "failed": 0,
+            "ignored": 0,
+            "seconds": 15.658
+          },
+          {
+            "name": "gcoms_sdk",
+            "binary": "gcoms_sdk-96a6e401355d5a21",
+            "status": "passed",
+            "exit_code": 0,
+            "passed": 40,
+            "failed": 0,
+            "ignored": 0,
+            "seconds": 9.378
+          },
+          {
+            "name": "runtime",
+            "binary": "runtime-ee0d0e8074be8cdd",
+            "status": "passed",
+            "exit_code": 0,
+            "passed": 11,
+            "failed": 0,
+            "ignored": 0,
+            "seconds": 76.692
+          },
+          {
+            "name": "gc_peers",
+            "binary": "gc_peers-503c7b4d77cac86d",
+            "status": "passed",
+            "exit_code": 0,
+            "passed": 1,
+            "failed": 0,
+            "ignored": 0,
+            "seconds": 18.499
+          },
+          {
+            "name": "compile",
+            "binary": "compile-d4e6c71520788e71",
+            "status": "not_run",
+            "reason": "Compiler UI harness requires the Windows C toolchain and dependency cache"
+          },
+          {
+            "name": "embedded",
+            "binary": "embedded-f8c7fa41b5595f32",
+            "status": "passed",
+            "exit_code": 0,
+            "passed": 7,
+            "failed": 0,
+            "ignored": 0,
+            "seconds": 9.949
+          },
+          {
+            "name": "gcoms",
+            "binary": "gcoms-99b647f7a7ac9bfb",
+            "status": "no_cases",
+            "exit_code": 0,
+            "passed": 0,
+            "failed": 0,
+            "ignored": 0,
+            "seconds": 14.602
+          },
+          {
+            "name": "gcoms_rpc",
+            "binary": "gcoms_rpc-98a3902da42a813f",
+            "status": "passed",
+            "exit_code": 0,
+            "passed": 3,
+            "failed": 0,
+            "ignored": 0,
+            "seconds": 5.595
+          },
+          {
+            "name": "gcomsd",
+            "binary": "gcomsd-1fc378519daeced2",
+            "status": "no_cases",
+            "exit_code": 0,
+            "passed": 0,
+            "failed": 0,
+            "ignored": 0,
+            "seconds": 0.178
+          },
+          {
+            "name": "ipc_unix",
+            "binary": "ipc_unix-fa2b97081704836d",
+            "status": "no_cases",
+            "exit_code": 0,
+            "passed": 0,
+            "failed": 0,
+            "ignored": 0,
+            "seconds": 0.227
+          },
+          {
+            "name": "tracked_send",
+            "binary": "tracked_send-82db76cbb6f86935",
+            "status": "no_cases",
+            "exit_code": 0,
+            "passed": 0,
+            "failed": 0,
+            "ignored": 0,
+            "seconds": 0.294
+          }
+        ],
+        "files_manifest_sha256": "b6aeea75d244a0b0304afd47ab6134de804dca932802d44da662f73b2241321b",
+        "test_manifest_sha256": "29e2003bc8ecc2b142b77c738110f1d5b2dc2328d3691862ceb318fa4d0295ce"
+      },
+      {
+        "label": "dns-retry",
+        "exit_code": 0,
+        "counts": {
+          "passed": 13,
+          "failed": 0,
+          "ignored": 0
+        },
+        "results": [
+          {
+            "name": "gcoms_network_client",
+            "binary": "gcoms_network_client-bee814f2038fa157",
+            "status": "passed",
+            "exit_code": 0,
+            "passed": 13,
+            "failed": 0,
+            "ignored": 0,
+            "seconds": 46.809
+          }
+        ],
+        "files_manifest_sha256": "338c74038f24540e21e456023c73a69ad453b560694e42bbd63ca9d776ad61a2",
+        "test_manifest_sha256": "8bbfd472f619e13120dcb8af0a2196395b09dcfb8193d728091f0a905d231c81"
+      },
+      {
+        "label": "gchat-fixed",
+        "exit_code": 0,
+        "counts": {
+          "passed": 121,
+          "failed": 0,
+          "ignored": 0
+        },
+        "results": [
+          {
+            "name": "chat_service",
+            "binary": "chat_service-51e1440d8041d0c1",
+            "status": "passed",
+            "exit_code": 0,
+            "passed": 12,
+            "failed": 0,
+            "ignored": 0,
+            "seconds": 502.861
+          },
+          {
+            "name": "continuity",
+            "binary": "continuity-280703f62352bee3",
+            "status": "passed",
+            "exit_code": 0,
+            "passed": 2,
+            "failed": 0,
+            "ignored": 0,
+            "seconds": 31.932
+          },
+          {
+            "name": "standalone_daemon",
+            "binary": "standalone_daemon-e94a41dc6f8800ac",
+            "status": "passed",
+            "exit_code": 0,
+            "passed": 1,
+            "failed": 0,
+            "ignored": 0,
+            "seconds": 32.24
+          },
+          {
+            "name": "daemon_archive",
+            "binary": "daemon_archive-1dcb40522b6dac24",
+            "status": "passed",
+            "exit_code": 0,
+            "passed": 1,
+            "failed": 0,
+            "ignored": 0,
+            "seconds": 11.796
+          },
+          {
+            "name": "daemon_pty",
+            "binary": "daemon_pty-9a9fcb80bcea4c36",
+            "status": "no_cases",
+            "exit_code": 0,
+            "passed": 0,
+            "failed": 0,
+            "ignored": 0,
+            "seconds": 0.491
+          },
+          {
+            "name": "gchat_api",
+            "binary": "gchat_api-06fd048b26cb2a42",
+            "status": "no_cases",
+            "exit_code": 0,
+            "passed": 0,
+            "failed": 0,
+            "ignored": 0,
+            "seconds": 0.423
+          },
+          {
+            "name": "gchat_core",
+            "binary": "gchat_core-cff109acb7d799a0",
+            "status": "passed",
+            "exit_code": 0,
+            "passed": 26,
+            "failed": 0,
+            "ignored": 0,
+            "seconds": 162.093
+          },
+          {
+            "name": "gchat_tui",
+            "binary": "gchat_tui-9b25f87d26be80fc",
+            "status": "passed",
+            "exit_code": 0,
+            "passed": 57,
+            "failed": 0,
+            "ignored": 0,
+            "seconds": 2.662
+          },
+          {
+            "name": "gchat-types",
+            "binary": "gchat_types-eca5fbc22fc40d4d",
+            "status": "no_cases",
+            "exit_code": 0,
+            "passed": 0,
+            "failed": 0,
+            "ignored": 0,
+            "seconds": 0.184
+          },
+          {
+            "name": "journey",
+            "binary": "journey-823291804889f49e",
+            "status": "passed",
+            "exit_code": 0,
+            "passed": 1,
+            "failed": 0,
+            "ignored": 0,
+            "seconds": 45.733
+          },
+          {
+            "name": "service_pty",
+            "binary": "service_pty-d60a252ab84c8011",
+            "status": "no_cases",
+            "exit_code": 0,
+            "passed": 0,
+            "failed": 0,
+            "ignored": 0,
+            "seconds": 0.17
+          },
+          {
+            "name": "snapshots",
+            "binary": "snapshots-02df941841e59785",
+            "status": "passed",
+            "exit_code": 0,
+            "passed": 21,
+            "failed": 0,
+            "ignored": 0,
+            "seconds": 3.839
+          }
+        ],
+        "files_manifest_sha256": "cd4e953cb6f6ac9376dada7bb7d13fcdb6a74ed88952bbc75173cb9c2d9dbf9f",
+        "test_manifest_sha256": "24999671e913494f8d8150df64879a55c86a2f5c85f700fc1f7815ff954afa54"
+      },
+      {
+        "label": "nat-fix",
+        "exit_code": 0,
+        "counts": {
+          "passed": 204,
+          "failed": 0,
+          "ignored": 1
+        },
+        "results": [
+          {
+            "name": "gcoms_node",
+            "binary": "gcoms_node-042b3ea905956393",
+            "status": "passed",
+            "exit_code": 0,
+            "passed": 204,
+            "failed": 0,
+            "ignored": 1,
+            "seconds": 250.144
+          }
+        ],
+        "files_manifest_sha256": "06072d27c277eeee9f1f5c1eb1df69c2642ad9755befc95c130cb696f65a630f",
+        "test_manifest_sha256": "4d12decd83e6e49e30c3b0993e85ca86c9aa0ccf6a51084e7eaf79ccc233f66e"
+      },
+      {
+        "label": "application-retry",
+        "exit_code": 0,
+        "counts": {
+          "passed": 5,
+          "failed": 0,
+          "ignored": 0
+        },
+        "results": [
+          {
+            "name": "backends",
+            "binary": "backends-de6fe1e07cdcf01d",
+            "status": "passed",
+            "exit_code": 0,
+            "passed": 5,
+            "failed": 0,
+            "ignored": 0,
+            "seconds": 173.924
+          }
+        ],
+        "files_manifest_sha256": "7c11d4bda5b34629a4b6cb03717990ac51478691f16fae83252686f38464a96d",
+        "test_manifest_sha256": "5d9115b2a6ed872cd72300a8a518b27a3687fc82563c0e31bc225c97c4f533c3"
+      }
+    ],
+    "gcoms_latest_per_harness": {
+      "counts": {
+        "passed": 615,
+        "failed": 0,
+        "ignored": 5
+      },
+      "results": [
+        {
+          "name": "backends",
+          "binary": "backends-de6fe1e07cdcf01d",
+          "status": "passed",
+          "exit_code": 0,
+          "passed": 5,
+          "failed": 0,
+          "ignored": 0,
+          "seconds": 173.924,
+          "run": "application-retry"
+        },
+        {
+          "name": "gcoms_runtime",
+          "binary": "gcoms_runtime-cfa02b110f23ecd9",
+          "status": "passed",
+          "exit_code": 0,
+          "passed": 15,
+          "failed": 0,
+          "ignored": 0,
+          "seconds": 15.658,
+          "run": "gcoms-fixes"
+        },
+        {
+          "name": "gcoms_sdk",
+          "binary": "gcoms_sdk-96a6e401355d5a21",
+          "status": "passed",
+          "exit_code": 0,
+          "passed": 40,
+          "failed": 0,
+          "ignored": 0,
+          "seconds": 9.378,
+          "run": "gcoms-fixes"
+        },
+        {
+          "name": "gcoms_private_fs",
+          "binary": "gcoms_private_fs-d3943c580a0f7afd",
+          "status": "passed",
+          "exit_code": 0,
+          "passed": 1,
+          "failed": 0,
+          "ignored": 0,
+          "seconds": 0.268,
+          "run": "gcoms"
+        },
+        {
+          "name": "runtime",
+          "binary": "runtime-ee0d0e8074be8cdd",
+          "status": "passed",
+          "exit_code": 0,
+          "passed": 11,
+          "failed": 0,
+          "ignored": 0,
+          "seconds": 76.692,
+          "run": "gcoms-fixes"
+        },
+        {
+          "name": "gc_peers",
+          "binary": "gc_peers-503c7b4d77cac86d",
+          "status": "passed",
+          "exit_code": 0,
+          "passed": 1,
+          "failed": 0,
+          "ignored": 0,
+          "seconds": 18.499,
+          "run": "gcoms-fixes"
+        },
+        {
+          "name": "camouflage",
+          "binary": "camouflage-566916127ca9424c",
+          "status": "passed",
+          "exit_code": 0,
+          "passed": 1,
+          "failed": 0,
+          "ignored": 0,
+          "seconds": 2.358,
+          "run": "gcoms"
+        },
+        {
+          "name": "cells",
+          "binary": "cells-68a8b7fce0d562e0",
+          "status": "passed",
+          "exit_code": 0,
+          "passed": 2,
+          "failed": 0,
+          "ignored": 0,
+          "seconds": 0.557,
+          "run": "gcoms"
+        },
+        {
+          "name": "channel",
+          "binary": "channel-8eb7d11671a1c716",
+          "status": "passed",
+          "exit_code": 0,
+          "passed": 13,
+          "failed": 0,
+          "ignored": 1,
+          "seconds": 8.922,
+          "run": "gcoms"
+        },
+        {
+          "name": "circuits",
+          "binary": "circuits-824c4a8b5943969c",
+          "status": "passed",
+          "exit_code": 0,
+          "passed": 11,
+          "failed": 0,
+          "ignored": 0,
+          "seconds": 23.407,
+          "run": "gcoms"
+        },
+        {
+          "name": "cli",
+          "binary": "cli-0e93bbc8b29aec62",
+          "status": "passed",
+          "exit_code": 0,
+          "passed": 1,
+          "failed": 0,
+          "ignored": 0,
+          "seconds": 0.972,
+          "run": "gcoms"
+        },
+        {
+          "name": "compile",
+          "binary": "compile-d4e6c71520788e71",
+          "status": "not_run",
+          "reason": "Compiler UI harness requires the Windows C toolchain and dependency cache",
+          "run": "gcoms-fixes"
+        },
+        {
+          "name": "embedded",
+          "binary": "embedded-f8c7fa41b5595f32",
+          "status": "passed",
+          "exit_code": 0,
+          "passed": 7,
+          "failed": 0,
+          "ignored": 0,
+          "seconds": 9.949,
+          "run": "gcoms-fixes"
+        },
+        {
+          "name": "gates",
+          "binary": "gates-9775bfb4d45378d9",
+          "status": "passed",
+          "exit_code": 0,
+          "passed": 3,
+          "failed": 0,
+          "ignored": 0,
+          "seconds": 2.171,
+          "run": "gcoms"
+        },
+        {
+          "name": "gcflow",
+          "binary": "gcflow-214a5996107bf9ef",
+          "status": "no_cases",
+          "exit_code": 0,
+          "passed": 0,
+          "failed": 0,
+          "ignored": 0,
+          "seconds": 0.201,
+          "run": "gcoms"
+        },
+        {
+          "name": "gcfuzz",
+          "binary": "gcfuzz-37dc22218dae0555",
+          "status": "no_cases",
+          "exit_code": 0,
+          "passed": 0,
+          "failed": 0,
+          "ignored": 0,
+          "seconds": 0.147,
+          "run": "gcoms"
+        },
+        {
+          "name": "gc-network-operator",
+          "binary": "gc_network_operator-c6da23dc28825b0f",
+          "status": "no_cases",
+          "exit_code": 0,
+          "passed": 0,
+          "failed": 0,
+          "ignored": 0,
+          "seconds": 0.224,
+          "run": "gcoms"
+        },
+        {
+          "name": "gcnode",
+          "binary": "gcnode-d344c9f8ad5a6d70",
+          "status": "passed",
+          "exit_code": 0,
+          "passed": 12,
+          "failed": 0,
+          "ignored": 0,
+          "seconds": 3.181,
+          "run": "gcoms"
+        },
+        {
+          "name": "gcoms",
+          "binary": "gcoms-99b647f7a7ac9bfb",
+          "status": "no_cases",
+          "exit_code": 0,
+          "passed": 0,
+          "failed": 0,
+          "ignored": 0,
+          "seconds": 14.602,
+          "run": "gcoms-fixes"
+        },
+        {
+          "name": "gcoms_addon_example",
+          "binary": "gcoms_addon_example-cd42b656a7559266",
+          "status": "no_cases",
+          "exit_code": 0,
+          "passed": 0,
+          "failed": 0,
+          "ignored": 0,
+          "seconds": 0.121,
+          "run": "gcoms"
+        },
+        {
+          "name": "gcoms_catalog",
+          "binary": "gcoms_catalog-cdc76c516012e520",
+          "status": "passed",
+          "exit_code": 0,
+          "passed": 3,
+          "failed": 0,
+          "ignored": 0,
+          "seconds": 4.34,
+          "run": "gcoms"
+        },
+        {
+          "name": "gcoms_conformance",
+          "binary": "gcoms_conformance-384e77b2cecec461",
+          "status": "passed",
+          "exit_code": 0,
+          "passed": 2,
+          "failed": 0,
+          "ignored": 0,
+          "seconds": 1.881,
+          "run": "gcoms"
+        },
+        {
+          "name": "gcoms_core",
+          "binary": "gcoms_core-0ea3391c51af8ef0",
+          "status": "passed",
+          "exit_code": 0,
+          "passed": 41,
+          "failed": 0,
+          "ignored": 0,
+          "seconds": 0.198,
+          "run": "gcoms"
+        },
+        {
+          "name": "gcoms_crypto",
+          "binary": "gcoms_crypto-7f02fdb8acea6ee4",
+          "status": "passed",
+          "exit_code": 0,
+          "passed": 24,
+          "failed": 0,
+          "ignored": 0,
+          "seconds": 2.108,
+          "run": "gcoms"
+        },
+        {
+          "name": "gcoms_file_transfer",
+          "binary": "gcoms_file_transfer-68c530e50b0d2d0e",
+          "status": "passed",
+          "exit_code": 0,
+          "passed": 2,
+          "failed": 0,
+          "ignored": 0,
+          "seconds": 0.366,
+          "run": "gcoms"
+        },
+        {
+          "name": "gcoms_fuzz",
+          "binary": "gcoms_fuzz-8e3c42e7a33fa6ff",
+          "status": "passed",
+          "exit_code": 0,
+          "passed": 2,
+          "failed": 0,
+          "ignored": 0,
+          "seconds": 129.473,
+          "run": "gcoms"
+        },
+        {
+          "name": "gcoms_gossip",
+          "binary": "gcoms_gossip-d1c182c95681be08",
+          "status": "passed",
+          "exit_code": 0,
+          "passed": 12,
+          "failed": 0,
+          "ignored": 0,
+          "seconds": 0.529,
+          "run": "gcoms"
+        },
+        {
+          "name": "gcoms_mls",
+          "binary": "gcoms_mls-cead1003a4658507",
+          "status": "passed",
+          "exit_code": 0,
+          "passed": 11,
+          "failed": 0,
+          "ignored": 0,
+          "seconds": 4.595,
+          "run": "gcoms"
+        },
+        {
+          "name": "gcoms_network",
+          "binary": "gcoms_network-4cd5dfb05207331d",
+          "status": "passed",
+          "exit_code": 0,
+          "passed": 2,
+          "failed": 0,
+          "ignored": 0,
+          "seconds": 1.227,
+          "run": "gcoms"
+        },
+        {
+          "name": "gcoms_network_client",
+          "binary": "gcoms_network_client-bee814f2038fa157",
+          "status": "passed",
+          "exit_code": 0,
+          "passed": 13,
+          "failed": 0,
+          "ignored": 0,
+          "seconds": 46.809,
+          "run": "dns-retry"
+        },
+        {
+          "name": "gcoms_node",
+          "binary": "gcoms_node-042b3ea905956393",
+          "status": "passed",
+          "exit_code": 0,
+          "passed": 204,
+          "failed": 0,
+          "ignored": 1,
+          "seconds": 250.144,
+          "run": "nat-fix"
+        },
+        {
+          "name": "gcoms_protocol",
+          "binary": "gcoms_protocol-b091b1fdab36d66c",
+          "status": "passed",
+          "exit_code": 0,
+          "passed": 25,
+          "failed": 0,
+          "ignored": 0,
+          "seconds": 0.672,
+          "run": "gcoms"
+        },
+        {
+          "name": "gcoms_renamed_dependency_check",
+          "binary": "gcoms_renamed_dependency_check-439cba775c5028f2",
+          "status": "no_cases",
+          "exit_code": 0,
+          "passed": 0,
+          "failed": 0,
+          "ignored": 0,
+          "seconds": 0.666,
+          "run": "gcoms"
+        },
+        {
+          "name": "gcoms_routing",
+          "binary": "gcoms_routing-8c692437c60a285f",
+          "status": "passed",
+          "exit_code": 0,
+          "passed": 6,
+          "failed": 0,
+          "ignored": 0,
+          "seconds": 2.442,
+          "run": "gcoms"
+        },
+        {
+          "name": "gcoms_rpc",
+          "binary": "gcoms_rpc-98a3902da42a813f",
+          "status": "passed",
+          "exit_code": 0,
+          "passed": 3,
+          "failed": 0,
+          "ignored": 0,
+          "seconds": 5.595,
+          "run": "gcoms-fixes"
+        },
+        {
+          "name": "gcoms_rpc_contract",
+          "binary": "gcoms_rpc_contract-ddce848d671a6eb7",
+          "status": "passed",
+          "exit_code": 0,
+          "passed": 2,
+          "failed": 0,
+          "ignored": 0,
+          "seconds": 0.328,
+          "run": "gcoms"
+        },
+        {
+          "name": "gcoms_rpc_macros",
+          "binary": "gcoms_rpc_macros-f5e83151977c7d07",
+          "status": "not_run",
+          "reason": "Host proc-macro harness is a Linux executable",
+          "run": "gcoms"
+        },
+        {
+          "name": "gcoms_sim",
+          "binary": "gcoms_sim-7d44334a3ae48f6c",
+          "status": "no_cases",
+          "exit_code": 0,
+          "passed": 0,
+          "failed": 0,
+          "ignored": 0,
+          "seconds": 0.138,
+          "run": "gcoms"
+        },
+        {
+          "name": "gcoms_transport",
+          "binary": "gcoms_transport-e2de55017647b43e",
+          "status": "passed",
+          "exit_code": 0,
+          "passed": 20,
+          "failed": 0,
+          "ignored": 0,
+          "seconds": 3.787,
+          "run": "gcoms"
+        },
+        {
+          "name": "gcoms-catalog",
+          "binary": "gcoms_catalog-3435625f1a71780c",
+          "status": "no_cases",
+          "exit_code": 0,
+          "passed": 0,
+          "failed": 0,
+          "ignored": 0,
+          "seconds": 0.16,
+          "run": "gcoms"
+        },
+        {
+          "name": "gcoms-conformance",
+          "binary": "gcoms_conformance-aaef46e94a8d5084",
+          "status": "no_cases",
+          "exit_code": 0,
+          "passed": 0,
+          "failed": 0,
+          "ignored": 0,
+          "seconds": 0.159,
+          "run": "gcoms"
+        },
+        {
+          "name": "gcomsd",
+          "binary": "gcomsd-1fc378519daeced2",
+          "status": "no_cases",
+          "exit_code": 0,
+          "passed": 0,
+          "failed": 0,
+          "ignored": 0,
+          "seconds": 0.178,
+          "run": "gcoms-fixes"
+        },
+        {
+          "name": "gcoms-sim",
+          "binary": "gcoms_sim-7dd8222ffd716ef9",
+          "status": "no_cases",
+          "exit_code": 0,
+          "passed": 0,
+          "failed": 0,
+          "ignored": 0,
+          "seconds": 0.187,
+          "run": "gcoms"
+        },
+        {
+          "name": "gcramcheck",
+          "binary": "gcramcheck-d188976246d410b7",
+          "status": "passed",
+          "exit_code": 0,
+          "passed": 2,
+          "failed": 0,
+          "ignored": 0,
+          "seconds": 2.92,
+          "run": "gcoms"
+        },
+        {
+          "name": "gc-rpc-types",
+          "binary": "gc_rpc_types-7ef04a7fb10558fb",
+          "status": "no_cases",
+          "exit_code": 0,
+          "passed": 0,
+          "failed": 0,
+          "ignored": 0,
+          "seconds": 0.201,
+          "run": "gcoms"
+        },
+        {
+          "name": "ipc_unix",
+          "binary": "ipc_unix-fa2b97081704836d",
+          "status": "no_cases",
+          "exit_code": 0,
+          "passed": 0,
+          "failed": 0,
+          "ignored": 0,
+          "seconds": 0.227,
+          "run": "gcoms-fixes"
+        },
+        {
+          "name": "kat",
+          "binary": "kat-6fa93ded1dab7b19",
+          "status": "passed",
+          "exit_code": 0,
+          "passed": 2,
+          "failed": 0,
+          "ignored": 0,
+          "seconds": 0.748,
+          "run": "gcoms"
+        },
+        {
+          "name": "minimal_tls",
+          "binary": "minimal_tls-995304df3c64beea",
+          "status": "passed",
+          "exit_code": 0,
+          "passed": 2,
+          "failed": 0,
+          "ignored": 3,
+          "seconds": 1.45,
+          "run": "gcoms"
+        },
+        {
+          "name": "node_1to1",
+          "binary": "node_1to1-037d4239f5ca2fa3",
+          "status": "passed",
+          "exit_code": 0,
+          "passed": 11,
+          "failed": 0,
+          "ignored": 0,
+          "seconds": 36.592,
+          "run": "gcoms"
+        },
+        {
+          "name": "node_alias",
+          "binary": "node_alias-a6a8306edcc662dc",
+          "status": "passed",
+          "exit_code": 0,
+          "passed": 4,
+          "failed": 0,
+          "ignored": 0,
+          "seconds": 47.157,
+          "run": "gcoms"
+        },
+        {
+          "name": "node_bounds",
+          "binary": "node_bounds-9237dc9a323d824d",
+          "status": "passed",
+          "exit_code": 0,
+          "passed": 1,
+          "failed": 0,
+          "ignored": 0,
+          "seconds": 41.075,
+          "run": "gcoms"
+        },
+        {
+          "name": "node_channel",
+          "binary": "node_channel-3a07618fea028147",
+          "status": "passed",
+          "exit_code": 0,
+          "passed": 6,
+          "failed": 0,
+          "ignored": 0,
+          "seconds": 25.24,
+          "run": "gcoms"
+        },
+        {
+          "name": "node_concurrency",
+          "binary": "node_concurrency-40ec6ac614c2e6f3",
+          "status": "passed",
+          "exit_code": 0,
+          "passed": 1,
+          "failed": 0,
+          "ignored": 0,
+          "seconds": 103.267,
+          "run": "gcoms"
+        },
+        {
+          "name": "node_connectivity",
+          "binary": "node_connectivity-8f2e13b076b6cf65",
+          "status": "passed",
+          "exit_code": 0,
+          "passed": 3,
+          "failed": 0,
+          "ignored": 0,
+          "seconds": 17.612,
+          "run": "gcoms"
+        },
+        {
+          "name": "node_cover",
+          "binary": "node_cover-421372682f0f8c2b",
+          "status": "passed",
+          "exit_code": 0,
+          "passed": 1,
+          "failed": 0,
+          "ignored": 0,
+          "seconds": 6.395,
+          "run": "gcoms"
+        },
+        {
+          "name": "node_e2e",
+          "binary": "node_e2e-6132dcd3cdb2945b",
+          "status": "passed",
+          "exit_code": 0,
+          "passed": 1,
+          "failed": 0,
+          "ignored": 0,
+          "seconds": 6.717,
+          "run": "gcoms"
+        },
+        {
+          "name": "node_injection",
+          "binary": "node_injection-6eea8e2a6f516402",
+          "status": "passed",
+          "exit_code": 0,
+          "passed": 1,
+          "failed": 0,
+          "ignored": 0,
+          "seconds": 2.688,
+          "run": "gcoms"
+        },
+        {
+          "name": "node_intermediary",
+          "binary": "node_intermediary-e95f64bf77fb33f7",
+          "status": "passed",
+          "exit_code": 0,
+          "passed": 2,
+          "failed": 0,
+          "ignored": 0,
+          "seconds": 7.135,
+          "run": "gcoms"
+        },
+        {
+          "name": "node_invite",
+          "binary": "node_invite-2ac7116f8fd5eddb",
+          "status": "passed",
+          "exit_code": 0,
+          "passed": 9,
+          "failed": 0,
+          "ignored": 0,
+          "seconds": 19.612,
+          "run": "gcoms"
+        },
+        {
+          "name": "node_onion",
+          "binary": "node_onion-291f1e880e7951a5",
+          "status": "passed",
+          "exit_code": 0,
+          "passed": 2,
+          "failed": 0,
+          "ignored": 0,
+          "seconds": 26.754,
+          "run": "gcoms"
+        },
+        {
+          "name": "node_overlay",
+          "binary": "node_overlay-d2b26544b730b61d",
+          "status": "passed",
+          "exit_code": 0,
+          "passed": 1,
+          "failed": 0,
+          "ignored": 0,
+          "seconds": 340.894,
+          "run": "gcoms"
+        },
+        {
+          "name": "node_profile",
+          "binary": "node_profile-a39c621c38f1323f",
+          "status": "passed",
+          "exit_code": 0,
+          "passed": 3,
+          "failed": 0,
+          "ignored": 0,
+          "seconds": 3.776,
+          "run": "gcoms"
+        },
+        {
+          "name": "node_shutdown",
+          "binary": "node_shutdown-24426e5c6b4e4e4f",
+          "status": "passed",
+          "exit_code": 0,
+          "passed": 1,
+          "failed": 0,
+          "ignored": 0,
+          "seconds": 3.726,
+          "run": "gcoms"
+        },
+        {
+          "name": "operator",
+          "binary": "operator-e8bb3f8cdbcf1cd9",
+          "status": "passed",
+          "exit_code": 0,
+          "passed": 1,
+          "failed": 0,
+          "ignored": 0,
+          "seconds": 14.744,
+          "run": "gcoms"
+        },
+        {
+          "name": "portable",
+          "binary": "portable-b68e898bc7f81f7c",
+          "status": "passed",
+          "exit_code": 0,
+          "passed": 3,
+          "failed": 0,
+          "ignored": 0,
+          "seconds": 2.839,
+          "run": "gcoms"
+        },
+        {
+          "name": "service",
+          "binary": "service-61d666e8deaafbaf",
+          "status": "passed",
+          "exit_code": 0,
+          "passed": 12,
+          "failed": 0,
+          "ignored": 0,
+          "seconds": 16.376,
+          "run": "gcoms"
+        },
+        {
+          "name": "session",
+          "binary": "session-1828b284fe287378",
+          "status": "passed",
+          "exit_code": 0,
+          "passed": 22,
+          "failed": 0,
+          "ignored": 0,
+          "seconds": 4.517,
+          "run": "gcoms"
+        },
+        {
+          "name": "tp1",
+          "binary": "tp1-bde9d55ac145632a",
+          "status": "passed",
+          "exit_code": 0,
+          "passed": 29,
+          "failed": 0,
+          "ignored": 0,
+          "seconds": 2.237,
+          "run": "gcoms"
+        },
+        {
+          "name": "tracked_send",
+          "binary": "tracked_send-82db76cbb6f86935",
+          "status": "no_cases",
+          "exit_code": 0,
+          "passed": 0,
+          "failed": 0,
+          "ignored": 0,
+          "seconds": 0.294,
+          "run": "gcoms-fixes"
+        },
+        {
+          "name": "typed-addon-server",
+          "binary": "typed_addon_server-56e31ff17fc657ac",
+          "status": "no_cases",
+          "exit_code": 0,
+          "passed": 0,
+          "failed": 0,
+          "ignored": 0,
+          "seconds": 0.275,
+          "run": "gcoms"
+        },
+        {
+          "name": "typed-addon-types",
+          "binary": "typed_addon_types-24dbe2eb136a514e",
+          "status": "no_cases",
+          "exit_code": 0,
+          "passed": 0,
+          "failed": 0,
+          "ignored": 0,
+          "seconds": 0.284,
+          "run": "gcoms"
+        }
+      ]
+    },
+    "gchat": {
+      "passed": 121,
+      "failed": 0,
+      "ignored": 0
+    },
+    "counting": "Replaced affected harnesses with explicit follow-up runs; no duplicate counting. Initial failed results remain above. Zero-case and unexecuted harnesses are excluded."
+  },
+  "linux": {
+    "gcoms": {
+      "initial_workspace": {
+        "counts": {
+          "passed": 438,
+          "failed": 1,
+          "ignored": 2
+        },
+        "log": "linux-final-workspace.log",
+        "sha256": "053ea34ee2713e8847cd193b85585860e86c1c59d34433eb9715c86720645769"
+      },
+      "initial_exit_code": 101,
+      "completion_exit": {
+        "exit_code": 1,
+        "doctest_exit_code": 0
+      },
+      "latest_counts_including_doctests": {
+        "passed": 627,
+        "failed": 0,
+        "ignored": 5
+      },
+      "completed_harnesses": 71,
+      "unresolved_harnesses": [
+        "compile"
+      ],
+      "proc_macro_loader_retry": {
+        "name": "gcoms_rpc_macros",
+        "binary": "gcoms_rpc_macros-503a93398d507443",
+        "run": "loader_environment_retry",
+        "exit_code": 0,
+        "status": "passed",
+        "log": "linux-proc-macro-retry.log",
+        "passed": 1,
+        "failed": 0,
+        "ignored": 0
+      },
+      "follow_up_results": [
+        {
+          "name": "node_overlay",
+          "binary": "node_overlay-95ff58ca0e7d0c51",
+          "run": "follow_up",
+          "exit_code": 0,
+          "seconds": 224.95,
+          "log": "linux-remaining-node_overlay-95ff58ca0e7d0c51.log",
+          "status": "passed",
+          "passed": 1,
+          "failed": 0,
+          "ignored": 0
+        },
+        {
+          "name": "camouflage",
+          "binary": "camouflage-17fd1556c00c5acd",
+          "run": "follow_up",
+          "exit_code": 0,
+          "seconds": 0.321,
+          "log": "linux-remaining-camouflage-17fd1556c00c5acd.log",
+          "status": "passed",
+          "passed": 1,
+          "failed": 0,
+          "ignored": 0
+        },
+        {
+          "name": "circuits",
+          "binary": "circuits-e37860b5cf1af6c1",
+          "run": "follow_up",
+          "exit_code": 0,
+          "seconds": 22.284,
+          "log": "linux-remaining-circuits-e37860b5cf1af6c1.log",
+          "status": "passed",
+          "passed": 11,
+          "failed": 0,
+          "ignored": 0
+        },
+        {
+          "name": "cli",
+          "binary": "cli-ef11ba6d07f8b22d",
+          "run": "follow_up",
+          "exit_code": 0,
+          "seconds": 0.036,
+          "log": "linux-remaining-cli-ef11ba6d07f8b22d.log",
+          "status": "passed",
+          "passed": 1,
+          "failed": 0,
+          "ignored": 0
+        },
+        {
+          "name": "compile",
+          "binary": "compile-7142f8910371a6db",
+          "run": "follow_up",
+          "exit_code": 124,
+          "seconds": 900.004,
+          "log": "linux-remaining-compile-7142f8910371a6db.log",
+          "status": "failed"
+        },
+        {
+          "name": "embedded",
+          "binary": "embedded-93a7ea3bc647900a",
+          "run": "follow_up",
+          "exit_code": 0,
+          "seconds": 4.734,
+          "log": "linux-remaining-embedded-93a7ea3bc647900a.log",
+          "status": "passed",
+          "passed": 7,
+          "failed": 0,
+          "ignored": 0
+        },
+        {
+          "name": "gates",
+          "binary": "gates-c0a1b40e2099730a",
+          "run": "follow_up",
+          "exit_code": 0,
+          "seconds": 2.576,
+          "log": "linux-remaining-gates-c0a1b40e2099730a.log",
+          "status": "passed",
+          "passed": 3,
+          "failed": 0,
+          "ignored": 0
+        },
+        {
+          "name": "gc-rpc-types",
+          "binary": "gc_rpc_types-ca0d5ba1634c5118",
+          "run": "follow_up",
+          "exit_code": 0,
+          "seconds": 0.008,
+          "log": "linux-remaining-gc_rpc_types-ca0d5ba1634c5118.log",
+          "status": "passed",
+          "passed": 0,
+          "failed": 0,
+          "ignored": 0
+        },
+        {
+          "name": "gc_peers",
+          "binary": "gc_peers-185d87dbfed12e05",
+          "run": "follow_up",
+          "exit_code": 0,
+          "seconds": 5.808,
+          "log": "linux-remaining-gc_peers-185d87dbfed12e05.log",
+          "status": "passed",
+          "passed": 1,
+          "failed": 0,
+          "ignored": 0
+        },
+        {
+          "name": "gcoms-sim",
+          "binary": "gcoms_sim-623a8714d41c9710",
+          "run": "follow_up",
+          "exit_code": 0,
+          "seconds": 0.008,
+          "log": "linux-remaining-gcoms_sim-623a8714d41c9710.log",
+          "status": "passed",
+          "passed": 0,
+          "failed": 0,
+          "ignored": 0
+        },
+        {
+          "name": "gcoms_private_fs",
+          "binary": "gcoms_private_fs-4f142aa842a71d83",
+          "run": "follow_up",
+          "exit_code": 0,
+          "seconds": 0.008,
+          "log": "linux-remaining-gcoms_private_fs-4f142aa842a71d83.log",
+          "status": "passed",
+          "passed": 2,
+          "failed": 0,
+          "ignored": 0
+        },
+        {
+          "name": "gcoms_protocol",
+          "binary": "gcoms_protocol-fd92bf197e8c06ae",
+          "run": "follow_up",
+          "exit_code": 0,
+          "seconds": 0.265,
+          "log": "linux-remaining-gcoms_protocol-fd92bf197e8c06ae.log",
+          "status": "passed",
+          "passed": 25,
+          "failed": 0,
+          "ignored": 0
+        },
+        {
+          "name": "gcoms_renamed_dependency_check",
+          "binary": "gcoms_renamed_dependency_check-0581b2746791be83",
+          "run": "follow_up",
+          "exit_code": 0,
+          "seconds": 0.008,
+          "log": "linux-remaining-gcoms_renamed_dependency_check-0581b2746791be83.log",
+          "status": "passed",
+          "passed": 0,
+          "failed": 0,
+          "ignored": 0
+        },
+        {
+          "name": "gcoms_routing",
+          "binary": "gcoms_routing-d96f6bb28501455e",
+          "run": "follow_up",
+          "exit_code": 0,
+          "seconds": 0.616,
+          "log": "linux-remaining-gcoms_routing-d96f6bb28501455e.log",
+          "status": "passed",
+          "passed": 6,
+          "failed": 0,
+          "ignored": 0
+        },
+        {
+          "name": "gcoms_rpc",
+          "binary": "gcoms_rpc-6fccd54868c3228e",
+          "run": "follow_up",
+          "exit_code": 0,
+          "seconds": 0.315,
+          "log": "linux-remaining-gcoms_rpc-6fccd54868c3228e.log",
+          "status": "passed",
+          "passed": 3,
+          "failed": 0,
+          "ignored": 0
+        },
+        {
+          "name": "gcoms_rpc_contract",
+          "binary": "gcoms_rpc_contract-ba5ae07e5226dcf4",
+          "run": "follow_up",
+          "exit_code": 0,
+          "seconds": 0.008,
+          "log": "linux-remaining-gcoms_rpc_contract-ba5ae07e5226dcf4.log",
+          "status": "passed",
+          "passed": 2,
+          "failed": 0,
+          "ignored": 0
+        },
+        {
+          "name": "gcoms_rpc_macros",
+          "binary": "gcoms_rpc_macros-503a93398d507443",
+          "run": "follow_up",
+          "exit_code": 127,
+          "seconds": 0.002,
+          "log": "linux-remaining-gcoms_rpc_macros-503a93398d507443.log",
+          "status": "failed"
+        },
+        {
+          "name": "gcoms_runtime",
+          "binary": "gcoms_runtime-226f487dba10fcbe",
+          "run": "follow_up",
+          "exit_code": 0,
+          "seconds": 6.578,
+          "log": "linux-remaining-gcoms_runtime-226f487dba10fcbe.log",
+          "status": "passed",
+          "passed": 15,
+          "failed": 0,
+          "ignored": 0
+        },
+        {
+          "name": "gcoms_sdk",
+          "binary": "gcoms_sdk-8452c2cc65350e09",
+          "run": "follow_up",
+          "exit_code": 0,
+          "seconds": 1.621,
+          "log": "linux-remaining-gcoms_sdk-8452c2cc65350e09.log",
+          "status": "passed",
+          "passed": 41,
+          "failed": 0,
+          "ignored": 0
+        },
+        {
+          "name": "gcoms_sim",
+          "binary": "gcoms_sim-1d27f167884b13a7",
+          "run": "follow_up",
+          "exit_code": 0,
+          "seconds": 0.012,
+          "log": "linux-remaining-gcoms_sim-1d27f167884b13a7.log",
+          "status": "passed",
+          "passed": 0,
+          "failed": 0,
+          "ignored": 0
+        },
+        {
+          "name": "gcoms_transport",
+          "binary": "gcoms_transport-938574104ab51139",
+          "run": "follow_up",
+          "exit_code": 0,
+          "seconds": 1.918,
+          "log": "linux-remaining-gcoms_transport-938574104ab51139.log",
+          "status": "passed",
+          "passed": 20,
+          "failed": 0,
+          "ignored": 0
+        },
+        {
+          "name": "ipc_unix",
+          "binary": "ipc_unix-54ec9bcb7ce4f971",
+          "run": "follow_up",
+          "exit_code": 0,
+          "seconds": 2.218,
+          "log": "linux-remaining-ipc_unix-54ec9bcb7ce4f971.log",
+          "status": "passed",
+          "passed": 2,
+          "failed": 0,
+          "ignored": 0
+        },
+        {
+          "name": "minimal_tls",
+          "binary": "minimal_tls-c5ce9cae98eebe17",
+          "run": "follow_up",
+          "exit_code": 0,
+          "seconds": 0.114,
+          "log": "linux-remaining-minimal_tls-c5ce9cae98eebe17.log",
+          "status": "passed",
+          "passed": 2,
+          "failed": 0,
+          "ignored": 3
+        },
+        {
+          "name": "node_profile",
+          "binary": "node_profile-55f8b24965b2cd8e",
+          "run": "follow_up",
+          "exit_code": 0,
+          "seconds": 0.515,
+          "log": "linux-remaining-node_profile-55f8b24965b2cd8e.log",
+          "status": "passed",
+          "passed": 3,
+          "failed": 0,
+          "ignored": 0
+        },
+        {
+          "name": "node_shutdown",
+          "binary": "node_shutdown-61bb832d8f6ad816",
+          "run": "follow_up",
+          "exit_code": 0,
+          "seconds": 0.416,
+          "log": "linux-remaining-node_shutdown-61bb832d8f6ad816.log",
+          "status": "passed",
+          "passed": 1,
+          "failed": 0,
+          "ignored": 0
+        },
+        {
+          "name": "runtime",
+          "binary": "runtime-38c53fa5b03ceff9",
+          "run": "follow_up",
+          "exit_code": 0,
+          "seconds": 0.869,
+          "log": "linux-remaining-runtime-38c53fa5b03ceff9.log",
+          "status": "passed",
+          "passed": 11,
+          "failed": 0,
+          "ignored": 0
+        },
+        {
+          "name": "tp1",
+          "binary": "tp1-1537d95ac104575f",
+          "run": "follow_up",
+          "exit_code": 0,
+          "seconds": 0.419,
+          "log": "linux-remaining-tp1-1537d95ac104575f.log",
+          "status": "passed",
+          "passed": 29,
+          "failed": 0,
+          "ignored": 0
+        },
+        {
+          "name": "tracked_send",
+          "binary": "tracked_send-10ba018836df9a8f",
+          "run": "follow_up",
+          "exit_code": 0,
+          "seconds": 5.128,
+          "log": "linux-remaining-tracked_send-10ba018836df9a8f.log",
+          "status": "passed",
+          "passed": 1,
+          "failed": 0,
+          "ignored": 0
+        }
+      ],
+      "doctests": {
+        "counts": {
+          "passed": 0,
+          "failed": 0,
+          "ignored": 0
+        },
+        "log": "linux-final-doctests.log",
+        "sha256": "8b6dd666fb356e4cba26dc1f831dabb8719fa82446054c75a56901875c8f5ac0"
+      }
+    },
+    "gchat": {
+      "counts": {
+        "passed": 129,
+        "failed": 0,
+        "ignored": 0
+      },
+      "log": "linux-gchat-fixed.log",
+      "sha256": "554686436433802a4f00b265773e7ce797128a967538bfaa107288133d3a81f7"
+    },
+    "ipc_fix_regression": {
+      "counts": {
+        "passed": 87,
+        "failed": 0,
+        "ignored": 0
+      },
+      "log": "linux-ipc-fixes.log",
+      "sha256": "37910a15f3364c587453f375b5b907300d0b25d8b5a32a9707b9126f3674e555"
+    }
+  },
+  "public_network": {
+    "scope": "Unauthenticated probes from Linux workstation; VM networking unchanged",
+    "providers": [
+      {
+        "url": "https://bootstrap-hel.gchat.boo/healthz",
+        "status": 200,
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "url": "https://bootstrap-hel.gchat.boo/readyz",
+        "status": 200,
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "url": "https://bootstrap-hel.gchat.boo/v1/network-defaults",
+        "status": 200,
+        "bytes": 6284,
+        "sha256": "ac974f12c9cc2316111a300a8dc55b867a8954490ce8709df4fe897745176580"
+      },
+      {
+        "url": "https://bootstrap-fsn.gchat.boo/healthz",
+        "status": 200,
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "url": "https://bootstrap-fsn.gchat.boo/readyz",
+        "status": 200,
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "url": "https://bootstrap-fsn.gchat.boo/v1/network-defaults",
+        "status": 200,
+        "bytes": 6284,
+        "sha256": "ac974f12c9cc2316111a300a8dc55b867a8954490ce8709df4fe897745176580"
+      }
+    ],
+    "signature_verification": {
+      "result": "passed for both downloaded documents",
+      "verifier": "Current gc-network-operator verify",
+      "trust_root": "crates/runtime/assets/gchat-network.json independently installed ML-DSA key",
+      "network_id": "gchat.boo",
+      "minimum_sequence": 1,
+      "sequence": 1
+    },
+    "authentication_boundary": [
+      {
+        "host": "hel",
+        "valid_request": true,
+        "unauthenticated_provisioning": 401
+      },
+      {
+        "host": "fsn",
+        "valid_request": true,
+        "unauthenticated_provisioning": 401
+      }
+    ],
+    "founder_tls": [
+      {
+        "name": "r1.relays.gchat.boo",
+        "expected_pin": "e52c6c1bed6e36fef61c3571da01e46915ea1aec2c2ff43c97eeb1f7f58240d5",
+        "tls": "TLSv1.3",
+        "cipher": "TLS_AES_256_GCM_SHA384",
+        "actual_pin": "e52c6c1bed6e36fef61c3571da01e46915ea1aec2c2ff43c97eeb1f7f58240d5",
+        "pin_matches": true,
+        "certificate_in_validity": true,
+        "dns_addresses": [
+          "95.217.200.179"
+        ],
+        "status": "passed"
+      },
+      {
+        "name": "r2.relays.gchat.boo",
+        "expected_pin": "421ea9ef11fa30e0694aed87af4833ee55dbb512fcad2d6ae0cb262dcb0244cd",
+        "tls": "TLSv1.3",
+        "cipher": "TLS_AES_256_GCM_SHA384",
+        "actual_pin": "421ea9ef11fa30e0694aed87af4833ee55dbb512fcad2d6ae0cb262dcb0244cd",
+        "pin_matches": true,
+        "certificate_in_validity": true,
+        "dns_addresses": [
+          "95.217.118.227"
+        ],
+        "status": "passed"
+      },
+      {
+        "name": "r3.relays.gchat.boo",
+        "expected_pin": "36e18cf7d234f7b6c92619bf1950e6e5931aba1314f98d0b029b5200cd7bb027",
+        "tls": "TLSv1.3",
+        "cipher": "TLS_AES_256_GCM_SHA384",
+        "actual_pin": "36e18cf7d234f7b6c92619bf1950e6e5931aba1314f98d0b029b5200cd7bb027",
+        "pin_matches": true,
+        "certificate_in_validity": true,
+        "dns_addresses": [
+          "135.181.6.55"
+        ],
+        "status": "passed"
+      },
+      {
+        "name": "r4.relays.gchat.boo",
+        "expected_pin": "0ef070867360d4de4387fac8d1a53ad0b8a04f0db8364764ca0f25465c21d354",
+        "tls": "TLSv1.3",
+        "cipher": "TLS_AES_256_GCM_SHA384",
+        "actual_pin": "0ef070867360d4de4387fac8d1a53ad0b8a04f0db8364764ca0f25465c21d354",
+        "pin_matches": true,
+        "certificate_in_validity": true,
+        "dns_addresses": [
+          "157.90.35.101"
+        ],
+        "status": "passed"
+      },
+      {
+        "name": "r5.relays.gchat.boo",
+        "expected_pin": "0ae393606a3e72c5be1c46423666630be347e257bcff550c09b79e0dceb868e1",
+        "tls": "TLSv1.3",
+        "cipher": "TLS_AES_256_GCM_SHA384",
+        "actual_pin": "0ae393606a3e72c5be1c46423666630be347e257bcff550c09b79e0dceb868e1",
+        "pin_matches": true,
+        "certificate_in_validity": true,
+        "dns_addresses": [
+          "78.46.219.146"
+        ],
+        "status": "passed"
+      },
+      {
+        "name": "r6.relays.gchat.boo",
+        "expected_pin": "f477183ea8a6e60aa396e245466119f8cbda9aa89e6eff1f351d30189eb00920",
+        "tls": "TLSv1.3",
+        "cipher": "TLS_AES_256_GCM_SHA384",
+        "actual_pin": "f477183ea8a6e60aa396e245466119f8cbda9aa89e6eff1f351d30189eb00920",
+        "pin_matches": true,
+        "certificate_in_validity": true,
+        "dns_addresses": [
+          "65.109.79.94"
+        ],
+        "status": "passed"
+      },
+      {
+        "name": "r7.relays.gchat.boo",
+        "expected_pin": "438f9e7fe3d02d91b1ac527c4e3af7f8e0ca789bf8fd80a88ae9e5d2a033375e",
+        "tls": "TLSv1.3",
+        "cipher": "TLS_AES_256_GCM_SHA384",
+        "actual_pin": "438f9e7fe3d02d91b1ac527c4e3af7f8e0ca789bf8fd80a88ae9e5d2a033375e",
+        "pin_matches": true,
+        "certificate_in_validity": true,
+        "dns_addresses": [
+          "116.202.84.152"
+        ],
+        "status": "passed"
+      },
+      {
+        "name": "r8.relays.gchat.boo",
+        "expected_pin": "f28674fa35b828f294678b12341df1145c9faa6ff159896adb54ec18ef1c1097",
+        "tls": "TLSv1.3",
+        "cipher": "TLS_AES_256_GCM_SHA384",
+        "actual_pin": "f28674fa35b828f294678b12341df1145c9faa6ff159896adb54ec18ef1c1097",
+        "pin_matches": true,
+        "certificate_in_validity": true,
+        "dns_addresses": [
+          "49.12.172.59"
+        ],
+        "status": "passed"
+      }
+    ],
+    "ipv6": [
+      {
+        "host": "bootstrap-hel.gchat.boo",
+        "family": "IPv6",
+        "addresses": [
+          "2a01:4f9:4a:3421::2"
+        ],
+        "status": "unavailable_from_workstation",
+        "errno": 101,
+        "error": "[Errno 101] Network is unreachable"
+      },
+      {
+        "host": "bootstrap-fsn.gchat.boo",
+        "family": "IPv6",
+        "addresses": [
+          "2a01:4f8:251:5951::2"
+        ],
+        "status": "unavailable_from_workstation",
+        "errno": 101,
+        "error": "[Errno 101] Network is unreachable"
+      }
+    ],
+    "authenticated_application_checks": {
+      "status": "blocked",
+      "reason": "A provisioned test invitation file path has been requested; no invitation is available within the permitted folders",
+      "pending": [
+        "onboarding",
+        "typed RPC",
+        "peer messaging",
+        "channel invitation redemption",
+        "durable reconnect",
+        "provider failover"
+      ]
+    }
+  },
+  "limitations": [
+    "Windows MSVC compilation, native compiler UI tests, Windows rustdoc and desktop installer/signing/GUI acceptance were not run.",
+    "macOS is unavailable.",
+    "TLS pin probes establish endpoint and certificate consistency, not GC/1 routing or privacy properties.",
+    "IPv6 is unreachable from the workstation; server IPv6 reachability is not qualified."
+  ],
+  "compiler_ui_repetition": {
+    "scope": "Only this task compiler UI rerun",
+    "reason": "Extra rerun blocked behind workstation resource scheduler; earlier IPC-fix compiler UI run passed",
+    "prior_success_log": "linux-ipc-fixes.log",
+    "queued_processes": [],
+    "outcome": "The redundant UI harness had already reached its 900-second timeout before cancellation was attempted; no processes were signalled"
+  },
+  "check_exit_codes": {
+    "linux_ipc_regression": 0,
+    "linux_clippy": 0,
+    "windows_clippy": 0,
+    "windows_nat_clippy": 0,
+    "windows_gchat_clippy": 0,
+    "source_inventory_gcoms": 0,
+    "source_inventory_gchat": 0,
+    "cell_vectors": 0,
+    "linux_gchat_tests": 0,
+    "linux_gchat_clippy": 0,
+    "linux_workspace_initial": 101,
+    "linux_clippy_final": 0,
+    "linux_remaining_runner": 1,
+    "linux_doctests": 0,
+    "linux_proc_macro_loader_retry": 0
+  },
+  "evidence_directory": "target/application-qualification-20260918T113411Z",
+  "evidence_retention": "Raw logs, original failed attempts, follow-up runs, source/binary hashes and VM overlay remain private; credentials/contact cards are not published."
+}

@@ -1,0 +1,1 @@
+-keep class boo.gcoms.sdk.Native { *; }

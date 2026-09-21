@@ -1,8 +1,11 @@
-//! Standard-runtime sealed storage and transactional prepare/commit APIs.
+//! Sealed storage and transactional prepare/commit APIs. Freestanding callers
+//! supply entropy, monotonic time and the elapsed time across a restart.
 use super::*;
 use aes_gcm::aead::Payload;
 use aes_gcm::Aes256Gcm;
+#[cfg(feature = "std")]
 use rand::rngs::OsRng;
+use rand::CryptoRng;
 
 const SEALED_MAGIC: &[u8; 8] = b"GCSEAL1\0";
 const SEALED_VERSION: u16 = 1;
@@ -78,7 +81,7 @@ impl SealedSession {
     }
 
     pub fn into_bytes(mut self) -> Vec<u8> {
-        std::mem::take(&mut self.0)
+        core::mem::take(&mut self.0)
     }
 }
 
@@ -134,6 +137,7 @@ impl ZeroizeOnDrop for PreparedReceive {}
 
 impl Session {
     /// Encrypt the complete session state under a caller-owned wrapping key.
+    #[cfg(feature = "std")]
     pub fn seal_state(
         &self,
         wrapping_key: &[u8; 32],
@@ -144,16 +148,37 @@ impl Session {
 
     /// Seals small caller metadata in the same transaction as the session.
     /// This is intended for capabilities needed to resume delivery after restart.
+    #[cfg(feature = "std")]
     pub fn seal_state_with_attachment(
         &self,
         wrapping_key: &[u8; 32],
         context: &SessionContext,
         attachment: &[u8],
     ) -> Result<SealedSession, CryptoError> {
+        self.seal_state_with_attachment_at(
+            wrapping_key,
+            context,
+            attachment,
+            Instant::now(),
+            &mut OsRng,
+        )
+    }
+
+    pub fn seal_state_with_attachment_at(
+        &self,
+        wrapping_key: &[u8; 32],
+        context: &SessionContext,
+        attachment: &[u8],
+        now: SessionTime,
+        entropy: &mut (impl RngCore + CryptoRng),
+    ) -> Result<SealedSession, CryptoError> {
         if attachment.len() > MAX_STATE_ATTACHMENT {
             return Err(CryptoError::StateTooLarge);
         }
-        let state = Zeroizing::new(self.encode_private());
+        if now < self.last_pq || self.skipped.iter().any(|key| now < key.stored_at) {
+            return Err(CryptoError::StaleTransaction);
+        }
+        let state = Zeroizing::new(self.encode_private_at(now));
         let mut plaintext = Zeroizing::new(Vec::with_capacity(4 + state.len() + attachment.len()));
         plaintext.extend_from_slice(&(state.len() as u32).to_be_bytes());
         plaintext.extend_from_slice(&state);
@@ -162,7 +187,9 @@ impl Session {
             return Err(CryptoError::StateTooLarge);
         }
         let mut nonce = [0u8; 12];
-        OsRng.fill_bytes(&mut nonce);
+        entropy
+            .try_fill_bytes(&mut nonce)
+            .map_err(|_| CryptoError::Entropy)?;
         let aad = context.aad();
         let ciphertext = Aes256Gcm::new_from_slice(wrapping_key)
             .expect("AES-256 key length")
@@ -183,6 +210,7 @@ impl Session {
     }
 
     /// Restore authenticated state. Wrong keys, contexts, versions and truncation fail closed.
+    #[cfg(feature = "std")]
     pub fn open_state(
         sealed: &SealedSession,
         wrapping_key: &[u8; 32],
@@ -192,6 +220,7 @@ impl Session {
     }
 
     /// Opens state while enforcing caller-durable counter floors to detect rollback.
+    #[cfg(feature = "std")]
     pub fn open_state_at_least(
         sealed: &SealedSession,
         wrapping_key: &[u8; 32],
@@ -206,10 +235,31 @@ impl Session {
         Ok(session)
     }
 
+    #[cfg(feature = "std")]
     pub fn open_state_with_attachment(
         sealed: &SealedSession,
         wrapping_key: &[u8; 32],
         context: &SessionContext,
+    ) -> Result<(Self, Zeroizing<Vec<u8>>), CryptoError> {
+        Self::open_state_with_attachment_at(
+            sealed,
+            wrapping_key,
+            context,
+            Instant::now(),
+            Duration::ZERO,
+            &mut OsRng,
+        )
+    }
+
+    /// `offline` must conservatively include elapsed time since the snapshot.
+    /// Caller-durable timestamps/deadlines remain the authority for run expiry.
+    pub fn open_state_with_attachment_at(
+        sealed: &SealedSession,
+        wrapping_key: &[u8; 32],
+        context: &SessionContext,
+        now: SessionTime,
+        offline: Duration,
+        entropy: &mut (impl RngCore + CryptoRng),
     ) -> Result<(Self, Zeroizing<Vec<u8>>), CryptoError> {
         let bytes = sealed.as_bytes();
         if bytes.len() < 38
@@ -241,13 +291,15 @@ impl Session {
         {
             return Err(CryptoError::BadEncoding);
         }
-        let session =
-            Self::decode_private(&plaintext[4..4 + state_len]).ok_or(CryptoError::BadEncoding)?;
+        let rng = StdRng::from_rng(entropy).map_err(|_| CryptoError::Entropy)?;
+        let session = Self::decode_private_at(&plaintext[4..4 + state_len], now, offline, rng)
+            .ok_or(CryptoError::BadEncoding)?;
         let attachment = Zeroizing::new(plaintext[4 + state_len..].to_vec());
         Ok((session, attachment))
     }
 
     /// Compute wire bytes and post-send state without advancing this session.
+    #[cfg(feature = "std")]
     pub fn prepare_send(
         &self,
         payload: &[u8],
@@ -257,6 +309,7 @@ impl Session {
         self.prepare_send_with_attachment(payload, wrapping_key, context, &[])
     }
 
+    #[cfg(feature = "std")]
     pub fn prepare_send_with_attachment(
         &self,
         payload: &[u8],
@@ -264,9 +317,29 @@ impl Session {
         context: &SessionContext,
         attachment: &[u8],
     ) -> Result<PreparedSend, CryptoError> {
-        let mut next = self.clone_with_fresh_entropy();
-        let wire = next.send(payload)?.encode();
-        let sealed = next.seal_state_with_attachment(wrapping_key, context, attachment)?;
+        self.prepare_send_with_attachment_at(
+            payload,
+            wrapping_key,
+            context,
+            attachment,
+            Instant::now(),
+            &mut OsRng,
+        )
+    }
+
+    pub fn prepare_send_with_attachment_at(
+        &self,
+        payload: &[u8],
+        wrapping_key: &[u8; 32],
+        context: &SessionContext,
+        attachment: &[u8],
+        now: SessionTime,
+        entropy: &mut (impl RngCore + CryptoRng),
+    ) -> Result<PreparedSend, CryptoError> {
+        let mut next = self.clone_with_fresh_entropy(entropy)?;
+        let wire = next.send_at(payload, now)?.encode();
+        let sealed =
+            next.seal_state_with_attachment_at(wrapping_key, context, attachment, now, entropy)?;
         Ok(PreparedSend {
             base_send_ctr: self.send_ctr,
             base_recv_ctr: self.recv_ctr,
@@ -287,15 +360,28 @@ impl Session {
     }
 
     /// Authenticate/decrypt without advancing until application durability is complete.
+    #[cfg(feature = "std")]
     pub fn prepare_receive(
         &self,
         frame: &Frame,
         wrapping_key: &[u8; 32],
         context: &SessionContext,
     ) -> Result<PreparedReceive, CryptoError> {
-        let mut next = self.clone_with_fresh_entropy();
-        let plaintext = next.receive(frame)?;
-        let sealed = next.seal_state(wrapping_key, context)?;
+        self.prepare_receive_at(frame, wrapping_key, context, Instant::now(), &mut OsRng)
+    }
+
+    pub fn prepare_receive_at(
+        &self,
+        frame: &Frame,
+        wrapping_key: &[u8; 32],
+        context: &SessionContext,
+        now: SessionTime,
+        entropy: &mut (impl RngCore + CryptoRng),
+    ) -> Result<PreparedReceive, CryptoError> {
+        let mut next = self.clone_with_fresh_entropy(entropy)?;
+        let plaintext = next.receive_at(frame, now)?;
+        let sealed =
+            next.seal_state_with_attachment_at(wrapping_key, context, &[], now, entropy)?;
         Ok(PreparedReceive {
             base_send_ctr: self.send_ctr,
             base_recv_ctr: self.recv_ctr,
@@ -317,9 +403,12 @@ impl Session {
     /// A copy whose randomness is independent of `self`. Cloning the RNG
     /// verbatim would make two prepared sends from one state derive the same
     /// ephemeral keys and the same AEAD nonce; that must never happen.
-    fn clone_with_fresh_entropy(&self) -> Self {
+    fn clone_with_fresh_entropy(
+        &self,
+        entropy: &mut (impl RngCore + CryptoRng),
+    ) -> Result<Self, CryptoError> {
         let mut next = self.clone();
-        next.rng = StdRng::from_entropy();
-        next
+        next.rng = StdRng::from_rng(entropy).map_err(|_| CryptoError::Entropy)?;
+        Ok(next)
     }
 }

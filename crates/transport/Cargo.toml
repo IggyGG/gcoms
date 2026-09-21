@@ -12,7 +12,7 @@ publish.workspace = true
 
 [dependencies]
 gcoms-core = { version = "0.1.0", path = "../core" }
-tokio = { version = "1", features = ["rt-multi-thread", "net", "macros", "time", "io-util"] }
+tokio = { version = "1", features = ["rt", "net", "macros", "time", "io-util"] }
 tokio-rustls = "0.26"
 rustls = { version = "0.23.45", default-features = false, features = ["aws-lc-rs", "std"] }
 h2 = "0.4"

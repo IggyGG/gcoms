@@ -10,7 +10,8 @@ async fn disconnected_probe_does_not_stop_listener() {
     let endpoint = LocalEndpoint::new(directory.path().join("probe.sock"));
     let mut listener = LocalListener::bind(&endpoint).unwrap();
 
-    // macOS may lose peer credentials as soon as this probe disconnects.
+    // Queue a closed connection before the live client. On macOS its peer PID
+    // is already unavailable when accept inspects the kernel credentials.
     drop(connect(&endpoint).await.unwrap());
     let mut client = connect(&endpoint).await.unwrap();
     client.write_all(b"ready").await.unwrap();
@@ -19,7 +20,8 @@ async fn disconnected_probe_does_not_stop_listener() {
         loop {
             let mut stream = listener.accept().await.unwrap();
             let mut data = [0; 5];
-            // Linux can still authenticate the closed probe; skip its EOF.
+            // Linux retains the credentials of the closed probe. Its admitted
+            // stream reaches EOF; either OS must still accept the live client.
             if stream.read(&mut data[..1]).await.unwrap() == 0 {
                 continue;
             }

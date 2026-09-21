@@ -15,3 +15,11 @@ __pycache__/
 
 # Contained task checkouts are local workspace state.
 /.worktrees/
+
+# Mobile SDK build products and workstation configuration.
+/mobile/android/.gradle/
+/mobile/android/.kotlin/
+/mobile/android/**/build/
+/mobile/android/local.properties
+/mobile/apple/*.xcodeproj/
+/mobile/apple/*.xcworkspace/
