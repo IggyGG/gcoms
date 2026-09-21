@@ -2,8 +2,10 @@
 
 The Rust loopback benchmark was already imported into GComs. This repository now
 also contains its three analysis/model scripts and regression tests, pinned by
-[research/IMPORT.json](research/IMPORT.json). Their historical behavior remains
-unchanged so that prior results can be checked rather than reinterpreted.
+[research/IMPORT.json](research/IMPORT.json). The manifest retains original source hashes and records local adaptations
+separately. Model calculations and retained aggregate results are unchanged. The
+Windows portability adaptation refuses private report creation on unsupported
+filesystems before writing; it does not reinterpret historical results.
 
 ## Historical controlled comparison
 

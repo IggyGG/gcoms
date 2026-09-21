@@ -7,32 +7,62 @@
     {
       "path": "scripts/relay-performance.py",
       "source_path": "scripts/relay-performance.py",
-      "sha256": "23d59993d3c90f815fd6a7cb8de82e20e39bd92685cd897990a71aacfd41e905"
+      "sha256": "69cb929e0b9109dd51cdcb7e3e2a08ad94be58c4b5c05ebdced3ac5a95f7c585",
+      "source_sha256": "23d59993d3c90f815fd6a7cb8de82e20e39bd92685cd897990a71aacfd41e905",
+      "local_adaptation": {
+        "commit": "60a91c5aa1efc970f4d332b5868a62f3dabded02",
+        "reason": "Refuse unsupported private report files on Windows before writing; tests cover explicit refusal. Historical model and result calculations unchanged."
+      }
     },
     {
       "path": "scripts/relay-tradeoffs.py",
       "source_path": "scripts/relay-tradeoffs.py",
-      "sha256": "df5b636e2d61a3ef84d4ced8a9409268c43b03522fa93b7ba4d0d02b36f4d50a"
+      "sha256": "dde5912b83b24b0183a5771d0fbc0547b9ca373d2ad7e5f9b5e33046e70820a2",
+      "source_sha256": "df5b636e2d61a3ef84d4ced8a9409268c43b03522fa93b7ba4d0d02b36f4d50a",
+      "local_adaptation": {
+        "commit": "60a91c5aa1efc970f4d332b5868a62f3dabded02",
+        "reason": "Refuse unsupported private report files on Windows before writing; tests cover explicit refusal. Historical model and result calculations unchanged."
+      }
     },
     {
       "path": "scripts/relay-utilization.py",
       "source_path": "scripts/relay-utilization.py",
-      "sha256": "a11e40fc16e6c17b338f3d14819f057849aff3f0c1f8dd6d809a711a46ed0c58"
+      "sha256": "3da825de5b070e2634a068343aa27ec0ce55d4599b02916a3ef7162c82f207a1",
+      "source_sha256": "a11e40fc16e6c17b338f3d14819f057849aff3f0c1f8dd6d809a711a46ed0c58",
+      "local_adaptation": {
+        "commit": "60a91c5aa1efc970f4d332b5868a62f3dabded02",
+        "reason": "Refuse unsupported private report files on Windows before writing; tests cover explicit refusal. Historical model and result calculations unchanged."
+      }
     },
     {
       "path": "scripts/tests/relay_performance_test.py",
       "source_path": "scripts/tests/relay_performance_test.py",
-      "sha256": "373e5b3f93417036dd9caa9486b6439a77801b00406bc5d1a5d55410f0301486"
+      "sha256": "d25bff3f655d55bcdf653b86a32a84ad35bb7576c5b3d6810db11e8f75a36bdd",
+      "source_sha256": "373e5b3f93417036dd9caa9486b6439a77801b00406bc5d1a5d55410f0301486",
+      "local_adaptation": {
+        "commit": "60a91c5aa1efc970f4d332b5868a62f3dabded02",
+        "reason": "Refuse unsupported private report files on Windows before writing; tests cover explicit refusal. Historical model and result calculations unchanged."
+      }
     },
     {
       "path": "scripts/tests/relay_tradeoffs_test.py",
       "source_path": "scripts/tests/relay_tradeoffs_test.py",
-      "sha256": "8ddb09841428525866739277292a074734a4edda0103ee089a5c78f2904faf4a"
+      "sha256": "35ed565f4e2f291cbecd9554bcfbfd68d88e3d158aef3719208083484f1716af",
+      "source_sha256": "8ddb09841428525866739277292a074734a4edda0103ee089a5c78f2904faf4a",
+      "local_adaptation": {
+        "commit": "60a91c5aa1efc970f4d332b5868a62f3dabded02",
+        "reason": "Refuse unsupported private report files on Windows before writing; tests cover explicit refusal. Historical model and result calculations unchanged."
+      }
     },
     {
       "path": "scripts/tests/relay_utilization_test.py",
       "source_path": "scripts/tests/relay_utilization_test.py",
-      "sha256": "8daeb583c9beac3d7707c298d1ae38ed9db0ea3a192fcf930d6f00da6ce561a5"
+      "sha256": "b3e23de06c6464273e3db6ab2e7c8d5f04b59de6d486efc49b254d232a3e6c57",
+      "source_sha256": "8daeb583c9beac3d7707c298d1ae38ed9db0ea3a192fcf930d6f00da6ce561a5",
+      "local_adaptation": {
+        "commit": "60a91c5aa1efc970f4d332b5868a62f3dabded02",
+        "reason": "Refuse unsupported private report files on Windows before writing; tests cover explicit refusal. Historical model and result calculations unchanged."
+      }
     },
     {
       "path": "docs/research/relay-utilization-20260917.json",

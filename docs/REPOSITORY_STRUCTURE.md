@@ -19,7 +19,8 @@ of those private applications.
 
 The missing research analyzers, their regression tests and the aggregate result
 are now retained here. [The import manifest](research/IMPORT.json) pins their
-original source paths and SHA-256 hashes. Verify them with
+original source paths and SHA-256 hashes, alongside separately recorded hashes
+and reasons for local adaptations. Verify current bytes with
 `python3 scripts/check-research-import.py`; the check does not access the old
 repository. [Research notes](RELAY_RESEARCH.md) distinguish historical results
 from new-source qualification.

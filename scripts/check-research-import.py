@@ -12,4 +12,4 @@ for entry in manifest["files"]:
         raise SystemExit("research path escapes repository")
     if hashlib.sha256(path.read_bytes()).hexdigest() != entry["sha256"]:
         raise SystemExit(f"historical research changed: {entry['path']}")
-print(f"{len(manifest['files'])} research imports match source {manifest['source_revision']}")
+print(f"{len(manifest['files'])} research files match recorded import/adaptation hashes; original source {manifest['source_revision']}")
