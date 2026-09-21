@@ -8,7 +8,18 @@
 //! an admit is in flight.
 
 use gcoms_node::channel::ChannelVisibility;
-use gcoms_node::node::{start, NodeConfig, NodeHandle, NodeProfile};
+use gcoms_node::node::{start, ChannelStatus, NodeConfig, NodeHandle, NodeProfile};
+
+async fn channel_status(owner: &NodeHandle, channel: &str) -> ChannelStatus {
+    owner
+        .list_channels()
+        .await
+        .expect("channel list")
+        .into_iter()
+        .find(|view| view.channel == channel)
+        .expect("channel exists")
+        .status
+}
 
 async fn spawn(seed: u8) -> NodeHandle {
     start(NodeConfig {
@@ -35,6 +46,7 @@ async fn admit(owner: &NodeHandle, channel: &str, member: &NodeHandle, name: &st
         .join_channel(req, channel, ChannelVisibility::Private, &welcome)
         .await
         .expect("join");
+    assert_eq!(channel_status(owner, channel).await, ChannelStatus::Active);
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
@@ -66,19 +78,31 @@ async fn current_info_stays_responsive_while_admissions_and_sends_are_in_flight(
     // Keep every admitted member online until all work completes: later
     // membership commits require acknowledgments from earlier members too.
     let mut tasks: tokio::task::JoinSet<()> = tokio::task::JoinSet::new();
+    let prepared = std::sync::Arc::new(tokio::sync::Barrier::new(pending.len() + 1));
+    // Owner commands already serialize admissions. Include the caller's
+    // application of each Welcome in that fixture ordering before advancing
+    // the next membership epoch; it is a separate command on another node.
+    let admission_cycle = std::sync::Arc::new(tokio::sync::Mutex::new(()));
     for (i, m) in pending.iter().enumerate() {
         let m = m.clone();
         let owner = owner.clone();
+        let prepared = prepared.clone();
+        let admission_cycle = admission_cycle.clone();
         tasks.spawn(async move {
             let name = format!("cc{i}");
             let req = m.prepare_channel_join(&name).await.expect("prepare");
             let kp = m.channel_key_package(req).await.expect("kp");
+            prepared.wait().await;
+            let _cycle = admission_cycle.lock().await;
             let welcome = owner.admit_channel("ops", &kp, &name).await.expect("admit");
             m.join_channel(req, "ops", ChannelVisibility::Private, &welcome)
                 .await
                 .expect("join");
+            assert_eq!(channel_status(&owner, "ops").await, ChannelStatus::Active);
         });
     }
+
+    prepared.wait().await;
     for i in 0..4u8 {
         let owner = owner.clone();
         tasks.spawn(async move {
@@ -130,4 +154,85 @@ async fn current_info_stays_responsive_while_admissions_and_sends_are_in_flight(
     for m in pending {
         m.shutdown().await;
     }
+}
+
+/// A briefly delayed Welcome is supported by the parked-cell and ACK paths.
+/// Exercise that overlap explicitly so ordering the load fixture cannot hide
+/// a failure to recover after the missing member actually joins.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn delayed_welcome_keeps_commands_responsive_and_membership_recovers() {
+    use std::time::Duration;
+
+    let owner = std::sync::Arc::new(spawn(0x61).await);
+    let first = spawn(0x62).await;
+    let second = spawn(0x63).await;
+    owner
+        .create_channel("delayed", "founder", 8, ChannelVisibility::Private)
+        .await
+        .expect("create");
+    let first_req = first.prepare_channel_join("first").await.expect("prepare");
+    let first_kp = first.channel_key_package(first_req).await.expect("kp");
+    let first_welcome = owner
+        .admit_channel("delayed", &first_kp, "first")
+        .await
+        .expect("first admission");
+    let second_req = second
+        .prepare_channel_join("second")
+        .await
+        .expect("prepare");
+    let second_kp = second.channel_key_package(second_req).await.expect("kp");
+    let second_owner = owner.clone();
+    let admission = tokio::spawn(async move {
+        second_owner
+            .admit_channel("delayed", &second_kp, "second")
+            .await
+    });
+    tokio::time::timeout(Duration::from_secs(10), async {
+        while channel_status(&owner, "delayed").await != ChannelStatus::MembershipPending {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .expect("second admission must await the not-yet-joined member");
+    for _ in 0..20 {
+        assert!(
+            !admission.is_finished(),
+            "admission cannot converge before join"
+        );
+        tokio::time::timeout(Duration::from_millis(500), owner.current_info())
+            .await
+            .expect("current_info must remain responsive during the blocked admission")
+            .expect("current_info");
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    first
+        .join_channel(
+            first_req,
+            "delayed",
+            ChannelVisibility::Private,
+            &first_welcome,
+        )
+        .await
+        .expect("apply the delayed Welcome");
+    let second_welcome = tokio::time::timeout(Duration::from_secs(90), admission)
+        .await
+        .expect("membership recovery must remain bounded")
+        .expect("admission task")
+        .expect("second admission");
+    assert_eq!(
+        channel_status(&owner, "delayed").await,
+        ChannelStatus::Active
+    );
+    second
+        .join_channel(
+            second_req,
+            "delayed",
+            ChannelVisibility::Private,
+            &second_welcome,
+        )
+        .await
+        .expect("second join");
+    owner.shutdown().await;
+    first.shutdown().await;
+    second.shutdown().await;
 }
