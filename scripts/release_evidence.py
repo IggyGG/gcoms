@@ -49,6 +49,13 @@ EXCLUSIONS = {
     "native_c_deadline_bounds_stalled_and_trickling_peers": "private external TLS probe",
     "native_c_http2_uses_existing_tp1_post_and_stream_paths": "private external TLS probe",
 }
+# These installed-network fixtures require the separate Linux namespace runner.
+# Native package tests record the exclusion; they never imply installed coverage.
+GCHAT_EXCLUSIONS = {
+    "bootstrap_gc2_tests::production_bootstrap_fresh_reopen_and_recovery",
+    "chat_service::networks::journey::combined_invitation_joins_another_network_and_retains_chat_and_file",
+    "chat_service::networks::tests::joined_network_registry_is_private_isolated_and_reopens",
+}
 
 
 class EvidenceError(ValueError):
@@ -185,8 +192,7 @@ def validate_report(check, report, candidate, base, artifacts):
         for exclusion in counts["excluded"]:
             require(isinstance(exclusion, dict) and nonempty(exclusion.get("name")) and nonempty(exclusion.get("reason")), "unexplained test exclusion")
             require((check.startswith("native.gcoms.") and exclusion["name"] in EXCLUSIONS) or
-                    (candidate.get("wire_profile") == "GC/2" and check.startswith("native.gchat.") and
-                     exclusion["name"] == "bootstrap_gc2_tests::production_bootstrap_fresh_reopen_and_recovery"),
+                    (check.startswith("native.gchat.") and exclusion["name"] in GCHAT_EXCLUSIONS),
                     "test exclusion is not in the reviewed qualification policy")
         require(len({entry["name"] for entry in counts["excluded"]}) == len(counts["excluded"]), "duplicate test exclusions")
     if check in INSTALLERS:

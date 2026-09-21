@@ -141,6 +141,19 @@ class EvidenceTests(unittest.TestCase):
                 self.candidate["targets"] = targets
                 self.assertTrue(any("invalid candidate targets" in error for error in self.errors()))
 
+    def test_native_gchat_keeps_explicit_namespace_exclusion_scope(self):
+        check = "native.gchat.macos-aarch64"
+        report = self.reports[check]
+        report["tests"].update(ignored=1, excluded=[{
+            "name": "chat_service::networks::tests::joined_network_registry_is_private_isolated_and_reopens",
+            "reason": "requires the disconnected namespace helper; creates independent protected runtimes",
+        }])
+        self.save(check)
+        self.assertEqual(self.errors(), [])
+        report["tests"]["excluded"][0]["name"] = "unexpected_ignored_test"
+        self.save(check)
+        self.assertTrue(any("reviewed qualification policy" in error for error in self.errors()))
+
     def test_changed_log_and_artifact_bytes_block_release(self):
         (self.base / "native.gcoms.linux-x86_64.log").write_text("altered")
         self.assertTrue(any("hash mismatch" in error for error in self.errors()))
