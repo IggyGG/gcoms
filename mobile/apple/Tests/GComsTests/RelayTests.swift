@@ -4,18 +4,22 @@ import XCTest
 final class RelayTests: XCTestCase {
     func testChannelsFilesAndProfileReopen() async throws {
         let session = try GComs()
-        guard session.role == 2 else {
-            try await session.close()
-            throw XCTSkip("Relay fixture requires the relay distribution")
-        }
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true,
             attributes: [.posixPermissions: 0o700])
         defer { try? FileManager.default.removeItem(at: root) }
-        let config = try JSONSerialization.data(withJSONObject: [
+        var configuration: [String: Any] = [
             "application": "mobile-smoke", "profile": root.appendingPathComponent("profile").path,
             "secret": "disposable-simulator-secret", "fixture": true
-        ])
+        ]
+        if session.role == 1 {
+            guard let relay = ProcessInfo.processInfo.environment["GCOMS_RELAY"] else {
+                try await session.close()
+                throw GComsError.native("Run scripts/qualify-apple.py with the separate relay fixture")
+            }
+            configuration["relay"] = try JSONSerialization.jsonObject(with: Data(relay.utf8))
+        }
+        let config = try JSONSerialization.data(withJSONObject: configuration)
         do {
             let first = try await session.open(configuration: config)
             let channelReply = try await session.request(JSONSerialization.data(withJSONObject: [

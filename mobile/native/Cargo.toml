@@ -36,6 +36,11 @@ jni = { version = "0.21.1", default-features = false }
 [dev-dependencies]
 tempfile = "3"
 gcoms-private-fs = { version = "0.1.0", path = "../../crates/private-fs" }
+base64 = "0.22"
+
+[[example]]
+name = "fixture_host"
+required-features = ["relay", "fixtures"]
 
 [profile.release]
 opt-level = "z"

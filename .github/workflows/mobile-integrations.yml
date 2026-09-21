@@ -1,9 +1,14 @@
 name: Mobile SDK preview
 on:
   workflow_dispatch:
+    inputs:
+      push:
+        description: Qualify the separate optional push distribution
+        type: boolean
+        default: false
   push:
     branches: [main]
-    paths: ['mobile/**', 'scripts/build-mobile.py', 'scripts/qualify-*.py', '.github/workflows/mobile-integrations.yml']
+    paths: ['mobile/**', 'scripts/build-mobile.py', 'scripts/qualify-*.py', 'scripts/mobile_fixture.py', 'scripts/test-android.py', '.github/workflows/mobile-integrations.yml']
 permissions:
   contents: read
 jobs:
@@ -24,23 +29,18 @@ jobs:
         run: |
           rustup toolchain install 1.98.0 --profile minimal
           rustup default 1.98.0
-          echo "JAVA_HOME=$JAVA_HOME_21_X64" >> "$GITHUB_ENV"
-          echo "$JAVA_HOME_21_X64/bin" >> "$GITHUB_PATH"
-          sdkmanager 'ndk;28.2.13676358' 'platforms;android-36' 'build-tools;35.0.0' 'emulator' 'system-images;android-35;google_apis_ps16k;x86_64'
-          sudo chmod a+rw /dev/kvm
-          echo no | avdmanager create avd -n gcoms16k -k 'system-images;android-35;google_apis_ps16k;x86_64'
+          python3 scripts/prepare-android.py
       - name: Build preview fixture native libraries
-        run: python3 scripts/build-mobile.py android --roles ${{ matrix.role }} --fixtures --output target/mobile-fixtures
+        run: python3 scripts/build-mobile.py android --roles ${{ matrix.role }} --fixtures ${{ inputs.push && '--push' || '' }} --output target/mobile-fixtures
       - name: Exercise Kotlin on a 16 KiB Android emulator
         run: |
           "$ANDROID_HOME/emulator/emulator" -avd gcoms16k -port 5580 -no-window -no-audio -no-snapshot -gpu swiftshader -memory 2048 > emulator.log 2>&1 &
           adb -s emulator-5580 wait-for-device
           timeout 300 bash -c 'until [ "$(adb -s emulator-5580 shell getprop sys.boot_completed | tr -d "\r")" = 1 ]; do sleep 3; done'
           test "$(adb -s emulator-5580 shell getconf PAGE_SIZE | tr -d "\r")" = 16384
-          role=${{ matrix.role }}
-          mobile/android/gradlew -p mobile/android -PgcomsNativeRoot="$PWD/target/mobile-fixtures/android" ":sdk:connected${role^}DebugAndroidTest" --no-daemon
+          python3 scripts/test-android.py --role ${{ matrix.role }} --native-root target/mobile-fixtures --serial emulator-5580 ${{ inputs.push && '--push' || '' }}
       - name: Measure production native packages
-        run: python3 scripts/build-mobile.py android --roles ${{ matrix.role }} --profiles 3 s z --output target/mobile
+        run: python3 scripts/build-mobile.py android --roles ${{ matrix.role }} --profiles 3 s z ${{ inputs.push && '--push' || '' }} --output target/mobile
       - name: Measure release AAR and installed sample delta
         run: python3 scripts/qualify-android.py --role ${{ matrix.role }} --native-root target/mobile --serial emulator-5580
       - name: Stop qualification emulator
@@ -49,7 +49,7 @@ jobs:
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: always()
         with:
-          name: mobile-android-${{ matrix.role }}-${{ github.sha }}
+          name: mobile-android-${{ matrix.role }}-${{ inputs.push && 'push' || 'base' }}-${{ github.sha }}
           path: |
             target/mobile/
             target/mobile-fixtures/summary.json
@@ -74,17 +74,17 @@ jobs:
           rustup default 1.98.0
           brew install xcodegen
       - name: Build preview fixture XCFramework
-        run: python3 scripts/build-mobile.py apple --roles ${{ matrix.role }} --fixtures --output target/mobile-fixtures
+        run: python3 scripts/build-mobile.py apple --roles ${{ matrix.role }} --fixtures ${{ inputs.push && '--push' || '' }} --output target/mobile-fixtures
       - name: Exercise Swift on an iOS simulator
         run: python3 scripts/qualify-apple.py --role ${{ matrix.role }} --native-root target/mobile-fixtures --test
       - name: Measure production native packages
-        run: python3 scripts/build-mobile.py apple --roles ${{ matrix.role }} --profiles 3 s z --output target/mobile
+        run: python3 scripts/build-mobile.py apple --roles ${{ matrix.role }} --profiles 3 s z ${{ inputs.push && '--push' || '' }} --output target/mobile
       - name: Measure linked application delta
         run: python3 scripts/qualify-apple.py --role ${{ matrix.role }} --native-root target/mobile
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: always()
         with:
-          name: mobile-apple-${{ matrix.role }}-${{ github.sha }}
+          name: mobile-apple-${{ matrix.role }}-${{ inputs.push && 'push' || 'base' }}-${{ github.sha }}
           path: |
             target/mobile/
             target/mobile-fixtures/summary.json

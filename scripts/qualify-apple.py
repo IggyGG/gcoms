@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 """Run the native Swift consumer and measure installed simulator/sample bytes."""
 import argparse
+import contextlib
 import hashlib
 import json
 import os
 from pathlib import Path
 import subprocess
+from mobile_fixture import relay
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -31,6 +33,11 @@ def main():
     parser.add_argument("--test", action="store_true")
     parser.add_argument("--baseline", type=Path)
     args = parser.parse_args()
+    with relay() if args.test and args.role == "client" else contextlib.nullcontext(None) as host:
+        qualify(args, host)
+
+
+def qualify(args, host):
     native = args.native_root.resolve()
     summary = json.loads((native / "summary.json").read_text())
     if bool(summary["fixtures"]) != args.test:
@@ -46,6 +53,10 @@ def main():
     if push:
         spec = spec.replace("product: GComs", "product: GComsPush")
         spec = spec.replace("GCOMS_ENABLED", "GCOMS_ENABLED GCOMS_PUSH")
+    if host:
+        spec = spec.replace("targets: [PreviewTests]",
+            "targets: [PreviewTests]\n      environmentVariables:\n        GCOMS_RELAY: " +
+            json.dumps(json.dumps(host["relay"], separators=(",", ":"))))
     (evidence / "project.yml").write_text(spec)
     run(["xcodegen", "generate", "--spec", evidence / "project.yml",
          "--project", evidence], env=env)

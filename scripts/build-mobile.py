@@ -25,8 +25,8 @@ def digest(path):
 def source_hashes():
     names = subprocess.check_output(['git', 'ls-files', '-z', '--cached', '--others', '--exclude-standard'], cwd=ROOT).decode().split('\0')
     return {name: digest(ROOT / name) for name in sorted(set(names)) if name and
-        (ROOT / name).is_file() and (name.startswith(('mobile/', 'crates/', 'scripts/qualify-')) or
-        name in ('Cargo.toml', 'Cargo.lock', 'scripts/build-mobile.py'))}
+        (ROOT / name).is_file() and (name.startswith(('mobile/', 'crates/', 'scripts/qualify-', 'scripts/test-android')) or
+        name in ('Cargo.toml', 'Cargo.lock', 'scripts/build-mobile.py', 'scripts/mobile_fixture.py'))}
 
 
 def main():

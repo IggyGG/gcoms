@@ -5,7 +5,6 @@ import kotlinx.coroutines.runBlocking
 import org.json.JSONObject
 import org.json.JSONArray
 import org.junit.Assert.*
-import org.junit.Assume.assumeTrue
 import org.junit.Test
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
@@ -22,14 +21,18 @@ class NativeSmokeTest {
         sdk.close()
     }
 
-    @Test fun relayProfileChannelsFilesAndLifecycle() = runBlocking {
-        assumeTrue(BuildConfig.NATIVE_ROLE == 2)
+    @Test fun profileChannelsFilesAndLifecycle() = runBlocking {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val directory = File(context.noBackupFilesDir, "smoke-" + System.nanoTime()).apply { mkdir() }
         val sdk = GComs()
         val config = JSONObject().put("application", "mobile-smoke")
             .put("profile", File(directory, "profile").absolutePath)
             .put("secret", "disposable-emulator-secret").put("fixture", true)
+        if (BuildConfig.NATIVE_ROLE == 1) {
+            val relay = InstrumentationRegistry.getArguments().getString("gcoms_relay")
+            check(relay != null) { "Run scripts/test-android.py to provide the separate relay fixture" }
+            config.put("relay", JSONArray(relay))
+        }
         try {
             val first = sdk.open(config) as JSONObject
             val channel = sdk.request(JSONObject().put("op", "create_channel").put("channel", "smoke")

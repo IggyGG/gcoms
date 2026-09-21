@@ -1,0 +1,39 @@
+#!/usr/bin/env python3
+"""Exercise either SDK role; clients use a separate loopback relay through adb."""
+import argparse
+import contextlib
+import json
+import os
+from pathlib import Path
+import subprocess
+from mobile_fixture import relay, ROOT
+
+parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument("--role", choices=["client", "relay"], required=True)
+parser.add_argument("--native-root", type=Path, required=True)
+parser.add_argument("--serial", required=True)
+parser.add_argument("--gradle", default=str(ROOT / "mobile/android/gradlew"))
+parser.add_argument("--push", action="store_true")
+args = parser.parse_args()
+native = args.native_root.resolve()
+metadata = json.loads((native / "android" / args.role / "build.json").read_text())
+if not metadata["fixtures"]:
+    raise RuntimeError("Functional tests require a non-distributable fixture build")
+adb = [str(Path(os.environ["ANDROID_HOME"]) / "platform-tools/adb"), "-s", args.serial]
+command = [args.gradle, "-p", str(ROOT / "mobile/android"),
+    "-PgcomsNativeRoot=" + str(native / "android")]
+if args.push:
+    command += ["-PgcomsPush=true", ":push:test" + args.role.title() + "DebugUnitTest"]
+with relay() if args.role == "client" else contextlib.nullcontext(None) as host:
+    port = None
+    try:
+        if host:
+            port = "tcp:" + str(host["port"])
+            subprocess.run(adb + ["reverse", port, port], check=True)
+            command += ["-Pandroid.testInstrumentationRunnerArguments.gcoms_relay=" +
+                json.dumps(host["relay"], separators=(",", ":"))]
+        subprocess.run(command + [":sdk:connected" + args.role.title() + "DebugAndroidTest", "--no-daemon"],
+            env=dict(os.environ, ANDROID_SERIAL=args.serial), check=True)
+    finally:
+        if port:
+            subprocess.run(adb + ["reverse", "--remove", port], check=False)
