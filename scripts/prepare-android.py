@@ -23,17 +23,18 @@ shutil.move(str(root / "unpack/cmdline-tools"), latest)
 for tool in (latest / "bin").iterdir():
     tool.chmod(tool.stat().st_mode | 0o111)
 environment = dict(os.environ, ANDROID_HOME=str(root), ANDROID_SDK_ROOT=str(root),
+    ANDROID_NDK_HOME=str(root / "ndk/27.3.13750724"),
     JAVA_HOME=os.environ["JAVA_HOME_21_X64"])
 sdkmanager = str(latest / "bin/sdkmanager")
 subprocess.run([sdkmanager, "--sdk_root=" + str(root), "--licenses"], input="y\n" * 200, text=True, env=environment, check=True)
-subprocess.run([sdkmanager, "--sdk_root=" + str(root), "ndk;28.2.13676358", "platforms;android-36",
+subprocess.run([sdkmanager, "--sdk_root=" + str(root), "ndk;27.3.13750724", "platforms;android-36",
     "build-tools;35.0.0", "platform-tools", "emulator", "system-images;android-35;google_apis_ps16k;x86_64"],
     input="y\n" * 200, text=True, env=environment, check=True)
 subprocess.run(["sudo", "chmod", "a+rw", "/dev/kvm"], check=True)
 subprocess.run([str(latest / "bin/avdmanager"), "create", "avd", "-n", "gcoms16k", "-k",
     "system-images;android-35;google_apis_ps16k;x86_64"], input="no\n", text=True, env=environment, check=True)
 with open(os.environ["GITHUB_ENV"], "a") as stream:
-    for name in ("ANDROID_HOME", "ANDROID_SDK_ROOT", "JAVA_HOME"):
+    for name in ("ANDROID_HOME", "ANDROID_SDK_ROOT", "ANDROID_NDK_HOME", "JAVA_HOME"):
         stream.write(name + "=" + environment[name] + "\n")
 with open(os.environ["GITHUB_PATH"], "a") as stream:
     stream.write(str(latest / "bin") + "\n" + str(root / "platform-tools") + "\n" + environment["JAVA_HOME"] + "/bin\n")

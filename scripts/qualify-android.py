@@ -21,6 +21,28 @@ def capture(args):
     return subprocess.check_output([str(a) for a in args], text=True).strip()
 
 
+def elf_alignment(data):
+    if len(data) < 64 or data[:6] != b"\x7fELF\x02\x01":
+        raise RuntimeError("Release APK requires a little-endian 64-bit ELF library")
+    header = struct.unpack_from("<16sHHIQQQIHHHHHH", data)
+    offset, entry_size, count = header[5], header[9], header[10]
+    if entry_size < 56 or offset + count * entry_size > len(data):
+        raise RuntimeError("Invalid native library program headers")
+    loads = []
+    for index in range(count):
+        kind, _, file_offset, address, _, _, memory_size, alignment = struct.unpack_from(
+            "<IIQQQQQQ", data, offset + index * entry_size)
+        if kind == 1:
+            if alignment < 16384 or file_offset % 16384 != address % 16384:
+                raise RuntimeError("Release APK native library lacks 16 KiB LOAD alignment")
+            loads.append(alignment)
+        elif kind == 0x6474E552 and (address + memory_size) % 16384:
+            raise RuntimeError("Release APK native library lacks 16 KiB RELRO alignment")
+    if not loads:
+        raise RuntimeError("Native library has no LOAD segments")
+    return {"elf_load_alignment": min(loads), "elf_relro_aligned": True}
+
+
 def archive(path):
     with zipfile.ZipFile(path) as content:
         entries = content.infolist()
@@ -35,8 +57,9 @@ def archive(path):
                     offset = item.header_offset + 30 + name_bytes + extra_bytes
                     if item.compress_type != zipfile.ZIP_STORED or offset % 16384:
                         raise RuntimeError("Release APK native library is not uncompressed and 16 KiB aligned: " + item.filename)
+                    payload = content.read(item)
                     native_entries.append({"path": item.filename, "offset": offset,
-                        "sha256": hashlib.sha256(content.read(item)).hexdigest()})
+                        "sha256": hashlib.sha256(payload).hexdigest(), **elf_alignment(payload)})
         return {"bytes": path.stat().st_size, "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
             "uncompressed_bytes": sum(i.file_size for i in entries),
             "native_bytes": sum(i.file_size for i in entries if i.filename.endswith(".so")),
@@ -58,6 +81,7 @@ def main():
     parser.add_argument("--serial", required=True, help="Qualification emulator serial")
     parser.add_argument("--gradle", default=str(PROJECT / "gradlew"))
     parser.add_argument("--baseline", type=Path)
+    parser.add_argument("--output", type=Path, default=ROOT / "target/android-evidence")
     args = parser.parse_args()
     native = args.native_root.resolve()
     summary = json.loads((native / "summary.json").read_text())
@@ -65,7 +89,7 @@ def main():
     if summary["fixtures"]:
         raise RuntimeError("Fixture packages cannot establish release sizes")
     push = summary.get("push", False)
-    evidence = ROOT / "target/android-evidence" / args.role / ("push" if push else "base")
+    evidence = args.output.resolve() / args.role / ("push" if push else "base")
     evidence.mkdir(parents=True, exist_ok=True)
     title = args.role.title()
     command = [args.gradle, "-p", PROJECT, "-PgcomsNativeRoot=" + str(native / "android"),

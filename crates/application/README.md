@@ -9,9 +9,12 @@ Opening keeps its large startup state on the heap so composed application
 futures leave room on the default thread stack for post-quantum key setup.
 This adds one allocation per profile open, with no extra worker threads.
 
+Before registry publication, use a local checkout as below or a pinned Git
+dependency. This example places the GComs checkout beside the application.
+
 ```toml
 [dependencies]
-gcoms = { version = "0.1.0", default-features = false, features = ["embedded", "files", "gc2-carrier"] }
+gcoms = { path = "../gcoms/crates/application", default-features = false, features = ["embedded", "files", "gc2-carrier"] }
 tokio = { version = "1", features = ["macros", "rt"] }
 ```
 

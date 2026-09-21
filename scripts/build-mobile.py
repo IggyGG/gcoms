@@ -11,7 +11,7 @@ import subprocess
 
 ROOT = Path(__file__).resolve().parents[1]
 MANIFEST = ROOT / 'mobile/native/Cargo.toml'
-NDK_VERSION = '28.2.13676358'
+NDK_VERSION = '27.3.13750724'
 
 
 def run(command, env=None, **kwargs):
@@ -143,7 +143,9 @@ def main():
         previous = {(item['role'], item['target'], item['opt_level']): item['bytes'] for item in baseline['artifacts']}
         for item in report['artifacts']:
             key = (item['role'], item['target'], item['opt_level'])
-            if key in previous and item['bytes'] > previous[key] * 1.05:
+            if key not in previous:
+                raise RuntimeError(f'{key} has no native size baseline')
+            if item['bytes'] > previous[key] * 1.05:
                 raise RuntimeError(f'{key} exceeds the 5 percent native size gate')
     if source_hashes() != report['source_sha256']:
         raise RuntimeError('Mobile source inventory changed during qualification; rerun against settled inputs')

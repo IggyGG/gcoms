@@ -66,6 +66,7 @@ jobs:
             target/mobile-fixtures/summary.json
             target/android-evidence/
             mobile/android/sdk/build/outputs/androidTest-results/
+            mobile/android/push/build/outputs/androidTest-results/
             emulator.log
           if-no-files-found: error
   apple:

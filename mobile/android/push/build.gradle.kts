@@ -8,7 +8,10 @@ val publicationRole = providers.gradleProperty("gcomsPublishRole").orElse("clien
 android {
     namespace = "boo.gcoms.push"
     compileSdk = 36
-    defaultConfig { minSdk = 26 }
+    defaultConfig {
+        minSdk = 26
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    }
     flavorDimensions += "role"
     productFlavors {
         create("client") { dimension = "role" }
@@ -27,8 +30,13 @@ kotlin {
 dependencies {
     api(project(":sdk"))
     api("com.google.firebase:firebase-messaging:25.1.3")
+    // Firebase's older transitive DataStore has misaligned native RELRO data.
+    // Publish this runtime dependency in both POM and Gradle metadata.
+    implementation("androidx.datastore:datastore-preferences:1.2.1")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
     testImplementation("junit:junit:4.13.2")
+    androidTestImplementation("androidx.test:runner:1.6.2")
+    androidTestImplementation("androidx.test.ext:junit:1.2.1")
 }
 afterEvaluate {
     publishing.publications {

@@ -30,8 +30,10 @@ with tempfile.TemporaryDirectory(prefix="fixture-assets-", dir=native) as assets
         command += ["-PgcomsFixtureAssets=" + assets]
         # Compile before minting the short-lived grant. Adding its asset below
         # only repeats asset merging/packaging before installation and testing.
-        subprocess.run(command + [":sdk:assembleClientDebug", ":sdk:assembleClientDebugAndroidTest",
-            "--no-daemon"], check=True)
+        assembly = [":sdk:assembleClientDebug", ":sdk:assembleClientDebugAndroidTest"]
+        if args.push:
+            assembly += [":push:assembleClientDebugAndroidTest"]
+        subprocess.run(command + assembly + ["--no-daemon"], check=True)
     with relay() if args.role == "client" else contextlib.nullcontext(None) as host:
         port = None
         try:
@@ -41,7 +43,10 @@ with tempfile.TemporaryDirectory(prefix="fixture-assets-", dir=native) as assets
                 # A relay card exceeds adb's shell command budget. Keep this
                 # disposable capability in test-only assets, never command logs.
                 (Path(assets) / "relay.json").write_text(json.dumps(host["relay"]))
-            subprocess.run(command + [":sdk:connected" + args.role.title() + "DebugAndroidTest", "--no-daemon"],
+            checks = [":sdk:connected" + args.role.title() + "DebugAndroidTest"]
+            if args.push:
+                checks += [":push:connected" + args.role.title() + "DebugAndroidTest"]
+            subprocess.run(command + checks + ["--no-daemon"],
                 env=dict(os.environ, ANDROID_SERIAL=args.serial), check=True)
         finally:
             if port:
