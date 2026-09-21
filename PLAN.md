@@ -4,9 +4,12 @@ The 2026-09-21 fleet integration combines SDK handoff `4fd466b` with the
 release branch's Windows owner-only file permissions, transport timing and Python
 portability fixes, authenticated channel management and research-import provenance.
 The only source conflict uses the SDK's directly boxed application-start future;
-existing awaiting callers and bounded startup remain intact. Targeted combined
-application/client/mobile feature and current GChat consumer validation is pending.
-This does not replace earlier native artifact receipts or enable live push in GChat.
+existing awaiting callers and bounded startup remain intact. Combined source
+`e3874a0` passed the application/runtime/SDK and node suites, mobile ABI and feature
+graphs, strict affected Clippy and GChat `2081526` consumer tests/Clippy. Both frozen
+sources remained unchanged. The [bounded receipt](docs/evidence/sdk-release-integration-20260921/summary.json)
+retains exact counts and exclusions. This does not replace earlier native artifact
+receipts or enable live push in GChat.
 
 # Windows and mobile integrations
 

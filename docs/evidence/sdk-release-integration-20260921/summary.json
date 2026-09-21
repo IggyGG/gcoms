@@ -1,0 +1,280 @@
+{
+  "schema": 1,
+  "date": "2026-09-21",
+  "status": "passed",
+  "scope": "bounded combined Linux GComs source and GChat consumer validation",
+  "gcoms": {
+    "revision": "e3874a0f46dc498c9f43edeac4f6452a9dfca9af",
+    "tree": "c94830c43da32bf2d4d0c2134d9a70b80952638f",
+    "tracked_files": 663,
+    "snapshot_sha256": "47408ab9631093708159d57111711624a0a781d4ec78a1b69e65c353b0a9838f"
+  },
+  "gchat": {
+    "revision": "208152615f9a95d926872ecdf7c9166b0dc1043f",
+    "tree": "32e4cce5492792fe5499c8b326a5300ecfed6b77",
+    "tracked_files": 428,
+    "snapshot_sha256": "2f44958ce34429ba5e7551e749a6016147622e65d02e1b861570b6108a744bed"
+  },
+  "source_unchanged": {
+    "gcoms": true,
+    "gchat": true
+  },
+  "checks": [
+    {
+      "name": "source",
+      "exit_code": 0,
+      "seconds": 0.06272482872009277,
+      "sha256": "380a0a5a6eaaf11d120bbacd71db5409e9327a5553e1f5092eade8045b889d71",
+      "log": "source.log"
+    },
+    {
+      "name": "research-import",
+      "exit_code": 0,
+      "seconds": 0.025903940200805664,
+      "sha256": "a90ef00a9392ea130dee6807cd368d2a76fc0d0e5ea87e43aca0ccc3c723f8e4",
+      "log": "research-import.log"
+    },
+    {
+      "name": "fmt",
+      "exit_code": 0,
+      "seconds": 1.8274285793304443,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "log": "fmt.log"
+    },
+    {
+      "name": "python",
+      "exit_code": 0,
+      "seconds": 10.575475454330444,
+      "sha256": "56c7dfb8bc3407f07f497889ccbe78efe45bc51bd72a1a3dc3641754bb2ff060",
+      "log": "python.log",
+      "python_tests_passed": 169
+    },
+    {
+      "name": "gateway-mocks",
+      "exit_code": 0,
+      "seconds": 0.6042935848236084,
+      "sha256": "6c01446866088078e7a39f4778eb2389cf3586bbd3025bb74de04e358013e8f2",
+      "log": "gateway-mocks.log",
+      "python_tests_passed": 9
+    },
+    {
+      "name": "app-runtime-sdk",
+      "exit_code": 0,
+      "seconds": 351.4242112636566,
+      "sha256": "6f2acf0c0605f7d6a29e9efb799b61ec58925eea18e09db16ef7b4a31acfbe56",
+      "log": "app-runtime-sdk.log",
+      "rust_counts": {
+        "passed": 103,
+        "failed": 0,
+        "ignored": 1
+      }
+    },
+    {
+      "name": "node-lib",
+      "exit_code": 0,
+      "seconds": 356.945116519928,
+      "sha256": "adc915cf424f67b45e06dc1f247302268ba93d1afa8e89ac87cff8f40bd3c1b0",
+      "log": "node-lib.log",
+      "rust_counts": {
+        "passed": 315,
+        "failed": 0,
+        "ignored": 1
+      }
+    },
+    {
+      "name": "rust-integration-graphs",
+      "exit_code": 0,
+      "seconds": 116.3136215209961,
+      "sha256": "8b870f262f47518bb6ea8213db9557f17e935bc50a968f73ad76dba404115cdd",
+      "log": "rust-integration-graphs.log"
+    },
+    {
+      "name": "core-minimal",
+      "exit_code": 0,
+      "seconds": 3.4345624446868896,
+      "sha256": "f0d0df179aab5d0eb2e51cd5e23b605ef5e792eced5988589c6379dd3eff80dd",
+      "log": "core-minimal.log"
+    },
+    {
+      "name": "sdk-ipc-minimal",
+      "exit_code": 0,
+      "seconds": 7.083764553070068,
+      "sha256": "50d8ed78fb20c3fb740e00101ee554b1100d2a04031730c1e901bef60d786491",
+      "log": "sdk-ipc-minimal.log"
+    },
+    {
+      "name": "mobile-abi-client-fixtures",
+      "exit_code": 0,
+      "seconds": 33.007110834121704,
+      "sha256": "dd6ff78d4adb64517a7e774dcf4fec3abd89487b3426bc81397f3c62bd317868",
+      "log": "mobile-abi-client-fixtures.log",
+      "rust_counts": {
+        "passed": 1,
+        "failed": 0,
+        "ignored": 0
+      }
+    },
+    {
+      "name": "mobile-abi-relay-fixtures",
+      "exit_code": 0,
+      "seconds": 29.035994052886963,
+      "sha256": "d88a1a01bd6e563eff8914127e3283e0bbbc25736275659f5344a5904cdcb3c7",
+      "log": "mobile-abi-relay-fixtures.log",
+      "rust_counts": {
+        "passed": 2,
+        "failed": 0,
+        "ignored": 0
+      }
+    },
+    {
+      "name": "mobile-abi-client-fixtures-push",
+      "exit_code": 0,
+      "seconds": 27.555582523345947,
+      "sha256": "fa6878daa55bd723658ba6771a26a5d1f758f50d0179e23605fc0a4b7a2181f6",
+      "log": "mobile-abi-client-fixtures-push.log",
+      "rust_counts": {
+        "passed": 1,
+        "failed": 0,
+        "ignored": 0
+      }
+    },
+    {
+      "name": "mobile-abi-relay-fixtures-push",
+      "exit_code": 0,
+      "seconds": 27.24779224395752,
+      "sha256": "ccff7bcb34b744ee9a2cc5e4966f2be410ff9a9028d2a829a7b1fb9eee2932fe",
+      "log": "mobile-abi-relay-fixtures-push.log",
+      "rust_counts": {
+        "passed": 2,
+        "failed": 0,
+        "ignored": 0
+      }
+    },
+    {
+      "name": "mobile-graph-aarch64-linux-android-client",
+      "exit_code": 0,
+      "seconds": 0.3674015998840332,
+      "sha256": "fc480ffde29d92aaeacbd818f90f3d4d8bcc60826ad44542bf266eca2cdbb8e9",
+      "log": "mobile-graph-aarch64-linux-android-client.log"
+    },
+    {
+      "name": "mobile-graph-aarch64-linux-android-relay",
+      "exit_code": 0,
+      "seconds": 0.3426330089569092,
+      "sha256": "700011a04dfb68a38f4873ef61ab9e8c0f3ba590de1cd750b76aa5f2d2ddc099",
+      "log": "mobile-graph-aarch64-linux-android-relay.log"
+    },
+    {
+      "name": "mobile-graph-aarch64-linux-android-client-push",
+      "exit_code": 0,
+      "seconds": 0.34795069694519043,
+      "sha256": "04a0fba2a523300022d173dd00753770b377dff3779702ac144c7f88c88469d7",
+      "log": "mobile-graph-aarch64-linux-android-client-push.log"
+    },
+    {
+      "name": "mobile-graph-aarch64-linux-android-relay-push",
+      "exit_code": 0,
+      "seconds": 0.3252449035644531,
+      "sha256": "d5a8d5bd0cbcb9f1ba30fdc1fa5684f16030ed8876b08da3f1e238560779f36e",
+      "log": "mobile-graph-aarch64-linux-android-relay-push.log"
+    },
+    {
+      "name": "mobile-graph-aarch64-apple-ios-client",
+      "exit_code": 0,
+      "seconds": 0.3426194190979004,
+      "sha256": "c6fc725286e25d544a89567b3fb814bb622152c204863d6b1c4ca697b65a06fa",
+      "log": "mobile-graph-aarch64-apple-ios-client.log"
+    },
+    {
+      "name": "mobile-graph-aarch64-apple-ios-relay",
+      "exit_code": 0,
+      "seconds": 0.31716299057006836,
+      "sha256": "da21af732164194e5cc0549580b31a283f5c6f047b1c1475c757c4c2ce3d87b5",
+      "log": "mobile-graph-aarch64-apple-ios-relay.log"
+    },
+    {
+      "name": "mobile-graph-aarch64-apple-ios-client-push",
+      "exit_code": 0,
+      "seconds": 0.330305814743042,
+      "sha256": "17329ea9d46b8846c7273c85dfd4f92a813be999f4b294c562fad70380d89887",
+      "log": "mobile-graph-aarch64-apple-ios-client-push.log"
+    },
+    {
+      "name": "mobile-graph-aarch64-apple-ios-relay-push",
+      "exit_code": 0,
+      "seconds": 0.3294968605041504,
+      "sha256": "7782394b960dcca14c44f7339ac5bd8982274a5ca4ac6ad4bf13942d4ed400ed",
+      "log": "mobile-graph-aarch64-apple-ios-relay-push.log"
+    },
+    {
+      "name": "affected-clippy",
+      "exit_code": 0,
+      "seconds": 56.80743765830994,
+      "sha256": "2426892e8c887cef3c7d44d561773beede14951a7423cebcb4e080109eb95633",
+      "log": "affected-clippy.log"
+    },
+    {
+      "name": "gchat-test",
+      "exit_code": 0,
+      "seconds": 685.5759675502777,
+      "sha256": "5af49940bb05de28a8af7b06bfbcef565ecef6d88380b9f8a15eeb1077535164",
+      "log": "gchat-test.log",
+      "rust_counts": {
+        "passed": 143,
+        "failed": 0,
+        "ignored": 2
+      }
+    },
+    {
+      "name": "gchat-clippy",
+      "exit_code": 0,
+      "seconds": 40.90704679489136,
+      "sha256": "b004dcc2e76c7dd4ced9e3b1e4a3cff3645b848b883bfd0deb653905dd11c5e2",
+      "log": "gchat-clippy.log"
+    },
+    {
+      "name": "diff",
+      "exit_code": 0,
+      "seconds": 0.0031702518463134766,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "log": "diff.log"
+    }
+  ],
+  "merge_resolution": "Directly boxed ApplicationBuilder::open; existing open_inner and all awaiting callers retained.",
+  "preserved_release_fixes": [
+    "owner-only Windows DACL replacement",
+    "native TP1 deadline regression",
+    "Windows Python/report portability",
+    "authenticated channel management and combined invitations",
+    "IPC19 compatibility",
+    "amended historical research provenance"
+  ],
+  "exclusions": {
+    "application_runtime_sdk": [
+      "bootstrap::gc2_tests::production_bootstrap_fresh_reopen_and_recovery: disconnected namespace helper required"
+    ],
+    "node": [
+      "connectivity::privilege_tests::real_denied_low_port_falls_back_without_privileges: isolated low-port policy required"
+    ],
+    "gchat": [
+      "chat_service::networks::journey::combined_invitation_joins_another_network_and_retains_chat_and_file: disconnected namespace helper required",
+      "chat_service::networks::tests::joined_network_registry_is_private_isolated_and_reopens: disconnected namespace helper required"
+    ]
+  },
+  "limits": [
+    "No new Windows, macOS, Android or iOS native application artifact was produced.",
+    "Mobile ABI execution here is Linux; Android/iOS checks are resolved dependency graphs, not emulator/device execution.",
+    "Existing native SDK sizes and released GChat artifacts retain their original source bindings.",
+    "No live APNs/FCM, gateway deployment, physical-device, installed-app or statistical privacy qualification.",
+    "GChat remains outbound on mobile; Kotlin/Swift wrappers were not added to its existing Rust/Tauri runtime."
+  ],
+  "retained_evidence": {
+    "summary.json": "cb50ff2203ac4ee448eea86490ab14e33c530167733babfe4b8e7ffd6dc8e0cd",
+    "before.json": "a57ebf5eb9c479ae5896484bbee58cb67ffcae2d5f393dfc09838ddaaaf3fe3b",
+    "merge-preservation.json": "c952fdb37d26d9e781d061024b2d7be5387f9434e6ace8777a167d1047fdc4be",
+    "mobile-graphs.json": "c6ef4160178c24afff6bbace99e0063c674903bc94023f966b6ee2f6bf50331e",
+    "gchat-test-summary.json": "e838a5e67340c56260153087552b04a4c39c1dc7f220bf81b69f936f15f2d32f",
+    "gchat-clippy-summary.json": "56e0da3464626fba3c1fb52417d484193e595ea43f90c111c3e8de3d58529def",
+    "validate.py": "e2156140780973285876d048d2dacb74a7e038f2466909d81e51c71239f406f1"
+  }
+}

@@ -8,6 +8,14 @@ Existing native SDK size baselines and published GChat binaries retain their own
 source bindings; a combined build is not covered by those older receipts. Live
 push, physical-device testing and app-store distribution remain separate scopes.
 
+Completed on `e3874a0` / GChat `2081526`: application/runtime/SDK 103 passed
+(one namespace exclusion), node library 315 passed (one low-port exclusion), six
+mobile ABI cases across four role/push variants, GChat 143 passed (two namespace
+exclusions), 169 Python and nine gateway simulations. Minimal and independent
+consumer checks, eight Android/iOS dependency graphs, both strict Clippy gates,
+formatting, source and amended research-import checks passed.
+[Exact sources, logs and scope](docs/evidence/sdk-release-integration-20260921/summary.json).
+
 # Rust integration qualification
 
 The native backend and size matrix passes on Windows x64 MSVC and Linux/macOS

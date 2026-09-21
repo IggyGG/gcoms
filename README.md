@@ -6,6 +6,10 @@ for a standalone client, `embedded,files,gc2-carrier` for a built-in relay, or
 `ipc,files` for the smallest consumer of an existing local host.
 RPC and automatic daemon launch are optional. GChat consumes the same API.
 
+The [combined release-branch receipt](docs/evidence/sdk-release-integration-20260921/summary.json)
+records the SDK merge with GChat-specific channel, persistence and platform fixes;
+existing native artifact receipts retain their original source bindings.
+
 The Linux workspace passes 910 tests (seven explicit ignores), and GChat passes
 137 tests against the shared API. Native tests and size checks pass on Linux,
 macOS ARM64/Intel and Windows x64 MSVC. [Measured consumer sizes](docs/RUST_INTEGRATIONS.md).
