@@ -34,6 +34,7 @@ def main():
     parser.add_argument("--native-root", type=Path, required=True)
     parser.add_argument("--test", action="store_true")
     parser.add_argument("--baseline", type=Path)
+    parser.add_argument("--output", type=Path, default=ROOT / "target/apple-evidence")
     args = parser.parse_args()
     qualify(args)
 
@@ -45,7 +46,7 @@ def qualify(args):
         raise RuntimeError("Fixture packages are for tests; size qualification requires production packages")
     push = summary.get("push", False)
     package = native / "packages" / (("GComsClient" if args.role == "client" else "GComsRelay") + ("Push" if push else ""))
-    evidence = ROOT / "target/apple-evidence" / args.role / (("push-" if push else "") + ("tests" if args.test else "sizes"))
+    evidence = args.output.resolve() / args.role / (("push-" if push else "") + ("tests" if args.test else "sizes"))
     evidence.mkdir(parents=True, exist_ok=True)
     env = dict(os.environ, GCOMS_PACKAGE_PATH=str(package))
     spec = (ROOT / "mobile/apple/project.yml").read_text()
@@ -82,6 +83,7 @@ def qualify(args):
     runtime, device_type = candidates[-1]
     device = capture(["xcrun", "simctl", "create", "GComs qualification", device_type, runtime])
     report = {"schema": 1, "role": args.role, "push": push, "revision": summary["revision"],
+        "native_opt_level": next(a["opt_level"] for a in reversed(summary["artifacts"]) if a["role"] == args.role),
         "xcode": capture(["xcodebuild", "-version"]), "runtime": runtime,
         "simulator_arch": platform.machine(), "deployment_postprocessing": not args.test, "apps": {}}
     try:
@@ -124,7 +126,8 @@ def qualify(args):
                 for field in ("installed_bundle_bytes", "unsigned_device_bundle_bytes")}
             if args.baseline:
                 previous = json.loads(args.baseline.read_text())
-                if any(previous.get(f) != report[f] for f in ("role", "push", "xcode", "runtime", "simulator_arch", "deployment_postprocessing")):
+                if any(previous.get(f, "z" if f == "native_opt_level" else None) != report[f]
+                    for f in ("role", "push", "xcode", "runtime", "simulator_arch", "deployment_postprocessing", "native_opt_level")):
                     raise RuntimeError("App baseline toolchain differs")
                 for field, value in report["delta"].items():
                     if value > previous["delta"][field] * 1.05:
