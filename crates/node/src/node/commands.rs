@@ -232,6 +232,18 @@ pub(crate) fn spawn_command_loop(ctx: CommandLoopContext) -> tokio::task::JoinHa
                     super::routing::refresh_public_info(&mut st);
                     let _ = done.send(st.info.clone());
                 }
+                #[cfg(feature = "experimental-gc2")]
+                Cmd::InstallGc2Bootstrap { bytes, done } => {
+                    let result = (|| {
+                        let st = state.lock().unwrap_or_else(|p| p.into_inner());
+                        let directory = st
+                            .gc2_carrier_directory
+                            .as_ref()
+                            .ok_or("GC/2 carrier directory is not enabled")?;
+                        super::gc2_bootstrap::install_bundle(directory, &bytes)
+                    })();
+                    let _ = done.send(result);
+                }
                 Cmd::SignIdentityDigest { digest, done } => {
                     let identity_seed = state
                         .lock()
