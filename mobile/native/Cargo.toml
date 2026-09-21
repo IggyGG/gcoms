@@ -11,7 +11,9 @@ publish = false
 [workspace]
 
 [lib]
-crate-type = ["rlib", "cdylib", "staticlib"]
+# Tests and fixture-host examples consume the rlib. The packaging script selects
+# exactly one foreign output with cargo rustc so release LTO stays enabled.
+crate-type = ["rlib"]
 
 [features]
 default = ["client"]

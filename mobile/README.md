@@ -60,11 +60,20 @@ and artifact hashes. `--baseline summary.json` enforces at most 5% growth under
 the same toolchain. Android builds require ANDROID_HOME and the pinned NDK;
 Apple builds require macOS/Xcode. Both require the pinned Rust 1.98 toolchain.
 
-Android qualification on 2026-09-21 uses Rust inputs at `b39199e` and publication
+Production builds emit one foreign library type per invocation: Android `cdylib`
+or Apple `staticlib`. This enables LTO; the previous combined rlib/native build
+disabled it despite the requested release profile. A local client probe reduces
+the ARM64 library from 10,172,928 to 7,359,720 bytes and x86_64 from 11,974,984 to
+8,796,864 bytes. Full production size qualification is being repeated. Apple
+release samples enable symbol stripping and count only the active simulator
+architecture. Archives retain linker-required external symbols.
+
+The superseded Android size record below uses Rust inputs at `b39199e` and publication
 metadata at `b3a21a9`. All four configurations pass instrumentation on the API 35
 16 KiB emulator. Production AARs, POM/module dependencies, native hashes, APK ZIP
 alignment and installed APK deltas are verified. `z` is the smallest of 3/s/z for
-both architectures in every configuration. Sizes below are decimal MB.
+both architectures in every configuration. These pre-LTO sizes are decimal MB;
+they are retained as historical evidence, not final release baselines.
 
 | Android distribution | ARM64 native library | SDK AAR (two ABIs) | ARM64 sample APK addition | x86_64 installed APK addition |
 | --- | ---: | ---: | ---: | ---: |

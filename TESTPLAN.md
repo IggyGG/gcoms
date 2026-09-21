@@ -18,6 +18,10 @@ do not establish physical-device or live-provider qualification.
   Verify both LOAD and GNU_RELRO alignment, compatible simulator selection, and
   the client through its separately hosted fixture relay. Development fixture
   sizes cannot establish production baselines.
+  Build only `cdylib` (Android) or `staticlib` (Apple) per compiler invocation;
+  emitting an rlib alongside them disables LTO. Record the selected crate type.
+  Strip Apple archive debug/local symbols while preserving linker externals,
+  and measure postprocessed release apps for only the active simulator CPU.
   Ad-hoc sign the disposable Swift simulator host with its own Keychain access
   group; require profile-secret and push-state reopen through fresh providers.
   Generate SDK and optional FCM POM/module metadata with `gcomsPublishRole` set

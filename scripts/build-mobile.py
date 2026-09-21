@@ -48,6 +48,7 @@ def main():
         'schema': 1, 'platform': args.platform, 'fixtures': args.fixtures, 'push': args.push,
         'revision': subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip(),
         'rustc': subprocess.check_output(['rustc', '-Vv'], text=True),
+        'crate_type': 'cdylib' if args.platform == 'android' else 'staticlib',
         'panic': 'unwind', 'lto': not args.fixtures, 'codegen_units': 256 if args.fixtures else 1,
         'build_profile': 'dev' if args.fixtures else 'release', 'artifacts': [], 'graphs': {}
     }
@@ -98,7 +99,10 @@ def main():
                 if role == 'client' and 'push-gateway' in graph.get('gcoms-node', []):
                     raise RuntimeError('Client package pulls in the relay HTTP gateway')
                 report['graphs'][role + '/' + triple] = graph
-                run(['cargo', 'build', '--manifest-path', MANIFEST, '--locked', '--profile',
+                # An rlib in the same invocation prevents whole-program LTO.
+                # Build only the final foreign-language library for this OS.
+                run(['cargo', 'rustc', '--lib', '--crate-type', report['crate_type'],
+                    '--manifest-path', MANIFEST, '--locked', '--profile',
                     report['build_profile'], '--no-default-features', '--features', features, '--target', triple], env)
                 name = 'libgcoms_mobile.so' if args.platform == 'android' else 'libgcoms_mobile.a'
                 library = target / triple / ('debug' if args.fixtures else 'release') / name
@@ -117,6 +121,9 @@ def main():
                             raise RuntimeError('Native library lacks 16 KiB RELRO alignment')
                     destination = output / 'android' / role / label / name
                 else:
+                    if not args.fixtures:
+                        # Retain external symbols needed by the host linker.
+                        run(['xcrun', 'strip', '-S', '-x', retained])
                     destination = output / 'apple' / role / label / name
                 destination.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(retained, destination)
@@ -130,7 +137,7 @@ def main():
                 (output / 'android' / role / 'build.json').write_text(json.dumps({'fixtures': args.fixtures, 'push': args.push, 'role': role, 'revision': report['revision']}) + '\n')
     if args.baseline:
         baseline = json.loads(args.baseline.read_text())
-        for field in ('platform', 'fixtures', 'push', 'rustc', 'ndk', 'xcode', 'panic', 'lto', 'codegen_units', 'build_profile'):
+        for field in ('platform', 'fixtures', 'push', 'rustc', 'ndk', 'xcode', 'panic', 'lto', 'codegen_units', 'build_profile', 'crate_type'):
             if baseline.get(field) != report.get(field):
                 raise RuntimeError(f'baseline {field} differs; establish a baseline for this toolchain')
         previous = {(item['role'], item['target'], item['opt_level']): item['bytes'] for item in baseline['artifacts']}

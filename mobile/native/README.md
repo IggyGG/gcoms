@@ -5,6 +5,11 @@ Work in progress toward an Android/iOS tested preview. Link exactly one build:
 Both expose ABI 1 in `include/gcoms_mobile.h`. The client excludes relay hosting,
 NAT mapping and relay queue storage. The relay embeds these facilities.
 
+Use `scripts/build-mobile.py` for distributions. It selects only `cdylib` on
+Android or `staticlib` on Apple with `cargo rustc --lib --crate-type`, enabling
+release LTO. The manifest's default rlib is for Rust tests and fixture hosts.
+Apple archives retain the external symbols needed by the application linker.
+
 One current-thread Tokio runtime runs on one owned background thread per session.
 Up to 8 sessions and 16 outstanding tickets per session are allowed. Request JSON
 is capped at 1100 KiB and response JSON at 2 MiB. Results are copied into caller-owned

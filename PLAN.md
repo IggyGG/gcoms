@@ -1,52 +1,30 @@
 # Windows and mobile integrations
 
-In progress (2026-09-21, Codex): native Windows x64 qualification; an outbound
-network-client backend with relay hosting compiled out; minimal Kotlin/Swift
-client and relay packages; optional app-operated APNs/FCM gateway. Mobile
-acceptance uses Android emulator/iOS simulator and simulated push providers.
-Physical-device, battery and live push qualification remain deferred.
+In progress (2026-09-21, Codex). The outbound-only Rust backend, minimal mobile
+C ABI, Kotlin/Swift client and relay packages, and optional app-operated APNs/FCM
+hint gateway are implemented. Acceptance remains an emulator/simulator preview
+with simulated providers; physical-device, battery and live push work is deferred.
 
-Checkpoint: outbound messaging/channel/file/reopen integration passed on Linux,
-along with 504 application/runtime/SDK/node/file tests (three explicit ignores).
-The native mobile ABI and Kotlin sources compile; the relay ABI fixture verifies
-channel/file operations and suspend/reopen. Android relay instrumentation passes
-on the API 35 16 KiB emulator. Windows x64, Linux x64 and macOS ARM64 native CI
-passed at e75c72c, including macOS Intel. Mobile CI now builds separate
-client/relay AARs and XCFrameworks and records linked/installed sample deltas.
-Swift execution remains in progress. The optional gateway's nine simulations and
-four owner-binding/admission tests pass. The remote owner-binding integration
-passes, along with strict Rust Clippy and Kotlin FCM adapter compilation/tests.
-Swift adapters and final mobile size evidence remain in qualification.
-Native Apple archives build for device and both simulator architectures. The
-first mobile CI runs exposed simulator selection and Android RELRO alignment
-issues; fixes retain the production three-profile measurements and use smaller
-development fixtures for functional tests. Android client fixtures pass relay
-configuration through test assets to avoid adb's command-length limit.
-Both client instrumentation tests now pass on the 16 KiB emulator, including
-channel/invitation creation, file import/export and profile reopen. GChat's
-unoptimized journey exposed startup stack pressure during identity restoration;
-boxing the application's startup future fixes the journey on the default stack.
-The current-source GChat gate passes all 137 tests at b39199e with GChat f7a83ce.
-The full workspace gate is being repeated. All four base/push Android role
-instrumentation jobs and the base iOS client simulator tests now pass at b39199e;
-release size measurements and the remaining Apple roles are still running.
-Android publication selects one role per invocation to give the FCM adapter an
-unambiguous dependency on the matching SDK; qualification retains its metadata.
-Android qualification is complete for the agreed emulator preview: all four
-base/push roles pass, 3/s/z native and app deltas are retained under
-`docs/evidence/mobile-preview-20260921/`, and publication metadata plus direct
-16 KiB APK loading are verified at b3a21a9. Rust workspace validation passes
-910 tests (seven explicit ignores), strict Clippy, documentation and minimal
-feature checks; GChat's 137 tests and strict Clippy pass. Apple preview and final
-desktop size evidence remain in progress.
-The first optional Swift push run exposed missing Keychain entitlements in the
-unsigned simulator host. The test harness now ad-hoc signs its disposable host
-with an application access group and checks profile-secret and push-state reopen.
-The corrected Apple runs remain in qualification; SDK storage protection is unchanged.
+Current qualification:
 
-Implementation order: Windows native gate, Rust role separation, mobile ABI and
-packages, push registration/relay notifications, integrated qualification and
-per-platform size evidence. Preserve the existing IPC and embedded consumers.
+- Linux, macOS ARM64 and Windows x64 native tests and 3/s/z size gates pass at
+  b39199e. Intel Mac measurements are still running.
+- All four Android base/push roles pass 16 KiB emulator instrumentation. SDK AAR,
+  POM/module dependencies, APK alignment and installed deltas are verified.
+- Both base Swift roles passed simulator tests. Both push roles now also pass,
+  including profile-secret and push-state Keychain reopen in an ad-hoc signed host.
+- Full Rust workspace: 910 passed, seven explicit ignores; strict Clippy,
+  documentation, minimal features and packaged Rust/npm consumers pass.
+  GChat f7a83ce against GComs b39199e passes 137 tests and strict Clippy.
+- Size inspection found that producing an rlib alongside foreign libraries
+  disabled LTO. Production now selects only the OS library type. The Android
+  client probe falls from 10.17 to 7.36 MB on ARM64 and 11.97 to 8.80 MB on x86_64.
+  Apple release measurements now strip symbols and select the active simulator
+  architecture. Final mobile measurements are being repeated for these changes.
+
+Retained pre-LTO records are explicitly marked as superseded under
+`docs/evidence/mobile-preview-20260921/`. Final baselines and the mobile CI size
+gate will be committed after all corrected distributions are verified.
 
 # Minimal Rust application integrations
 

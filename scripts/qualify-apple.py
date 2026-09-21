@@ -7,6 +7,7 @@ import json
 import os
 from pathlib import Path
 import plistlib
+import platform
 import subprocess
 from mobile_fixture import relay
 
@@ -86,7 +87,8 @@ def qualify(args, host):
     runtime, device_type = candidates[-1]
     device = capture(["xcrun", "simctl", "create", "GComs qualification", device_type, runtime])
     report = {"schema": 1, "role": args.role, "push": push, "revision": summary["revision"],
-        "xcode": capture(["xcodebuild", "-version"]), "runtime": runtime, "apps": {}}
+        "xcode": capture(["xcodebuild", "-version"]), "runtime": runtime,
+        "simulator_arch": platform.machine(), "deployment_postprocessing": not args.test, "apps": {}}
     try:
         run(["xcrun", "simctl", "boot", device])
         run(["xcrun", "simctl", "bootstatus", device, "-b"])
@@ -117,7 +119,7 @@ def qualify(args, host):
                 for field in ("installed_bundle_bytes", "unsigned_device_bundle_bytes")}
             if args.baseline:
                 previous = json.loads(args.baseline.read_text())
-                if any(previous.get(f) != report[f] for f in ("role", "push", "xcode", "runtime")):
+                if any(previous.get(f) != report[f] for f in ("role", "push", "xcode", "runtime", "simulator_arch", "deployment_postprocessing")):
                     raise RuntimeError("App baseline toolchain differs")
                 for field, value in report["delta"].items():
                     if value > previous["delta"][field] * 1.05:

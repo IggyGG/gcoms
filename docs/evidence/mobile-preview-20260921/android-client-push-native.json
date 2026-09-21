@@ -70,5 +70,8 @@
     "workflow_run": "https://github.com/IggyGG/gcoms/actions/runs/35598824608",
     "native_report_sha256": "6e0f594edce0a775716f73ef85c7d1e63950bf228ddd3db2b9a719b5cc002f1b",
     "app_report_sha256": "153093395a09c02c774ec1b1129e67a66eb2af3be2916937ab3dd0e1aa9c0ed4"
-  }
+  },
+  "qualification_notes": [
+    "Superseded size record: lto records the requested Cargo profile; emitting an rlib alongside the foreign library disabled effective LTO. Use the subsequent single-crate-type measurements for release baselines."
+  ]
 }
