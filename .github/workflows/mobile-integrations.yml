@@ -1,0 +1,107 @@
+name: Mobile SDK preview
+on:
+  workflow_dispatch:
+    inputs:
+      push:
+        description: Qualify the separate optional push distribution
+        type: boolean
+        default: false
+      platform:
+        description: Platform to qualify
+        type: choice
+        options: [all, android, apple]
+        default: all
+      role:
+        description: Distribution to qualify
+        type: choice
+        options: [all, client, relay]
+        default: all
+  push:
+    branches: [main]
+    paths: ['mobile/**', 'scripts/build-mobile.py', 'scripts/prepare-android.py', 'scripts/qualify-*.py', 'scripts/mobile_fixture.py', 'scripts/test-android.py', '.github/workflows/mobile-integrations.yml']
+permissions:
+  contents: read
+jobs:
+  android:
+    if: github.event_name != 'workflow_dispatch' || inputs.platform != 'apple'
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        role: ${{ fromJSON(inputs.role == 'client' && '["client"]' || inputs.role == 'relay' && '["relay"]' || '["client","relay"]') }}
+    runs-on: ubuntu-24.04
+    env:
+      ANDROID_SERIAL: emulator-5580
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Install pinned Rust and Android tools
+        run: |
+          python3 -m unittest discover -s scripts/tests -p mobile_elf_test.py
+          rustup toolchain install 1.98.0 --profile minimal
+          rustup default 1.98.0
+          python3 scripts/prepare-android.py
+      - name: Build preview fixture native libraries
+        run: python3 scripts/build-mobile.py android --roles ${{ matrix.role }} --fixtures ${{ inputs.push && '--push' || '' }} --output target/mobile-fixtures
+      - name: Exercise Kotlin on a 16 KiB Android emulator
+        run: |
+          "$ANDROID_HOME/emulator/emulator" -avd gcoms16k -port 5580 -no-window -no-audio -no-snapshot -gpu swiftshader -memory 2048 > emulator.log 2>&1 &
+          adb -s emulator-5580 wait-for-device
+          timeout 300 bash -c 'until [ "$(adb -s emulator-5580 shell getprop sys.boot_completed | tr -d "\r")" = 1 ]; do sleep 3; done'
+          test "$(adb -s emulator-5580 shell getconf PAGE_SIZE | tr -d "\r")" = 16384
+          python3 scripts/test-android.py --role ${{ matrix.role }} --native-root target/mobile-fixtures --serial emulator-5580 ${{ inputs.push && '--push' || '' }}
+      - name: Measure production native packages
+        run: python3 scripts/build-mobile.py android --roles ${{ matrix.role }} --profiles 3 s z ${{ inputs.push && '--push' || '' }} --output target/mobile --baseline docs/evidence/mobile-preview-lto-20260921/android-${{ matrix.role }}-${{ inputs.push && 'push' || 'base' }}-native.json
+      - name: Measure release AAR and installed sample delta
+        run: python3 scripts/qualify-android.py --role ${{ matrix.role }} --native-root target/mobile --serial emulator-5580 --baseline docs/evidence/mobile-preview-lto-20260921/android-${{ matrix.role }}-${{ inputs.push && 'push' || 'base' }}-app.json
+      - name: Stop qualification emulator
+        if: always()
+        run: adb -s emulator-5580 emu kill || true
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: mobile-android-${{ matrix.role }}-${{ inputs.push && 'push' || 'base' }}-${{ github.sha }}
+          path: |
+            target/mobile/
+            target/mobile-fixtures/summary.json
+            target/android-evidence/
+            mobile/android/sdk/build/outputs/androidTest-results/
+            mobile/android/push/build/outputs/androidTest-results/
+            emulator.log
+          if-no-files-found: error
+  apple:
+    if: github.event_name != 'workflow_dispatch' || inputs.platform != 'android'
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        role: ${{ fromJSON(inputs.role == 'client' && '["client"]' || inputs.role == 'relay' && '["relay"]' || '["client","relay"]') }}
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Install pinned Rust and project generator
+        run: |
+          rustup toolchain install 1.98.0 --profile minimal
+          rustup default 1.98.0
+          brew install xcodegen
+      - name: Build preview fixture XCFramework
+        run: python3 scripts/build-mobile.py apple --roles ${{ matrix.role }} --fixtures ${{ inputs.push && '--push' || '' }} --output target/mobile-fixtures
+      - name: Exercise Swift on an iOS simulator
+        run: python3 scripts/qualify-apple.py --role ${{ matrix.role }} --native-root target/mobile-fixtures --test
+      - name: Measure production native packages
+        run: python3 scripts/build-mobile.py apple --roles ${{ matrix.role }} --profiles 3 s z ${{ inputs.push && '--push' || '' }} --output target/mobile --baseline docs/evidence/mobile-preview-lto-20260921/apple-${{ matrix.role }}-${{ inputs.push && 'push' || 'base' }}-native.json
+      - name: Measure linked application delta
+        run: python3 scripts/qualify-apple.py --role ${{ matrix.role }} --native-root target/mobile --baseline docs/evidence/mobile-preview-lto-20260921/apple-${{ matrix.role }}-${{ inputs.push && 'push' || 'base' }}-app.json
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: mobile-apple-${{ matrix.role }}-${{ inputs.push && 'push' || 'base' }}-${{ github.sha }}
+          path: |
+            target/mobile/
+            target/mobile-fixtures/summary.json
+            target/apple-evidence/
+            !target/apple-evidence/**/derived/**
+          if-no-files-found: error

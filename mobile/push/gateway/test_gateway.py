@@ -82,5 +82,34 @@ class GatewayTests(unittest.TestCase):
         self.gateway = Gateway(self.directory.name + "/state.sqlite", self.gateway.apps, self.gateway.relays, self.provider, lambda: self.now)
         self.assertTrue(self.gateway.dispatch_one())
 
+    def test_crash_during_provider_request_retains_pending_work(self):
+        registered = self.register()
+        self.event(registered["reference"])
+        original = self.provider.send
+        def interrupted(*_):
+            raise KeyboardInterrupt("simulated process interruption")
+        self.provider.send = interrupted
+        with self.assertRaises(KeyboardInterrupt):
+            self.gateway.dispatch_one()
+        self.gateway.db.close()
+        self.provider.send = original
+        self.gateway = Gateway(self.directory.name + "/state.sqlite", self.gateway.apps, self.gateway.relays, self.provider, lambda: self.now)
+        self.now += 30
+        self.assertTrue(self.gateway.dispatch_one())
+
+    def test_token_rotation_during_provider_failure_preserves_new_token(self):
+        registered = self.register()
+        self.event(registered["reference"])
+        original = self.provider.send
+        def rotate(*_):
+            self.register("rotated-while-in-flight")
+            return DeliveryResult("expired")
+        self.provider.send = rotate
+        self.assertTrue(self.gateway.dispatch_one())
+        self.provider.send = original
+        self.now += 30
+        self.assertTrue(self.gateway.dispatch_one())
+        self.assertEqual(self.provider.sent[-1]["token"], "rotated-while-in-flight")
+
 
 if __name__ == "__main__": unittest.main()

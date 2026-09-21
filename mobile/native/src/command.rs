@@ -7,6 +7,8 @@ use zeroize::Zeroize;
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Open {
+    #[cfg(feature = "push-gateway")]
+    push_gateway: Option<gcoms::runtime::push_notifications::GatewayConfig>,
     application: String,
     profile: String,
     secret: String,
@@ -45,6 +47,12 @@ impl From<Peer> for sdk::Peer {
 #[derive(Deserialize)]
 #[serde(tag = "op", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Command {
+    #[cfg(feature = "push")]
+    BindPush {
+        reference: [u8; 32],
+        revision: u64,
+        expires: u64,
+    },
     Open {
         config: Open,
     },
@@ -167,6 +175,21 @@ impl State {
                 builder = builder.peer(peer.clone());
             }
             let app = builder.open().await?;
+            #[cfg(feature = "push-gateway")]
+            if let Some(gateway) = config.push_gateway.take() {
+                if let Err(error) = app
+                    .embedded_runtime()
+                    .ok_or("runtime unavailable")?
+                    .sdk_client()
+                    .embedded()
+                    .node()
+                    .configure_push_gateway(gateway)
+                    .await
+                {
+                    let _ = app.close().await;
+                    return Err(error);
+                }
+            }
             self.events = Some(app.messaging().subscribe_events());
             self.peers = peers;
             let identity = value(app.identity())?;
@@ -179,6 +202,21 @@ impl State {
         let app = self.app.as_ref().ok_or("profile is suspended")?;
         let client = app.messaging();
         match command {
+            #[cfg(feature = "push")]
+            Command::BindPush {
+                reference,
+                revision,
+                expires,
+            } => {
+                app.embedded_runtime()
+                    .ok_or("runtime unavailable")?
+                    .sdk_client()
+                    .embedded()
+                    .node()
+                    .bind_push_notifications(reference, revision, expires)
+                    .await?;
+                Ok(Value::Null)
+            }
             Command::Open { .. } | Command::Suspend => unreachable!(),
             Command::Identity => value(app.identity()),
             Command::Trust { peer } => {

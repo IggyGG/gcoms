@@ -1,0 +1,9 @@
+{
+  "schema": 1,
+  "source_revision": "6cf6c0a",
+  "tests_passed": 162,
+  "failed": 0,
+  "rust": "1.98.0",
+  "log_sha256": "8ee29b5cee3a01e67485445de537fa655579cd0940a4087ff8af66c67c55f8ac",
+  "scope": "All script tests, including real isolated Cargo consumers and the APK ELF regression"
+}

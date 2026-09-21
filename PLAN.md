@@ -1,21 +1,44 @@
+# GChat release integration follow-up
+
+The 2026-09-21 fleet integration combines SDK handoff `4fd466b` with the
+release branch's Windows owner-only file permissions, transport timing and Python
+portability fixes, authenticated channel management and research-import provenance.
+The only source conflict uses the SDK's directly boxed application-start future;
+existing awaiting callers and bounded startup remain intact. Targeted combined
+application/client/mobile feature and current GChat consumer validation is pending.
+This does not replace earlier native artifact receipts or enable live push in GChat.
+
 # Windows and mobile integrations
 
-In progress (2026-09-21, Codex): native Windows x64 qualification; an outbound
-network-client backend with relay hosting compiled out; minimal Kotlin/Swift
-client and relay packages; optional app-operated APNs/FCM gateway. Mobile
-acceptance uses Android emulator/iOS simulator and simulated push providers.
-Physical-device, battery and live push qualification remain deferred.
+Completed the emulator/simulator preview on 2026-09-21. The outbound-only Rust
+backend, minimal C ABI, Kotlin/Swift client and relay packages, and optional
+app-operated APNs/FCM hint adapters are implemented and qualified. Physical-device,
+battery and live-provider qualification remains outside this accepted scope.
 
-Checkpoint: outbound messaging/channel/file/reopen integration passed on Linux,
-along with 504 application/runtime/SDK/node/file tests (three explicit ignores).
-The native mobile ABI and Kotlin sources compile; the relay ABI fixture verifies
-channel/file operations and suspend/reopen. Swift packaging and emulator/simulator
-execution remain in progress. The optional gateway's five simulations pass;
-owner-authorized relay bindings and platform push adapters are still being wired.
+- Linux, macOS ARM64/Intel and Windows x64 native tests and 3/s/z size gates pass
+  at b39199e. All executable/source hashes are verified; maximum growth is 2.24%.
+- All four Android base/push roles pass 16 KiB emulator instrumentation.
+  Release AARs, POM/module dependencies, APK alignment and installed deltas pass.
+- All four Swift base/push roles pass simulator tests, including secure profile
+  reopen and push-state Keychain persistence in ad-hoc signed test hosts.
+- Production libraries cover both Android ABIs and all three Apple architectures.
+  Full LTO is active; z minimizes Android libraries and linked Apple samples
+  across 3/s/z. App additions are measured for
+  installed emulators/simulators and built ARM64 samples. Mobile CI enforces a
+  separate 5% same-toolchain size baseline for each platform, role and push option.
+- Full Rust workspace: 910 passed, seven explicit ignores; strict Clippy,
+  documentation, minimal features and packaged Rust/npm consumers pass.
+  GChat f7a83ce against GComs b39199e passes 137 tests and strict Clippy.
+- Client fixtures compile before provisioning their five-minute relay card.
+  Production grant expiry is unchanged. Android explicitly selects the qualified
+  NDK 27.3.13750724 and DataStore 1.2.1. Every packaged native library passes LOAD,
+  RELRO and ZIP alignment checks; both push roles exercise the native counter.
 
-Implementation order: Windows native gate, Rust role separation, mobile ABI and
-packages, push registration/relay notifications, integrated qualification and
-per-platform size evidence. Preserve the existing IPC and embedded consumers.
+[Desktop evidence](docs/evidence/rust-integrations-mobile-20260921/),
+[mobile qualification and final baselines](docs/evidence/mobile-preview-lto-20260921/),
+and [combined workspace/GChat checks](docs/evidence/mobile-preview-20260921/combined-checks.json)
+retain exact source revisions and artifact/report hashes. Pre-LTO mobile records
+are historical evidence; they are excluded from final size comparisons.
 
 # Minimal Rust application integrations
 

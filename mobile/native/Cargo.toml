@@ -11,7 +11,9 @@ publish = false
 [workspace]
 
 [lib]
-crate-type = ["rlib", "cdylib", "staticlib"]
+# Tests and fixture-host examples consume the rlib. The packaging script selects
+# exactly one foreign output with cargo rustc so release LTO stays enabled.
+crate-type = ["rlib"]
 
 [features]
 default = ["client"]
@@ -19,6 +21,8 @@ client = ["gcoms/network-client"]
 relay = ["gcoms/embedded", "gcoms/gc2-carrier"]
 # Disposable emulator/simulator fixtures only; excluded from release packages.
 fixtures = []
+push = ["gcoms/push-notifications"]
+push-gateway = ["push", "relay", "gcoms/push-gateway"]
 
 [dependencies]
 gcoms = { version = "0.1.0", path = "../../crates/application", default-features = false, features = ["files"] }
@@ -34,6 +38,11 @@ jni = { version = "0.21.1", default-features = false }
 [dev-dependencies]
 tempfile = "3"
 gcoms-private-fs = { version = "0.1.0", path = "../../crates/private-fs" }
+base64 = "0.22"
+
+[[example]]
+name = "fixture_host"
+required-features = ["relay", "fixtures"]
 
 [profile.release]
 opt-level = "z"

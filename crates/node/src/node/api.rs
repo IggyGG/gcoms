@@ -460,6 +460,8 @@ pub struct TransportStatus {
 
 #[derive(Clone)]
 pub struct NodeHandle {
+    #[cfg(feature = "push-gateway")]
+    pub(super) notification_host: Option<std::sync::Weak<super::host::RelayHost>>,
     pub(crate) state: std::sync::Weak<Mutex<NodeState>>,
     pub(crate) listener_addr: SocketAddr,
     #[cfg(feature = "relay-host")]

@@ -7,10 +7,18 @@ packages:
     path: ${GCOMS_PACKAGE_PATH}
 settings:
   base:
-    SWIFT_VERSION: "5.9"
+    SWIFT_VERSION: "5.0"
     CODE_SIGNING_ALLOWED: NO
     GENERATE_INFOPLIST_FILE: YES
     IPHONEOS_DEPLOYMENT_TARGET: "15.0"
+  configs:
+    Release:
+      DEAD_CODE_STRIPPING: YES
+      DEPLOYMENT_POSTPROCESSING: YES
+      STRIP_INSTALLED_PRODUCT: YES
+      STRIP_STYLE: all
+      STRIP_SWIFT_SYMBOLS: YES
+      ONLY_ACTIVE_ARCH: YES
 targets:
   Baseline:
     type: application
@@ -41,6 +49,7 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: boo.gcoms.preview.tests
+        SWIFT_ACTIVE_COMPILATION_CONDITIONS: GCOMS_ENABLED
 schemes:
   Preview:
     build:

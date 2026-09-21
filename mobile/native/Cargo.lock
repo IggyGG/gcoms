@@ -926,6 +926,7 @@ dependencies = [
 name = "gcoms-mobile"
 version = "0.1.0"
 dependencies = [
+ "base64",
  "futures-util",
  "gcoms",
  "gcoms-private-fs",

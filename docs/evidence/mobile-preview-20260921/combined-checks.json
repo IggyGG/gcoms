@@ -1,0 +1,150 @@
+{
+  "schema": 1,
+  "date": "2026-09-21",
+  "gcoms_revision": "b39199e431fa680267eecd566914ff84ee06ef25",
+  "rust": "1.98.0",
+  "scope": "source integration and mobile preview; no live deployment or physical-device qualification",
+  "workspace_tests": {
+    "passed": 910,
+    "failed": 0,
+    "ignored": 7,
+    "evidence": {
+      "name": "workspace-final2.log",
+      "sha256": "3f84e2d51ada3b4044c27052d4ddc6cfbbbb77e61569dce01479892c5469a23d"
+    }
+  },
+  "gchat_tests": {
+    "passed": 137,
+    "failed": 0,
+    "ignored": 0,
+    "evidence": {
+      "name": "gchat-b391.log",
+      "sha256": "766153f5b1300d2cb707a979bc383d20686c43ac5df1be847aae7e8794879b40"
+    }
+  },
+  "native_mobile_abi_tests": {
+    "passed": 3,
+    "failed": 0,
+    "ignored": 0,
+    "evidence": {
+      "name": "native-final-b391.log",
+      "sha256": "4b788ee72e94654fa93dd960e3ce8e279ffc5b2514e37a53bcfcd101bab75052"
+    }
+  },
+  "workspace_checks": {
+    "format": "passed",
+    "strict_clippy_all_targets_all_features": "passed",
+    "documentation": "passed",
+    "core_no_default_features": "passed",
+    "sdk_ipc_no_default_features": "passed"
+  },
+  "client_push_feature_check": "passed",
+  "gchat": {
+    "test": {
+      "passed": true,
+      "sources": {
+        "gcoms": {
+          "revision": "b39199e431fa680267eecd566914ff84ee06ef25",
+          "snapshot_sha256": "6a3537a0a1a57bd45140cf7d004f4572ebe386e4251e634c3403ed332cd0ba72",
+          "unchanged_during_check": true
+        },
+        "gchat": {
+          "revision": "f7a83ceec335961b208fdf8eaa251bacc76d8cb2",
+          "snapshot_sha256": "8e31dd7a01dcd4975d93f03c0223c1dcbe230b8281ac9f4c314f5cb7094d2165",
+          "unchanged_during_check": true
+        }
+      },
+      "evidence": {
+        "name": "test-summary.json",
+        "sha256": "062981fe93c0ebafbb7e09c84ebc8beda47601ea4983dd0ffa5977bfb33ede40"
+      }
+    },
+    "clippy": {
+      "passed": true,
+      "sources": {
+        "gcoms": {
+          "revision": "b39199e431fa680267eecd566914ff84ee06ef25",
+          "snapshot_sha256": "6a3537a0a1a57bd45140cf7d004f4572ebe386e4251e634c3403ed332cd0ba72",
+          "unchanged_during_check": true
+        },
+        "gchat": {
+          "revision": "f7a83ceec335961b208fdf8eaa251bacc76d8cb2",
+          "snapshot_sha256": "8e31dd7a01dcd4975d93f03c0223c1dcbe230b8281ac9f4c314f5cb7094d2165",
+          "unchanged_during_check": true
+        }
+      },
+      "evidence": {
+        "name": "clippy-summary.json",
+        "sha256": "62bafe24df06acfbd58c3f71893a99754f51b162e29169b85638f0d5e5beda27"
+      }
+    }
+  },
+  "packaged_consumers": {
+    "status": "passed",
+    "release": true,
+    "published": false,
+    "source_unchanged": true,
+    "rust_packages": [
+      "gcoms-runtime",
+      "gcoms-core",
+      "gcoms-crypto",
+      "gcoms-file-transfer",
+      "gcoms-private-fs",
+      "gcoms-network-client",
+      "gcoms-network",
+      "gcoms-routing",
+      "gcoms-transport",
+      "gcoms-protocol",
+      "gcoms-node",
+      "gcoms-gossip",
+      "gcoms-mls",
+      "gcoms-sdk",
+      "gcoms",
+      "gcoms-rpc",
+      "gcoms-rpc-contract",
+      "gcoms-rpc-macros",
+      "gcoms-catalog"
+    ],
+    "rust_external_alias_consumer": "passed",
+    "npm_archive_consumer": "passed",
+    "evidence": {
+      "name": "summary.json",
+      "sha256": "ec7700dabfa4d66612833656f49a38d17c5d762768a83f6f29b54dee9ca06c9f"
+    }
+  },
+  "source_and_npm_checks": {
+    "independent_vectors": 8,
+    "rpc_tests": 8,
+    "source_inventory": "passed",
+    "generated_contracts": "passed",
+    "typescript_check_and_build": "passed",
+    "evidence": {
+      "name": "source-node-gates.log",
+      "sha256": "302a8c15a9459b46689358d55035208b7f79bb836956eea57e2078dbbd59046d"
+    }
+  },
+  "cargo_deny": {
+    "advisories": "passed",
+    "bans": "passed",
+    "licenses": "passed",
+    "sources": "passed",
+    "evidence": {
+      "name": "deny-isolated.log",
+      "sha256": "99db71e10bc7b1ee17aa66f4af0e8ec07821c51d1badced1c7da30ef83486623"
+    }
+  },
+  "npm_audit": {
+    "production_vulnerabilities": 0,
+    "evidence": {
+      "name": "npm-audit-final.json",
+      "sha256": "0955ca766697d1f47b8a36c6444a271f03dc15015a3f0cd71b860bbab5603d97"
+    }
+  },
+  "mobile_build_change_checks": {
+    "revision": "65fc089ba25fe137f578a956981a909c8a298599",
+    "abi_tests_passed": 3,
+    "abi_tests_failed": 0,
+    "client_push_feature_check": "passed",
+    "log_sha256": "70d20298cebcb1244da39c92f292c85e7bac52254e8c6a91ab63675d3531cb94"
+  }
+}

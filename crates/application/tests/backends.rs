@@ -13,6 +13,13 @@ use std::{
     time::Duration,
 };
 
+#[test]
+fn startup_future_keeps_caller_stack_bounded() {
+    let opening = Application::builder("stack-fixture").open();
+    let bytes = std::mem::size_of_val(&opening);
+    assert!(bytes <= 16 * 1024, "startup future occupies {bytes} bytes");
+}
+
 #[gcoms::service(name = "example.echo", version = 1)]
 trait Echo {
     #[rpc(id = "echo", kind = "query")]

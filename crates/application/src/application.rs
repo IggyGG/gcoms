@@ -156,11 +156,10 @@ impl ApplicationBuilder {
         self.services.push((dispatcher, authorize));
         self
     }
-    pub async fn open(self) -> Result<Application, String> {
-        // Keep backend construction out of the caller's async state machine.
-        // Nested application adapters otherwise multiply the embedded startup
-        // future and can overflow a normal test/mobile thread stack.
-        Box::pin(self.open_inner()).await
+    /// Open the profile without embedding the large startup state in the
+    /// caller's future. This also leaves stack space for post-quantum key setup.
+    pub fn open(self) -> impl std::future::Future<Output = Result<Application, String>> + Send {
+        Box::pin(self.open_inner())
     }
 
     async fn open_inner(self) -> Result<Application, String> {

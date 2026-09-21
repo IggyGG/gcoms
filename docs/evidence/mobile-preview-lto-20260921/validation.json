@@ -1,0 +1,265 @@
+{
+  "schema": 1,
+  "date": "2026-09-21",
+  "status": "passed",
+  "scope": "Android 16 KiB emulator and iOS simulator preview; physical devices, battery and live APNs/FCM excluded",
+  "distributions": [
+    {
+      "distribution": "android-client-base",
+      "revision": "65fc089ba25fe137f578a956981a909c8a298599",
+      "workflow_run": "https://github.com/IggyGG/gcoms/actions/runs/35606582546",
+      "job": "https://github.com/IggyGG/gcoms/actions/runs/35606582546/job/106355030409",
+      "conclusion": "success",
+      "functional_checks": {
+        "instrumentation_tests_passed": 2,
+        "test_names": [
+          "profileChannelsFilesAndLifecycle",
+          "loadsRoleAndOwnsNativeResults"
+        ],
+        "native_exports": [
+          "Java_boo_gcoms_sdk_Native_cancel",
+          "Java_boo_gcoms_sdk_Native_create",
+          "Java_boo_gcoms_sdk_Native_destroy",
+          "Java_boo_gcoms_sdk_Native_role",
+          "Java_boo_gcoms_sdk_Native_submit",
+          "Java_boo_gcoms_sdk_Native_take",
+          "gcoms_mobile_abi_version",
+          "gcoms_mobile_cancel",
+          "gcoms_mobile_create",
+          "gcoms_mobile_destroy",
+          "gcoms_mobile_role",
+          "gcoms_mobile_submit",
+          "gcoms_mobile_take"
+        ],
+        "all_architectures_and_profiles_preserve_exports": true,
+        "page_size": 16384
+      },
+      "native_artifacts_verified": 6,
+      "dependency_graph_checks": "passed",
+      "source_inventory_verified": true,
+      "distributed_profile": "z",
+      "smallest_native_profiles": {
+        "aarch64-linux-android": "z",
+        "x86_64-linux-android": "z"
+      },
+      "retained_job_log_sha256": "cf95edd43f41224a3d14498f6e6a75c273ab8eeb2212d3775d8f05a30c6e39e6"
+    },
+    {
+      "distribution": "android-relay-base",
+      "revision": "65fc089ba25fe137f578a956981a909c8a298599",
+      "workflow_run": "https://github.com/IggyGG/gcoms/actions/runs/35606582546",
+      "job": "https://github.com/IggyGG/gcoms/actions/runs/35606582546/job/106355030506",
+      "conclusion": "success",
+      "functional_checks": {
+        "instrumentation_tests_passed": 2,
+        "test_names": [
+          "profileChannelsFilesAndLifecycle",
+          "loadsRoleAndOwnsNativeResults"
+        ],
+        "native_exports": [
+          "Java_boo_gcoms_sdk_Native_cancel",
+          "Java_boo_gcoms_sdk_Native_create",
+          "Java_boo_gcoms_sdk_Native_destroy",
+          "Java_boo_gcoms_sdk_Native_role",
+          "Java_boo_gcoms_sdk_Native_submit",
+          "Java_boo_gcoms_sdk_Native_take",
+          "gcoms_mobile_abi_version",
+          "gcoms_mobile_cancel",
+          "gcoms_mobile_create",
+          "gcoms_mobile_destroy",
+          "gcoms_mobile_role",
+          "gcoms_mobile_submit",
+          "gcoms_mobile_take"
+        ],
+        "all_architectures_and_profiles_preserve_exports": true,
+        "page_size": 16384
+      },
+      "native_artifacts_verified": 6,
+      "dependency_graph_checks": "passed",
+      "source_inventory_verified": true,
+      "distributed_profile": "z",
+      "smallest_native_profiles": {
+        "aarch64-linux-android": "z",
+        "x86_64-linux-android": "z"
+      },
+      "retained_job_log_sha256": "66502ab0f28218eb4f1ad36a456aae561ea56cfd2eaee3953118f38bb7314a7e"
+    },
+    {
+      "distribution": "android-client-push",
+      "revision": "65fc089ba25fe137f578a956981a909c8a298599",
+      "workflow_run": "https://github.com/IggyGG/gcoms/actions/runs/35606654147",
+      "job": "https://github.com/IggyGG/gcoms/actions/runs/35606654147/job/106355269051",
+      "conclusion": "success",
+      "functional_checks": {
+        "instrumentation_tests_passed": 2,
+        "test_names": [
+          "profileChannelsFilesAndLifecycle",
+          "loadsRoleAndOwnsNativeResults"
+        ],
+        "native_exports": [
+          "Java_boo_gcoms_sdk_Native_cancel",
+          "Java_boo_gcoms_sdk_Native_create",
+          "Java_boo_gcoms_sdk_Native_destroy",
+          "Java_boo_gcoms_sdk_Native_role",
+          "Java_boo_gcoms_sdk_Native_submit",
+          "Java_boo_gcoms_sdk_Native_take",
+          "gcoms_mobile_abi_version",
+          "gcoms_mobile_cancel",
+          "gcoms_mobile_create",
+          "gcoms_mobile_destroy",
+          "gcoms_mobile_role",
+          "gcoms_mobile_submit",
+          "gcoms_mobile_take"
+        ],
+        "all_architectures_and_profiles_preserve_exports": true,
+        "page_size": 16384,
+        "push_hint_unit_test_task": "passed"
+      },
+      "native_artifacts_verified": 6,
+      "dependency_graph_checks": "passed",
+      "source_inventory_verified": true,
+      "distributed_profile": "z",
+      "smallest_native_profiles": {
+        "aarch64-linux-android": "z",
+        "x86_64-linux-android": "z"
+      },
+      "retained_job_log_sha256": "77c74993469531126980ddd4ec81d6bdf3550cd5a98632e60a6fa9c472262291"
+    },
+    {
+      "distribution": "android-relay-push",
+      "revision": "3a47609b448003cae6d7775cbaf7ebe1d3f5a05a",
+      "workflow_run": "https://github.com/IggyGG/gcoms/actions/runs/35608966305",
+      "job": "https://github.com/IggyGG/gcoms/actions/runs/35608966305/job/106363012670",
+      "conclusion": "success",
+      "functional_checks": {
+        "instrumentation_tests_passed": 2,
+        "test_names": [
+          "profileChannelsFilesAndLifecycle",
+          "loadsRoleAndOwnsNativeResults"
+        ],
+        "native_exports": [
+          "Java_boo_gcoms_sdk_Native_cancel",
+          "Java_boo_gcoms_sdk_Native_create",
+          "Java_boo_gcoms_sdk_Native_destroy",
+          "Java_boo_gcoms_sdk_Native_role",
+          "Java_boo_gcoms_sdk_Native_submit",
+          "Java_boo_gcoms_sdk_Native_take",
+          "gcoms_mobile_abi_version",
+          "gcoms_mobile_cancel",
+          "gcoms_mobile_create",
+          "gcoms_mobile_destroy",
+          "gcoms_mobile_role",
+          "gcoms_mobile_submit",
+          "gcoms_mobile_take"
+        ],
+        "all_architectures_and_profiles_preserve_exports": true,
+        "page_size": 16384,
+        "push_hint_unit_test_task": "passed"
+      },
+      "native_artifacts_verified": 6,
+      "dependency_graph_checks": "passed",
+      "source_inventory_verified": true,
+      "distributed_profile": "z",
+      "smallest_native_profiles": {
+        "aarch64-linux-android": "z",
+        "x86_64-linux-android": "z"
+      },
+      "retained_job_log_sha256": "e763a2fbd7195a868e0e8a0002de7f761bb12e85d1db999e2e05142e48245549"
+    },
+    {
+      "distribution": "apple-relay-base",
+      "revision": "65fc089ba25fe137f578a956981a909c8a298599",
+      "workflow_run": "https://github.com/IggyGG/gcoms/actions/runs/35606582546",
+      "job": "https://github.com/IggyGG/gcoms/actions/runs/35606582546/job/106355030077",
+      "conclusion": "success",
+      "functional_checks": {
+        "simulator_tests_passed": 3,
+        "simulator_keychain_profile_reopen": "passed"
+      },
+      "native_artifacts_verified": 9,
+      "dependency_graph_checks": "passed",
+      "source_inventory_verified": true,
+      "distributed_profile": "z",
+      "smallest_native_profiles": {
+        "aarch64-apple-ios": "s",
+        "aarch64-apple-ios-sim": "s",
+        "x86_64-apple-ios": "z"
+      },
+      "retained_job_log_sha256": "96e10b1c9a13e597f35de0a7d19e24a850edec319491926c9d827ec0f44efe0e"
+    },
+    {
+      "distribution": "apple-relay-push",
+      "revision": "65fc089ba25fe137f578a956981a909c8a298599",
+      "workflow_run": "https://github.com/IggyGG/gcoms/actions/runs/35606654147",
+      "job": "https://github.com/IggyGG/gcoms/actions/runs/35606654147/job/106355269159",
+      "conclusion": "success",
+      "functional_checks": {
+        "simulator_tests_passed": 5,
+        "simulator_keychain_profile_reopen": "passed",
+        "push_hint_validation_and_keychain_state_reopen": "passed"
+      },
+      "native_artifacts_verified": 9,
+      "dependency_graph_checks": "passed",
+      "source_inventory_verified": true,
+      "distributed_profile": "z",
+      "smallest_native_profiles": {
+        "aarch64-apple-ios": "s",
+        "aarch64-apple-ios-sim": "s",
+        "x86_64-apple-ios": "z"
+      },
+      "retained_job_log_sha256": "5e9a3317e3fc4f804a5730322c83b571e44911cd1f1ce715b6192cf700382738"
+    },
+    {
+      "distribution": "apple-client-base",
+      "revision": "3a47609b448003cae6d7775cbaf7ebe1d3f5a05a",
+      "workflow_run": "https://github.com/IggyGG/gcoms/actions/runs/35608962490",
+      "job": "https://github.com/IggyGG/gcoms/actions/runs/35608962490/job/106362999521",
+      "conclusion": "success",
+      "functional_checks": {
+        "simulator_tests_passed": 3,
+        "simulator_keychain_profile_reopen": "passed"
+      },
+      "native_artifacts_verified": 9,
+      "dependency_graph_checks": "passed",
+      "source_inventory_verified": true,
+      "distributed_profile": "z",
+      "smallest_native_profiles": {
+        "aarch64-apple-ios": "s",
+        "aarch64-apple-ios-sim": "s",
+        "x86_64-apple-ios": "z"
+      },
+      "retained_job_log_sha256": "cfa23dcdb4f9e32f0475c8fae1779763b24fcab1e10d86d7b62e0b5e2130fe3c"
+    },
+    {
+      "distribution": "apple-client-push",
+      "revision": "3a47609b448003cae6d7775cbaf7ebe1d3f5a05a",
+      "workflow_run": "https://github.com/IggyGG/gcoms/actions/runs/35609901784",
+      "job": "https://github.com/IggyGG/gcoms/actions/runs/35609901784/job/106366121698",
+      "conclusion": "success",
+      "functional_checks": {
+        "simulator_tests_passed": 5,
+        "simulator_keychain_profile_reopen": "passed",
+        "push_hint_validation_and_keychain_state_reopen": "passed"
+      },
+      "native_artifacts_verified": 9,
+      "dependency_graph_checks": "passed",
+      "source_inventory_verified": true,
+      "distributed_profile": "z",
+      "smallest_native_profiles": {
+        "aarch64-apple-ios": "s",
+        "aarch64-apple-ios-sim": "s",
+        "x86_64-apple-ios": "z"
+      },
+      "retained_job_log_sha256": "cddc086dfe270e299e819d5ba23cf0a73097e4db98fc57477ae5ee6c155b8de4"
+    }
+  ],
+  "desktop_and_gchat_rust_sources_unchanged_since": "b39199e431fa680267eecd566914ff84ee06ef25",
+  "mobile_rust_and_wrapper_sources_unchanged_since": "65fc089ba25fe137f578a956981a909c8a298599",
+  "final_build_configuration_checks": "pinned-android-packaging.json and size-gate-checks.json",
+  "final_android_packaging_and_native_dependency_tests": "android-final-qualification.json",
+  "combined_checks": "../mobile-preview-20260921/combined-checks.json",
+  "qualification_note": "Superseded failed jobs are replaced by the successful targeted jobs listed here; each artifact retains its exact source revision.",
+  "measurements": "Native binaries independently hashed; Android APK payloads independently verified; Apple app deltas use CI reports because derived app binaries are excluded from upload.",
+  "apple_linked_profile_comparison": "apple-linked-profiles.json",
+  "script_checks": "python-checks.json"
+}

@@ -1,0 +1,157 @@
+{
+  "schema": 1,
+  "checks": [
+    {
+      "baseline": "android-client-base-native.json",
+      "script": "scripts/build-mobile.py",
+      "script_sha256": "5757902e3b9b491eea2afc610ad6e3e164dd91fec81b33c65b47c7741fa713d7",
+      "current_size_accepted": true,
+      "changed_toolchain_rejected": true,
+      "five_percent_boundary_cases": 6,
+      "boundary_accepted_and_one_byte_above_rejected": true,
+      "missing_native_baseline_rejected": true
+    },
+    {
+      "baseline": "android-client-push-native.json",
+      "script": "scripts/build-mobile.py",
+      "script_sha256": "5757902e3b9b491eea2afc610ad6e3e164dd91fec81b33c65b47c7741fa713d7",
+      "current_size_accepted": true,
+      "changed_toolchain_rejected": true,
+      "five_percent_boundary_cases": 6,
+      "boundary_accepted_and_one_byte_above_rejected": true,
+      "missing_native_baseline_rejected": true
+    },
+    {
+      "baseline": "android-relay-base-native.json",
+      "script": "scripts/build-mobile.py",
+      "script_sha256": "5757902e3b9b491eea2afc610ad6e3e164dd91fec81b33c65b47c7741fa713d7",
+      "current_size_accepted": true,
+      "changed_toolchain_rejected": true,
+      "five_percent_boundary_cases": 6,
+      "boundary_accepted_and_one_byte_above_rejected": true,
+      "missing_native_baseline_rejected": true
+    },
+    {
+      "baseline": "android-relay-push-native.json",
+      "script": "scripts/build-mobile.py",
+      "script_sha256": "5757902e3b9b491eea2afc610ad6e3e164dd91fec81b33c65b47c7741fa713d7",
+      "current_size_accepted": true,
+      "changed_toolchain_rejected": true,
+      "five_percent_boundary_cases": 6,
+      "boundary_accepted_and_one_byte_above_rejected": true,
+      "missing_native_baseline_rejected": true
+    },
+    {
+      "baseline": "apple-client-base-native.json",
+      "script": "scripts/build-mobile.py",
+      "script_sha256": "5757902e3b9b491eea2afc610ad6e3e164dd91fec81b33c65b47c7741fa713d7",
+      "current_size_accepted": true,
+      "changed_toolchain_rejected": true,
+      "five_percent_boundary_cases": 9,
+      "boundary_accepted_and_one_byte_above_rejected": true,
+      "missing_native_baseline_rejected": true
+    },
+    {
+      "baseline": "apple-client-push-native.json",
+      "script": "scripts/build-mobile.py",
+      "script_sha256": "5757902e3b9b491eea2afc610ad6e3e164dd91fec81b33c65b47c7741fa713d7",
+      "current_size_accepted": true,
+      "changed_toolchain_rejected": true,
+      "five_percent_boundary_cases": 9,
+      "boundary_accepted_and_one_byte_above_rejected": true,
+      "missing_native_baseline_rejected": true
+    },
+    {
+      "baseline": "apple-relay-base-native.json",
+      "script": "scripts/build-mobile.py",
+      "script_sha256": "5757902e3b9b491eea2afc610ad6e3e164dd91fec81b33c65b47c7741fa713d7",
+      "current_size_accepted": true,
+      "changed_toolchain_rejected": true,
+      "five_percent_boundary_cases": 9,
+      "boundary_accepted_and_one_byte_above_rejected": true,
+      "missing_native_baseline_rejected": true
+    },
+    {
+      "baseline": "apple-relay-push-native.json",
+      "script": "scripts/build-mobile.py",
+      "script_sha256": "5757902e3b9b491eea2afc610ad6e3e164dd91fec81b33c65b47c7741fa713d7",
+      "current_size_accepted": true,
+      "changed_toolchain_rejected": true,
+      "five_percent_boundary_cases": 9,
+      "boundary_accepted_and_one_byte_above_rejected": true,
+      "missing_native_baseline_rejected": true
+    },
+    {
+      "baseline": "android-client-base-app.json",
+      "script": "scripts/qualify-android.py",
+      "script_sha256": "cf78519d8ca423494e96bcf33457705d0c6fb25db6ecfe746556fc330ae49d2d",
+      "current_size_accepted": true,
+      "changed_toolchain_rejected": true,
+      "five_percent_boundary_cases": 2,
+      "boundary_accepted_and_one_byte_above_rejected": true
+    },
+    {
+      "baseline": "android-client-push-app.json",
+      "script": "scripts/qualify-android.py",
+      "script_sha256": "cf78519d8ca423494e96bcf33457705d0c6fb25db6ecfe746556fc330ae49d2d",
+      "current_size_accepted": true,
+      "changed_toolchain_rejected": true,
+      "five_percent_boundary_cases": 2,
+      "boundary_accepted_and_one_byte_above_rejected": true
+    },
+    {
+      "baseline": "android-relay-base-app.json",
+      "script": "scripts/qualify-android.py",
+      "script_sha256": "cf78519d8ca423494e96bcf33457705d0c6fb25db6ecfe746556fc330ae49d2d",
+      "current_size_accepted": true,
+      "changed_toolchain_rejected": true,
+      "five_percent_boundary_cases": 2,
+      "boundary_accepted_and_one_byte_above_rejected": true
+    },
+    {
+      "baseline": "android-relay-push-app.json",
+      "script": "scripts/qualify-android.py",
+      "script_sha256": "cf78519d8ca423494e96bcf33457705d0c6fb25db6ecfe746556fc330ae49d2d",
+      "current_size_accepted": true,
+      "changed_toolchain_rejected": true,
+      "five_percent_boundary_cases": 2,
+      "boundary_accepted_and_one_byte_above_rejected": true
+    },
+    {
+      "baseline": "apple-client-base-app.json",
+      "script": "scripts/qualify-apple.py",
+      "script_sha256": "37739adc5dc4aab6ebcfb4bf2fbb009c70085ecf82ecf5946b511d0072938c49",
+      "current_size_accepted": true,
+      "changed_toolchain_rejected": true,
+      "five_percent_boundary_cases": 2,
+      "boundary_accepted_and_one_byte_above_rejected": true
+    },
+    {
+      "baseline": "apple-client-push-app.json",
+      "script": "scripts/qualify-apple.py",
+      "script_sha256": "37739adc5dc4aab6ebcfb4bf2fbb009c70085ecf82ecf5946b511d0072938c49",
+      "current_size_accepted": true,
+      "changed_toolchain_rejected": true,
+      "five_percent_boundary_cases": 2,
+      "boundary_accepted_and_one_byte_above_rejected": true
+    },
+    {
+      "baseline": "apple-relay-base-app.json",
+      "script": "scripts/qualify-apple.py",
+      "script_sha256": "37739adc5dc4aab6ebcfb4bf2fbb009c70085ecf82ecf5946b511d0072938c49",
+      "current_size_accepted": true,
+      "changed_toolchain_rejected": true,
+      "five_percent_boundary_cases": 2,
+      "boundary_accepted_and_one_byte_above_rejected": true
+    },
+    {
+      "baseline": "apple-relay-push-app.json",
+      "script": "scripts/qualify-apple.py",
+      "script_sha256": "37739adc5dc4aab6ebcfb4bf2fbb009c70085ecf82ecf5946b511d0072938c49",
+      "current_size_accepted": true,
+      "changed_toolchain_rejected": true,
+      "five_percent_boundary_cases": 2,
+      "boundary_accepted_and_one_byte_above_rejected": true
+    }
+  ]
+}

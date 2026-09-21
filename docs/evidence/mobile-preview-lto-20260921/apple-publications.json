@@ -1,0 +1,290 @@
+{
+  "schema": 1,
+  "scope": "iOS simulator preview; physical devices and live push excluded",
+  "distributions": [
+    {
+      "role": "client",
+      "push": false,
+      "native_revision": "3a47609b448003cae6d7775cbaf7ebe1d3f5a05a",
+      "xcframework_bytes": 45606430,
+      "swift_package_bytes": 45623544,
+      "all_native_slices_verified": true,
+      "wrapper_sources_verified": true,
+      "app_measurements": "CI-installed simulator and unsigned device build reports; app binaries excluded from upload",
+      "workflow_run": "https://github.com/IggyGG/gcoms/actions/runs/35608962490",
+      "artifacts": {
+        "GComsNative.xcframework/Info.plist": {
+          "bytes": 1270,
+          "sha256": "90883bc3c6e009238d3972f536440b172a9443f322ea013e7b2427de9e811cf9"
+        },
+        "GComsNative.xcframework/ios-arm64/Headers/gcoms_mobile.h": {
+          "bytes": 1177,
+          "sha256": "f68173ade00355c7770c7f46b90111af0190d146da501535a09ba919473afbb9"
+        },
+        "GComsNative.xcframework/ios-arm64/Headers/module.modulemap": {
+          "bytes": 51,
+          "sha256": "d93bee41e5f9c90b6c0c40cf4aae6e4af9ab29c3e585ddee119439d3bf2dbb27"
+        },
+        "GComsNative.xcframework/ios-arm64/libgcoms_mobile.a": {
+          "bytes": 15483928,
+          "sha256": "055992edc8111bd3dda762635a8b3691db8ad66d761c30cd6298d60d20750279"
+        },
+        "GComsNative.xcframework/ios-arm64_x86_64-simulator/Headers/gcoms_mobile.h": {
+          "bytes": 1177,
+          "sha256": "f68173ade00355c7770c7f46b90111af0190d146da501535a09ba919473afbb9"
+        },
+        "GComsNative.xcframework/ios-arm64_x86_64-simulator/Headers/module.modulemap": {
+          "bytes": 51,
+          "sha256": "d93bee41e5f9c90b6c0c40cf4aae6e4af9ab29c3e585ddee119439d3bf2dbb27"
+        },
+        "GComsNative.xcframework/ios-arm64_x86_64-simulator/libgcoms_sim.a": {
+          "bytes": 30118776,
+          "sha256": "5eb097df28e1b34c60a86bf4ad8f872b4c4541675653c9f09056c7fbe947d22a"
+        },
+        "Package.swift": {
+          "bytes": 519,
+          "sha256": "e1aa082b5664996f7cc6eb2a0f5d53a772564008189c21c386ec368cff428e55"
+        },
+        "Sources/GComs/GComs.swift": {
+          "bytes": 7345,
+          "sha256": "d0bfb36427c0133e774f18c3cd19bbe43ab7a2829135a4f0bf86c9434ae3bc82"
+        },
+        "Sources/GComs/ProfileDirectory.swift": {
+          "bytes": 1174,
+          "sha256": "f749011b71998f6a3974a70bbe5deeb8aed571695ad2b104302f64340d21b2c6"
+        },
+        "Sources/GComs/UnlockProvider.swift": {
+          "bytes": 2316,
+          "sha256": "1a8ade418316b26751b0c014db2ebccd74f2002ddd14deb09cd6c96324f7a8e9"
+        },
+        "Tests/GComsTests/PushTests.swift": {
+          "bytes": 1159,
+          "sha256": "54973430f4a910d1282cc742610d72c1f6ab2142da053d133ea209649923d7bb"
+        },
+        "Tests/GComsTests/RelayTests.swift": {
+          "bytes": 3574,
+          "sha256": "7cecb3804861154d338ddc97f709ed7b571b270fb5d16138c1c929f503dd9b1c"
+        },
+        "Tests/GComsTests/SmokeTests.swift": {
+          "bytes": 1027,
+          "sha256": "deb276e7d853e9fcdad4e7883d21b0dd3ed540d78bc6c8fc056832193a7466c0"
+        }
+      }
+    },
+    {
+      "role": "client",
+      "push": true,
+      "native_revision": "3a47609b448003cae6d7775cbaf7ebe1d3f5a05a",
+      "xcframework_bytes": 45658254,
+      "swift_package_bytes": 45683518,
+      "all_native_slices_verified": true,
+      "wrapper_sources_verified": true,
+      "app_measurements": "CI-installed simulator and unsigned device build reports; app binaries excluded from upload",
+      "workflow_run": "https://github.com/IggyGG/gcoms/actions/runs/35609901784",
+      "artifacts": {
+        "GComsNative.xcframework/Info.plist": {
+          "bytes": 1270,
+          "sha256": "f9423a8f67f80bae9ab7a18fd2559fa70be36dc6da3a0c62d06c2d8dcebe1ed9"
+        },
+        "GComsNative.xcframework/ios-arm64/Headers/gcoms_mobile.h": {
+          "bytes": 1177,
+          "sha256": "f68173ade00355c7770c7f46b90111af0190d146da501535a09ba919473afbb9"
+        },
+        "GComsNative.xcframework/ios-arm64/Headers/module.modulemap": {
+          "bytes": 51,
+          "sha256": "d93bee41e5f9c90b6c0c40cf4aae6e4af9ab29c3e585ddee119439d3bf2dbb27"
+        },
+        "GComsNative.xcframework/ios-arm64/libgcoms_mobile.a": {
+          "bytes": 15502904,
+          "sha256": "510fb6593610e9b1730a8d5fe3b2aa15764f4e1855c87556df2ca7d79dfe1292"
+        },
+        "GComsNative.xcframework/ios-arm64_x86_64-simulator/Headers/gcoms_mobile.h": {
+          "bytes": 1177,
+          "sha256": "f68173ade00355c7770c7f46b90111af0190d146da501535a09ba919473afbb9"
+        },
+        "GComsNative.xcframework/ios-arm64_x86_64-simulator/Headers/module.modulemap": {
+          "bytes": 51,
+          "sha256": "d93bee41e5f9c90b6c0c40cf4aae6e4af9ab29c3e585ddee119439d3bf2dbb27"
+        },
+        "GComsNative.xcframework/ios-arm64_x86_64-simulator/libgcoms_sim.a": {
+          "bytes": 30151624,
+          "sha256": "d70b176ac41633b0651fae1dc5266dc0b5e7df18f0def8477ca9d2b8facb1e96"
+        },
+        "Package.swift": {
+          "bytes": 633,
+          "sha256": "56a27ff37bb7a55b3952e7344340cb739129d38770124f5fae23e5a76a57946c"
+        },
+        "Sources/GComs/GComs.swift": {
+          "bytes": 7345,
+          "sha256": "d0bfb36427c0133e774f18c3cd19bbe43ab7a2829135a4f0bf86c9434ae3bc82"
+        },
+        "Sources/GComs/ProfileDirectory.swift": {
+          "bytes": 1174,
+          "sha256": "f749011b71998f6a3974a70bbe5deeb8aed571695ad2b104302f64340d21b2c6"
+        },
+        "Sources/GComs/UnlockProvider.swift": {
+          "bytes": 2316,
+          "sha256": "1a8ade418316b26751b0c014db2ebccd74f2002ddd14deb09cd6c96324f7a8e9"
+        },
+        "Sources/GComsPush/PushGateway.swift": {
+          "bytes": 8036,
+          "sha256": "75b2e176f30b8fe968e9881bd0e34028120b8eb79c7bd7fc0072d23693dd47e8"
+        },
+        "Tests/GComsTests/PushTests.swift": {
+          "bytes": 1159,
+          "sha256": "54973430f4a910d1282cc742610d72c1f6ab2142da053d133ea209649923d7bb"
+        },
+        "Tests/GComsTests/RelayTests.swift": {
+          "bytes": 3574,
+          "sha256": "7cecb3804861154d338ddc97f709ed7b571b270fb5d16138c1c929f503dd9b1c"
+        },
+        "Tests/GComsTests/SmokeTests.swift": {
+          "bytes": 1027,
+          "sha256": "deb276e7d853e9fcdad4e7883d21b0dd3ed540d78bc6c8fc056832193a7466c0"
+        }
+      }
+    },
+    {
+      "role": "relay",
+      "push": false,
+      "native_revision": "65fc089ba25fe137f578a956981a909c8a298599",
+      "xcframework_bytes": 48389894,
+      "swift_package_bytes": 48407008,
+      "all_native_slices_verified": true,
+      "wrapper_sources_verified": true,
+      "app_measurements": "CI-installed simulator and unsigned device build reports; app binaries excluded from upload",
+      "workflow_run": "https://github.com/IggyGG/gcoms/actions/runs/35606582546",
+      "artifacts": {
+        "GComsNative.xcframework/Info.plist": {
+          "bytes": 1270,
+          "sha256": "f9423a8f67f80bae9ab7a18fd2559fa70be36dc6da3a0c62d06c2d8dcebe1ed9"
+        },
+        "GComsNative.xcframework/ios-arm64/Headers/gcoms_mobile.h": {
+          "bytes": 1177,
+          "sha256": "f68173ade00355c7770c7f46b90111af0190d146da501535a09ba919473afbb9"
+        },
+        "GComsNative.xcframework/ios-arm64/Headers/module.modulemap": {
+          "bytes": 51,
+          "sha256": "d93bee41e5f9c90b6c0c40cf4aae6e4af9ab29c3e585ddee119439d3bf2dbb27"
+        },
+        "GComsNative.xcframework/ios-arm64/libgcoms_mobile.a": {
+          "bytes": 16445640,
+          "sha256": "2cd93f4aa47d3c285345fb3f35ec70b45d510106cf5b13234ec768ba1af8afc9"
+        },
+        "GComsNative.xcframework/ios-arm64_x86_64-simulator/Headers/gcoms_mobile.h": {
+          "bytes": 1177,
+          "sha256": "f68173ade00355c7770c7f46b90111af0190d146da501535a09ba919473afbb9"
+        },
+        "GComsNative.xcframework/ios-arm64_x86_64-simulator/Headers/module.modulemap": {
+          "bytes": 51,
+          "sha256": "d93bee41e5f9c90b6c0c40cf4aae6e4af9ab29c3e585ddee119439d3bf2dbb27"
+        },
+        "GComsNative.xcframework/ios-arm64_x86_64-simulator/libgcoms_sim.a": {
+          "bytes": 31940528,
+          "sha256": "002123700a4e0bfd02dc656c08c03bf820738dfaf59ddb5e15029e0e8b6ddcaa"
+        },
+        "Package.swift": {
+          "bytes": 519,
+          "sha256": "e1aa082b5664996f7cc6eb2a0f5d53a772564008189c21c386ec368cff428e55"
+        },
+        "Sources/GComs/GComs.swift": {
+          "bytes": 7345,
+          "sha256": "d0bfb36427c0133e774f18c3cd19bbe43ab7a2829135a4f0bf86c9434ae3bc82"
+        },
+        "Sources/GComs/ProfileDirectory.swift": {
+          "bytes": 1174,
+          "sha256": "f749011b71998f6a3974a70bbe5deeb8aed571695ad2b104302f64340d21b2c6"
+        },
+        "Sources/GComs/UnlockProvider.swift": {
+          "bytes": 2316,
+          "sha256": "1a8ade418316b26751b0c014db2ebccd74f2002ddd14deb09cd6c96324f7a8e9"
+        },
+        "Tests/GComsTests/PushTests.swift": {
+          "bytes": 1159,
+          "sha256": "54973430f4a910d1282cc742610d72c1f6ab2142da053d133ea209649923d7bb"
+        },
+        "Tests/GComsTests/RelayTests.swift": {
+          "bytes": 3574,
+          "sha256": "7cecb3804861154d338ddc97f709ed7b571b270fb5d16138c1c929f503dd9b1c"
+        },
+        "Tests/GComsTests/SmokeTests.swift": {
+          "bytes": 1027,
+          "sha256": "deb276e7d853e9fcdad4e7883d21b0dd3ed540d78bc6c8fc056832193a7466c0"
+        }
+      }
+    },
+    {
+      "role": "relay",
+      "push": true,
+      "native_revision": "65fc089ba25fe137f578a956981a909c8a298599",
+      "xcframework_bytes": 48571486,
+      "swift_package_bytes": 48596750,
+      "all_native_slices_verified": true,
+      "wrapper_sources_verified": true,
+      "app_measurements": "CI-installed simulator and unsigned device build reports; app binaries excluded from upload",
+      "workflow_run": "https://github.com/IggyGG/gcoms/actions/runs/35606654147",
+      "artifacts": {
+        "GComsNative.xcframework/Info.plist": {
+          "bytes": 1270,
+          "sha256": "f9423a8f67f80bae9ab7a18fd2559fa70be36dc6da3a0c62d06c2d8dcebe1ed9"
+        },
+        "GComsNative.xcframework/ios-arm64/Headers/gcoms_mobile.h": {
+          "bytes": 1177,
+          "sha256": "f68173ade00355c7770c7f46b90111af0190d146da501535a09ba919473afbb9"
+        },
+        "GComsNative.xcframework/ios-arm64/Headers/module.modulemap": {
+          "bytes": 51,
+          "sha256": "d93bee41e5f9c90b6c0c40cf4aae6e4af9ab29c3e585ddee119439d3bf2dbb27"
+        },
+        "GComsNative.xcframework/ios-arm64/libgcoms_mobile.a": {
+          "bytes": 16507408,
+          "sha256": "529463a849a107380f110d666ce9be9787ef3e96cf0d3504d5dc3e2f1d243c61"
+        },
+        "GComsNative.xcframework/ios-arm64_x86_64-simulator/Headers/gcoms_mobile.h": {
+          "bytes": 1177,
+          "sha256": "f68173ade00355c7770c7f46b90111af0190d146da501535a09ba919473afbb9"
+        },
+        "GComsNative.xcframework/ios-arm64_x86_64-simulator/Headers/module.modulemap": {
+          "bytes": 51,
+          "sha256": "d93bee41e5f9c90b6c0c40cf4aae6e4af9ab29c3e585ddee119439d3bf2dbb27"
+        },
+        "GComsNative.xcframework/ios-arm64_x86_64-simulator/libgcoms_sim.a": {
+          "bytes": 32060352,
+          "sha256": "1eb7ecaf62f21b67259e561c09114019d81a34e114ecc85525df2f49026757f0"
+        },
+        "Package.swift": {
+          "bytes": 633,
+          "sha256": "56a27ff37bb7a55b3952e7344340cb739129d38770124f5fae23e5a76a57946c"
+        },
+        "Sources/GComs/GComs.swift": {
+          "bytes": 7345,
+          "sha256": "d0bfb36427c0133e774f18c3cd19bbe43ab7a2829135a4f0bf86c9434ae3bc82"
+        },
+        "Sources/GComs/ProfileDirectory.swift": {
+          "bytes": 1174,
+          "sha256": "f749011b71998f6a3974a70bbe5deeb8aed571695ad2b104302f64340d21b2c6"
+        },
+        "Sources/GComs/UnlockProvider.swift": {
+          "bytes": 2316,
+          "sha256": "1a8ade418316b26751b0c014db2ebccd74f2002ddd14deb09cd6c96324f7a8e9"
+        },
+        "Sources/GComsPush/PushGateway.swift": {
+          "bytes": 8036,
+          "sha256": "75b2e176f30b8fe968e9881bd0e34028120b8eb79c7bd7fc0072d23693dd47e8"
+        },
+        "Tests/GComsTests/PushTests.swift": {
+          "bytes": 1159,
+          "sha256": "54973430f4a910d1282cc742610d72c1f6ab2142da053d133ea209649923d7bb"
+        },
+        "Tests/GComsTests/RelayTests.swift": {
+          "bytes": 3574,
+          "sha256": "7cecb3804861154d338ddc97f709ed7b571b270fb5d16138c1c929f503dd9b1c"
+        },
+        "Tests/GComsTests/SmokeTests.swift": {
+          "bytes": 1027,
+          "sha256": "deb276e7d853e9fcdad4e7883d21b0dd3ed540d78bc6c8fc056832193a7466c0"
+        }
+      }
+    }
+  ]
+}

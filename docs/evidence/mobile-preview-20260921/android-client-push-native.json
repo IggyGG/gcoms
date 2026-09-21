@@ -1,0 +1,77 @@
+{
+  "schema": 1,
+  "platform": "android",
+  "fixtures": false,
+  "push": true,
+  "revision": "b39199e431fa680267eecd566914ff84ee06ef25",
+  "rustc": "rustc 1.98.0 (88d9e12ae 2026-08-18)\nbinary: rustc\ncommit-hash: 88d9e12ae178fab0fb5cc050a94da85685d449ea\ncommit-date: 2026-08-18\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.0\nLLVM version: 22.1.8\n",
+  "panic": "unwind",
+  "lto": true,
+  "codegen_units": 1,
+  "build_profile": "release",
+  "artifacts": [
+    {
+      "role": "client",
+      "target": "aarch64-linux-android",
+      "opt_level": "3",
+      "kind": "shared_library",
+      "bytes": 13852296,
+      "sha256": "f794cdf3c243ec9d1656506b0e4dc8fc2a35e6386c9d479a84e59168340b76a5",
+      "artifact": "evidence/client-aarch64-linux-android-opt-3.so"
+    },
+    {
+      "role": "client",
+      "target": "x86_64-linux-android",
+      "opt_level": "3",
+      "kind": "shared_library",
+      "bytes": 16488608,
+      "sha256": "662fb4271d7655340448f7c5f70462c9f42f015b2aeb4957c58daba5d91a363b",
+      "artifact": "evidence/client-x86_64-linux-android-opt-3.so"
+    },
+    {
+      "role": "client",
+      "target": "aarch64-linux-android",
+      "opt_level": "s",
+      "kind": "shared_library",
+      "bytes": 10702592,
+      "sha256": "8c7587745c161a90fe739d70162916a643dac40ce2bb0db563fcb677203917be",
+      "artifact": "evidence/client-aarch64-linux-android-opt-s.so"
+    },
+    {
+      "role": "client",
+      "target": "x86_64-linux-android",
+      "opt_level": "s",
+      "kind": "shared_library",
+      "bytes": 12192272,
+      "sha256": "4b4a1379aad22e2efc4cbec11709688a4df6ac70fef0ddf744971b0234334279",
+      "artifact": "evidence/client-x86_64-linux-android-opt-s.so"
+    },
+    {
+      "role": "client",
+      "target": "aarch64-linux-android",
+      "opt_level": "z",
+      "kind": "shared_library",
+      "bytes": 10186520,
+      "sha256": "43c16f41e7e70ccbde248ebbe6493a99cc3914044b4fa7a54deed7891f4b1689",
+      "artifact": "evidence/client-aarch64-linux-android-opt-z.so"
+    },
+    {
+      "role": "client",
+      "target": "x86_64-linux-android",
+      "opt_level": "z",
+      "kind": "shared_library",
+      "bytes": 11996968,
+      "sha256": "5fccb98e39ed117da551fb986c2ae31e678d25385bedc30252d8cabcf53e0a58",
+      "artifact": "evidence/client-x86_64-linux-android-opt-z.so"
+    }
+  ],
+  "ndk": "Pkg.Desc = Android NDK\nPkg.Revision = 27.3.13750724\nPkg.BaseRevision = 27.3.13750724\nPkg.ReleaseName = r27d\n",
+  "evidence": {
+    "workflow_run": "https://github.com/IggyGG/gcoms/actions/runs/35598824608",
+    "native_report_sha256": "6e0f594edce0a775716f73ef85c7d1e63950bf228ddd3db2b9a719b5cc002f1b",
+    "app_report_sha256": "153093395a09c02c774ec1b1129e67a66eb2af3be2916937ab3dd0e1aa9c0ed4"
+  },
+  "qualification_notes": [
+    "Superseded size record: lto records the requested Cargo profile; emitting an rlib alongside the foreign library disabled effective LTO. Use the subsequent single-crate-type measurements for release baselines."
+  ]
+}

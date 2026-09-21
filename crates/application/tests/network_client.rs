@@ -54,6 +54,54 @@ async fn outbound_clients_use_remote_inboxes_and_reopen_files_and_identity() {
         .open()
         .await
         .unwrap();
+    #[cfg(feature = "push-gateway")]
+    {
+        use gcoms::runtime::push_notifications::GatewayConfig;
+        let host_node = host
+            .embedded_runtime()
+            .unwrap()
+            .sdk_client()
+            .embedded()
+            .node()
+            .clone();
+        host_node
+            .configure_push_gateway(GatewayConfig {
+                url: "https://push.example.invalid/v1/events".into(),
+                relay_id: "fixture-relay".into(),
+                key: [71; 32],
+            })
+            .await
+            .unwrap();
+        let node = bob
+            .embedded_runtime()
+            .unwrap()
+            .sdk_client()
+            .embedded()
+            .node()
+            .clone();
+        let expires = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs()
+            + 60;
+        node.bind_push_notifications([72; 32], 1, expires)
+            .await
+            .unwrap();
+        node.bind_push_notifications([72; 32], 1, expires)
+            .await
+            .unwrap();
+        assert!(node
+            .bind_push_notifications([73; 32], 1, expires)
+            .await
+            .is_err());
+        node.bind_push_notifications([0; 32], 2, expires)
+            .await
+            .unwrap();
+        assert!(node
+            .bind_push_notifications([72; 32], 1, expires)
+            .await
+            .is_err());
+    }
     for app in [&alice, &bob] {
         let client = app.embedded_runtime().unwrap().sdk_client().embedded();
         assert_eq!(client.node().listener_addr().port(), 0);

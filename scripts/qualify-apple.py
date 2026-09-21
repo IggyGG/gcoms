@@ -1,0 +1,142 @@
+#!/usr/bin/env python3
+"""Run the native Swift consumer and measure installed simulator/sample bytes."""
+import argparse
+import contextlib
+import hashlib
+import json
+import os
+from pathlib import Path
+import plistlib
+import platform
+import subprocess
+from mobile_fixture import relay
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+def run(args, **kwargs):
+    return subprocess.run([str(a) for a in args], check=True, **kwargs)
+
+
+def capture(args):
+    return subprocess.check_output(args, text=True).strip()
+
+
+def files(path):
+    return {str(p.relative_to(path)): {"bytes": p.stat().st_size,
+        "sha256": hashlib.sha256(p.read_bytes()).hexdigest()}
+        for p in sorted(path.rglob("*")) if p.is_file() and not p.is_symlink()}
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--role", choices=["client", "relay"], required=True)
+    parser.add_argument("--native-root", type=Path, required=True)
+    parser.add_argument("--test", action="store_true")
+    parser.add_argument("--baseline", type=Path)
+    parser.add_argument("--output", type=Path, default=ROOT / "target/apple-evidence")
+    args = parser.parse_args()
+    qualify(args)
+
+
+def qualify(args):
+    native = args.native_root.resolve()
+    summary = json.loads((native / "summary.json").read_text())
+    if bool(summary["fixtures"]) != args.test:
+        raise RuntimeError("Fixture packages are for tests; size qualification requires production packages")
+    push = summary.get("push", False)
+    package = native / "packages" / (("GComsClient" if args.role == "client" else "GComsRelay") + ("Push" if push else ""))
+    evidence = args.output.resolve() / args.role / (("push-" if push else "") + ("tests" if args.test else "sizes"))
+    evidence.mkdir(parents=True, exist_ok=True)
+    env = dict(os.environ, GCOMS_PACKAGE_PATH=str(package))
+    spec = (ROOT / "mobile/apple/project.yml").read_text()
+    spec = spec.replace("sources: [Sample]", "sources: [" + str(ROOT / "mobile/apple/Sample") + "]")
+    spec = spec.replace("sources: [Tests/GComsTests]", "sources: [" + str(ROOT / "mobile/apple/Tests/GComsTests") + "]")
+    if args.test:
+        # Keychain requires an application access group, even in the simulator.
+        # These ad-hoc identities belong only to the disposable test host; device
+        # size builds remain unsigned and real apps supply their own signing.
+        entitlements = evidence / "Simulator.entitlements"
+        entitlements.write_bytes(plistlib.dumps({
+            "application-identifier": "$(PRODUCT_BUNDLE_IDENTIFIER)",
+            "keychain-access-groups": ["$(PRODUCT_BUNDLE_IDENTIFIER)"],
+            "get-task-allow": True,
+        }))
+        spec = spec.replace("CODE_SIGNING_ALLOWED: NO",
+            "CODE_SIGNING_ALLOWED: YES\n    CODE_SIGN_IDENTITY: '-'\n    CODE_SIGN_ENTITLEMENTS: " + str(entitlements))
+    if push:
+        spec = spec.replace("product: GComs", "product: GComsPush")
+        spec = spec.replace("GCOMS_ENABLED", "GCOMS_ENABLED GCOMS_PUSH")
+    (evidence / "project.yml").write_text(spec)
+    run(["xcodegen", "generate", "--spec", evidence / "project.yml",
+         "--project", evidence], env=env)
+    project = evidence / "GComsPreview.xcodeproj"
+    runtimes = json.loads(capture(["xcrun", "simctl", "list", "runtimes", "--json"]))["runtimes"]
+    available = json.loads(capture(["xcrun", "simctl", "list", "devices", "available", "--json"]))["devices"]
+    # Device-type ordering is unrelated to runtime compatibility.
+    candidates = [(r["identifier"], d["deviceTypeIdentifier"])
+        for r in runtimes if r["isAvailable"] and r["identifier"].startswith("com.apple.CoreSimulator.SimRuntime.iOS")
+        for d in available.get(r["identifier"], [])
+        if d["isAvailable"] and d["name"].startswith("iPhone") and d.get("deviceTypeIdentifier")]
+    if not candidates:
+        raise RuntimeError("Xcode runner has no compatible available iPhone simulator")
+    runtime, device_type = candidates[-1]
+    device = capture(["xcrun", "simctl", "create", "GComs qualification", device_type, runtime])
+    report = {"schema": 1, "role": args.role, "push": push, "revision": summary["revision"],
+        "native_opt_level": next(a["opt_level"] for a in reversed(summary["artifacts"]) if a["role"] == args.role),
+        "xcode": capture(["xcodebuild", "-version"]), "runtime": runtime,
+        "simulator_arch": platform.machine(), "deployment_postprocessing": not args.test, "apps": {}}
+    try:
+        run(["xcrun", "simctl", "boot", device])
+        run(["xcrun", "simctl", "bootstatus", device, "-b"])
+        if args.test:
+            command = ["xcodebuild", "-project", project, "-scheme", "Preview",
+                "-destination", "platform=iOS Simulator,id=" + device,
+                "-derivedDataPath", evidence / "derived"]
+            run(command + ["build-for-testing"], env=env)
+            # Provisioning grants expire after five minutes. Mint only after
+            # compilation and simulator startup, immediately before execution.
+            with relay() if args.role == "client" else contextlib.nullcontext(None) as host:
+                test_env = dict(env)
+                if host:
+                    # xcodebuild forwards TEST_RUNNER_ variables to the runner
+                    # with that prefix removed; credentials stay out of argv.
+                    test_env["TEST_RUNNER_GCOMS_RELAY"] = json.dumps(host["relay"], separators=(",", ":"))
+                run(command + ["-resultBundlePath", evidence / "tests.xcresult",
+                    "test-without-building"], env=test_env)
+        else:
+            for scheme, bundle in [("Baseline", "boo.gcoms.preview.baseline"), ("Preview", "boo.gcoms.preview.sdk")]:
+                derived = evidence / "derived"
+                run(["xcodebuild", "-project", project, "-scheme", scheme,
+                    "-configuration", "Release", "-destination", "platform=iOS Simulator,id=" + device,
+                    "-derivedDataPath", derived, "build"], env=env)
+                app = derived / "Build/Products/Release-iphonesimulator" / (scheme + ".app")
+                run(["xcrun", "simctl", "install", device, app])
+                installed = Path(capture(["xcrun", "simctl", "get_app_container", device, bundle, "app"]))
+                inventory = files(installed)
+                report["apps"][scheme] = {"installed_bundle_bytes": sum(f["bytes"] for f in inventory.values()), "files": inventory}
+                run(["xcodebuild", "-project", project, "-scheme", scheme,
+                    "-configuration", "Release", "-destination", "generic/platform=iOS",
+                    "-derivedDataPath", derived, "build"], env=env)
+                device_app = derived / "Build/Products/Release-iphoneos" / (scheme + ".app")
+                device_inventory = files(device_app)
+                report["apps"][scheme]["unsigned_device_bundle_bytes"] = sum(f["bytes"] for f in device_inventory.values())
+                report["apps"][scheme]["device_files"] = device_inventory
+            report["delta"] = {field: report["apps"]["Preview"][field] - report["apps"]["Baseline"][field]
+                for field in ("installed_bundle_bytes", "unsigned_device_bundle_bytes")}
+            if args.baseline:
+                previous = json.loads(args.baseline.read_text())
+                if any(previous.get(f, "z" if f == "native_opt_level" else None) != report[f]
+                    for f in ("role", "push", "xcode", "runtime", "simulator_arch", "deployment_postprocessing", "native_opt_level")):
+                    raise RuntimeError("App baseline toolchain differs")
+                for field, value in report["delta"].items():
+                    if value > previous["delta"][field] * 1.05:
+                        raise RuntimeError("Linked application delta exceeds the 5 percent gate")
+        (evidence / "summary.json").write_text(json.dumps(report, indent=2) + "\n")
+    finally:
+        subprocess.run(["xcrun", "simctl", "shutdown", device], check=False)
+        subprocess.run(["xcrun", "simctl", "delete", device], check=False)
+
+
+if __name__ == "__main__":
+    main()

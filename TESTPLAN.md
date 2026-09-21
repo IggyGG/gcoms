@@ -1,12 +1,54 @@
+# Combined SDK and release-branch boundary
+
+Validate the exact combined source with application feature variants, the outbound
+client/relay separation and mobile client/relay graphs, minimal core/SDK checks,
+strict affected-package Clippy, Python/source/import checks and the current GChat
+consumer. Preserve channel-management, IPC19 and Windows owner-only DACL repairs.
+Existing native SDK size baselines and published GChat binaries retain their own
+source bindings; a combined build is not covered by those older receipts. Live
+push, physical-device testing and app-store distribution remain separate scopes.
+
 # Rust integration qualification
 
-Windows/mobile follow-up (in progress): run the native backend and size matrix
-on Windows x64 MSVC as well as Linux/macOS. The private temporary-root helper
+The native backend and size matrix passes on Windows x64 MSVC and Linux/macOS
+at b39199e. All Android/iOS base/push preview distributions and final size gates
+pass; [exact mobile evidence](docs/evidence/mobile-preview-lto-20260921/) records
+the qualified revisions and toolchains. The private temporary-root helper
 must preserve current-user ownership and remove inherited Windows grants.
 Qualify outbound-only runtime behavior, mobile ABI cancellation/lifecycle,
 Android emulator/iOS simulator consumers and simulated APNs/FCM providers.
 Measure the base SDK and optional push adapter independently. These additions
 do not establish physical-device or live-provider qualification.
+
+- Run `cargo test -p gcoms-node --all-features --lib notification` for binding
+  authorization, revisions, unbind/expiry/rotation/revocation, admission filtering,
+  coalescing and bounded hint backpressure.
+- Run `cargo test -p gcoms --all-features --test network_client` to exercise the
+  remote administrative binding API alongside trusted messaging/channel/files.
+- Run the Mobile SDK preview CI matrix for JNI/Swift execution, 16 KiB alignment,
+  separate client/relay native graphs, 3/s/z measurements and sample app deltas.
+  Verify both LOAD and GNU_RELRO alignment, compatible simulator selection, and
+  the client through its separately hosted fixture relay. Development fixture
+  sizes cannot establish production baselines.
+  Build only `cdylib` (Android) or `staticlib` (Apple) per compiler invocation;
+  emitting an rlib alongside them disables LTO. Record the selected crate type.
+  Strip Apple archive debug/local symbols while preserving linker externals,
+  and measure postprocessed release apps for only the active simulator CPU.
+  Ad-hoc sign the disposable Swift simulator host with its own Keychain access
+  group; require profile-secret and push-state reopen through fresh providers.
+  Mint client fixture credentials after consumer compilation. Keep production
+  grant expiry unchanged; slow Xcode/Gradle builds must not age the test grant.
+  Generate SDK and optional FCM POM/module metadata with `gcomsPublishRole` set
+  to the tested role and verify that the FCM dependency names that role's SDK.
+  Check APK ZIP offsets as well as ELF alignment: each native entry must be
+  uncompressed and aligned to 16 KiB so installed APK bytes include native code.
+  Validate LOAD and RELRO boundaries for every packaged native dependency.
+  Require the optional push adapter to exercise DataStore native counter writes
+  and reads on the 16 KiB emulator; its runtime dependency is DataStore 1.2.1.
+- Keep the public startup future below 16 KiB and run GChat's complete channel
+  journey on the default thread stack, including restored post-quantum identity.
+  Native desktop CI compares 3/s/z results with the committed platform baselines
+  and rejects growth above 5% on the same Rust toolchain.
 
 - Compile independent `ipc,files` and `embedded,files,gc2-carrier` consumers.
   Reject host/crypto/MLS/RPC dependencies in the IPC graph and forced Tokio

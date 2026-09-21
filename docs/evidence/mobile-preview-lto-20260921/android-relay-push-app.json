@@ -1,0 +1,151 @@
+{
+  "schema": 1,
+  "role": "relay",
+  "push": true,
+  "revision": "3a47609b448003cae6d7775cbaf7ebe1d3f5a05a",
+  "packaging_revision": "6cf6c0abe6a72e63f4b116832c97e780b412fe37",
+  "packaging_source_sha256": {
+    "mobile/android/build.gradle.kts": "93812feaf5a83aa38862eaec0bce6c5c445a1f4132a52762d6111d8e21ca9eac",
+    "mobile/android/gradle.properties": "66eb28b6c7a2125fb66df726193b029c86133ecf3ae80d12c04da84ef5ff5785",
+    "mobile/android/gradle/wrapper/gradle-wrapper.jar": "81a82aaea5abcc8ff68b3dfcb58b3c3c429378efd98e7433460610fecd7ae45f",
+    "mobile/android/gradle/wrapper/gradle-wrapper.properties": "1bb6d43ff8af30abb0eaf03fe58f636ed9b37f758a748bf30a9cebd809639c9d",
+    "mobile/android/gradlew": "734b3879d3501dce471cf0522d3bcbafe76873d9fc5129345b67fb43bd15e933",
+    "mobile/android/gradlew.bat": "57931b17dd228e5c24dac90e815d0bf82477e831a4618dfab4136f5446b42a9f",
+    "mobile/android/push/build.gradle.kts": "b8e31e9664691de8cc47049cf8bf244a5f8f8cdc8b209c1649cf56067a37f31e",
+    "mobile/android/push/src/androidTest/java/boo/gcoms/push/NativeStorageTest.kt": "2ff15d4ab3fbacd8b053ab02ca31194a8aeede32052022f244b46632871ec376",
+    "mobile/android/push/src/main/AndroidManifest.xml": "70045400fce8c221c50084d44eb7ba17454c8f7d1e2a8f7dc300ecbe40b39bc1",
+    "mobile/android/push/src/main/java/boo/gcoms/push/GComsFirebaseService.kt": "0452cafd17c675020725903d4d8f024dcde7cb36f9b8bc3981562f2677bb6231",
+    "mobile/android/push/src/main/java/boo/gcoms/push/PushGateway.kt": "187b12bc1ea57ad80921c1f3faa71044bbe9af65c486cc1c94210a4f7bc89e55",
+    "mobile/android/push/src/main/java/boo/gcoms/push/PushStorage.kt": "571d901982141fa0e16276714b1b5258f7e2c8d9b85a45cdbbe7225c06fb409d",
+    "mobile/android/push/src/test/java/boo/gcoms/push/PushHintsTest.kt": "c7f75cb5fb6ad955d42973e5507599f6fb8b88dcd1b689fb3d720fc1007d21b0",
+    "mobile/android/sample/build.gradle.kts": "eaa44b4fcca9868058cddeaba0ecab41c195af1e672d643b3dd8647c8bf10500",
+    "mobile/android/sample/push-rules.pro": "70d169cba9ea2ad5fa679f9fbe2474add91f9bbf22c1901e37684241b5df0b56",
+    "mobile/android/sample/src/baseline/java/boo/gcoms/sample/Preview.kt": "110ce7e60b8e4a3a2a89c5def68b7390fce5459eefcb7bb230ce42edd357e047",
+    "mobile/android/sample/src/client/java/boo/gcoms/sample/Preview.kt": "0767d293923e704b0231c6f15d353e805e13d9a6809141ce59f3b2015d040bef",
+    "mobile/android/sample/src/main/AndroidManifest.xml": "9377201bd5f87a016c9c37dbcae81341285fab2cd2dc05e304ff1e3c7ac13b91",
+    "mobile/android/sample/src/main/java/boo/gcoms/sample/MainActivity.kt": "f77aa85ace31afb57370a2bb6e3d3b1f2634b130756228a82a9ffded2e9bef81",
+    "mobile/android/sample/src/push/AndroidManifest.xml": "fb2cbf413af3fb9242763efadb1a0c8716320196257d9320ec0f25632fa64928",
+    "mobile/android/sample/src/push/java/boo/gcoms/sample/PreviewPushService.kt": "74562869284f00ecaea60020419c38406842b675d06247ae611e0930d5b29c0d",
+    "mobile/android/sample/src/relay/java/boo/gcoms/sample/Preview.kt": "e69078a51ec742c21c530eb91d686f6e52ecebd5927114c530dc0433ae5f2316",
+    "mobile/android/sdk/build.gradle.kts": "3d666f9dc88ca595f4ff101d8a89bd623114812801362ef1d4d8dd43faf88e6f",
+    "mobile/android/sdk/consumer-rules.pro": "dddd303b61b20134f7c6077d4f6f35f28bf2c25e7d0a6fe9ae58e297cb6b6261",
+    "mobile/android/sdk/src/androidTest/java/boo/gcoms/sdk/NativeSmokeTest.kt": "a6cb561d0a04b2e973732056a70d401887b75eacb6b61635b2e30c414105874e",
+    "mobile/android/sdk/src/main/AndroidManifest.xml": "678647a824ef7ab16066708585790ab265135d32fdf84bcd918a4b050f8891b9",
+    "mobile/android/sdk/src/main/java/boo/gcoms/sdk/GComs.kt": "56f3f80720109506b80facfabd82f9062b50d1a1c88234cb89b21788252c9759",
+    "mobile/android/sdk/src/main/java/boo/gcoms/sdk/UnlockProvider.kt": "1e5ca7041b3e7225fce9b94954495454ae9088f6e186109085fed4a3b192d485",
+    "mobile/android/settings.gradle.kts": "aba61f26be3133b1801350c1c9d1e2d35b40b2e3dd942fcdb65874e9f8e1a2b7",
+    "scripts/qualify-android.py": "cf78519d8ca423494e96bcf33457705d0c6fb25db6ecfe746556fc330ae49d2d"
+  },
+  "ndk": "Pkg.Desc = Android NDK\nPkg.Revision = 27.3.13750724\nPkg.BaseRevision = 27.3.13750724\nPkg.ReleaseName = r27d\n",
+  "rustc": "rustc 1.98.0 (88d9e12ae 2026-08-18)\nbinary: rustc\ncommit-hash: 88d9e12ae178fab0fb5cc050a94da85685d449ea\ncommit-date: 2026-08-18\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.0\nLLVM version: 22.1.8\n",
+  "page_size": 16384,
+  "android": "google/sdk_gphone16k_x86_64/emu64xa16k:15/AE3A.240806.043/12960925:userdebug/dev-keys",
+  "apps": {
+    "baseline": {
+      "arm64-v8a": {
+        "bytes": 20520,
+        "sha256": "14b39b9373153c49dd22d0659e53d4f0a4c9b07ddae2333d4540b5dd27361fb0",
+        "uncompressed_bytes": 55961,
+        "native_bytes": 0,
+        "dex_bytes": 2020,
+        "native_entries": []
+      },
+      "x86_64": {
+        "bytes": 20520,
+        "sha256": "14b39b9373153c49dd22d0659e53d4f0a4c9b07ddae2333d4540b5dd27361fb0",
+        "uncompressed_bytes": 55961,
+        "native_bytes": 0,
+        "dex_bytes": 2020,
+        "native_entries": [],
+        "installed_apk_bytes": 20520
+      }
+    },
+    "relay": {
+      "arm64-v8a": {
+        "bytes": 8543370,
+        "sha256": "58f6db8235f4edfe069437c731ba0933def9ff2965444a5ac7cd3fafad9926a1",
+        "uncompressed_bytes": 8963565,
+        "native_bytes": 7965384,
+        "dex_bytes": 694068,
+        "native_entries": [
+          {
+            "path": "lib/arm64-v8a/libdatastore_shared_counter.so",
+            "offset": 327680,
+            "sha256": "deed4546c8dafad0e68ea2c25e4c0a62ca97343614ae386b7ed2af6abb7fa999",
+            "elf_load_alignment": 16384,
+            "elf_relro_aligned": true
+          },
+          {
+            "path": "lib/arm64-v8a/libgcoms_mobile.so",
+            "offset": 344064,
+            "sha256": "9d16925fdf5a7b27bba620f1b7c9eeffd158bd3b59575db8eba83f9459230a8a",
+            "elf_load_alignment": 16384,
+            "elf_relro_aligned": true
+          }
+        ]
+      },
+      "x86_64": {
+        "bytes": 10099364,
+        "sha256": "2edfcf8fd7749a3b241ef0814a73a90c75830e9f2e73b039d56634c9736868cb",
+        "uncompressed_bytes": 10518629,
+        "native_bytes": 9520448,
+        "dex_bytes": 694068,
+        "native_entries": [
+          {
+            "path": "lib/x86_64/libdatastore_shared_counter.so",
+            "offset": 327680,
+            "sha256": "c3973140a0e6144a83e7dd7ee3c4e161f42181591feda254e12c8395d3bbacd0",
+            "elf_load_alignment": 16384,
+            "elf_relro_aligned": true
+          },
+          {
+            "path": "lib/x86_64/libgcoms_mobile.so",
+            "offset": 344064,
+            "sha256": "119d2fa06f1dcbff640a699e17f18022587ebe1ac9718653245e5f74f7269d27",
+            "elf_load_alignment": 16384,
+            "elf_relro_aligned": true
+          }
+        ],
+        "installed_apk_bytes": 10099364
+      }
+    }
+  },
+  "aar": {
+    "bytes": 8867592,
+    "sha256": "08ad3252e35dd49e04851f7134543d02424a6c28ec58b6bdba816a79a23fa1e7",
+    "uncompressed_bytes": 17498664,
+    "native_bytes": 17466048,
+    "dex_bytes": 0,
+    "native_entries": []
+  },
+  "push_aar": {
+    "bytes": 25028,
+    "sha256": "293286ed201a6d139fcac958081b0708d243450238d0c0d06f3aced0319d50b8",
+    "uncompressed_bytes": 26220,
+    "native_bytes": 0,
+    "dex_bytes": 0,
+    "native_entries": []
+  },
+  "delta": {
+    "arm64-v8a": {
+      "bytes": 8522850,
+      "uncompressed_bytes": 8907604,
+      "native_bytes": 7965384,
+      "dex_bytes": 692048
+    },
+    "x86_64": {
+      "bytes": 10078844,
+      "uncompressed_bytes": 10462668,
+      "native_bytes": 9520448,
+      "dex_bytes": 692048,
+      "installed_apk_bytes": 10078844
+    }
+  },
+  "evidence": {
+    "native_workflow_run": "https://github.com/IggyGG/gcoms/actions/runs/35608966305",
+    "packaging": "managed local Android 16 KiB emulator",
+    "app_report_sha256": "a00455cac3548197e1cbe886cd8b0ae9d7cfc4367483054292f35771742e24d2",
+    "qualification_log_sha256": "0e09764d6877c848deacfe7ac5db98b68d38203f8a277aa6c5f275ca68348a29",
+    "supersedes_ci_packaging": "Validate every native LOAD/RELRO and upgrade transitive DataStore to 1.2.1"
+  }
+}
