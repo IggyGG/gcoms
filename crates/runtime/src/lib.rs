@@ -25,3 +25,5 @@ pub mod network_status;
 pub mod files;
 
 pub use gcoms_node::metrics;
+#[cfg(feature = "push-notifications")]
+pub use gcoms_node::push_notifications;

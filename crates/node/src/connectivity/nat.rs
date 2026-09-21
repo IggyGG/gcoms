@@ -25,26 +25,7 @@ const SERVICES: [&str; 3] = [
     "urn:schemas-upnp-org:service:WANPPPConnection:1",
 ];
 
-#[derive(Clone, Debug)]
-pub struct NatConfig {
-    pub gateway: Option<Ipv4Addr>,
-    pub requested_lifetime: Duration,
-    pub request_timeout: Duration,
-    pub discovery_timeout: Duration,
-    pub operation_timeout: Duration,
-}
-
-impl Default for NatConfig {
-    fn default() -> Self {
-        Self {
-            gateway: None,
-            requested_lifetime: Duration::from_secs(1200),
-            request_timeout: Duration::from_secs(2),
-            discovery_timeout: Duration::from_secs(2),
-            operation_timeout: Duration::from_secs(30),
-        }
-    }
-}
+pub use super::nat_config::NatConfig;
 
 impl NatConfig {
     fn validate(&self) -> Result<(), String> {

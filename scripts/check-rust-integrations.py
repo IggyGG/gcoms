@@ -8,17 +8,75 @@ from pathlib import Path
 import platform
 import shutil
 import subprocess
+import struct
 
 ROOT = Path(__file__).resolve().parents[1]
 MANIFEST = ROOT / 'examples/rust-integration/Cargo.toml'
+
+
+def binary_imports(path):
+    """Record native loader dependencies without requiring dumpbin on Windows."""
+    if os.name == 'nt':
+        data = path.read_bytes()
+        pe = struct.unpack_from('<I', data, 0x3c)[0]
+        if data[:2] != b'MZ' or data[pe:pe + 4] != b'PE\0\0':
+            raise RuntimeError('expected a native PE executable')
+        optional = pe + 24
+        magic = struct.unpack_from('<H', data, optional)[0]
+        directories = optional + {0x10b: 96, 0x20b: 112}[magic]
+        imports = struct.unpack_from('<I', data, directories + 8)[0]
+        count = struct.unpack_from('<H', data, pe + 6)[0]
+        table = optional + struct.unpack_from('<H', data, pe + 20)[0]
+        sections = [struct.unpack_from('<IIII', data, table + i * 40 + 8) for i in range(count)]
+        def offset(rva):
+            for virtual_size, virtual_address, raw_size, raw_offset in sections:
+                if virtual_address <= rva < virtual_address + min(virtual_size, raw_size):
+                    return raw_offset + rva - virtual_address
+            raise RuntimeError('PE import points outside file-backed sections')
+        if not imports:
+            return []
+        found = []
+        cursor = offset(imports)
+        while any(data[cursor:cursor + 20]):
+            name = offset(struct.unpack_from('<I', data, cursor + 12)[0])
+            end = data.index(0, name, min(name + 512, len(data)))
+            found.append(data[name:end].decode('ascii'))
+            cursor += 20
+            if len(found) > 256:
+                raise RuntimeError('too many PE imports')
+        return sorted(found)
+    if platform.system() == 'Darwin':
+        lines = subprocess.check_output(['otool', '-L', str(path)], text=True).splitlines()[1:]
+        return sorted(line.strip().split(' (', 1)[0] for line in lines)
+    lines = subprocess.check_output(['readelf', '-d', str(path)], text=True).splitlines()
+    return sorted(line.split('[', 1)[1].split(']', 1)[0] for line in lines if '(NEEDED)' in line)
+
+
+def compare_baseline(report, path):
+    baseline = json.loads(path.read_text())
+    for field in ('system', 'machine', 'rustc', 'panic', 'lto', 'codegen_units', 'stripped'):
+        if baseline[field] != report[field]:
+            raise RuntimeError(f'baseline {field} differs; establish a baseline for this toolchain')
+    previous = {(item['mode'], item['opt_level']): item['bytes'] for item in baseline['binaries']}
+    changes = []
+    for item in report['binaries']:
+        key = (item['mode'], item['opt_level'])
+        if key not in previous:
+            continue
+        growth = item['bytes'] / previous[key] - 1
+        changes.append({'mode': key[0], 'opt_level': key[1], 'growth_percent': round(growth * 100, 3)})
+        if growth > 0.05:
+            raise RuntimeError(f'{key} grew {growth:.1%}; exceeds the 5% size gate')
+    report['baseline_comparison'] = changes
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--measure', action='store_true')
     parser.add_argument('--profiles', nargs='+', choices=('3', 's', 'z'), default=['3', 's', 'z'])
-    parser.add_argument('--modes', nargs='+', choices=('ipc', 'embedded'), default=['ipc', 'embedded'])
+    parser.add_argument('--modes', nargs='+', choices=('ipc', 'embedded', 'network-client'), default=['ipc', 'embedded', 'network-client'])
     parser.add_argument('--output', type=Path, default=ROOT / 'target/rust-integration-evidence')
+    parser.add_argument('--baseline', type=Path, help='Same-platform/toolchain summary; reject growth above 5 percent')
     args = parser.parse_args()
     output = args.output.resolve()
     output.mkdir(parents=True, exist_ok=True)
@@ -52,6 +110,11 @@ def main():
             forbidden = {'gcoms-node', 'gcoms-runtime', 'gcoms-file-transfer', 'gcoms-crypto', 'gcoms-mls', 'gcoms-routing', 'gcoms-rpc', 'gcoms-rpc-macros', 'reqwest', 'rustls', 'aes-gcm', 'argon2'}
             if forbidden & graph.keys():
                 raise RuntimeError(f'IPC unexpectedly links host dependencies: {sorted(forbidden & graph.keys())}')
+        if mode == 'network-client':
+            if any('relay-host' in graph.get(name, []) for name in ('gcoms-node', 'gcoms-runtime')):
+                raise RuntimeError('Network client unexpectedly includes relay hosting')
+            if 'quick-xml' in graph or 'embedded' in graph.get('gcoms-sdk', []):
+                raise RuntimeError('Network client unexpectedly includes the legacy host dependency graph')
         if 'rt-multi-thread' in graph.get('tokio', []):
             raise RuntimeError(f'{mode} forces a multithread Tokio runtime')
         if 'gcoms-rpc' in graph:
@@ -69,7 +132,8 @@ def main():
             subprocess.run([str(retained)], check=True, stdout=subprocess.DEVNULL)
             data = retained.read_bytes()
             report['binaries'].append({'mode': mode, 'opt_level': profile, 'bytes': len(data),
-                                       'sha256': hashlib.sha256(data).hexdigest(), 'artifact': retained.name})
+                                       'sha256': hashlib.sha256(data).hexdigest(), 'artifact': retained.name,
+                                       'imports': binary_imports(retained)})
             (output / 'summary.json').write_text(json.dumps(report, indent=2) + '\n')
     if args.measure and 'ipc' in args.modes:
         # The IPC client's footprint excludes this separate host. Report it too.
@@ -81,7 +145,12 @@ def main():
         shutil.copy2(executable, retained)
         data = retained.read_bytes()
         report['binaries'].append({'mode': 'host', 'opt_level': 's', 'bytes': len(data),
-                                   'sha256': hashlib.sha256(data).hexdigest(), 'artifact': retained.name})
+                                   'sha256': hashlib.sha256(data).hexdigest(), 'artifact': retained.name,
+                                   'imports': binary_imports(retained)})
+    if args.baseline:
+        if not args.measure:
+            raise RuntimeError('--baseline requires --measure')
+        compare_baseline(report, args.baseline)
     (output / 'summary.json').write_text(json.dumps(report, indent=2) + '\n')
     if any(hashlib.sha256((ROOT / name).read_bytes()).hexdigest() != digest for name, digest in report['source_sha256'].items()):
         raise RuntimeError('Rust source changed during size qualification; rerun after changes settle')

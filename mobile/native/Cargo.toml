@@ -1,0 +1,52 @@
+[package]
+name = "gcoms-mobile"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.98"
+license = "MIT OR Apache-2.0"
+description = "Bounded native GComs interface for Android and iOS"
+readme = "README.md"
+publish = false
+
+[workspace]
+
+[lib]
+# Tests and fixture-host examples consume the rlib. The packaging script selects
+# exactly one foreign output with cargo rustc so release LTO stays enabled.
+crate-type = ["rlib"]
+
+[features]
+default = ["client"]
+client = ["gcoms/network-client"]
+relay = ["gcoms/embedded", "gcoms/gc2-carrier"]
+# Disposable emulator/simulator fixtures only; excluded from release packages.
+fixtures = []
+push = ["gcoms/push-notifications"]
+push-gateway = ["push", "relay", "gcoms/push-gateway"]
+
+[dependencies]
+gcoms = { version = "0.1.0", path = "../../crates/application", default-features = false, features = ["files"] }
+tokio = { version = "1", features = ["rt", "sync", "time"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+zeroize = "1"
+futures-util = { version = "0.3", default-features = false, features = ["std", "async-await"] }
+
+[target.'cfg(target_os = "android")'.dependencies]
+jni = { version = "0.21.1", default-features = false }
+
+[dev-dependencies]
+tempfile = "3"
+gcoms-private-fs = { version = "0.1.0", path = "../../crates/private-fs" }
+base64 = "0.22"
+
+[[example]]
+name = "fixture_host"
+required-features = ["relay", "fixtures"]
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+strip = "symbols"
+panic = "unwind"

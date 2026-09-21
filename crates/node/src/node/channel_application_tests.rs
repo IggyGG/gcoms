@@ -121,8 +121,6 @@ async fn file_receipt_does_not_hold_channel_preparation_for_an_independent_peer(
     node.scheduler.shutdown();
     node.scheduler = scheduler.clone();
     node.channels.insert("files".into(), channel);
-    let info = node.info.clone();
-    let relay_target = node.client_relay.aliases[0].contact.target.clone();
     let state = Arc::new(Mutex::new(node));
     let (events_tx, _) = broadcast::channel(8);
     let (commands, cmd_rx) = mpsc::channel(8);
@@ -131,14 +129,8 @@ async fn file_receipt_does_not_hold_channel_preparation_for_an_independent_peer(
         frwd_admitted: Default::default(),
         scheduler: scheduler.clone(),
         events_tx,
-        leases: Arc::new(Mutex::new(
-            LeaseStore::new(relay_target.relay_service_id, StoreConfig::default()).unwrap(),
-        )),
-        registry: TokenRegistry::new(),
-        authorities: Default::default(),
-        relay_target,
-        relay_identity_pk: info.identity_pk,
-        relay_bundle: info.bundle,
+        #[cfg(feature = "relay-host")]
+        relay_host: None,
         cmd_rx,
     });
 

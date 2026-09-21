@@ -11,7 +11,10 @@ publish.workspace = true
 [features]
 default = []
 files = ["gcoms-runtime?/files", "tokio/fs"]
-embedded = ["dep:gcoms-runtime", "gcoms-sdk/embedded", "dep:fs2"]
+push-notifications = ["gcoms-runtime?/push-notifications"]
+push-gateway = ["push-notifications", "embedded", "gcoms-runtime/push-gateway"]
+embedded = ["dep:gcoms-runtime", "gcoms-runtime/relay-host", "gcoms-sdk/embedded", "dep:fs2"]
+network-client = ["dep:gcoms-runtime", "gcoms-sdk/in-process", "gcoms-runtime/gc2-carrier", "dep:fs2"]
 ipc = ["gcoms-sdk/ipc"]
 launch = ["ipc", "dep:fs2", "tokio/process"]
 daemon = ["embedded", "ipc", "tokio/signal", "tokio/rt-multi-thread"]
@@ -24,7 +27,7 @@ gcoms-rpc = { version = "0.1.0", path = "../rpc", optional = true, default-featu
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 gcoms-sdk = { version = "0.1.0", path = "../sdk", default-features = false }
-gcoms-runtime = { version = "0.1.0", path = "../runtime", optional = true }
+gcoms-runtime = { version = "0.1.0", path = "../runtime", optional = true, default-features = false }
 gcoms-private-fs = { version = "0.1.0", path = "../private-fs" }
 tokio = { version = "1", features = ["rt", "macros", "sync", "time", "net", "io-util"] }
 serde = { version = "1", features = ["derive"] }
@@ -42,6 +45,9 @@ rustix = { version = "1", features = ["process"] }
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61", features = ["Win32_System_Threading"] }
+
+[dev-dependencies]
+base64 = "0.22"
 
 [target.'cfg(windows)'.dev-dependencies]
 windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_System_Pipes"] }

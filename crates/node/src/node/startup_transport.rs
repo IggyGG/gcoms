@@ -1,11 +1,18 @@
 //! Constructor ownership until the transport is transferred to NodeHandle.
-use super::{api::ShutdownTask, Tp1Server};
+use super::api::ShutdownTask;
+#[cfg(feature = "relay-host")]
+use super::Tp1Server;
 
 pub(super) struct StartupTransport {
     transport: Option<ShutdownTask>,
 }
 
 impl StartupTransport {
+    pub(super) fn empty() -> Self {
+        Self { transport: None }
+    }
+
+    #[cfg(feature = "relay-host")]
     pub(super) fn spawn(server: Tp1Server) -> Self {
         let (stop, mut stopped) = tokio::sync::watch::channel(false);
         let task = tokio::spawn(async move {
@@ -33,8 +40,8 @@ impl StartupTransport {
         self.transport.take();
     }
 
-    pub(super) fn take(&mut self) -> ShutdownTask {
-        self.transport.take().expect("constructor owns transport")
+    pub(super) fn take(&mut self) -> Option<ShutdownTask> {
+        self.transport.take()
     }
 }
 
@@ -50,7 +57,7 @@ impl Drop for StartupTransport {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "relay-host"))]
 mod tests {
     use super::*;
     use crate::node::{

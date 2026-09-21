@@ -70,7 +70,10 @@ async fn start_relay(
     ip: &str,
     secret: [u8; 32],
     policy: impl FnOnce(RelayTarget) -> ServicePolicy,
-) -> (gcoms_routing::gc2::directory::Introduction, tokio::task::JoinHandle<()>) {
+) -> (
+    gcoms_routing::gc2::directory::Introduction,
+    tokio::task::JoinHandle<()>,
+) {
     let identity = TlsIdentity::generate().unwrap();
     let server = Tp1Server::bind_with_identity(
         format!("{ip}:0").parse().unwrap(),
@@ -156,11 +159,7 @@ async fn fresh_carrier_node_provisions_its_inbox_over_the_protected_route() {
     let reply = tokio::time::timeout(std::time::Duration::from_secs(240), async {
         loop {
             if let Ok(reply) = runtime
-                .provision_inbox(
-                    &[gcoms_protocol::proto::PROVISION_OPTION_GC2],
-                    &[],
-                    None,
-                )
+                .provision_inbox(&[gcoms_protocol::proto::PROVISION_OPTION_GC2], &[], None)
                 .await
             {
                 return Ok::<_, String>(reply);
@@ -171,8 +170,7 @@ async fn fresh_carrier_node_provisions_its_inbox_over_the_protected_route() {
     .await
     .expect("GCP2 provisioning answers within the startup window")
     .expect("GCP2 provisioning answers");
-    let (card, advertised) =
-        NodeInfo::decode_private_any(&reply).expect("private card decodes");
+    let (card, advertised) = NodeInfo::decode_private_any(&reply).expect("private card decodes");
     assert_eq!(
         card.provisioning.as_ref().map(|p| p.aliases.len()),
         Some(2),
@@ -218,12 +216,8 @@ async fn fresh_carrier_node_provisions_its_inbox_over_the_protected_route() {
     .await
     .expect("legacy provisioning answers within the startup window")
     .expect("legacy provisioning answers");
-    let (card, advertised) =
-        NodeInfo::decode_private_any(&legacy).expect("legacy card decodes");
-    assert_eq!(
-        card.provisioning.as_ref().map(|p| p.aliases.len()),
-        Some(2)
-    );
+    let (card, advertised) = NodeInfo::decode_private_any(&legacy).expect("legacy card decodes");
+    assert_eq!(card.provisioning.as_ref().map(|p| p.aliases.len()), Some(2));
     assert!(advertised.is_none(), "legacy cards carry no advertisement");
 }
 

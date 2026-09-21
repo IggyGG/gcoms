@@ -11,6 +11,8 @@ pub const OP_ROTATE: u8 = 0x03;
 pub const OP_REVOKE: u8 = 0x04;
 pub const OP_SUBSCRIBE: u8 = 0x05;
 pub const OP_GRANT_REQUEST: u8 = 0x06;
+// 7 and 8 belong to protected relay bootstrap (bootstrap.rs).
+pub const OP_BIND_NOTIFICATION: u8 = 0x09;
 
 pub const ADMISSION_GRANT_LEN: usize = 180;
 pub const LEASE_CREATE_LEN: usize = 386;

@@ -1,0 +1,77 @@
+{
+  "schema": 1,
+  "platform": "android",
+  "fixtures": false,
+  "push": false,
+  "revision": "b39199e431fa680267eecd566914ff84ee06ef25",
+  "rustc": "rustc 1.98.0 (88d9e12ae 2026-08-18)\nbinary: rustc\ncommit-hash: 88d9e12ae178fab0fb5cc050a94da85685d449ea\ncommit-date: 2026-08-18\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.0\nLLVM version: 22.1.8\n",
+  "panic": "unwind",
+  "lto": true,
+  "codegen_units": 1,
+  "build_profile": "release",
+  "artifacts": [
+    {
+      "role": "relay",
+      "target": "aarch64-linux-android",
+      "opt_level": "3",
+      "kind": "shared_library",
+      "bytes": 14850904,
+      "sha256": "6d1d1ec9de9d0081f55db123879011403d96cadb048c6d54e76bbbb32da0e4bc",
+      "artifact": "evidence/relay-aarch64-linux-android-opt-3.so"
+    },
+    {
+      "role": "relay",
+      "target": "x86_64-linux-android",
+      "opt_level": "3",
+      "kind": "shared_library",
+      "bytes": 17610144,
+      "sha256": "7b49b8fac7dd44c4d52c6f24f00bc9372bb4c25c234c81b6ba8838e137bacd97",
+      "artifact": "evidence/relay-x86_64-linux-android-opt-3.so"
+    },
+    {
+      "role": "relay",
+      "target": "aarch64-linux-android",
+      "opt_level": "s",
+      "kind": "shared_library",
+      "bytes": 11473432,
+      "sha256": "afb1a973b3c77b32d79eafb02ebad54606c7c06dbc8f234e5d3a699debd94b40",
+      "artifact": "evidence/relay-aarch64-linux-android-opt-s.so"
+    },
+    {
+      "role": "relay",
+      "target": "x86_64-linux-android",
+      "opt_level": "s",
+      "kind": "shared_library",
+      "bytes": 13041928,
+      "sha256": "e598e5816410f24ef60e1c115b9429cfacf9ae190563bdba24c427b091d323bf",
+      "artifact": "evidence/relay-x86_64-linux-android-opt-s.so"
+    },
+    {
+      "role": "relay",
+      "target": "aarch64-linux-android",
+      "opt_level": "z",
+      "kind": "shared_library",
+      "bytes": 10823048,
+      "sha256": "0284cc25e524bdc3873bb3f7aabe28816f0f2f15c69723327a1d4b9855ef369f",
+      "artifact": "evidence/relay-aarch64-linux-android-opt-z.so"
+    },
+    {
+      "role": "relay",
+      "target": "x86_64-linux-android",
+      "opt_level": "z",
+      "kind": "shared_library",
+      "bytes": 12788496,
+      "sha256": "75a2d92783c601705d35d903cdb55db50ecc1efe7e288810229e9d9526d8b2db",
+      "artifact": "evidence/relay-x86_64-linux-android-opt-z.so"
+    }
+  ],
+  "ndk": "Pkg.Desc = Android NDK\nPkg.Revision = 27.3.13750724\nPkg.BaseRevision = 27.3.13750724\nPkg.ReleaseName = r27d\n",
+  "evidence": {
+    "workflow_run": "https://github.com/IggyGG/gcoms/actions/runs/35598613291",
+    "native_report_sha256": "cefadffcf556396c0d2f089cc3f24f3b79e1d557a1ac254a2f069316ceef27d7",
+    "app_report_sha256": "e8a56d6009cb7a29be754f0b76cd8a716c41c1e7bfd6f9cbbd558f292b7e118f"
+  },
+  "qualification_notes": [
+    "Superseded size record: lto records the requested Cargo profile; emitting an rlib alongside the foreign library disabled effective LTO. Use the subsequent single-crate-type measurements for release baselines."
+  ]
+}

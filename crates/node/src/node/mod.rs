@@ -1,28 +1,36 @@
 use crate::alias::{AliasContact, OwnedAlias, RelayProvision};
+#[cfg(feature = "relay-host")]
 use crate::forward::decode_authorized_with_policy;
 use crate::lease::{
     Capabilities, DynamicGrantRequest, LeaseCreate, LeaseLimits, LeaseRenew, LeaseRevoke,
-    OP_CREATE, OP_GRANT_REQUEST, OP_RENEW, OP_REVOKE, OP_ROTATE,
 };
+#[cfg(feature = "relay-host")]
+use crate::lease::{OP_CREATE, OP_GRANT_REQUEST, OP_RENEW, OP_REVOKE, OP_ROTATE};
 use crate::metrics;
 use crate::proto::{
     decode_direct_record, decode_payload, encode_contact_update, encode_direct_ack,
     encode_direct_data, encode_direct_presence, encode_first_move, encode_forward_grant,
     encode_frame, ContactUpdate, DirectRecord, NodeInfo, NodePayload, PresenceMode, KIND_BOOTSTRAP,
 };
+#[cfg(feature = "relay-host")]
 use crate::queues::{GrantRequest, LeaseStore, PushOutcome, StoreConfig, StoreError};
-use crate::relay::{FrwdTargetPolicy, RelayTarget, UnauthenticatedRelayPush};
+#[cfg(feature = "relay-host")]
+use crate::relay::UnauthenticatedRelayPush;
+use crate::relay::{FrwdTargetPolicy, RelayTarget};
 use crate::scheduler::{EnqueueError, ProducerClass, RelayScheduler, SchedulerProfile};
 use aes_gcm::aead::{Aead, Payload};
 use aes_gcm::{Aes256Gcm, KeyInit, Nonce};
 use gcoms_core::{Cell, CellType};
 use gcoms_crypto::session::FirstMove;
 use gcoms_crypto::{Bundle, IdentityKeypair, LocalSecrets, SealedSession, Session, SessionContext};
+#[cfg(feature = "relay-host")]
 use gcoms_transport::server::{
     AcceptedStream, CellHandler, QueueCellHandler, QueueReject, StreamHandler, Tp1Server,
 };
 use gcoms_transport::tls::TlsIdentity;
-use gcoms_transport::{encode_b64url, TokenRegistry, Tp1Client};
+#[cfg(feature = "relay-host")]
+use gcoms_transport::TokenRegistry;
+use gcoms_transport::{encode_b64url, Tp1Client};
 use hkdf::Hkdf;
 use rand::{RngCore, SeedableRng};
 use sha2::{Digest, Sha256};
@@ -48,21 +56,26 @@ mod gc2_bootstrap;
 mod gc2_carrier;
 #[cfg(feature = "experimental-gc2")]
 mod gc2_direct;
-#[cfg(feature = "experimental-gc2")]
+#[cfg(all(feature = "experimental-gc2", feature = "relay-host"))]
 mod gc2_forward;
-#[cfg(feature = "experimental-gc2")]
+#[cfg(all(feature = "experimental-gc2", feature = "relay-host"))]
 mod gc2_gate;
 #[cfg(feature = "experimental-gc2")]
 mod gc2_receipts;
 mod peer_session;
+#[cfg(feature = "push-notifications")]
+mod push_notifications;
 #[cfg(feature = "experimental-gc2")]
 mod retained;
 use peer_session::PeerSession;
+#[cfg(feature = "relay-host")]
+mod host;
 #[cfg(feature = "client-persist")]
 mod persist;
 #[cfg(feature = "client-persist")]
 mod persist_legacy;
 mod presence;
+#[cfg(feature = "relay-host")]
 mod relay_service;
 mod routing;
 mod startup_transport;
@@ -83,6 +96,7 @@ pub(crate) use channel_recovery::*;
 pub(crate) use channels::*;
 pub(crate) use direct::*;
 pub(crate) use presence::*;
+#[cfg(feature = "relay-host")]
 pub(crate) use relay_service::*;
 pub(crate) use state::*;
 
@@ -452,6 +466,7 @@ impl NodeProfile {
     }
 
     #[cfg(feature = "experimental-gc2")]
+    #[cfg(feature = "relay-host")]
     fn gc2_gate(&self) -> bool {
         match self {
             Self::Fixture(fixture) => fixture.gc2_gate,
@@ -540,6 +555,7 @@ impl NodeProfile {
 
     /// Connection admission limits for the relay listener. A fixture packs
     /// many nodes onto one host, so its per-source cap is lifted.
+    #[cfg(feature = "relay-host")]
     pub(crate) fn server_limits(&self) -> gcoms_transport::ServerLimits {
         match self {
             Self::Production => gcoms_transport::ServerLimits::default(),
@@ -549,6 +565,7 @@ impl NodeProfile {
         }
     }
 
+    #[cfg(feature = "relay-host")]
     pub(crate) fn stream_emission(&self) -> StreamEmission {
         match self {
             Self::Production => StreamEmission {
@@ -584,6 +601,7 @@ impl NodeProfile {
 
 /// Relay->subscriber cadence parameters derived from the profile.
 #[derive(Clone, Copy, Debug)]
+#[cfg(feature = "relay-host")]
 pub(crate) struct StreamEmission {
     pub(crate) slot_interval: std::time::Duration,
     pub(crate) emission_probability: f64,
@@ -899,6 +917,77 @@ async fn start_with_tls_policy_control_sink_and_bootstrap(
     routing_config: Option<RoutingConfig>,
     bootstrap_directory: Option<std::path::PathBuf>,
 ) -> Result<NodeHandle, String> {
+    start_role(
+        cfg,
+        tls_identity,
+        frwd_target_policy,
+        remote_control,
+        durable_state_sink,
+        initial_state,
+        routing_config,
+        bootstrap_directory,
+        true,
+    )
+    .await
+}
+
+#[cfg(feature = "client-persist")]
+/// Restore an outbound endpoint. No local relay, control socket or port mapping is started.
+pub async fn start_client_persistent_restored(
+    cfg: NodeConfig,
+    policy: Option<FrwdTargetPolicy>,
+    sink: DurableStateSink,
+    initial_state: Option<&[u8]>,
+    routing: Option<RoutingConfig>,
+) -> Result<NodeHandle, String> {
+    let tls = match initial_state {
+        Some(bytes) => persist::restore_tls_identity(bytes, &cfg.seed)?,
+        None => None,
+    }
+    .map(Ok)
+    .unwrap_or_else(|| TlsIdentity::generate().map_err(|e| e.to_string()))?;
+    start_role(
+        cfg,
+        tls,
+        policy,
+        None,
+        Some(sink),
+        initial_state,
+        routing,
+        None,
+        false,
+    )
+    .await
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn start_role(
+    cfg: NodeConfig,
+    tls_identity: TlsIdentity,
+    frwd_target_policy: Option<FrwdTargetPolicy>,
+    remote_control: Option<crate::control::RemoteControlConfig>,
+    durable_state_sink: Option<DurableStateSink>,
+    initial_state: Option<&[u8]>,
+    routing_config: Option<RoutingConfig>,
+    bootstrap_directory: Option<std::path::PathBuf>,
+    host_relay: bool,
+) -> Result<NodeHandle, String> {
+    if host_relay && !cfg!(feature = "relay-host") {
+        return Err("relay hosting is not compiled in; use the outbound client constructor".into());
+    }
+    if !host_relay
+        && (cfg.control.is_some()
+            || cfg.advertise.is_some()
+            || cfg.listen.port() != 0
+            || remote_control.is_some()
+            || routing_config
+                .as_ref()
+                .is_some_and(|r| r.connectivity.is_some()))
+    {
+        return Err(
+            "outbound clients cannot configure listeners, advertisements or port mappings".into(),
+        );
+    }
     if bootstrap_directory.is_some() {
         return Err("managed installer bootstrap is provided by the host integration".into());
     }
@@ -907,6 +996,7 @@ async fn start_with_tls_policy_control_sink_and_bootstrap(
         None if cfg.profile.is_production() => Some(RoutingConfig::from_environment()?),
         None => None,
     };
+    #[cfg(feature = "relay-host")]
     let connectivity = routing_config.as_ref().and_then(|r| r.connectivity.clone());
     #[cfg(feature = "experimental-gc2")]
     if cfg.profile.gc2_carrier().is_some()
@@ -946,7 +1036,8 @@ async fn start_with_tls_policy_control_sink_and_bootstrap(
     let cfg = {
         let mut cfg = cfg;
         if let Some(record) = &saved_owner {
-            if routing.is_none()
+            if host_relay
+                && routing.is_none()
                 && cfg.inbox_relay.is_none()
                 && cfg.advertise.is_none()
                 && cfg.listen.port() == 0
@@ -991,7 +1082,6 @@ async fn start_with_tls_policy_control_sink_and_bootstrap(
     cfg.profile.check_listen(cfg.listen)?;
     let frwd_target_policy = cfg.profile.frwd_target_policy(frwd_target_policy);
     let scheduler_profile = cfg.profile.scheduler_profile();
-    let stream_emission = cfg.profile.stream_emission();
     if cfg.alias_lifecycle.alias_ttl.is_zero()
         || cfg.alias_lifecycle.alias_drain.is_zero()
         || cfg.alias_lifecycle.poll_interval.is_zero()
@@ -1001,6 +1091,7 @@ async fn start_with_tls_policy_control_sink_and_bootstrap(
         return Err("alias lifecycle durations must be nonzero".into());
     }
     let mut tasks: Vec<tokio::task::JoinHandle<()>> = Vec::new();
+    #[cfg(feature = "relay-host")]
     let control_listener = match cfg.control {
         Some(address) => Some(
             crate::control::ControlListener::bind(address, remote_control)
@@ -1017,19 +1108,6 @@ async fn start_with_tls_policy_control_sink_and_bootstrap(
     let identity = IdentityKeypair::from_seed(cfg.seed);
     let (bundle, secrets) = identity.issue_bundle();
     let secrets = Arc::new(secrets);
-    let registry = TokenRegistry::new();
-    let service_id = tls_identity.service_id();
-    let leases = Arc::new(Mutex::new(
-        LeaseStore::new(service_id, StoreConfig::default()).map_err(|e| e.to_string())?,
-    ));
-    let queue_tokens = Arc::new(Mutex::new(HashMap::<[u8; 32], String>::new()));
-    let authorities = Arc::new(Mutex::new(ProvisionAuthorities {
-        transit_ready: routing
-            .as_ref()
-            .filter(|r| r.automatic_connectivity)
-            .map(|r| r.published.clone()),
-        ..Default::default()
-    }));
     #[cfg(feature = "experimental-gc2")]
     let prepared_gc2 = gc2_bootstrap::prepare(&cfg, routing.as_ref())?;
     let client = Arc::new(
@@ -1043,95 +1121,41 @@ async fn start_with_tls_policy_control_sink_and_bootstrap(
         }
         .map_err(|e| e.to_string())?,
     );
-    // Transit carries only already authorized relay jobs. It must never invoke
-    // the endpoint's onion connector and recursively build another circuit.
-    let transit_client = Arc::new(Tp1Client::new().map_err(|e| e.to_string())?);
-    let (scheduler, transit_scheduler) = {
-        #[cfg(feature = "experimental-gc2")]
-        if routing.as_ref().is_some_and(|r| r.gc2.get().is_some()) {
-            RelayScheduler::with_gc2_transit(client.clone(), transit_client)
-        } else {
-            RelayScheduler::with_transit(client.clone(), transit_client, scheduler_profile.clone())
-        }
-        #[cfg(not(feature = "experimental-gc2"))]
-        {
-            RelayScheduler::with_transit(client.clone(), transit_client, scheduler_profile.clone())
-        }
-    };
-    let (on_cell, on_queue_cell, on_stream) = relay_service::build_handlers(
-        &leases,
-        &registry,
-        &queue_tokens,
-        &authorities,
-        &transit_scheduler,
-        &frwd_target_policy,
-        service_id,
-        stream_emission,
-    );
-
-    let listener = match &connectivity {
-        Some(config) => config.bind(cfg.listen)?,
-        None => Tp1Server::bind_listener(cfg.listen).map_err(|e| e.to_string())?,
-    };
-    let server = Tp1Server::from_listener_with_identity_and_queue(
-        listener,
-        registry.clone(),
-        on_cell,
-        on_stream,
-        on_queue_cell,
-        &tls_identity,
-    )
-    .map_err(|e| e.to_string())?
-    .with_limits(cfg.profile.server_limits());
-    #[cfg(feature = "experimental-gc2")]
-    let server = if cfg.profile.gc2_gate() {
-        // Compose the owned terminal queue service under the same role gate.
-        // Its handler only accepts authenticated queue tokens that resolve to a
-        // current lease in this node's store.
-        let queues = crate::gc2::QueueService::new(leases.clone()).handler();
-        let forwards = gc2_forward::handler(
-            authorities.clone(),
-            transit_scheduler.clone(),
-            service_id,
-            frwd_target_policy.clone(),
-        );
-        let terminal: Option<gcoms_transport::server::DuplexHandler> =
-            Some(Arc::new(move |path| {
-                queues(path).or_else(|| forwards(path))
-            }));
-        server.with_dispatch_factory(gc2_gate::dispatch_factory(routing.clone(), terminal))
-    } else {
-        server
-    };
-    let local_addr = server.local_addr().map_err(|e| e.to_string())?;
-    let candidate = match cfg.advertise {
-        Some(address) => address,
-        None if connectivity.is_some() => crate::connectivity::initial_candidate(local_addr).await,
-        None => local_addr,
-    };
-    let relay_target = RelayTarget {
-        address: candidate,
-        relay_service_id: service_id,
-    };
-    #[cfg(feature = "experimental-gc2")]
-    if let Some(prepared) = &prepared_gc2 {
-        prepared
-            .directory
-            .set_own_services(vec![(relay_target.address, relay_target.relay_service_id)])
-            .map_err(|e| e.to_string())?;
-    }
-    let server = if let Some(runtime) = &routing {
-        server.with_duplex(runtime.attach(
+    let (scheduler, transit_scheduler) = schedulers(
+        client.clone(),
+        &routing,
+        scheduler_profile.clone(),
+        host_relay,
+    )?;
+    #[cfg(feature = "relay-host")]
+    let (relay_host, mut transport, local_addr) = if host_relay {
+        let (host, transport, addr) = host::start(
+            &cfg,
             &tls_identity,
-            &relay_target,
-            leases.clone(),
-            registry.clone(),
-            authorities.clone(),
-        )?)
+            routing.as_ref(),
+            connectivity.as_ref(),
+            transit_scheduler.as_ref().expect("relay scheduler"),
+            &frwd_target_policy,
+            (&identity.public_bytes(), &bundle.encode()),
+        )
+        .await?;
+        #[cfg(feature = "experimental-gc2")]
+        if let Some(prepared) = &prepared_gc2 {
+            prepared
+                .directory
+                .set_own_services(vec![(host.target.address, host.target.relay_service_id)])
+                .map_err(|e| e.to_string())?;
+        }
+        (Some(host), transport, addr)
     } else {
-        server
+        (
+            None,
+            startup_transport::StartupTransport::empty(),
+            cfg.listen,
+        )
     };
-    let mut transport = startup_transport::StartupTransport::spawn(server);
+    #[cfg(not(feature = "relay-host"))]
+    let (mut transport, local_addr) = (startup_transport::StartupTransport::empty(), cfg.listen);
     let cleanup_scheduler = scheduler.clone();
     let cleanup_transit_scheduler = transit_scheduler.clone();
     // Every fallible post-spawn operation belongs to this one result boundary.
@@ -1158,15 +1182,19 @@ async fn start_with_tls_policy_control_sink_and_bootstrap(
         } else {
             let relay_card = match cfg.inbox_relay.as_ref() {
                 Some(card) => card.clone(),
-                None => provision_relay(
-                    &leases,
-                    &registry,
-                    &authorities,
-                    &relay_target,
-                    &identity.public_bytes(),
-                    &bundle.encode(),
-                    true,
-                )?,
+                None => {
+                    #[cfg(feature = "relay-host")]
+                    {
+                        relay_host
+                            .as_ref()
+                            .ok_or("outbound fixture requires a remote inbox relay")?
+                            .provision(true)?
+                    }
+                    #[cfg(not(feature = "relay-host"))]
+                    {
+                        return Err("outbound fixture requires a remote inbox relay".into());
+                    }
+                }
             };
             let provision = consume_provision(&scheduler, &relay_card).await?;
             if provision.aliases.len() < 2 {
@@ -1502,22 +1530,20 @@ async fn start_with_tls_policy_control_sink_and_bootstrap(
             scheduler.clone(),
             events_tx.clone(),
         ));
-        let frwd_admitted = authorities
-            .lock()
-            .unwrap_or_else(|p| p.into_inner())
-            .admitted
-            .clone();
+        #[cfg(feature = "relay-host")]
+        let frwd_admitted = relay_host
+            .as_ref()
+            .map(|host| host.admitted())
+            .unwrap_or_default();
+        #[cfg(not(feature = "relay-host"))]
+        let frwd_admitted = Arc::new(std::sync::atomic::AtomicU64::new(0));
         tasks.push(commands::spawn_command_loop(commands::CommandLoopContext {
             state: state.clone(),
             frwd_admitted,
             scheduler: scheduler.clone(),
             events_tx: events_tx.clone(),
-            leases: leases.clone(),
-            registry: registry.clone(),
-            authorities: authorities.clone(),
-            relay_target: relay_target.clone(),
-            relay_identity_pk: identity.public_bytes(),
-            relay_bundle: bundle.encode(),
+            #[cfg(feature = "relay-host")]
+            relay_host: relay_host.clone(),
             cmd_rx,
         }));
         tasks.push(ticks::spawn_direct_maintenance_loop(
@@ -1535,6 +1561,7 @@ async fn start_with_tls_policy_control_sink_and_bootstrap(
             cfg.seed,
         ));
 
+        #[cfg(feature = "relay-host")]
         if let Some(control_listener) = control_listener {
             let state = state.clone();
             let cmd_tx = cmd_tx.clone();
@@ -1548,13 +1575,12 @@ async fn start_with_tls_policy_control_sink_and_bootstrap(
             }));
         }
 
-        tasks.push(relay_service::spawn_lease_sweeper(
-            leases.clone(),
-            queue_tokens.clone(),
-            registry.clone(),
-            authorities.clone(),
-        ));
+        #[cfg(feature = "relay-host")]
+        if let Some(ref host) = relay_host {
+            tasks.push(host.sweep());
+        }
 
+        #[cfg(feature = "relay-host")]
         let connectivity_task = match (connectivity, routing.as_ref()) {
             (Some(config), Some(runtime)) => {
                 let runtime = runtime.clone();
@@ -1570,8 +1596,11 @@ async fn start_with_tls_policy_control_sink_and_bootstrap(
             _ => None,
         };
         Ok(NodeHandle {
+            #[cfg(feature = "push-gateway")]
+            notification_host: relay_host.as_ref().map(Arc::downgrade),
             state: Arc::downgrade(&state),
             listener_addr: local_addr,
+            #[cfg(feature = "relay-host")]
             connectivity: Arc::new(tokio::sync::Mutex::new(connectivity_task)),
             routing,
             info,
@@ -1583,14 +1612,16 @@ async fn start_with_tls_policy_control_sink_and_bootstrap(
             workers: Arc::new(tokio::sync::Mutex::new(Some(workers))),
             scheduler,
             transit_scheduler,
-            transport: Arc::new(tokio::sync::Mutex::new(Some(transport.take()))),
+            transport: Arc::new(tokio::sync::Mutex::new(transport.take())),
         })
     }
     .await;
     if result.is_err() {
         transport.stop().await;
         cleanup_scheduler.shutdown();
-        cleanup_transit_scheduler.shutdown();
+        if let Some(scheduler) = cleanup_transit_scheduler {
+            scheduler.shutdown();
+        }
     }
     result
 }
@@ -1703,3 +1734,28 @@ fn checkpoint_direct_state(
 // ---------------------------------------------------------------------------
 
 pub use api::ComponentAuthority;
+
+fn schedulers(
+    client: Arc<Tp1Client>,
+    routing: &Option<Arc<routing::RoutingRuntime>>,
+    profile: SchedulerProfile,
+    host_relay: bool,
+) -> Result<(RelayScheduler, Option<RelayScheduler>), String> {
+    #[cfg(feature = "relay-host")]
+    if host_relay {
+        let transit = Arc::new(Tp1Client::new().map_err(|e| e.to_string())?);
+        #[cfg(feature = "experimental-gc2")]
+        if routing.as_ref().is_some_and(|r| r.gc2.get().is_some()) {
+            let (client, relay) = RelayScheduler::with_gc2_transit(client, transit);
+            return Ok((client, Some(relay)));
+        }
+        let (client, relay) = RelayScheduler::with_transit(client, transit, profile);
+        return Ok((client, Some(relay)));
+    }
+    let _ = (host_relay, routing);
+    #[cfg(feature = "experimental-gc2")]
+    if routing.as_ref().is_some_and(|r| r.gc2.get().is_some()) {
+        return Ok((RelayScheduler::with_gc2_client(client), None));
+    }
+    Ok((RelayScheduler::with_profile(client, profile), None))
+}

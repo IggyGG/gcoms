@@ -159,6 +159,24 @@ impl ProtocolRuntime {
         data: ProtocolData,
         options: crate::RuntimeOptions,
     ) -> Result<Self, String> {
+        Self::from_storage_role(store, data, options, true).await
+    }
+
+    /// Restore the same encrypted profile with no local relay or control listener.
+    pub async fn from_client_storage(
+        store: Arc<dyn ProfileStorage>,
+        data: ProtocolData,
+        options: crate::RuntimeOptions,
+    ) -> Result<Self, String> {
+        Self::from_storage_role(store, data, options, false).await
+    }
+
+    async fn from_storage_role(
+        store: Arc<dyn ProfileStorage>,
+        data: ProtocolData,
+        options: crate::RuntimeOptions,
+        host_relay: bool,
+    ) -> Result<Self, String> {
         let relay = options
             .relay
             .as_ref()
@@ -184,7 +202,7 @@ impl ProtocolRuntime {
                 return Err("host was built without GC/2 carrier support".into())
             }
         };
-        Self::boot_storage(
+        Self::boot_storage_role(
             store,
             data,
             options.listen,
@@ -193,6 +211,7 @@ impl ProtocolRuntime {
             &[],
             profile,
             options.network,
+            host_relay,
         )
         .await
     }
@@ -208,6 +227,20 @@ impl ProtocolRuntime {
             ProtocolStore::open(path, secret)?
         };
         Self::from_storage(Arc::new(store), data, options).await
+    }
+
+    pub async fn open_client_options(
+        path: &std::path::Path,
+        secret: &str,
+        create: bool,
+        options: crate::RuntimeOptions,
+    ) -> Result<Self, String> {
+        let (store, data) = if create {
+            ProtocolStore::create(path, secret)?
+        } else {
+            ProtocolStore::open(path, secret)?
+        };
+        Self::from_client_storage(Arc::new(store), data, options).await
     }
 
     pub fn verify_secret(&self, secret: &str) -> Result<(), String> {
@@ -485,6 +518,31 @@ impl ProtocolRuntime {
         profile: gcoms_node::node::NodeProfile,
         installed: Option<gcoms_network_client::InstalledNetwork>,
     ) -> Result<Self, String> {
+        Self::boot_storage_role(
+            store,
+            data,
+            listen,
+            advertise,
+            inbox_relay,
+            allow_frwd_private_cidrs,
+            profile,
+            installed,
+            true,
+        )
+        .await
+    }
+    #[allow(clippy::too_many_arguments)]
+    async fn boot_storage_role(
+        store: Arc<dyn ProfileStorage>,
+        data: ProtocolData,
+        listen: SocketAddr,
+        advertise: Option<SocketAddr>,
+        inbox_relay: Option<NodeInfo>,
+        allow_frwd_private_cidrs: &[String],
+        profile: gcoms_node::node::NodeProfile,
+        installed: Option<gcoms_network_client::InstalledNetwork>,
+        host_relay: bool,
+    ) -> Result<Self, String> {
         let identity_seed = data.identity_seed;
         let node_state = data.node_state;
         let network = if profile.is_production() {
@@ -496,7 +554,7 @@ impl ProtocolRuntime {
         } else {
             None
         };
-        let connectivity = if network.is_some() && listen.port() == 0 {
+        let connectivity = if host_relay && network.is_some() && listen.port() == 0 {
             Some(gcoms_node::connectivity::ConnectivityConfig {
                 state: Some(Arc::new(gcoms_node::connectivity::PortState::open(
                     &store.network_directory(),
@@ -524,7 +582,21 @@ impl ProtocolRuntime {
             alias_lifecycle: Default::default(),
         };
         let policy = build_frwd_policy(allow_frwd_private_cidrs, listen.port())?;
-        let node = if let Some(connectivity) = connectivity {
+        let node = if !host_relay {
+            let routing = if node_config.profile.is_production() {
+                Some(gcoms_node::node::RoutingConfig::from_environment()?)
+            } else {
+                None
+            };
+            gcoms_node::node::start_client_persistent_restored(
+                node_config,
+                policy,
+                durable_state_sink,
+                node_state.as_deref(),
+                routing,
+            )
+            .await?
+        } else if let Some(connectivity) = connectivity {
             let mut routing = gcoms_node::node::RoutingConfig::from_environment()?;
             routing.connectivity = Some(connectivity);
             gcoms_node::node::start_persistent_restored_with_policy_and_routing(
@@ -1521,11 +1593,7 @@ mod protected_profile_tests {
     #[tokio::test]
     async fn protected_profile_creates_and_reopens_the_carrier_instance() {
         let dir = tempfile::tempdir().unwrap();
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            std::fs::set_permissions(dir.path(), std::fs::Permissions::from_mode(0o700)).unwrap();
-        }
+        crate::private_fs::make_private(dir.path(), true).unwrap();
         let profile = dir.path().join("carrier.gcprotocol");
         let listen: SocketAddr = "127.0.0.1:0".parse().unwrap();
         let first = ProtocolRuntime::create_protected(

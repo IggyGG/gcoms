@@ -247,7 +247,7 @@ pub(crate) fn registration(profile: &Path, application: &str) -> Result<[u8; 32]
         Err(e) => Err(e.error.to_string()),
     }
 }
-#[cfg(all(feature = "embedded", feature = "ipc"))]
+#[cfg(all(any(feature = "embedded", feature = "network-client"), feature = "ipc"))]
 pub(crate) fn credentials_equal(a: &[u8; 32], b: &[u8; 32]) -> bool {
     a.iter().zip(b).fold(0u8, |d, (a, b)| d | (a ^ b)) == 0
 }
@@ -275,7 +275,13 @@ pub(crate) fn sidecar(path: &Path, suffix: &str) -> PathBuf {
     PathBuf::from(name)
 }
 
-#[cfg(all(feature = "ipc", any(feature = "embedded", feature = "launch")))]
+#[cfg(all(
+    feature = "ipc",
+    any(
+        any(feature = "embedded", feature = "network-client"),
+        feature = "launch"
+    )
+))]
 pub(crate) fn private_lock(path: &Path) -> Result<std::fs::File, String> {
     let mut options = std::fs::OpenOptions::new();
     options.read(true).write(true).create_new(true);

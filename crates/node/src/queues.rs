@@ -13,9 +13,10 @@ use std::fmt;
 
 #[cfg(feature = "experimental-gc2")]
 pub mod gc2;
+#[cfg(feature = "push-notifications")]
+mod notifications;
 
-pub const DEFAULT_QUEUE_CELLS: u16 = 256;
-pub const DEFAULT_QUEUE_BYTES: u64 = 4 * 1024 * 1024;
+pub use crate::lease::{DEFAULT_QUEUE_BYTES, DEFAULT_QUEUE_CELLS};
 pub const DEFAULT_MAX_GRANTS: usize = 1024;
 pub const DEFAULT_MAX_QUEUES: usize = 1024;
 pub const DEFAULT_MAX_REPLAY_NONCES: usize = 4096;
@@ -183,6 +184,10 @@ struct ReplayRecord {
 }
 
 struct LeaseRecord {
+    #[cfg(feature = "push-notifications")]
+    notification: Option<crate::push_notifications::Binding>,
+    #[cfg(feature = "push-notifications")]
+    last_notification: u64,
     create_digest: [u8; 32],
     queue_id: QueueId,
     epoch: u64,
@@ -341,6 +346,8 @@ impl QueueStore {
 
 /// Owns all boot-scoped admission, lease, replay, and queue state.
 pub struct LeaseStore {
+    #[cfg(feature = "push-notifications")]
+    notification_sink: Option<tokio::sync::mpsc::Sender<[u8; 32]>>,
     relay_service_id: RelayServiceId,
     admission_key: AdmissionKey,
     config: StoreConfig,
@@ -371,6 +378,8 @@ impl LeaseStore {
             OsRng.fill_bytes(&mut admission_key);
         }
         Ok(Self {
+            #[cfg(feature = "push-notifications")]
+            notification_sink: None,
             relay_service_id,
             admission_key,
             config,
@@ -515,6 +524,10 @@ impl LeaseStore {
             gc2_push_binding: None,
         });
         let lease = LeaseRecord {
+            #[cfg(feature = "push-notifications")]
+            notification: None,
+            #[cfg(feature = "push-notifications")]
+            last_notification: 0,
             create_digest,
             queue_id: create.queue_id,
             epoch: create.epoch,
@@ -657,6 +670,11 @@ impl LeaseStore {
         lease.capabilities.sub.fill(0);
         lease.capabilities.admin.fill(0);
         lease.capabilities = rotate.new_capabilities;
+        #[cfg(feature = "push-notifications")]
+        {
+            lease.notification = None;
+            lease.last_notification = 0;
+        }
         lease.epoch = rotate.new_epoch;
         lease.expiry = rotate.lease_expiry;
         lease.replay.clear();

@@ -11,6 +11,9 @@ pub mod lease;
 pub mod metrics;
 pub mod node;
 pub mod proto;
+#[cfg(feature = "push-notifications")]
+pub mod push_notifications;
+#[cfg(feature = "relay-host")]
 pub mod queues;
 pub mod relay;
 pub mod routing_cache;

@@ -1,0 +1,210 @@
+{
+  "schema": 1,
+  "scope": "Android emulator preview; physical devices and live push excluded",
+  "distributions": [
+    {
+      "role": "client",
+      "push": false,
+      "native_revision": "65fc089ba25fe137f578a956981a909c8a298599",
+      "packaging_revision": "6cf6c0abe6a72e63f4b116832c97e780b412fe37",
+      "page_size": 16384,
+      "native_payloads_verified": true,
+      "pom_and_module_dependencies_verified": true,
+      "module_artifact_hashes_verified": true,
+      "apk_direct_loading_verified": true,
+      "every_apk_native_load_and_relro_aligned": true,
+      "installed_apk_reports_match_retained_apks": true,
+      "artifacts": {
+        "sample-baseline-arm64-v8a-release.apk": {
+          "bytes": 20520,
+          "sha256": "14b39b9373153c49dd22d0659e53d4f0a4c9b07ddae2333d4540b5dd27361fb0"
+        },
+        "sample-baseline-x86_64-release.apk": {
+          "bytes": 20520,
+          "sha256": "14b39b9373153c49dd22d0659e53d4f0a4c9b07ddae2333d4540b5dd27361fb0"
+        },
+        "sample-client-arm64-v8a-release.apk": {
+          "bytes": 7420858,
+          "sha256": "cc64d105463da253cf78d7cba02331611c9381715bd5cdae4813e3f4659bf460"
+        },
+        "sample-client-x86_64-release.apk": {
+          "bytes": 8880943,
+          "sha256": "9d139524993c61bbac0a113b083d63fbbb1298e6158c03f6deeeadeaa26330e7"
+        },
+        "sdk-client-release.aar": {
+          "bytes": 8187936,
+          "sha256": "34c0f8b0adf3a8e6368dec2f459b55e37d378e3bd4e3e93ff161189c3286f2f2"
+        },
+        "sdk-client.module": {
+          "bytes": 2519,
+          "sha256": "c162c38d19abde24b363fb316f784f5686c8ad75b18ecc768cc852b4f25813bb"
+        },
+        "sdk-client.pom": {
+          "bytes": 1212,
+          "sha256": "ed7bce488563eb91ddfb967f2b0fd096deb457197ddccddbadd6cfab2288542b"
+        }
+      },
+      "native_workflow_run": "https://github.com/IggyGG/gcoms/actions/runs/35606582546",
+      "packaging": "managed local Android 16 KiB emulator"
+    },
+    {
+      "role": "client",
+      "push": true,
+      "native_revision": "65fc089ba25fe137f578a956981a909c8a298599",
+      "packaging_revision": "6cf6c0abe6a72e63f4b116832c97e780b412fe37",
+      "page_size": 16384,
+      "native_payloads_verified": true,
+      "pom_and_module_dependencies_verified": true,
+      "module_artifact_hashes_verified": true,
+      "apk_direct_loading_verified": true,
+      "every_apk_native_load_and_relro_aligned": true,
+      "installed_apk_reports_match_retained_apks": true,
+      "artifacts": {
+        "push-client-release.aar": {
+          "bytes": 25033,
+          "sha256": "9d999f44e411f8e70dad5efe276b0107f58d6b6dee8cde53c995bbe486a6221b"
+        },
+        "push-client.module": {
+          "bytes": 3393,
+          "sha256": "04ee504f107e0285b35e12bffd2aa832168a2552f14b284137c6a7493f11ee19"
+        },
+        "push-client.pom": {
+          "bytes": 1786,
+          "sha256": "f2eb23f5643605bbeb2fa3641026689ea6713261d70b7b8b07f37a1b0f6c2397"
+        },
+        "sample-baseline-arm64-v8a-release.apk": {
+          "bytes": 20520,
+          "sha256": "14b39b9373153c49dd22d0659e53d4f0a4c9b07ddae2333d4540b5dd27361fb0"
+        },
+        "sample-baseline-x86_64-release.apk": {
+          "bytes": 20520,
+          "sha256": "14b39b9373153c49dd22d0659e53d4f0a4c9b07ddae2333d4540b5dd27361fb0"
+        },
+        "sample-client-arm64-v8a-release.apk": {
+          "bytes": 7948770,
+          "sha256": "73ac8a12466625dbe9f6d41d9372e24d63f95c9c8d3421f4aa46b4584e618001"
+        },
+        "sample-client-x86_64-release.apk": {
+          "bytes": 9411012,
+          "sha256": "686b241715d4fc0f62dd6cbe06d29ec569e661dd12df24e937f28623c86a1e1d"
+        },
+        "sdk-client-release.aar": {
+          "bytes": 8201494,
+          "sha256": "86fe87e84798be33cc1f6ad646168d0f7e1dacaf3e8cd0e93f2ef59c2c3fba66"
+        },
+        "sdk-client.module": {
+          "bytes": 2544,
+          "sha256": "bf05ed99ce2b7487fa45619b36e9920fd2569428108b5e4bef57f7dc25e29c08"
+        },
+        "sdk-client.pom": {
+          "bytes": 1217,
+          "sha256": "d9671a68ebc645256a1973025032984f4cc8ffe300f3fbd7c82e5cd89c05fcc2"
+        }
+      },
+      "native_workflow_run": "https://github.com/IggyGG/gcoms/actions/runs/35606654147",
+      "packaging": "managed local Android 16 KiB emulator"
+    },
+    {
+      "role": "relay",
+      "push": false,
+      "native_revision": "65fc089ba25fe137f578a956981a909c8a298599",
+      "packaging_revision": "6cf6c0abe6a72e63f4b116832c97e780b412fe37",
+      "page_size": 16384,
+      "native_payloads_verified": true,
+      "pom_and_module_dependencies_verified": true,
+      "module_artifact_hashes_verified": true,
+      "apk_direct_loading_verified": true,
+      "every_apk_native_load_and_relro_aligned": true,
+      "installed_apk_reports_match_retained_apks": true,
+      "artifacts": {
+        "sample-baseline-arm64-v8a-release.apk": {
+          "bytes": 20520,
+          "sha256": "14b39b9373153c49dd22d0659e53d4f0a4c9b07ddae2333d4540b5dd27361fb0"
+        },
+        "sample-baseline-x86_64-release.apk": {
+          "bytes": 20520,
+          "sha256": "14b39b9373153c49dd22d0659e53d4f0a4c9b07ddae2333d4540b5dd27361fb0"
+        },
+        "sample-relay-arm64-v8a-release.apk": {
+          "bytes": 7988466,
+          "sha256": "bb2c77efa01ef7a7455d63aebd2c9245637fb03c351ae1964bac67a0428cc586"
+        },
+        "sample-relay-x86_64-release.apk": {
+          "bytes": 9545871,
+          "sha256": "178daecfd49932a2f96a1b094e28f3d1ac324bc1a2cc5cabb10ea28e03eee225"
+        },
+        "sdk-relay-release.aar": {
+          "bytes": 8829082,
+          "sha256": "d1f5cc948a04b7ce68a9ee6ee87b3736a23e012e84716f0b9a4287dc8559a7b6"
+        },
+        "sdk-relay.module": {
+          "bytes": 2510,
+          "sha256": "3b4584a296720d4444194453fbc5806ffa5bcb89a3b4e8fae2e230c2b183acf8"
+        },
+        "sdk-relay.pom": {
+          "bytes": 1211,
+          "sha256": "48ca5e108c2af63f1456fac4192278b2d5a4f3d2d8c21e36cd823c8bc1d7f16c"
+        }
+      },
+      "native_workflow_run": "https://github.com/IggyGG/gcoms/actions/runs/35606582546",
+      "packaging": "managed local Android 16 KiB emulator"
+    },
+    {
+      "role": "relay",
+      "push": true,
+      "native_revision": "3a47609b448003cae6d7775cbaf7ebe1d3f5a05a",
+      "packaging_revision": "6cf6c0abe6a72e63f4b116832c97e780b412fe37",
+      "page_size": 16384,
+      "native_payloads_verified": true,
+      "pom_and_module_dependencies_verified": true,
+      "module_artifact_hashes_verified": true,
+      "apk_direct_loading_verified": true,
+      "every_apk_native_load_and_relro_aligned": true,
+      "installed_apk_reports_match_retained_apks": true,
+      "artifacts": {
+        "push-relay-release.aar": {
+          "bytes": 25028,
+          "sha256": "293286ed201a6d139fcac958081b0708d243450238d0c0d06f3aced0319d50b8"
+        },
+        "push-relay.module": {
+          "bytes": 3382,
+          "sha256": "be8c761a1a1d5454352237ff4459d90ad348f76e7df6f68f46c393b1c4ad9725"
+        },
+        "push-relay.pom": {
+          "bytes": 1784,
+          "sha256": "a754b6f28d51ab995edbb5370b38d3fc795b375a82586d907bfd99b3769501ff"
+        },
+        "sample-baseline-arm64-v8a-release.apk": {
+          "bytes": 20520,
+          "sha256": "14b39b9373153c49dd22d0659e53d4f0a4c9b07ddae2333d4540b5dd27361fb0"
+        },
+        "sample-baseline-x86_64-release.apk": {
+          "bytes": 20520,
+          "sha256": "14b39b9373153c49dd22d0659e53d4f0a4c9b07ddae2333d4540b5dd27361fb0"
+        },
+        "sample-relay-arm64-v8a-release.apk": {
+          "bytes": 8543370,
+          "sha256": "58f6db8235f4edfe069437c731ba0933def9ff2965444a5ac7cd3fafad9926a1"
+        },
+        "sample-relay-x86_64-release.apk": {
+          "bytes": 10099364,
+          "sha256": "2edfcf8fd7749a3b241ef0814a73a90c75830e9f2e73b039d56634c9736868cb"
+        },
+        "sdk-relay-release.aar": {
+          "bytes": 8867592,
+          "sha256": "08ad3252e35dd49e04851f7134543d02424a6c28ec58b6bdba816a79a23fa1e7"
+        },
+        "sdk-relay.module": {
+          "bytes": 2535,
+          "sha256": "1b23b7c4c7e8d048299279a4d8572906fb08d4cd77fad07a6f89029b4537aa40"
+        },
+        "sdk-relay.pom": {
+          "bytes": 1216,
+          "sha256": "9036196fc7a1faa8aa775655d69a10509233b943790ea327860d97c51d0252c5"
+        }
+      },
+      "native_workflow_run": "https://github.com/IggyGG/gcoms/actions/runs/35608966305",
+      "packaging": "managed local Android 16 KiB emulator"
+    }
+  ]
+}

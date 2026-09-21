@@ -479,6 +479,10 @@ pub(crate) fn build_handlers(
             let result = match operation {
                 OP_CREATE => store.create_lease(&cell.payload, now_unix()),
                 OP_RENEW => store.renew(&cell.payload, now_unix()),
+                #[cfg(feature = "push-notifications")]
+                crate::push_notifications::OP_BIND_NOTIFICATION => {
+                    store.bind_notification(&cell.payload, now_unix())
+                }
                 OP_ROTATE => store.rotate(&cell.payload, now_unix()),
                 OP_REVOKE => {
                     store

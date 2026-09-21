@@ -1,0 +1,54 @@
+name: Apple linked size comparison
+on:
+  workflow_dispatch:
+    inputs:
+      source_run:
+        description: Completed native qualification run
+        type: string
+        required: true
+      artifact_name:
+        description: Exact production Apple artifact name from that run
+        type: string
+        required: true
+      role:
+        type: choice
+        options: [client, relay]
+        required: true
+      push:
+        type: boolean
+        default: false
+permissions:
+  contents: read
+  actions: read
+jobs:
+  compare:
+    runs-on: macos-15
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Prepare retained native profiles
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_RUN: ${{ inputs.source_run }}
+          ARTIFACT_NAME: ${{ inputs.artifact_name }}
+        run: |
+          gh run download "$SOURCE_RUN" --name "$ARTIFACT_NAME" --dir target/apple-profile-input
+          brew install xcodegen
+      - name: Compare linked release samples at 3, s and z
+        env:
+          COMPARE_ROLE: ${{ inputs.role }}
+          COMPARE_PUSH: ${{ inputs.push }}
+        run: |
+          compare_args=(--input target/apple-profile-input/mobile --role "$COMPARE_ROLE")
+          if [ "$COMPARE_PUSH" = true ]; then compare_args+=(--push); fi
+          python3 scripts/compare-apple-sizes.py "${compare_args[@]}"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: apple-profile-${{ inputs.role }}-${{ inputs.push && 'push' || 'base' }}-${{ github.sha }}
+          path: |
+            target/apple-profile-comparison/comparison.json
+            target/apple-profile-comparison/**/apps/**/summary.json
+          if-no-files-found: error

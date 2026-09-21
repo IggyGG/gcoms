@@ -27,12 +27,23 @@ async fn run(args: Vec<String>) -> Result<(), String> {
         Ok(path) => builder.network_config(std::fs::read(path).map_err(err)?),
         Err(_) => builder,
     };
+    let builder = match std::env::var("GCOMS_RELAY") {
+        Ok(path) => builder.relay(Some(sdk::RelayCard(std::fs::read(path).map_err(err)?))),
+        Err(_) => builder,
+    };
+    let builder = match std::env::var("GCOMS_INVITATION") {
+        Ok(invitation) => builder.invitation(invitation),
+        Err(_) => builder,
+    };
     let builder = if std::env::var("GCOMS_FIXTURE").as_deref() == Ok("1") {
         builder.local_fixture()
     } else {
         builder.carrier_profile(sdk::CarrierProfile::Gc2)
     };
-    #[cfg(all(feature = "ipc", not(feature = "embedded")))]
+    #[cfg(all(
+        feature = "ipc",
+        not(any(feature = "embedded", feature = "network-client"))
+    ))]
     let builder = builder.backend(gcoms::Backend::Attach {
         endpoint: std::env::var("GCOMS_ENDPOINT")
             .map_err(|_| "set GCOMS_ENDPOINT")?

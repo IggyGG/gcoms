@@ -1,0 +1,188 @@
+{
+  "schema": 1,
+  "system": "Linux",
+  "machine": "x86_64",
+  "rustc": "rustc 1.98.0 (88d9e12ae 2026-08-18)\nbinary: rustc\ncommit-hash: 88d9e12ae178fab0fb5cc050a94da85685d449ea\ncommit-date: 2026-08-18\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.0\nLLVM version: 22.1.8\n",
+  "revision": "b39199e431fa680267eecd566914ff84ee06ef25",
+  "dirty": false,
+  "panic": "unwind",
+  "lto": true,
+  "codegen_units": 1,
+  "stripped": true,
+  "binaries": [
+    {
+      "mode": "ipc",
+      "opt_level": "3",
+      "bytes": 1162032,
+      "sha256": "7b4a7ab73c23973274afa262fe54f552a4e811f2ffc67e4833dad627a520587c",
+      "artifact": "ipc-opt-3",
+      "imports": [
+        "libc.so.6",
+        "libgcc_s.so.1"
+      ]
+    },
+    {
+      "mode": "ipc",
+      "opt_level": "s",
+      "bytes": 926664,
+      "sha256": "130811f3a17f2c20e230b052e5d1a45cd6f9380aa6c803247506e0e11a58b88f",
+      "artifact": "ipc-opt-s",
+      "imports": [
+        "libc.so.6",
+        "libgcc_s.so.1"
+      ]
+    },
+    {
+      "mode": "ipc",
+      "opt_level": "z",
+      "bytes": 877496,
+      "sha256": "f4be17c11e6ddab870b2c65af14b90f5c7fc9d82f8dba63a63f4153c42b22873",
+      "artifact": "ipc-opt-z",
+      "imports": [
+        "libc.so.6",
+        "libgcc_s.so.1"
+      ]
+    },
+    {
+      "mode": "embedded",
+      "opt_level": "3",
+      "bytes": 15618496,
+      "sha256": "109256206428e6f38975e1908270f2d4b006bb2866d63442dd26655ab94a7d13",
+      "artifact": "embedded-opt-3",
+      "imports": [
+        "libc.so.6",
+        "libgcc_s.so.1"
+      ]
+    },
+    {
+      "mode": "embedded",
+      "opt_level": "s",
+      "bytes": 10009584,
+      "sha256": "88fba78807fd45e3fd2226b7cba7ea6d643fa02d3d55f146fd7ff00dc195fb35",
+      "artifact": "embedded-opt-s",
+      "imports": [
+        "libc.so.6",
+        "libgcc_s.so.1"
+      ]
+    },
+    {
+      "mode": "embedded",
+      "opt_level": "z",
+      "bytes": 9374048,
+      "sha256": "b27d836bdd3ab1c3297158e2228ece140dd1d9b0c84822cae3b6e3de42d006e9",
+      "artifact": "embedded-opt-z",
+      "imports": [
+        "libc.so.6",
+        "libgcc_s.so.1"
+      ]
+    },
+    {
+      "mode": "network-client",
+      "opt_level": "3",
+      "bytes": 14502328,
+      "sha256": "1a90a361414062ff8ca24d089b2c380beaeae757d90d0fa18189a8a033d570b5",
+      "artifact": "network-client-opt-3",
+      "imports": [
+        "libc.so.6",
+        "libgcc_s.so.1"
+      ]
+    },
+    {
+      "mode": "network-client",
+      "opt_level": "s",
+      "bytes": 9247944,
+      "sha256": "264ca81067359c49e543ea1b377e7496e4ed65811220f865605cb3554ccebbb1",
+      "artifact": "network-client-opt-s",
+      "imports": [
+        "libc.so.6",
+        "libgcc_s.so.1"
+      ]
+    },
+    {
+      "mode": "network-client",
+      "opt_level": "z",
+      "bytes": 8710968,
+      "sha256": "7977b827d19c3d44344beccdfad4a5dee48bf1cbf092a226cbe5bfff8c1d5978",
+      "artifact": "network-client-opt-z",
+      "imports": [
+        "libc.so.6",
+        "libgcc_s.so.1"
+      ]
+    },
+    {
+      "mode": "host",
+      "opt_level": "s",
+      "bytes": 10258968,
+      "sha256": "74b00980393f6bcd42ad96f82b06f30debc6c34d2640836cf3aa02cf61e0ee39",
+      "artifact": "host-opt-s",
+      "imports": [
+        "libc.so.6",
+        "libgcc_s.so.1",
+        "libm.so.6"
+      ]
+    }
+  ],
+  "consumer_sha256": {
+    "examples/rust-integration/Cargo.toml": "27d3029f625a8c451e3c61197d5af7bbff70ab7e4541f4fd299d4dbe24d589a8",
+    "examples/rust-integration/src/main.rs": "e8247d0e645a994c7a3dfb9ea0ceeaa04e286488cf444006df67688baf900cc4"
+  },
+  "baseline_comparison": [
+    {
+      "mode": "ipc",
+      "opt_level": "3",
+      "growth_percent": 1.07
+    },
+    {
+      "mode": "ipc",
+      "opt_level": "s",
+      "growth_percent": 0.639
+    },
+    {
+      "mode": "ipc",
+      "opt_level": "z",
+      "growth_percent": 0.694
+    },
+    {
+      "mode": "embedded",
+      "opt_level": "3",
+      "growth_percent": 0.402
+    },
+    {
+      "mode": "embedded",
+      "opt_level": "s",
+      "growth_percent": 0.107
+    },
+    {
+      "mode": "embedded",
+      "opt_level": "z",
+      "growth_percent": 0.1
+    },
+    {
+      "mode": "network-client",
+      "opt_level": "3",
+      "growth_percent": 0.46
+    },
+    {
+      "mode": "network-client",
+      "opt_level": "s",
+      "growth_percent": 0.096
+    },
+    {
+      "mode": "network-client",
+      "opt_level": "z",
+      "growth_percent": 0.087
+    },
+    {
+      "mode": "host",
+      "opt_level": "s",
+      "growth_percent": -0.004
+    }
+  ],
+  "evidence": {
+    "workflow_run": "https://github.com/IggyGG/gcoms/actions/runs/35598613312",
+    "report_sha256": "162c3ec5723002b13e76b5e6d0e42b8e654f101e0341a48ef664f3dd2243b2e6",
+    "verified_source_files": 334,
+    "verified_binaries": 10,
+    "baseline": "../rust-integrations-20260921/linux-x86_64.json"
+  }
+}

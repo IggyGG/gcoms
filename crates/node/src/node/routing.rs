@@ -2,8 +2,10 @@
 use super::*;
 use gcoms_routing::{
     bootstrap::BootstrapBundle, carrier::CarrierConfig, discovery::Discovery, Directory,
-    OnionConnector, RelayService, ServicePolicy,
+    OnionConnector,
 };
+#[cfg(feature = "relay-host")]
+use gcoms_routing::{RelayService, ServicePolicy};
 use gcoms_transport::connector::{ConnectFuture, Connector, DirectConnector};
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -117,12 +119,15 @@ pub(crate) struct RoutingRuntime {
     #[cfg(feature = "experimental-gc2")]
     pub gc2_bootstrap: Option<gcoms_routing::gc2::directory::BootstrapBundle>,
     pub discovery: Discovery,
+    #[cfg(feature = "relay-host")]
     pub service: Mutex<Option<Arc<RelayService>>>,
     pub catalog_origins: Mutex<Vec<String>>,
     pub recovering_owner: AtomicBool,
     pub published: Arc<AtomicBool>,
+    #[cfg(feature = "relay-host")]
     pub automatic_connectivity: bool,
     stopping: AtomicBool,
+    #[cfg(feature = "relay-host")]
     provision_target: Arc<Mutex<Option<RelayTarget>>>,
     pub fixture: bool,
     provision_request: [u8; 32],
@@ -255,12 +260,15 @@ impl RoutingRuntime {
             #[cfg(feature = "experimental-gc2")]
             gc2_bootstrap: config.gc2_bootstrap,
             discovery,
+            #[cfg(feature = "relay-host")]
             service: Mutex::new(None),
             catalog_origins: Mutex::new(config.catalog_origins),
             recovering_owner: AtomicBool::new(true),
             published: Arc::new(AtomicBool::new(false)),
+            #[cfg(feature = "relay-host")]
             automatic_connectivity: config.connectivity.is_some(),
             stopping: AtomicBool::new(false),
+            #[cfg(feature = "relay-host")]
             provision_target: Arc::new(Mutex::new(None)),
             fixture,
             provision_request: random_nonzero(),
@@ -268,6 +276,21 @@ impl RoutingRuntime {
             prepared_ready: Mutex::new(HashSet::new()),
             entry,
         }))
+    }
+
+    pub(crate) fn own_introduction(&self) -> Option<gcoms_routing::Relay> {
+        #[cfg(feature = "relay-host")]
+        {
+            self.service
+                .lock()
+                .unwrap_or_else(|p| p.into_inner())
+                .as_ref()
+                .map(|s| s.introduction(now_unix()))
+        }
+        #[cfg(not(feature = "relay-host"))]
+        {
+            None
+        }
     }
 
     pub fn bind_state(&self, state: &Arc<Mutex<NodeState>>) -> Result<(), String> {
@@ -280,6 +303,7 @@ impl RoutingRuntime {
     pub(crate) fn stop_publication(&self) {
         // Serialize with a completing independent probe, so shutdown cannot
         // be followed by a late proof restoring public transit admission.
+        #[cfg(feature = "relay-host")]
         let _service = self.service.lock().unwrap_or_else(|p| p.into_inner());
         self.stopping.store(true, Ordering::Release);
         self.published.store(false, Ordering::Release);
@@ -287,6 +311,7 @@ impl RoutingRuntime {
 
     /// The candidate is updated independently of inbox/session ownership. The
     /// next normal discovery publication must authenticate the new listener.
+    #[cfg(feature = "relay-host")]
     pub(crate) fn update_endpoint(&self, address: SocketAddr) -> Result<(), String> {
         let service = self.service.lock().unwrap_or_else(|p| p.into_inner());
         let service = service.as_ref().ok_or("relay listener not attached")?;
@@ -316,6 +341,7 @@ impl RoutingRuntime {
         Ok(bundle)
     }
 
+    #[cfg(feature = "relay-host")]
     pub fn attach(
         &self,
         tls: &TlsIdentity,
@@ -447,8 +473,7 @@ pub(crate) fn refresh_public_info(st: &mut NodeState) {
     let Some(runtime) = &st.routing else {
         return;
     };
-    let service = runtime.service.lock().unwrap_or_else(|p| p.into_inner());
-    let own = service.as_ref().map(|s| s.introduction(now_unix()));
+    let own = runtime.own_introduction();
     st.info.aliases = st
         .client_relay
         .aliases
@@ -534,8 +559,11 @@ pub(crate) fn spawn(
             .clone()
             .expect("routing runtime");
         let mut failures = 0u32;
+        #[cfg(feature = "relay-host")]
         let mut next_publish = std::time::Instant::now();
+        #[cfg(feature = "relay-host")]
         let mut publication_failures = 0u32;
+        #[cfg(feature = "relay-host")]
         let mut last_candidate = None;
         loop {
             let current_protocol = scheduler.is_gc2();
@@ -585,47 +613,50 @@ pub(crate) fn spawn(
             if !runtime.recovering_owner.load(Ordering::Acquire) {
                 let _ = recover_channels(&state, &scheduler, &runtime).await;
             }
-            let introduction = runtime
-                .service
-                .lock()
-                .unwrap_or_else(|p| p.into_inner())
-                .as_ref()
-                .map(|s| s.introduction(now_unix()));
-            if let Some(own) = introduction.filter(|_| !current_protocol) {
-                if last_candidate != Some(own.addr) {
-                    next_publish = std::time::Instant::now();
-                    publication_failures = 0;
-                    last_candidate = Some(own.addr);
-                }
-                if std::time::Instant::now() >= next_publish
-                    && (runtime.fixture || gcoms_routing::service::public_ip(own.addr.ip()))
-                {
-                    let verified = runtime.discovery.publish(&own).await.is_ok();
-                    // A concurrent router change cannot turn an obsolete proof
-                    // into authority for the new endpoint.
-                    let service = runtime.service.lock().unwrap_or_else(|p| p.into_inner());
-                    if !runtime.stopping.load(Ordering::Acquire)
-                        && service
-                            .as_ref()
-                            .is_some_and(|service| service.address() == own.addr)
-                    {
-                        runtime.published.store(verified, Ordering::Release);
+            #[cfg(feature = "relay-host")]
+            {
+                let introduction = runtime
+                    .service
+                    .lock()
+                    .unwrap_or_else(|p| p.into_inner())
+                    .as_ref()
+                    .map(|s| s.introduction(now_unix()));
+                if let Some(own) = introduction.filter(|_| !current_protocol) {
+                    if last_candidate != Some(own.addr) {
+                        next_publish = std::time::Instant::now();
+                        publication_failures = 0;
+                        last_candidate = Some(own.addr);
                     }
-                    publication_failures = if verified {
-                        0
-                    } else {
-                        publication_failures.saturating_add(1)
-                    };
-                    let retry = if verified {
-                        300
-                    } else {
-                        5u64.saturating_mul(1 << publication_failures.min(6))
-                            .min(300)
-                    };
-                    next_publish = std::time::Instant::now()
-                        + std::time::Duration::from_secs(
-                            retry + rand::random::<u64>() % (retry / 4 + 1),
-                        );
+                    if std::time::Instant::now() >= next_publish
+                        && (runtime.fixture || gcoms_routing::service::public_ip(own.addr.ip()))
+                    {
+                        let verified = runtime.discovery.publish(&own).await.is_ok();
+                        // A concurrent router change cannot turn an obsolete proof
+                        // into authority for the new endpoint.
+                        let service = runtime.service.lock().unwrap_or_else(|p| p.into_inner());
+                        if !runtime.stopping.load(Ordering::Acquire)
+                            && service
+                                .as_ref()
+                                .is_some_and(|service| service.address() == own.addr)
+                        {
+                            runtime.published.store(verified, Ordering::Release);
+                        }
+                        publication_failures = if verified {
+                            0
+                        } else {
+                            publication_failures.saturating_add(1)
+                        };
+                        let retry = if verified {
+                            300
+                        } else {
+                            5u64.saturating_mul(1 << publication_failures.min(6))
+                                .min(300)
+                        };
+                        next_publish = std::time::Instant::now()
+                            + std::time::Duration::from_secs(
+                                retry + rand::random::<u64>() % (retry / 4 + 1),
+                            );
+                    }
                 }
             }
             tokio::time::sleep(if runtime.fixture {
@@ -816,12 +847,7 @@ async fn recover_owner(
         .unwrap_or_else(|p| p.into_inner())
         .client_relay
         .clone();
-    let own = runtime
-        .service
-        .lock()
-        .unwrap_or_else(|p| p.into_inner())
-        .as_ref()
-        .map(|s| s.introduction(now_unix()));
+    let own = runtime.own_introduction();
     let live = !current.aliases.is_empty()
         && current.aliases.iter().all(|a| {
             a.contact.expiry > now_unix()
@@ -994,6 +1020,6 @@ async fn resume_owner(
     Ok(())
 }
 
-#[cfg(all(test, feature = "experimental-gc2"))]
+#[cfg(all(test, feature = "experimental-gc2", feature = "relay-host"))]
 #[path = "gc2_inbox_tests.rs"]
 mod gc2_inbox_tests;

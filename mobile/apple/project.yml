@@ -1,0 +1,64 @@
+name: GComsPreview
+options:
+  deploymentTarget:
+    iOS: "15.0"
+packages:
+  GComsPackage:
+    path: ${GCOMS_PACKAGE_PATH}
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    CODE_SIGNING_ALLOWED: NO
+    GENERATE_INFOPLIST_FILE: YES
+    IPHONEOS_DEPLOYMENT_TARGET: "15.0"
+  configs:
+    Release:
+      DEAD_CODE_STRIPPING: YES
+      DEPLOYMENT_POSTPROCESSING: YES
+      STRIP_INSTALLED_PRODUCT: YES
+      STRIP_STYLE: all
+      STRIP_SWIFT_SYMBOLS: YES
+      ONLY_ACTIVE_ARCH: YES
+targets:
+  Baseline:
+    type: application
+    platform: iOS
+    sources: [Sample]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: boo.gcoms.preview.baseline
+  Preview:
+    type: application
+    platform: iOS
+    sources: [Sample]
+    dependencies:
+      - package: GComsPackage
+        product: GComs
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: boo.gcoms.preview.sdk
+        SWIFT_ACTIVE_COMPILATION_CONDITIONS: GCOMS_ENABLED
+  PreviewTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources: [Tests/GComsTests]
+    dependencies:
+      - target: Preview
+      - package: GComsPackage
+        product: GComs
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: boo.gcoms.preview.tests
+        SWIFT_ACTIVE_COMPILATION_CONDITIONS: GCOMS_ENABLED
+schemes:
+  Preview:
+    build:
+      targets:
+        Preview: all
+        PreviewTests: [test]
+    test:
+      targets: [PreviewTests]
+  Baseline:
+    build:
+      targets:
+        Baseline: all

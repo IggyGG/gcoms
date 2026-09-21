@@ -1,19 +1,29 @@
 //! Shared native full-node listener selection. A selected socket is never closed
 //! for a second bind. Router grants are candidates, never reachability evidence.
+#[cfg(feature = "relay-host")]
 pub mod nat;
+mod nat_config;
+#[cfg(not(feature = "relay-host"))]
+pub mod nat {
+    pub use super::nat_config::NatConfig;
+}
+#[cfg(feature = "relay-host")]
 mod runtime;
+#[cfg(feature = "relay-host")]
 pub(crate) use runtime::{initial_candidate, spawn, RuntimeTask};
 
+#[cfg(feature = "relay-host")]
 use gcoms_transport::server::Tp1Server;
 use hmac::{Hmac, Mac};
 use sha2::Sha256;
 use std::{
     fs::File,
-    io,
-    net::SocketAddr,
     path::{Path, PathBuf},
     sync::Arc,
 };
+#[cfg(feature = "relay-host")]
+use std::{io, net::SocketAddr};
+#[cfg(feature = "relay-host")]
 use tokio::net::TcpListener;
 use zeroize::Zeroizing;
 
@@ -44,6 +54,7 @@ impl Default for ConnectivityConfig {
     }
 }
 
+#[cfg(feature = "relay-host")]
 impl ConnectivityConfig {
     pub(crate) fn bind(&self, address: SocketAddr) -> Result<TcpListener, String> {
         let saved = match &self.state {
@@ -60,6 +71,7 @@ impl ConnectivityConfig {
     }
 }
 
+#[cfg(feature = "relay-host")]
 fn select_listener<T>(
     address: SocketAddr,
     previous: Option<u16>,
@@ -163,7 +175,7 @@ impl ListenerStateStore for PortState {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "relay-host"))]
 mod tests {
     use super::*;
     #[tokio::test]
@@ -266,7 +278,7 @@ mod tests {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "relay-host"))]
 mod privilege_tests {
     use super::*;
 

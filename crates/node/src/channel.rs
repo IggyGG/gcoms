@@ -1492,7 +1492,10 @@ mod tests {
             8,
         )
         .unwrap();
-        let own = route(owner.own_pseudonym()[0]);
+        let mut own = route(1);
+        // Preserve the full MLS pseudonym; repeating its first random byte
+        // occasionally made the owner identical to a fixture peer.
+        own.pseudonym = owner.own_pseudonym();
         ChannelState::new(
             ChannelRole::Owner(owner),
             owned(own),

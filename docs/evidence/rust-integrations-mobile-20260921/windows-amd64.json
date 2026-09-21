@@ -1,0 +1,342 @@
+{
+  "schema": 1,
+  "system": "Windows",
+  "machine": "AMD64",
+  "rustc": "rustc 1.98.0 (88d9e12ae 2026-08-18)\nbinary: rustc\ncommit-hash: 88d9e12ae178fab0fb5cc050a94da85685d449ea\ncommit-date: 2026-08-18\nhost: x86_64-pc-windows-msvc\nrelease: 1.98.0\nLLVM version: 22.1.8\n",
+  "revision": "b39199e431fa680267eecd566914ff84ee06ef25",
+  "dirty": false,
+  "panic": "unwind",
+  "lto": true,
+  "codegen_units": 1,
+  "stripped": true,
+  "binaries": [
+    {
+      "mode": "ipc",
+      "opt_level": "3",
+      "bytes": 1334784,
+      "sha256": "afc2f070c5db1acaecda81fdf3da9237eb7ee27bbf4836771d1643cfdc805b2b",
+      "artifact": "ipc-opt-3.exe",
+      "imports": [
+        "ADVAPI32.dll",
+        "KERNEL32.dll",
+        "VCRUNTIME140.dll",
+        "advapi32.dll",
+        "api-ms-win-core-synch-l1-2-0.dll",
+        "api-ms-win-crt-heap-l1-1-0.dll",
+        "api-ms-win-crt-locale-l1-1-0.dll",
+        "api-ms-win-crt-math-l1-1-0.dll",
+        "api-ms-win-crt-runtime-l1-1-0.dll",
+        "api-ms-win-crt-stdio-l1-1-0.dll",
+        "bcrypt.dll",
+        "bcryptprimitives.dll",
+        "kernel32.dll",
+        "ntdll.dll"
+      ]
+    },
+    {
+      "mode": "ipc",
+      "opt_level": "s",
+      "bytes": 1038848,
+      "sha256": "8d832fda3c50c2c1113d4f398dbe2dd051ac0a1d39947f47a8ca12edd1eac959",
+      "artifact": "ipc-opt-s.exe",
+      "imports": [
+        "ADVAPI32.dll",
+        "KERNEL32.dll",
+        "VCRUNTIME140.dll",
+        "advapi32.dll",
+        "api-ms-win-core-synch-l1-2-0.dll",
+        "api-ms-win-crt-heap-l1-1-0.dll",
+        "api-ms-win-crt-locale-l1-1-0.dll",
+        "api-ms-win-crt-math-l1-1-0.dll",
+        "api-ms-win-crt-runtime-l1-1-0.dll",
+        "api-ms-win-crt-stdio-l1-1-0.dll",
+        "bcrypt.dll",
+        "bcryptprimitives.dll",
+        "kernel32.dll",
+        "ntdll.dll"
+      ]
+    },
+    {
+      "mode": "ipc",
+      "opt_level": "z",
+      "bytes": 948736,
+      "sha256": "c2a8d1580f1267defd2322611b657d116b91bcb612e0aab7b39d3b6d036a430d",
+      "artifact": "ipc-opt-z.exe",
+      "imports": [
+        "ADVAPI32.dll",
+        "KERNEL32.dll",
+        "VCRUNTIME140.dll",
+        "advapi32.dll",
+        "api-ms-win-core-synch-l1-2-0.dll",
+        "api-ms-win-crt-heap-l1-1-0.dll",
+        "api-ms-win-crt-locale-l1-1-0.dll",
+        "api-ms-win-crt-math-l1-1-0.dll",
+        "api-ms-win-crt-runtime-l1-1-0.dll",
+        "api-ms-win-crt-stdio-l1-1-0.dll",
+        "bcrypt.dll",
+        "bcryptprimitives.dll",
+        "kernel32.dll",
+        "ntdll.dll"
+      ]
+    },
+    {
+      "mode": "embedded",
+      "opt_level": "3",
+      "bytes": 17074688,
+      "sha256": "d8648f1b252a1dabb86a7aee949be28f1081ecc45b3b1eea332f9a28a59cb2fa",
+      "artifact": "embedded-opt-3.exe",
+      "imports": [
+        "ADVAPI32.dll",
+        "KERNEL32.dll",
+        "VCRUNTIME140.dll",
+        "advapi32.dll",
+        "api-ms-win-core-synch-l1-2-0.dll",
+        "api-ms-win-crt-convert-l1-1-0.dll",
+        "api-ms-win-crt-environment-l1-1-0.dll",
+        "api-ms-win-crt-heap-l1-1-0.dll",
+        "api-ms-win-crt-locale-l1-1-0.dll",
+        "api-ms-win-crt-math-l1-1-0.dll",
+        "api-ms-win-crt-runtime-l1-1-0.dll",
+        "api-ms-win-crt-stdio-l1-1-0.dll",
+        "api-ms-win-crt-string-l1-1-0.dll",
+        "api-ms-win-crt-utility-l1-1-0.dll",
+        "bcrypt.dll",
+        "bcryptprimitives.dll",
+        "kernel32.dll",
+        "ntdll.dll",
+        "ws2_32.dll"
+      ]
+    },
+    {
+      "mode": "embedded",
+      "opt_level": "s",
+      "bytes": 11641856,
+      "sha256": "89222f6804f1034e2e161451f93c2d7fae668ee5b930137be974b50e6278d674",
+      "artifact": "embedded-opt-s.exe",
+      "imports": [
+        "ADVAPI32.dll",
+        "KERNEL32.dll",
+        "VCRUNTIME140.dll",
+        "advapi32.dll",
+        "api-ms-win-core-synch-l1-2-0.dll",
+        "api-ms-win-crt-convert-l1-1-0.dll",
+        "api-ms-win-crt-environment-l1-1-0.dll",
+        "api-ms-win-crt-heap-l1-1-0.dll",
+        "api-ms-win-crt-locale-l1-1-0.dll",
+        "api-ms-win-crt-math-l1-1-0.dll",
+        "api-ms-win-crt-runtime-l1-1-0.dll",
+        "api-ms-win-crt-stdio-l1-1-0.dll",
+        "api-ms-win-crt-string-l1-1-0.dll",
+        "api-ms-win-crt-utility-l1-1-0.dll",
+        "bcrypt.dll",
+        "bcryptprimitives.dll",
+        "kernel32.dll",
+        "ntdll.dll",
+        "ws2_32.dll"
+      ]
+    },
+    {
+      "mode": "embedded",
+      "opt_level": "z",
+      "bytes": 10458112,
+      "sha256": "313ed0eddf2dd4143bc38f26f11ef4f4832ee2743fe8f6d8efe7cfa6140e54b0",
+      "artifact": "embedded-opt-z.exe",
+      "imports": [
+        "ADVAPI32.dll",
+        "KERNEL32.dll",
+        "VCRUNTIME140.dll",
+        "advapi32.dll",
+        "api-ms-win-core-synch-l1-2-0.dll",
+        "api-ms-win-crt-convert-l1-1-0.dll",
+        "api-ms-win-crt-environment-l1-1-0.dll",
+        "api-ms-win-crt-heap-l1-1-0.dll",
+        "api-ms-win-crt-locale-l1-1-0.dll",
+        "api-ms-win-crt-math-l1-1-0.dll",
+        "api-ms-win-crt-runtime-l1-1-0.dll",
+        "api-ms-win-crt-stdio-l1-1-0.dll",
+        "api-ms-win-crt-string-l1-1-0.dll",
+        "api-ms-win-crt-utility-l1-1-0.dll",
+        "bcrypt.dll",
+        "bcryptprimitives.dll",
+        "kernel32.dll",
+        "ntdll.dll",
+        "ws2_32.dll"
+      ]
+    },
+    {
+      "mode": "network-client",
+      "opt_level": "3",
+      "bytes": 15499264,
+      "sha256": "9725c5a724db167bb57e27b20d0a5143be47f2cf4413aeaccee6cd09b15c82b8",
+      "artifact": "network-client-opt-3.exe",
+      "imports": [
+        "ADVAPI32.dll",
+        "KERNEL32.dll",
+        "VCRUNTIME140.dll",
+        "advapi32.dll",
+        "api-ms-win-core-synch-l1-2-0.dll",
+        "api-ms-win-crt-convert-l1-1-0.dll",
+        "api-ms-win-crt-environment-l1-1-0.dll",
+        "api-ms-win-crt-heap-l1-1-0.dll",
+        "api-ms-win-crt-locale-l1-1-0.dll",
+        "api-ms-win-crt-math-l1-1-0.dll",
+        "api-ms-win-crt-runtime-l1-1-0.dll",
+        "api-ms-win-crt-stdio-l1-1-0.dll",
+        "api-ms-win-crt-string-l1-1-0.dll",
+        "api-ms-win-crt-utility-l1-1-0.dll",
+        "bcrypt.dll",
+        "bcryptprimitives.dll",
+        "kernel32.dll",
+        "ntdll.dll",
+        "ws2_32.dll"
+      ]
+    },
+    {
+      "mode": "network-client",
+      "opt_level": "s",
+      "bytes": 10536960,
+      "sha256": "0690ee8dc54b995cbcc227a7459bdd4982da7986aa91ca8851db9d5ce183cfcf",
+      "artifact": "network-client-opt-s.exe",
+      "imports": [
+        "ADVAPI32.dll",
+        "KERNEL32.dll",
+        "VCRUNTIME140.dll",
+        "advapi32.dll",
+        "api-ms-win-core-synch-l1-2-0.dll",
+        "api-ms-win-crt-convert-l1-1-0.dll",
+        "api-ms-win-crt-environment-l1-1-0.dll",
+        "api-ms-win-crt-heap-l1-1-0.dll",
+        "api-ms-win-crt-locale-l1-1-0.dll",
+        "api-ms-win-crt-math-l1-1-0.dll",
+        "api-ms-win-crt-runtime-l1-1-0.dll",
+        "api-ms-win-crt-stdio-l1-1-0.dll",
+        "api-ms-win-crt-string-l1-1-0.dll",
+        "api-ms-win-crt-utility-l1-1-0.dll",
+        "bcrypt.dll",
+        "bcryptprimitives.dll",
+        "kernel32.dll",
+        "ntdll.dll",
+        "ws2_32.dll"
+      ]
+    },
+    {
+      "mode": "network-client",
+      "opt_level": "z",
+      "bytes": 9507328,
+      "sha256": "5206c0cbea250d87d4468f2755ff6c93985d2a82892e3ead34e08dfd71786379",
+      "artifact": "network-client-opt-z.exe",
+      "imports": [
+        "ADVAPI32.dll",
+        "KERNEL32.dll",
+        "VCRUNTIME140.dll",
+        "advapi32.dll",
+        "api-ms-win-core-synch-l1-2-0.dll",
+        "api-ms-win-crt-convert-l1-1-0.dll",
+        "api-ms-win-crt-environment-l1-1-0.dll",
+        "api-ms-win-crt-heap-l1-1-0.dll",
+        "api-ms-win-crt-locale-l1-1-0.dll",
+        "api-ms-win-crt-math-l1-1-0.dll",
+        "api-ms-win-crt-runtime-l1-1-0.dll",
+        "api-ms-win-crt-stdio-l1-1-0.dll",
+        "api-ms-win-crt-string-l1-1-0.dll",
+        "api-ms-win-crt-utility-l1-1-0.dll",
+        "bcrypt.dll",
+        "bcryptprimitives.dll",
+        "kernel32.dll",
+        "ntdll.dll",
+        "ws2_32.dll"
+      ]
+    },
+    {
+      "mode": "host",
+      "opt_level": "s",
+      "bytes": 11944448,
+      "sha256": "c2781135f2007b9319bda5e57ef7b321cd0cb13cd24c5ce8c47e8ffbbd5df197",
+      "artifact": "host-opt-s.exe",
+      "imports": [
+        "ADVAPI32.dll",
+        "KERNEL32.dll",
+        "VCRUNTIME140.dll",
+        "advapi32.dll",
+        "api-ms-win-core-synch-l1-2-0.dll",
+        "api-ms-win-crt-convert-l1-1-0.dll",
+        "api-ms-win-crt-environment-l1-1-0.dll",
+        "api-ms-win-crt-heap-l1-1-0.dll",
+        "api-ms-win-crt-locale-l1-1-0.dll",
+        "api-ms-win-crt-math-l1-1-0.dll",
+        "api-ms-win-crt-runtime-l1-1-0.dll",
+        "api-ms-win-crt-stdio-l1-1-0.dll",
+        "api-ms-win-crt-string-l1-1-0.dll",
+        "api-ms-win-crt-utility-l1-1-0.dll",
+        "bcrypt.dll",
+        "bcryptprimitives.dll",
+        "kernel32.dll",
+        "ntdll.dll",
+        "ws2_32.dll"
+      ]
+    }
+  ],
+  "consumer_sha256": {
+    "examples\\rust-integration\\Cargo.toml": "27d3029f625a8c451e3c61197d5af7bbff70ab7e4541f4fd299d4dbe24d589a8",
+    "examples\\rust-integration\\src\\main.rs": "e8247d0e645a994c7a3dfb9ea0ceeaa04e286488cf444006df67688baf900cc4"
+  },
+  "baseline_comparison": [
+    {
+      "mode": "ipc",
+      "opt_level": "3",
+      "growth_percent": 1.243
+    },
+    {
+      "mode": "ipc",
+      "opt_level": "s",
+      "growth_percent": 0.645
+    },
+    {
+      "mode": "ipc",
+      "opt_level": "z",
+      "growth_percent": -0.162
+    },
+    {
+      "mode": "embedded",
+      "opt_level": "3",
+      "growth_percent": 0.428
+    },
+    {
+      "mode": "embedded",
+      "opt_level": "s",
+      "growth_percent": 0.137
+    },
+    {
+      "mode": "embedded",
+      "opt_level": "z",
+      "growth_percent": 0.137
+    },
+    {
+      "mode": "network-client",
+      "opt_level": "3",
+      "growth_percent": 0.445
+    },
+    {
+      "mode": "network-client",
+      "opt_level": "s",
+      "growth_percent": 0.151
+    },
+    {
+      "mode": "network-client",
+      "opt_level": "z",
+      "growth_percent": 0.129
+    },
+    {
+      "mode": "host",
+      "opt_level": "s",
+      "growth_percent": -0.009
+    }
+  ],
+  "evidence": {
+    "workflow_run": "https://github.com/IggyGG/gcoms/actions/runs/35598613312",
+    "report_sha256": "7be24e475bb61035c115a80266b92109a573ec6ca9168175bcab4be306f60a0a",
+    "verified_source_files": 334,
+    "verified_binaries": 10,
+    "baseline": "../rust-integrations-20260921/windows-amd64.json"
+  }
+}

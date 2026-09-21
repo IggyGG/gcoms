@@ -1,0 +1,75 @@
+{
+  "schema": 1,
+  "platform": "android",
+  "fixtures": false,
+  "push": false,
+  "revision": "65fc089ba25fe137f578a956981a909c8a298599",
+  "rustc": "rustc 1.98.0 (88d9e12ae 2026-08-18)\nbinary: rustc\ncommit-hash: 88d9e12ae178fab0fb5cc050a94da85685d449ea\ncommit-date: 2026-08-18\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.0\nLLVM version: 22.1.8\n",
+  "crate_type": "cdylib",
+  "panic": "unwind",
+  "lto": true,
+  "codegen_units": 1,
+  "build_profile": "release",
+  "artifacts": [
+    {
+      "role": "relay",
+      "target": "aarch64-linux-android",
+      "opt_level": "3",
+      "kind": "shared_library",
+      "bytes": 13344760,
+      "sha256": "38a7a4ad571a896297a7430c4cb44f8739bd8e783f67edd23f4422bab99c89b5",
+      "artifact": "evidence/relay-aarch64-linux-android-opt-3.so"
+    },
+    {
+      "role": "relay",
+      "target": "x86_64-linux-android",
+      "opt_level": "3",
+      "kind": "shared_library",
+      "bytes": 15927416,
+      "sha256": "5d6083d5e6c0c6060b83a2e21b6ac81a36f4aa539395ad78c3ac5c6dd7a52f79",
+      "artifact": "evidence/relay-x86_64-linux-android-opt-3.so"
+    },
+    {
+      "role": "relay",
+      "target": "aarch64-linux-android",
+      "opt_level": "s",
+      "kind": "shared_library",
+      "bytes": 8831560,
+      "sha256": "04ab91217abc47bb57e6a6fe976b8ffec50de7a1bc5ff2d1754fd53dee0abdff",
+      "artifact": "evidence/relay-aarch64-linux-android-opt-s.so"
+    },
+    {
+      "role": "relay",
+      "target": "x86_64-linux-android",
+      "opt_level": "s",
+      "kind": "shared_library",
+      "bytes": 10118320,
+      "sha256": "1bd20c7cbc875ab10b135caf7f0b6232d100f663663d699393867f5af71e502d",
+      "artifact": "evidence/relay-x86_64-linux-android-opt-s.so"
+    },
+    {
+      "role": "relay",
+      "target": "aarch64-linux-android",
+      "opt_level": "z",
+      "kind": "shared_library",
+      "bytes": 7918608,
+      "sha256": "c8aa268ec213b083c7ccf5edcfe4c9188cdbd6b6e67528d585a4ddf131f82a55",
+      "artifact": "evidence/relay-aarch64-linux-android-opt-z.so"
+    },
+    {
+      "role": "relay",
+      "target": "x86_64-linux-android",
+      "opt_level": "z",
+      "kind": "shared_library",
+      "bytes": 9476016,
+      "sha256": "af252389386556fac33d65aa9080bd1242ae453956115dd5dec1363c852d356d",
+      "artifact": "evidence/relay-x86_64-linux-android-opt-z.so"
+    }
+  ],
+  "ndk": "Pkg.Desc = Android NDK\nPkg.Revision = 27.3.13750724\nPkg.BaseRevision = 27.3.13750724\nPkg.ReleaseName = r27d\n",
+  "evidence": {
+    "workflow_run": "https://github.com/IggyGG/gcoms/actions/runs/35606582546",
+    "native_report_sha256": "ef36a6890455d1a75e63ac2fc50c1df3964c6bfa68b4e714bb29b7b405a9bcd4",
+    "app_report_sha256": "63a0959fa14a294903b1f59c0c74e90bd734c059ec90c3efccf47d734e148d43"
+  }
+}

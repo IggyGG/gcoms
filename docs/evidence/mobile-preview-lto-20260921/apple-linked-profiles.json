@@ -1,0 +1,432 @@
+{
+  "schema": 1,
+  "status": "passed",
+  "selection": "z minimizes linked device and installed simulator app additions in every distribution; s slightly reduces ARM64 archive sizes",
+  "scope": "Same retained Rust native archives, identical Swift consumers and same Xcode/simulator environment per comparison",
+  "distributions": [
+    {
+      "schema": 1,
+      "role": "client",
+      "push": false,
+      "native_revision": "3a47609b448003cae6d7775cbaf7ebe1d3f5a05a",
+      "qualification_revision": "ea5e7ff8dfe8ad53e89c410916e6cfb9aab018bf",
+      "native_report_sha256": "b5b3e802d75fbf60760108fb324fbfc4109e19eda7b6620f6ee701674e7e45ed",
+      "profiles": {
+        "3": {
+          "schema": 1,
+          "role": "client",
+          "push": false,
+          "revision": "3a47609b448003cae6d7775cbaf7ebe1d3f5a05a",
+          "native_opt_level": "3",
+          "xcode": "Xcode 16.4\nBuild version 16F6",
+          "runtime": "com.apple.CoreSimulator.SimRuntime.iOS-26-2",
+          "simulator_arch": "arm64",
+          "deployment_postprocessing": true,
+          "delta": {
+            "installed_bundle_bytes": 11866922,
+            "unsigned_device_bundle_bytes": 11824170
+          },
+          "app_report_sha256": "123b0ea451b6cc8ee449f4936936905a022df8cc56f4fa15746a76b975a2e576",
+          "native_archives": {
+            "aarch64-apple-ios": {
+              "bytes": 19990264,
+              "sha256": "3381163d55ceb92828311183d13ae84f67dc355bd41343c1bf488618ecee7aa5"
+            },
+            "aarch64-apple-ios-sim": {
+              "bytes": 19961496,
+              "sha256": "7cf01fafaa9dd279fd40fbfe413054ed996ef76435e5e9ce3dc4f000a02212da"
+            },
+            "x86_64-apple-ios": {
+              "bytes": 21352448,
+              "sha256": "81c93019f7d37b5a13e6c854a306ced8f89988a19340eef473fea669628f0dbe"
+            }
+          }
+        },
+        "s": {
+          "schema": 1,
+          "role": "client",
+          "push": false,
+          "revision": "3a47609b448003cae6d7775cbaf7ebe1d3f5a05a",
+          "native_opt_level": "s",
+          "xcode": "Xcode 16.4\nBuild version 16F6",
+          "runtime": "com.apple.CoreSimulator.SimRuntime.iOS-26-2",
+          "simulator_arch": "arm64",
+          "deployment_postprocessing": true,
+          "delta": {
+            "installed_bundle_bytes": 8037818,
+            "unsigned_device_bundle_bytes": 8024746
+          },
+          "app_report_sha256": "fdde0ba16c420ca678e3f0f0ea0cac0e13e4b557e89ea514a724803fe3c9d245",
+          "native_archives": {
+            "aarch64-apple-ios": {
+              "bytes": 15341760,
+              "sha256": "b32b94fc80e524167f7ee02e4cb575cab27e321d97094699df720b151bf2f31e"
+            },
+            "aarch64-apple-ios-sim": {
+              "bytes": 15305416,
+              "sha256": "74172f5d588558db17a66b4ff0451ec7a4dec9134de813563238ccac5e639058"
+            },
+            "x86_64-apple-ios": {
+              "bytes": 15502304,
+              "sha256": "12c21694fe63360bd4d6b63bf631e6b789f241cb4b46185d6cddf43280192228"
+            }
+          }
+        },
+        "z": {
+          "schema": 1,
+          "role": "client",
+          "push": false,
+          "revision": "3a47609b448003cae6d7775cbaf7ebe1d3f5a05a",
+          "native_opt_level": "z",
+          "xcode": "Xcode 16.4\nBuild version 16F6",
+          "runtime": "com.apple.CoreSimulator.SimRuntime.iOS-26-2",
+          "simulator_arch": "arm64",
+          "deployment_postprocessing": true,
+          "delta": {
+            "installed_bundle_bytes": 6293306,
+            "unsigned_device_bundle_bytes": 6261058
+          },
+          "app_report_sha256": "fbfd1791108689ef9a0c3381c74112cec71f35432a8e29f5875e3743a9ae676a",
+          "native_archives": {
+            "aarch64-apple-ios": {
+              "bytes": 15483928,
+              "sha256": "055992edc8111bd3dda762635a8b3691db8ad66d761c30cd6298d60d20750279"
+            },
+            "aarch64-apple-ios-sim": {
+              "bytes": 15467120,
+              "sha256": "cc23dbc726f7de734154719f916609cf75332b7d2b28107c8095987a02fb340e"
+            },
+            "x86_64-apple-ios": {
+              "bytes": 14651608,
+              "sha256": "331efa50a186455652360cdfa8fc420c3d474be933bd0325f14ef32400f25c99"
+            }
+          }
+        }
+      },
+      "smallest_linked_profiles": {
+        "installed_bundle_bytes": "z",
+        "unsigned_device_bundle_bytes": "z"
+      },
+      "workflow_run": "https://github.com/IggyGG/gcoms/actions/runs/35619682506",
+      "comparison_report_sha256": "361ca0cf90684533b9f353738f18af52b758429818eac4238bb315cadb0f53c5"
+    },
+    {
+      "schema": 1,
+      "role": "relay",
+      "push": false,
+      "native_revision": "65fc089ba25fe137f578a956981a909c8a298599",
+      "qualification_revision": "ea5e7ff8dfe8ad53e89c410916e6cfb9aab018bf",
+      "native_report_sha256": "4a75c4f22484a6c980c813678c66e71551b61e25e00223f96d8457b7697bcb52",
+      "profiles": {
+        "3": {
+          "schema": 1,
+          "role": "relay",
+          "push": false,
+          "revision": "65fc089ba25fe137f578a956981a909c8a298599",
+          "native_opt_level": "3",
+          "xcode": "Xcode 16.4\nBuild version 16F6",
+          "runtime": "com.apple.CoreSimulator.SimRuntime.iOS-26-2",
+          "simulator_arch": "arm64",
+          "deployment_postprocessing": true,
+          "delta": {
+            "installed_bundle_bytes": 12826298,
+            "unsigned_device_bundle_bytes": 12792482
+          },
+          "app_report_sha256": "e9fcc8286e78716f9ab419505268ecf39bdea73f1686c8be1aaadb58f49fff96",
+          "native_archives": {
+            "aarch64-apple-ios": {
+              "bytes": 21334864,
+              "sha256": "3fd8bb4a6b25080a29d9600bacd449123abc78fe0261d97b89d655225365f504"
+            },
+            "aarch64-apple-ios-sim": {
+              "bytes": 21291128,
+              "sha256": "689111acb1011ef1b6e753cad078789bb76e42dbc61d6ad31c83614322ba6928"
+            },
+            "x86_64-apple-ios": {
+              "bytes": 22723104,
+              "sha256": "1ab3892b74ce8cdfb481b38d3fb36da2d8012cb173daa6fc822bd3ae39cce151"
+            }
+          }
+        },
+        "s": {
+          "schema": 1,
+          "role": "relay",
+          "push": false,
+          "revision": "65fc089ba25fe137f578a956981a909c8a298599",
+          "native_opt_level": "s",
+          "xcode": "Xcode 16.4\nBuild version 16F6",
+          "runtime": "com.apple.CoreSimulator.SimRuntime.iOS-26-2",
+          "simulator_arch": "arm64",
+          "deployment_postprocessing": true,
+          "delta": {
+            "installed_bundle_bytes": 8699818,
+            "unsigned_device_bundle_bytes": 8698050
+          },
+          "app_report_sha256": "5d130cf7a38b558d3006a558581e00a8fec3e5b8d20dd395ef764b90323cfc19",
+          "native_archives": {
+            "aarch64-apple-ios": {
+              "bytes": 16332712,
+              "sha256": "370d9192db3f4256ce6850d477d9a8427b153a0f96170d0d95017fd9276c1e62"
+            },
+            "aarch64-apple-ios-sim": {
+              "bytes": 16280912,
+              "sha256": "1b5f8fcbcb10a1ae6d4854125b9cc2c68e425a526e5a65c2565865200aabb348"
+            },
+            "x86_64-apple-ios": {
+              "bytes": 16489944,
+              "sha256": "fa4000b2bf234ab012844d1241281bf328c4d8defe67d1a2bd0118c5de58f189"
+            }
+          }
+        },
+        "z": {
+          "schema": 1,
+          "role": "relay",
+          "push": false,
+          "revision": "65fc089ba25fe137f578a956981a909c8a298599",
+          "native_opt_level": "z",
+          "xcode": "Xcode 16.4\nBuild version 16F6",
+          "runtime": "com.apple.CoreSimulator.SimRuntime.iOS-26-2",
+          "simulator_arch": "arm64",
+          "deployment_postprocessing": true,
+          "delta": {
+            "installed_bundle_bytes": 6775386,
+            "unsigned_device_bundle_bytes": 6755818
+          },
+          "app_report_sha256": "c732232714f922c7aa67888cab4c3b4a291c30e0ac636b989bcd15373ce26c59",
+          "native_archives": {
+            "aarch64-apple-ios": {
+              "bytes": 16445640,
+              "sha256": "2cd93f4aa47d3c285345fb3f35ec70b45d510106cf5b13234ec768ba1af8afc9"
+            },
+            "aarch64-apple-ios-sim": {
+              "bytes": 16417024,
+              "sha256": "ddcefe095d323c24ad811ae07a535b173bbe36df2bbb66fd7bb0f1b317f716d7"
+            },
+            "x86_64-apple-ios": {
+              "bytes": 15523456,
+              "sha256": "ee130627b6081d98dd4690c978bd40ae92d9a92d43b3d28d55f5952f5da9f260"
+            }
+          }
+        }
+      },
+      "smallest_linked_profiles": {
+        "installed_bundle_bytes": "z",
+        "unsigned_device_bundle_bytes": "z"
+      },
+      "workflow_run": "https://github.com/IggyGG/gcoms/actions/runs/35619688383",
+      "comparison_report_sha256": "5d284ecc44aefb2697f80716f96876b6f74ccdd48c6298c6c465bdd8680f9730"
+    },
+    {
+      "schema": 1,
+      "role": "client",
+      "push": true,
+      "native_revision": "3a47609b448003cae6d7775cbaf7ebe1d3f5a05a",
+      "qualification_revision": "ea5e7ff8dfe8ad53e89c410916e6cfb9aab018bf",
+      "native_report_sha256": "a583b157747608291004ae8bd7c64d7666eceb62223912592e4059cbdd811e4d",
+      "profiles": {
+        "3": {
+          "schema": 1,
+          "role": "client",
+          "push": true,
+          "revision": "3a47609b448003cae6d7775cbaf7ebe1d3f5a05a",
+          "native_opt_level": "3",
+          "xcode": "Xcode 16.4\nBuild version 16F6",
+          "runtime": "com.apple.CoreSimulator.SimRuntime.iOS-26-2",
+          "simulator_arch": "arm64",
+          "deployment_postprocessing": true,
+          "delta": {
+            "installed_bundle_bytes": 11928986,
+            "unsigned_device_bundle_bytes": 11902154
+          },
+          "app_report_sha256": "e71c3c47712e76e5ff961084e821d9cc456433d7696779c048f665e63e973e4d",
+          "native_archives": {
+            "aarch64-apple-ios": {
+              "bytes": 20009784,
+              "sha256": "05882a1bb83ed5dfcb486c0d911b8a02d9d2c6f49382f07db7d258894adc8e5d"
+            },
+            "aarch64-apple-ios-sim": {
+              "bytes": 19980592,
+              "sha256": "2d12a9e8802a045d08c2d651e33579de0be485c1e03d2b6bb8746213c72e03dc"
+            },
+            "x86_64-apple-ios": {
+              "bytes": 21373512,
+              "sha256": "3ce66a954ea3fb698a175f4b0194f4b10b48344e4951485a92c006e5f2fbcd25"
+            }
+          }
+        },
+        "s": {
+          "schema": 1,
+          "role": "client",
+          "push": true,
+          "revision": "3a47609b448003cae6d7775cbaf7ebe1d3f5a05a",
+          "native_opt_level": "s",
+          "xcode": "Xcode 16.4\nBuild version 16F6",
+          "runtime": "com.apple.CoreSimulator.SimRuntime.iOS-26-2",
+          "simulator_arch": "arm64",
+          "deployment_postprocessing": true,
+          "delta": {
+            "installed_bundle_bytes": 8099914,
+            "unsigned_device_bundle_bytes": 8086386
+          },
+          "app_report_sha256": "d3f09cdb4aaf935ec96fac52977714d87ec1c77d9ed6ef9ac8dceb0596dc073c",
+          "native_archives": {
+            "aarch64-apple-ios": {
+              "bytes": 15363280,
+              "sha256": "35366ba0d4973eac14a6f973fb9eab38bdc5464231a60ea8705c8e74941a3b31"
+            },
+            "aarch64-apple-ios-sim": {
+              "bytes": 15326720,
+              "sha256": "0ce543311174e1b3c3921540c24a9926ff9c4e4d7adbf0bbf24b4665fcd158bb"
+            },
+            "x86_64-apple-ios": {
+              "bytes": 15522672,
+              "sha256": "92c0b99255b301229a1ebc69657532f66bb9fed52fba4cf61238c041a45b9627"
+            }
+          }
+        },
+        "z": {
+          "schema": 1,
+          "role": "client",
+          "push": true,
+          "revision": "3a47609b448003cae6d7775cbaf7ebe1d3f5a05a",
+          "native_opt_level": "z",
+          "xcode": "Xcode 16.4\nBuild version 16F6",
+          "runtime": "com.apple.CoreSimulator.SimRuntime.iOS-26-2",
+          "simulator_arch": "arm64",
+          "deployment_postprocessing": true,
+          "delta": {
+            "installed_bundle_bytes": 6355450,
+            "unsigned_device_bundle_bytes": 6322730
+          },
+          "app_report_sha256": "a47bbb2e10218111f679134e68400b65f65f2b131261234b8d933f94dce786b1",
+          "native_archives": {
+            "aarch64-apple-ios": {
+              "bytes": 15502904,
+              "sha256": "510fb6593610e9b1730a8d5fe3b2aa15764f4e1855c87556df2ca7d79dfe1292"
+            },
+            "aarch64-apple-ios-sim": {
+              "bytes": 15484528,
+              "sha256": "9f3cdbbd2abb9b933c4f3b9eb14a7e4c7236bc421a307f2ced4c18f899c652bb"
+            },
+            "x86_64-apple-ios": {
+              "bytes": 14667048,
+              "sha256": "3d35a92ffc8948ecabf70dedf19d652f32935dd965ac4c1b48b5118bd086e17b"
+            }
+          }
+        }
+      },
+      "smallest_linked_profiles": {
+        "installed_bundle_bytes": "z",
+        "unsigned_device_bundle_bytes": "z"
+      },
+      "workflow_run": "https://github.com/IggyGG/gcoms/actions/runs/35619694011",
+      "comparison_report_sha256": "d396837ed08e2777c30f0bf75b3fa1998ae2964b71ed80c059f94360f1246fbd"
+    },
+    {
+      "schema": 1,
+      "role": "relay",
+      "push": true,
+      "native_revision": "65fc089ba25fe137f578a956981a909c8a298599",
+      "qualification_revision": "ea5e7ff8dfe8ad53e89c410916e6cfb9aab018bf",
+      "native_report_sha256": "ad0c28399a57f4749f3db337264a0ec2ce7afc342a7c6eccb9f532055dd4000c",
+      "profiles": {
+        "3": {
+          "schema": 1,
+          "role": "relay",
+          "push": true,
+          "revision": "65fc089ba25fe137f578a956981a909c8a298599",
+          "native_opt_level": "3",
+          "xcode": "Xcode 16.4\nBuild version 16F6",
+          "runtime": "com.apple.CoreSimulator.SimRuntime.iOS-26-2",
+          "simulator_arch": "arm64",
+          "deployment_postprocessing": true,
+          "delta": {
+            "installed_bundle_bytes": 12921466,
+            "unsigned_device_bundle_bytes": 12903314
+          },
+          "app_report_sha256": "610ee4ad5f2ae492a19c09663d6e5c0c71c8b18c3fe75ff42cb4d76584708723",
+          "native_archives": {
+            "aarch64-apple-ios": {
+              "bytes": 21406552,
+              "sha256": "1732ae21adb92a7cd28fa9b76bdd29608f9b5c1b0ffba1f4372e3a7af3e1cbed"
+            },
+            "aarch64-apple-ios-sim": {
+              "bytes": 21360768,
+              "sha256": "26269e73ec1537f40dec2cbac4b14a6a1bfc87b322ad65cd22a19f10c55f5831"
+            },
+            "x86_64-apple-ios": {
+              "bytes": 22805088,
+              "sha256": "5a0f3b9d0d83b60347adb3dc33fef92fdca652109686d4cb1c275e291159c963"
+            }
+          }
+        },
+        "s": {
+          "schema": 1,
+          "role": "relay",
+          "push": true,
+          "revision": "65fc089ba25fe137f578a956981a909c8a298599",
+          "native_opt_level": "s",
+          "xcode": "Xcode 16.4\nBuild version 16F6",
+          "runtime": "com.apple.CoreSimulator.SimRuntime.iOS-26-2",
+          "simulator_arch": "arm64",
+          "deployment_postprocessing": true,
+          "delta": {
+            "installed_bundle_bytes": 8795018,
+            "unsigned_device_bundle_bytes": 8808922
+          },
+          "app_report_sha256": "3940ae7274c97ff52a984e6d80f9a83c2fd54e1d72efc8be911cf8987817c83f",
+          "native_archives": {
+            "aarch64-apple-ios": {
+              "bytes": 16396616,
+              "sha256": "799b324356a94ab48f095993e7bd77c8e9d924f4b4f5135c8442c6a106516958"
+            },
+            "aarch64-apple-ios-sim": {
+              "bytes": 16341864,
+              "sha256": "2489dceed6d3b3b06d6342ccbbe52dac2a455a0fd07c5e0f8c690de7c22c6de1"
+            },
+            "x86_64-apple-ios": {
+              "bytes": 16553392,
+              "sha256": "d051d0292b6880d21b8a73aaaa7d9d3407b6d397796dab6bc9301e2badf9d3ac"
+            }
+          }
+        },
+        "z": {
+          "schema": 1,
+          "role": "relay",
+          "push": true,
+          "revision": "65fc089ba25fe137f578a956981a909c8a298599",
+          "native_opt_level": "z",
+          "xcode": "Xcode 16.4\nBuild version 16F6",
+          "runtime": "com.apple.CoreSimulator.SimRuntime.iOS-26-2",
+          "simulator_arch": "arm64",
+          "deployment_postprocessing": true,
+          "delta": {
+            "installed_bundle_bytes": 6870698,
+            "unsigned_device_bundle_bytes": 6850450
+          },
+          "app_report_sha256": "fa21274fdbbf32129ecad672a34b4523a3e5c81241cdb884c84871bf5217f5ae",
+          "native_archives": {
+            "aarch64-apple-ios": {
+              "bytes": 16507408,
+              "sha256": "529463a849a107380f110d666ce9be9787ef3e96cf0d3504d5dc3e2f1d243c61"
+            },
+            "aarch64-apple-ios-sim": {
+              "bytes": 16481104,
+              "sha256": "09e343ff94c13dac1bb6c3a5ed1454423d6d41fa1ea68c658dd9d83ea2d3a1b9"
+            },
+            "x86_64-apple-ios": {
+              "bytes": 15579200,
+              "sha256": "380eb7e56aa3d6054e9eefd36719ed812b1e075249953bc5b1394ff5cd7620c6"
+            }
+          }
+        }
+      },
+      "smallest_linked_profiles": {
+        "installed_bundle_bytes": "z",
+        "unsigned_device_bundle_bytes": "z"
+      },
+      "workflow_run": "https://github.com/IggyGG/gcoms/actions/runs/35619699646",
+      "comparison_report_sha256": "cbfaacb472f8b9cc11a063d2432dda8d9e9758b05aebb242d8537c35e4d74080"
+    }
+  ]
+}

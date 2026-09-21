@@ -9,7 +9,10 @@ version.workspace = true
 publish.workspace = true
 
 [features]
-default = []
+default = ["relay-host"]
+relay-host = ["gcoms-node/relay-host"]
+push-notifications = ["gcoms-node/push-notifications"]
+push-gateway = ["push-notifications", "relay-host", "gcoms-node/push-gateway"]
 files = ["dep:gcoms-file-transfer", "dep:sha2"]
 gc2-carrier = ["gcoms-node/experimental-gc2", "gcoms-network-client/experimental-gc2"]
 
@@ -18,7 +21,7 @@ gcoms-file-transfer = { version = "0.1.0", path = "../file-transfer", optional =
 sha2 = { version = "0.10", optional = true }
 gcoms-core = { version = "0.1.0", path = "../core" }
 gcoms-node = { version = "0.1.0", path = "../node", default-features = false, features = ["client-persist"] }
-gcoms-sdk = { version = "0.1.0", path = "../sdk", default-features = false, features = ["embedded"] }
+gcoms-sdk = { version = "0.1.0", path = "../sdk", default-features = false, features = ["in-process"] }
 gcoms-network-client = { version = "0.1.0", path = "../network-client" }
 gcoms-routing = { version = "0.1.0", path = "../routing" }
 gcoms-transport = { version = "0.1.0", path = "../transport" }
