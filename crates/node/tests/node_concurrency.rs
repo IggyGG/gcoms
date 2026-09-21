@@ -102,7 +102,9 @@ async fn current_info_stays_responsive_while_admissions_and_sends_are_in_flight(
         });
     }
 
-    prepared.wait().await;
+    tokio::time::timeout(std::time::Duration::from_secs(30), prepared.wait())
+        .await
+        .expect("all concurrent join packages must be prepared");
     for i in 0..4u8 {
         let owner = owner.clone();
         tasks.spawn(async move {
