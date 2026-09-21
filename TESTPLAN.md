@@ -20,6 +20,8 @@ do not establish physical-device or live-provider qualification.
   sizes cannot establish production baselines.
   Generate SDK and optional FCM POM/module metadata with `gcomsPublishRole` set
   to the tested role and verify that the FCM dependency names that role's SDK.
+  Check APK ZIP offsets as well as ELF alignment: each native entry must be
+  uncompressed and aligned to 16 KiB so installed APK bytes include native code.
 - Keep the public startup future below 16 KiB and run GChat's complete channel
   journey on the default thread stack, including restored post-quantum identity.
   Native desktop CI compares 3/s/z results with the committed platform baselines

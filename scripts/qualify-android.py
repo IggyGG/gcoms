@@ -5,6 +5,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import struct
 import subprocess
 import zipfile
 
@@ -23,10 +24,31 @@ def capture(args):
 def archive(path):
     with zipfile.ZipFile(path) as content:
         entries = content.infolist()
+        native_entries = []
+        if path.suffix == ".apk":
+            with path.open("rb") as raw:
+                for item in entries:
+                    if not item.filename.endswith(".so"):
+                        continue
+                    raw.seek(item.header_offset + 26)
+                    name_bytes, extra_bytes = struct.unpack("<HH", raw.read(4))
+                    offset = item.header_offset + 30 + name_bytes + extra_bytes
+                    if item.compress_type != zipfile.ZIP_STORED or offset % 16384:
+                        raise RuntimeError("Release APK native library is not uncompressed and 16 KiB aligned: " + item.filename)
+                    native_entries.append({"path": item.filename, "offset": offset,
+                        "sha256": hashlib.sha256(content.read(item)).hexdigest()})
         return {"bytes": path.stat().st_size, "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
             "uncompressed_bytes": sum(i.file_size for i in entries),
             "native_bytes": sum(i.file_size for i in entries if i.filename.endswith(".so")),
-            "dex_bytes": sum(i.file_size for i in entries if i.filename.endswith(".dex"))}
+            "dex_bytes": sum(i.file_size for i in entries if i.filename.endswith(".dex")),
+            "native_entries": native_entries}
+
+
+def packaging_sources():
+    names = subprocess.check_output(["git", "ls-files", "-z", "--cached", "--others",
+        "--exclude-standard", "--", "mobile/android", "scripts/qualify-android.py"], cwd=ROOT).decode().split("\0")
+    return {name: hashlib.sha256((ROOT / name).read_bytes()).hexdigest()
+        for name in sorted(set(names)) if name and (ROOT / name).is_file()}
 
 
 def main():
@@ -39,6 +61,7 @@ def main():
     args = parser.parse_args()
     native = args.native_root.resolve()
     summary = json.loads((native / "summary.json").read_text())
+    sources = packaging_sources()
     if summary["fixtures"]:
         raise RuntimeError("Fixture packages cannot establish release sizes")
     push = summary.get("push", False)
@@ -63,6 +86,8 @@ def main():
     if page_size != 16384:
         raise RuntimeError("Qualification requires the 16 KiB emulator")
     report = {"schema": 1, "role": args.role, "push": push, "revision": summary["revision"],
+        "packaging_revision": capture(["git", "-C", ROOT, "rev-parse", "HEAD"]),
+        "packaging_source_sha256": sources,
         "ndk": summary["ndk"], "rustc": summary["rustc"], "page_size": page_size,
         "android": capture(adb_args + ["shell", "getprop", "ro.build.fingerprint"]), "apps": {}}
     import shutil
@@ -104,6 +129,8 @@ def main():
         for abi, item in report["delta"].items():
             if item["bytes"] > previous["delta"][abi]["bytes"] * 1.05:
                 raise RuntimeError("Sample APK delta exceeds the 5 percent gate")
+    if packaging_sources() != sources:
+        raise RuntimeError("Android packaging sources changed during qualification; rerun against settled inputs")
     (evidence / "summary.json").write_text(json.dumps(report, indent=2) + "\n")
     print(json.dumps(report["delta"], indent=2))
 
