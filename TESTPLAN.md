@@ -1,3 +1,11 @@
+# Client bootstrap API follow-up
+
+Test the trusted client bundle API through the Node command loop: fresh carrier
+seeds install, malformed/mixed-expired bundles leave the directory unchanged,
+relay advertisement seeds are untouched, and non-GC/2 nodes refuse installation.
+The deployed-relay probe requires explicit `--ignored` plus independently authorized
+live provisioning; it is excluded from ordinary local/native CI.
+
 # Combined SDK and release-branch boundary
 
 Validate the exact combined source with application feature variants, the outbound

@@ -1,3 +1,11 @@
+# Concurrent bootstrap integration
+
+The subsequent `a5c3b6b` main-line change adds trusted client-side GC/2 bundle
+installation without publishing those seeds through the relay service. The merge
+preserves the completed SDK/release fixes. Local API and rejection coverage is
+being validated; the deployed-relay provisioning probe is retained as explicitly
+ignored opt-in work and is not run by ordinary CI or this integration.
+
 # GChat release integration follow-up
 
 The 2026-09-21 fleet integration combines SDK handoff `4fd466b` with the

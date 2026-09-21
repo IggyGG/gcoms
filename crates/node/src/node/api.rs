@@ -75,6 +75,11 @@ pub enum Cmd {
         bundle: gcoms_routing::bootstrap::BootstrapBundle,
         done: tokio::sync::oneshot::Sender<Result<(), String>>,
     },
+    #[cfg(feature = "experimental-gc2")]
+    InstallGc2Bootstrap {
+        bytes: Vec<u8>,
+        done: tokio::sync::oneshot::Sender<Result<usize, String>>,
+    },
     InstallInboxRelay {
         relay: Box<NodeInfo>,
         done: tokio::sync::oneshot::Sender<Result<(), String>>,
@@ -642,6 +647,20 @@ impl NodeHandle {
                 .map_err(|e| e.to_string())?;
         }
         Ok(())
+    }
+
+    /// Install trusted GC/2 introductions fetched over an authenticated HTTPS
+    /// bootstrap channel as directory seeds for the carrier profile. This is
+    /// the client-side path; it seeds only the carrier directory, never the
+    /// relay service.
+    #[cfg(feature = "experimental-gc2")]
+    pub async fn install_gc2_bootstrap(&self, bytes: Vec<u8>) -> Result<usize, String> {
+        let (done, receive) = tokio::sync::oneshot::channel();
+        self.cmd_tx
+            .send(Cmd::InstallGc2Bootstrap { bytes, done })
+            .await
+            .map_err(|e| e.to_string())?;
+        receive.await.map_err(|e| e.to_string())?
     }
 
     /// The socket actually owned by this runtime, including an OS-assigned port.
