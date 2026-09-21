@@ -26,6 +26,9 @@ std = ["gcoms-core/std", "gcoms-crypto/std", "sha2/std"]
 
 # Unqualified wire codecs; production runtime selection remains GC/1.
 experimental-gc2 = ["gcoms-core/experimental-gc2", "dep:aes-gcm", "dep:hkdf", "dep:rand_core", "dep:zeroize"]
+# Authenticated peer sessions with caller-owned clocks, entropy and storage.
+# The installer can use the same transactional session without a std runtime.
+gc2-session = ["experimental-gc2", "gcoms-crypto/sealed-state"]
 
 [dev-dependencies]
 rand = "0.8"

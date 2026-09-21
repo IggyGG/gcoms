@@ -1,7 +1,9 @@
 //! Transaction boundary between GC/2 credit and the existing hybrid ratchet.
 use super::{Error, Record, Window, CREDIT_BYTES};
 use alloc::{sync::Arc, vec::Vec};
-use gcoms_crypto::{CryptoError, Frame, SealedSession, Session, SessionContext};
+use core::time::Duration;
+use gcoms_crypto::{CryptoError, Frame, SealedSession, Session, SessionContext, SessionTime};
+use rand_core::{CryptoRng, RngCore};
 use zeroize::Zeroizing;
 
 #[derive(Debug)]
@@ -63,14 +65,43 @@ impl CreditedSession {
     /// `private_flow` must already be authenticated by the containing archive.
     /// Bind `context` to the peer and GC/2 session tag, and persist both inputs
     /// atomically. Restoring also invalidates every earlier prepared transaction.
+    #[cfg(feature = "std")]
     pub fn restore(
         sealed: &SealedSession,
         private_flow: &[u8],
         wrapping_key: &[u8; 32],
         context: &SessionContext,
     ) -> Result<Self, SessionError> {
+        Self::restore_at(
+            sealed,
+            private_flow,
+            wrapping_key,
+            context,
+            std::time::Instant::now(),
+            Duration::ZERO,
+            &mut rand_core::OsRng,
+        )
+    }
+
+    pub fn restore_at(
+        sealed: &SealedSession,
+        private_flow: &[u8],
+        wrapping_key: &[u8; 32],
+        context: &SessionContext,
+        now: SessionTime,
+        offline: Duration,
+        entropy: &mut (impl RngCore + CryptoRng),
+    ) -> Result<Self, SessionError> {
         Self::from_authenticated(
-            Session::open_state(sealed, wrapping_key, context)?,
+            Session::open_state_with_attachment_at(
+                sealed,
+                wrapping_key,
+                context,
+                now,
+                offline,
+                entropy,
+            )?
+            .0,
             Window::decode_private(private_flow)?,
         )
     }
@@ -91,14 +122,33 @@ impl CreditedSession {
         Ok(())
     }
 
+    #[cfg(feature = "std")]
     pub fn seal_ratchet(
         &self,
         wrapping_key: &[u8; 32],
         context: &SessionContext,
     ) -> Result<SealedSession, SessionError> {
-        Ok(self.ratchet.seal_state(wrapping_key, context)?)
+        self.seal_ratchet_at(
+            wrapping_key,
+            context,
+            std::time::Instant::now(),
+            &mut rand_core::OsRng,
+        )
     }
 
+    pub fn seal_ratchet_at(
+        &self,
+        wrapping_key: &[u8; 32],
+        context: &SessionContext,
+        now: SessionTime,
+        entropy: &mut (impl RngCore + CryptoRng),
+    ) -> Result<SealedSession, SessionError> {
+        Ok(self
+            .ratchet
+            .seal_state_with_attachment_at(wrapping_key, context, &[], now, entropy)?)
+    }
+
+    #[cfg(feature = "std")]
     pub fn prepare_send(
         &self,
         record: &Record,
@@ -106,12 +156,32 @@ impl CreditedSession {
         wrapping_key: &[u8; 32],
         context: &SessionContext,
     ) -> Result<PreparedSend, SessionError> {
-        self.prepare_send_inner(record, now_unix, wrapping_key, context, false)
+        self.prepare_send_at(
+            record,
+            now_unix,
+            wrapping_key,
+            context,
+            std::time::Instant::now(),
+            &mut rand_core::OsRng,
+        )
+    }
+
+    pub fn prepare_send_at(
+        &self,
+        record: &Record,
+        now_unix: u64,
+        wrapping_key: &[u8; 32],
+        context: &SessionContext,
+        now: SessionTime,
+        entropy: &mut (impl RngCore + CryptoRng),
+    ) -> Result<PreparedSend, SessionError> {
+        self.prepare_send_inner(record, now_unix, wrapping_key, context, false, now, entropy)
     }
 
     /// Keep retry ciphertext in RAM without writing it to a private archive.
     /// A restored missing counter requires authenticated recovery, unless peer
     /// credit proves it arrived. First moves and control records stay durable.
+    #[cfg(feature = "std")]
     pub fn prepare_volatile_send(
         &self,
         record: &Record,
@@ -119,12 +189,32 @@ impl CreditedSession {
         wrapping_key: &[u8; 32],
         context: &SessionContext,
     ) -> Result<PreparedSend, SessionError> {
+        self.prepare_volatile_send_at(
+            record,
+            now_unix,
+            wrapping_key,
+            context,
+            std::time::Instant::now(),
+            &mut rand_core::OsRng,
+        )
+    }
+
+    pub fn prepare_volatile_send_at(
+        &self,
+        record: &Record,
+        now_unix: u64,
+        wrapping_key: &[u8; 32],
+        context: &SessionContext,
+        now: SessionTime,
+        entropy: &mut (impl RngCore + CryptoRng),
+    ) -> Result<PreparedSend, SessionError> {
         if record.purpose() == super::Purpose::Control {
             return Err(Error::State.into());
         }
-        self.prepare_send_inner(record, now_unix, wrapping_key, context, true)
+        self.prepare_send_inner(record, now_unix, wrapping_key, context, true, now, entropy)
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn prepare_send_inner(
         &self,
         record: &Record,
@@ -132,14 +222,21 @@ impl CreditedSession {
         wrapping_key: &[u8; 32],
         context: &SessionContext,
         volatile: bool,
+        now: SessionTime,
+        entropy: &mut (impl RngCore + CryptoRng),
     ) -> Result<PreparedSend, SessionError> {
         if self.window.recovery_required(now_unix) {
             return Err(SessionError::RecoveryRequired);
         }
         let counter = self.window.next_counter(record.purpose())?;
-        let prepared = self
-            .ratchet
-            .prepare_send(&record.encode(), wrapping_key, context)?;
+        let prepared = self.ratchet.prepare_send_with_attachment_at(
+            &record.encode(),
+            wrapping_key,
+            context,
+            &[],
+            now,
+            entropy,
+        )?;
         let mut window = self.window.clone();
         let packet = crate::gc2_session::encode_frame_bytes(window.session(), prepared.wire())?;
         window.record_sent(counter, &packet, record, now_unix)?;
@@ -163,11 +260,29 @@ impl CreditedSession {
         Ok(())
     }
 
+    #[cfg(feature = "std")]
     pub fn prepare_receive(
         &self,
         frame: &Frame,
         wrapping_key: &[u8; 32],
         context: &SessionContext,
+    ) -> Result<PreparedReceive, SessionError> {
+        self.prepare_receive_at(
+            frame,
+            wrapping_key,
+            context,
+            std::time::Instant::now(),
+            &mut rand_core::OsRng,
+        )
+    }
+
+    pub fn prepare_receive_at(
+        &self,
+        frame: &Frame,
+        wrapping_key: &[u8; 32],
+        context: &SessionContext,
+        now: SessionTime,
+        entropy: &mut (impl RngCore + CryptoRng),
     ) -> Result<PreparedReceive, SessionError> {
         crate::gc2_session::validate_frame(frame)?;
         let packet = crate::gc2_session::encode_frame(self.window.session(), frame)?;
@@ -175,7 +290,9 @@ impl CreditedSession {
         let (ratchet, record) = if window.received.contains(frame.ctr) {
             (None, None)
         } else {
-            let prepared = self.ratchet.prepare_receive(frame, wrapping_key, context)?;
+            let prepared =
+                self.ratchet
+                    .prepare_receive_at(frame, wrapping_key, context, now, entropy)?;
             let record = Record::decode(prepared.plaintext())?;
             window.record_authenticated(frame.ctr, &packet, &record)?;
             (Some(prepared), Some(record))
@@ -205,22 +322,48 @@ impl CreditedSession {
     /// Stage a post-receive session for an application ACK in the same archive
     /// transaction. Committing this receive installs the exact revision used by
     /// that ACK. A restored or unrelated session cannot reuse either operation.
+    #[cfg(feature = "std")]
     pub fn stage_received(
         &self,
         prepared: &PreparedReceive,
         wrapping_key: &[u8; 32],
         context: &SessionContext,
     ) -> Result<Self, SessionError> {
+        self.stage_received_at(
+            prepared,
+            wrapping_key,
+            context,
+            std::time::Instant::now(),
+            &mut rand_core::OsRng,
+        )
+    }
+
+    pub fn stage_received_at(
+        &self,
+        prepared: &PreparedReceive,
+        wrapping_key: &[u8; 32],
+        context: &SessionContext,
+        now: SessionTime,
+        entropy: &mut (impl RngCore + CryptoRng),
+    ) -> Result<Self, SessionError> {
         self.check_revision(&prepared.revision)?;
         let current;
         let sealed = match prepared.sealed_ratchet() {
             Some(sealed) => sealed,
             None => {
-                current = self.seal_ratchet(wrapping_key, context)?;
+                current = self.seal_ratchet_at(wrapping_key, context, now, entropy)?;
                 &current
             }
         };
-        let ratchet = Session::open_state(sealed, wrapping_key, context)?;
+        let ratchet = Session::open_state_with_attachment_at(
+            sealed,
+            wrapping_key,
+            context,
+            now,
+            Duration::ZERO,
+            entropy,
+        )?
+        .0;
         Ok(Self {
             ratchet,
             window: prepared.window.clone(),

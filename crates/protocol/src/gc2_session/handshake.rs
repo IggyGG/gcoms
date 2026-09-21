@@ -3,7 +3,7 @@ use crate::{
     flow::{CreditedSession, Purpose, Record, SessionError, Window},
     proto::NodeInfo,
 };
-use gcoms_crypto::{Bundle, CryptoError, IdentityKeypair, LocalSecrets};
+use gcoms_crypto::{Bundle, CryptoError, IdentityKeypair, LocalSecrets, SessionTime};
 use rand_core::{CryptoRng, RngCore};
 use zeroize::Zeroizing;
 
@@ -64,6 +64,7 @@ fn bundle(info: &NodeInfo, now: u64) -> Result<Bundle, SessionError> {
     Ok(bundle)
 }
 
+#[cfg(feature = "std")]
 pub fn initiate(
     identity: &IdentityKeypair,
     own: &NodeInfo,
@@ -72,11 +73,32 @@ pub fn initiate(
     now: u64,
     entropy: &mut (impl RngCore + CryptoRng),
 ) -> Result<Initiated, SessionError> {
-    initiate_generation(identity, own, secrets, peer, 1, now, entropy)
+    initiate_at(
+        identity,
+        own,
+        secrets,
+        peer,
+        now,
+        std::time::Instant::now(),
+        entropy,
+    )
+}
+
+pub fn initiate_at(
+    identity: &IdentityKeypair,
+    own: &NodeInfo,
+    secrets: &LocalSecrets,
+    peer: &NodeInfo,
+    now: u64,
+    monotonic: SessionTime,
+    entropy: &mut (impl RngCore + CryptoRng),
+) -> Result<Initiated, SessionError> {
+    initiate_generation(identity, own, secrets, peer, 1, now, monotonic, entropy)
 }
 
 /// Explicit identity-authenticated recovery. The caller persists this candidate
 /// before sending and must never roll back its peer's emitted generation.
+#[cfg(feature = "std")]
 pub fn initiate_recovery(
     identity: &IdentityKeypair,
     own: &NodeInfo,
@@ -86,12 +108,38 @@ pub fn initiate_recovery(
     now: u64,
     entropy: &mut (impl RngCore + CryptoRng),
 ) -> Result<Initiated, SessionError> {
+    initiate_recovery_at(
+        identity,
+        own,
+        secrets,
+        peer,
+        generation,
+        now,
+        std::time::Instant::now(),
+        entropy,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn initiate_recovery_at(
+    identity: &IdentityKeypair,
+    own: &NodeInfo,
+    secrets: &LocalSecrets,
+    peer: &NodeInfo,
+    generation: u64,
+    now: u64,
+    monotonic: SessionTime,
+    entropy: &mut (impl RngCore + CryptoRng),
+) -> Result<Initiated, SessionError> {
     if generation < 2 {
         return Err(Error::State.into());
     }
-    initiate_generation(identity, own, secrets, peer, generation, now, entropy)
+    initiate_generation(
+        identity, own, secrets, peer, generation, now, monotonic, entropy,
+    )
 }
 
+#[allow(clippy::too_many_arguments)]
 fn initiate_generation(
     identity: &IdentityKeypair,
     own: &NodeInfo,
@@ -99,6 +147,7 @@ fn initiate_generation(
     peer: &NodeInfo,
     generation: u64,
     now: u64,
+    monotonic: SessionTime,
     entropy: &mut (impl RngCore + CryptoRng),
 ) -> Result<Initiated, SessionError> {
     if identity.public_bytes() != own.identity_pk || own.identity_pk == peer.identity_pk {
@@ -132,7 +181,7 @@ fn initiate_generation(
         &remote,
         &record.encode(),
         entropy,
-        std::time::Instant::now(),
+        monotonic,
     )?;
     ratchet.provide_local_kem(secrets.kem_decapsulation_key());
     let packet = encode_first_move(&tag, &first)?;
@@ -144,16 +193,35 @@ fn initiate_generation(
     })
 }
 
+#[cfg(feature = "std")]
 pub fn accept(
     packet: &Packet<'_>,
     own: &NodeInfo,
     secrets: &LocalSecrets,
     now: u64,
 ) -> Result<Accepted, SessionError> {
+    accept_at(
+        packet,
+        own,
+        secrets,
+        now,
+        std::time::Instant::now(),
+        &mut rand_core::OsRng,
+    )
+}
+
+pub fn accept_at(
+    packet: &Packet<'_>,
+    own: &NodeInfo,
+    secrets: &LocalSecrets,
+    now: u64,
+    monotonic: SessionTime,
+    entropy: &mut (impl RngCore + CryptoRng),
+) -> Result<Accepted, SessionError> {
     let own_bundle = bundle(own, now)?;
     check_secrets(&own_bundle, secrets)?;
     let first = packet.first_move()?;
-    let (plain, mut ratchet) = secrets.accept(&first)?;
+    let (plain, mut ratchet) = secrets.accept_with_rng_at(&first, entropy, monotonic)?;
     let plain = Zeroizing::new(plain);
     let (signed, signature) =
         gcoms_crypto::split_authenticated_payload(&plain).ok_or(CryptoError::BadEncoding)?;
