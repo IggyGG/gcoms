@@ -21,3 +21,12 @@ Optional `push-notifications` adds owner-authenticated inbox bindings.
 transport to one operator-configured endpoint. Neither is enabled by default.
 Client push bindings do not pull in the relay HTTP gateway. See the
 [app-operated push contract](../../mobile/push/README.md).
+
+
+Trusted GC/2 bootstrap bytes can be installed asynchronously with
+`NodeHandle::install_gc2_bootstrap`. The caller must obtain them through its
+already authenticated bootstrap channel. This method validates the complete
+fresh bundle and seeds only the client carrier directory; it does not fetch a
+provider, publish the seeds through the relay service or select a different
+protocol. Non-GC/2 nodes refuse it. The deployed-relay diagnostic is an explicitly
+ignored live provisioning test and requires separate authorization to run.

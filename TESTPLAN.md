@@ -6,6 +6,11 @@ relay advertisement seeds are untouched, and non-GC/2 nodes refuse installation.
 The deployed-relay probe requires explicit `--ignored` plus independently authorized
 live provisioning; it is excluded from ordinary local/native CI.
 
+Completed on `1decc33`: four local tests passed; the live probe was reported ignored
+without execution. No-host client compilation, all-target/all-feature node Clippy,
+formatting, source/provenance and diff checks passed on unchanged frozen sources.
+[Exact receipt](docs/evidence/client-bootstrap-release-integration-20260921/summary.json).
+
 # Combined SDK and release-branch boundary
 
 Validate the exact combined source with application feature variants, the outbound

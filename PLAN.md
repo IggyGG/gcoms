@@ -2,9 +2,11 @@
 
 The subsequent `a5c3b6b` main-line change adds trusted client-side GC/2 bundle
 installation without publishing those seeds through the relay service. The merge
-preserves the completed SDK/release fixes. Local API and rejection coverage is
-being validated; the deployed-relay provisioning probe is retained as explicitly
-ignored opt-in work and is not run by ordinary CI or this integration.
+preserves the completed SDK/release fixes. Exact merged source `1decc33` passed
+four local helper/Node API cases, no-host compilation and strict node Clippy,
+with unchanged sources. The deployed-relay provisioning probe is retained as
+explicitly ignored opt-in work; its default exclusion was verified without running
+it. [Focused evidence](docs/evidence/client-bootstrap-release-integration-20260921/summary.json).
 
 # GChat release integration follow-up
 

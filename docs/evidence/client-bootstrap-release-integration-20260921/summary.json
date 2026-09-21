@@ -1,0 +1,107 @@
+{
+  "schema": 1,
+  "date": "2026-09-21",
+  "status": "passed",
+  "scope": "focused local client-bootstrap integration, no deployed relay probe",
+  "revision": "1decc33e695cc2336906bb80da96b69df8d39367",
+  "tree": "55b0d2463b95b1d78b3ba0190d8a643b5fc0a78d",
+  "tracked_files": 664,
+  "snapshot_sha256": "0e090156896ce0910be0add92b1d72a0c0cde06f5b998de6d9e0b03602fde887",
+  "parents": [
+    "d3262f558851ded8b3ca968d314348f2b3b4861a",
+    "a5c3b6bab325feb33efeb633ea63231ad7beaa4c"
+  ],
+  "prior_combined_source_receipt": "../sdk-release-integration-20260921/summary.json",
+  "source_unchanged": true,
+  "live_probe_executed": false,
+  "checks": [
+    {
+      "name": "source",
+      "exit_code": 0,
+      "seconds": 0.06478571891784668,
+      "log": "source.log",
+      "sha256": "f79cd0baeeb8e7836b9ab8cf83f62d71fd745e9046db84fca3a20241ccb14f0b"
+    },
+    {
+      "name": "research",
+      "exit_code": 0,
+      "seconds": 0.02259659767150879,
+      "log": "research.log",
+      "sha256": "a90ef00a9392ea130dee6807cd368d2a76fc0d0e5ea87e43aca0ccc3c723f8e4"
+    },
+    {
+      "name": "fmt",
+      "exit_code": 0,
+      "seconds": 1.6786015033721924,
+      "log": "fmt.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "bootstrap-helper",
+      "exit_code": 0,
+      "seconds": 92.31609797477722,
+      "log": "bootstrap-helper.log",
+      "sha256": "38fa8cf356b45a25812845936f0334c88e16175e146e5dca848077abdbb5803b",
+      "rust_counts": {
+        "passed": 2,
+        "failed": 0,
+        "ignored": 0
+      }
+    },
+    {
+      "name": "bootstrap-command",
+      "exit_code": 0,
+      "seconds": 0.5481388568878174,
+      "log": "bootstrap-command.log",
+      "sha256": "f0aa93353d449e4f7dc1b3ce420c4dfa78b5c3e10d6ce627f6b464eca09ebb16",
+      "rust_counts": {
+        "passed": 2,
+        "failed": 0,
+        "ignored": 0
+      }
+    },
+    {
+      "name": "probe-default-exclusion",
+      "exit_code": 0,
+      "seconds": 0.38669776916503906,
+      "log": "probe-default-exclusion.log",
+      "sha256": "332db3a8cfc8afb07d7a0493592b55faf38a0daa0f1820594a670b85eed30c76",
+      "rust_counts": {
+        "passed": 0,
+        "failed": 0,
+        "ignored": 1
+      }
+    },
+    {
+      "name": "client-no-host",
+      "exit_code": 0,
+      "seconds": 29.888391971588135,
+      "log": "client-no-host.log",
+      "sha256": "0289b2267deaeb5f24ed6565c867c7a7d0c05cf9a71bf14acad0441089d6f79f"
+    },
+    {
+      "name": "node-clippy",
+      "exit_code": 0,
+      "seconds": 13.990846157073975,
+      "log": "node-clippy.log",
+      "sha256": "7437648548892474b46988af7a15a45c6d09721371e752f7e135e787c0407b95"
+    },
+    {
+      "name": "diff",
+      "exit_code": 0,
+      "seconds": 0.02082991600036621,
+      "log": "diff.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ],
+  "limits": [
+    "Focused local follow-up; not a repeat of the prior full application/node/GChat consumer run.",
+    "The deployed relay provisioning test remains explicitly ignored, and no live network or provider was contacted.",
+    "No native application artifacts were rebuilt or released; existing Windows/Intel/iOS frozen jobs and refs remain unchanged."
+  ],
+  "retained_evidence": {
+    "summary.json": "e21c6e0148a431257522d23cef4986d1ed10f9eb09dff35023e1b74cfd00902f",
+    "before.json": "244f0f00245fe9a8c6a0c736a200bf243033f1bfc4cb057c3bc824b5b83dc928",
+    "validate.py": "061f0d223b7666391e412f6045cc78ced9b44d0777cf4989af627988d78bf849"
+  }
+}
