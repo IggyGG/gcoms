@@ -22,28 +22,35 @@ def digest(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def source_hashes():
+    names = subprocess.check_output(['git', 'ls-files', '-z', '--cached', '--others', '--exclude-standard'], cwd=ROOT).decode().split('\0')
+    return {name: digest(ROOT / name) for name in sorted(set(names)) if name and
+        (ROOT / name).is_file() and (name.startswith(('mobile/', 'crates/', 'scripts/qualify-')) or
+        name in ('Cargo.toml', 'Cargo.lock', 'scripts/build-mobile.py'))}
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('platform', choices=['android', 'apple'])
     parser.add_argument('--roles', nargs='+', choices=['client', 'relay'], default=['client', 'relay'])
     parser.add_argument('--profiles', nargs='+', choices=['3', 's', 'z'], default=['z'])
     parser.add_argument('--fixtures', action='store_true', help='Non-distributable simulator/emulator qualification build')
+    parser.add_argument('--push', action='store_true', help='Separate optional push-enabled distribution')
     parser.add_argument('--baseline', type=Path, help='Same-toolchain native summary; reject size growth above 5 percent')
-    parser.add_argument('--output', type=Path, default=ROOT / 'target/mobile')
+    parser.add_argument('--output', type=Path, default=None)
     args = parser.parse_args()
-    output = args.output.resolve()
+    output = (args.output or ROOT / ('target/mobile-push' if args.push else 'target/mobile')).resolve()
     output.mkdir(parents=True, exist_ok=True)
     target = Path(os.environ.get('CARGO_TARGET_DIR', ROOT / 'target/mobile-build')).resolve()
     environment = dict(os.environ, CARGO_TARGET_DIR=str(target))
     environment.setdefault('CARGO_BUILD_JOBS', '2')
     report = {
-        'schema': 1, 'platform': args.platform, 'fixtures': args.fixtures,
+        'schema': 1, 'platform': args.platform, 'fixtures': args.fixtures, 'push': args.push,
         'revision': subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip(),
         'rustc': subprocess.check_output(['rustc', '-Vv'], text=True),
         'panic': 'unwind', 'lto': True, 'codegen_units': 1, 'artifacts': [], 'graphs': {}
     }
-    sources = subprocess.check_output(['git', 'ls-files', '-z', '--cached', '--others', '--exclude-standard'], cwd=ROOT).decode().split('\0')
-    report['source_sha256'] = {name: digest(ROOT / name) for name in sorted(set(sources)) if name and (ROOT / name).is_file() and (name.startswith('mobile/') or name.startswith('crates/') or name in ('Cargo.toml', 'Cargo.lock', 'scripts/build-mobile.py'))}
+    report['source_sha256'] = source_hashes()
     if args.platform == 'android':
         sdk = Path(os.environ['ANDROID_HOME'])
         ndk = Path(os.environ.get('ANDROID_NDK_HOME', sdk / 'ndk' / NDK_VERSION))
@@ -69,7 +76,7 @@ def main():
                     env['CC_' + triple.replace('-', '_')] = compiler
                     env['AR_' + triple.replace('-', '_')] = str(llvm / 'llvm-ar')
                     env['RUSTFLAGS'] = env.get('RUSTFLAGS', '') + ' -C link-arg=-Wl,-z,max-page-size=16384'
-                features = role + (',fixtures' if args.fixtures else '')
+                features = role + (',fixtures' if args.fixtures else '') + ((',push-gateway' if role == 'relay' else ',push') if args.push else '')
                 tree = subprocess.check_output(['cargo', 'tree', '--manifest-path', str(MANIFEST), '--locked',
                     '--no-default-features', '--features', features, '--target', triple,
                     '--edges', 'normal,build', '--prefix', 'none', '--format', '{p}|{f}'], env=env, text=True)
@@ -82,6 +89,8 @@ def main():
                     raise RuntimeError('Mobile package pulls in optional RPC or multithread scheduling')
                 if role == 'client' and ('relay-host' in graph.get('gcoms-node', []) or 'quick-xml' in graph):
                     raise RuntimeError('Client package pulls in relay hosting')
+                if role == 'client' and 'hyper-rustls' in graph:
+                    raise RuntimeError('Client package pulls in the relay HTTP gateway')
                 report['graphs'][role + '/' + triple] = graph
                 run(['cargo', 'build', '--manifest-path', MANIFEST, '--locked', '--release', '--no-default-features', '--features', features, '--target', triple], env)
                 name = 'libgcoms_mobile.so' if args.platform == 'android' else 'libgcoms_mobile.a'
@@ -109,12 +118,12 @@ def main():
                     'bytes': retained.stat().st_size, 'sha256': digest(retained), 'artifact': str(retained.relative_to(output))})
                 (output / 'summary.json').write_text(json.dumps(report, indent=2) + '\n')
             if args.platform == 'apple':
-                package_apple(output, role)
+                package_apple(output, role, args.push)
             else:
-                (output / 'android' / role / 'build.json').write_text(json.dumps({'fixtures': args.fixtures, 'role': role, 'revision': report['revision']}) + '\n')
+                (output / 'android' / role / 'build.json').write_text(json.dumps({'fixtures': args.fixtures, 'push': args.push, 'role': role, 'revision': report['revision']}) + '\n')
     if args.baseline:
         baseline = json.loads(args.baseline.read_text())
-        for field in ('platform', 'fixtures', 'rustc', 'ndk', 'xcode', 'panic', 'lto', 'codegen_units'):
+        for field in ('platform', 'fixtures', 'push', 'rustc', 'ndk', 'xcode', 'panic', 'lto', 'codegen_units'):
             if baseline.get(field) != report.get(field):
                 raise RuntimeError(f'baseline {field} differs; establish a baseline for this toolchain')
         previous = {(item['role'], item['target'], item['opt_level']): item['bytes'] for item in baseline['artifacts']}
@@ -122,16 +131,15 @@ def main():
             key = (item['role'], item['target'], item['opt_level'])
             if key in previous and item['bytes'] > previous[key] * 1.05:
                 raise RuntimeError(f'{key} exceeds the 5 percent native size gate')
-    for name, expected in report['source_sha256'].items():
-        if digest(ROOT / name) != expected:
-            raise RuntimeError('Mobile source changed during qualification; rerun against settled inputs')
+    if source_hashes() != report['source_sha256']:
+        raise RuntimeError('Mobile source inventory changed during qualification; rerun against settled inputs')
     (output / 'summary.json').write_text(json.dumps(report, indent=2) + '\n')
     print(json.dumps(report['artifacts'], indent=2))
 
 
-def package_apple(output, role):
+def package_apple(output, role, push):
     native = output / 'apple' / role
-    package = output / 'packages' / ('GComsClient' if role == 'client' else 'GComsRelay')
+    package = output / 'packages' / (('GComsClient' if role == 'client' else 'GComsRelay') + ('Push' if push else ''))
     package.mkdir(parents=True, exist_ok=True)
     simulator = native / 'libgcoms_sim.a'
     run(['xcrun', 'lipo', '-create', native / 'sim-arm64/libgcoms_mobile.a', native / 'sim-x86_64/libgcoms_mobile.a', '-output', simulator])
@@ -143,9 +151,11 @@ def package_apple(output, role):
     shutil.copy2(ROOT / 'mobile/native/include/gcoms_mobile.h', headers)
     (headers / 'module.modulemap').write_text('module CGComs { header "gcoms_mobile.h" export * }\n')
     run(['xcodebuild', '-create-xcframework', '-library', native / 'device/libgcoms_mobile.a', '-headers', headers, '-library', simulator, '-headers', headers, '-output', framework])
-    for directory in ('Sources', 'Tests'):
+    for directory in ('Sources/GComs', 'Tests'):
         shutil.copytree(ROOT / 'mobile/apple' / directory, package / directory, dirs_exist_ok=True)
-    (package / 'Package.swift').write_text('''// swift-tools-version: 5.9
+    if push:
+        shutil.copytree(ROOT / 'mobile/apple/Sources/GComsPush', package / 'Sources/GComsPush', dirs_exist_ok=True)
+    manifest = '''// swift-tools-version: 5.9
 import PackageDescription
 let package = Package(
     name: "GComs",
@@ -157,7 +167,11 @@ let package = Package(
         .testTarget(name: "GComsTests", dependencies: ["GComs"])
     ]
 )
-''')
+'''
+    if push:
+        manifest = manifest.replace('products: [', 'products: [.library(name: \"GComsPush\", targets: [\"GComsPush\"]), ')
+        manifest = manifest.replace('targets: [\n', 'targets: [\n        .target(name: \"GComsPush\", dependencies: [\"GComs\"]),\n', 1)
+    (package / 'Package.swift').write_text(manifest)
 
 
 if __name__ == '__main__':

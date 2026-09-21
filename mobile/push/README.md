@@ -18,6 +18,26 @@ Events contain exactly `reference` and `activity:"message"`, authenticated with
 sender, channel, message, file name or cryptographic capability. Unknown/expired
 references receive the same response. A relay is scoped to configured app IDs.
 
+Native clients opt into `push`; relay hosts opt into `push-gateway`. The mobile
+`bind_push` operation takes a 32-byte opaque reference, a monotonically increasing
+`revision` persisted by the host application, and Unix-second `expires` at most
+one day ahead. It binds current owned direct-message and channel inbox aliases through their existing pinned
+administrative routes using the admin capability. Zero reference unbinds.
+Retries may reuse the same revision and values; changed values require a new
+revision. Multiple aliases are not one transaction: reconcile/retry on failure.
+Rebind after reconnect/alias rotation and before suspension. Lease expiry and
+capability rotation invalidate bindings; relay restart requires re-registration.
+Older relays reject this optional operation.
+
+Wire management operation 9 is version 1 followed by queue ID, epoch, revision,
+expiry, 16-byte nonce, 32-byte reference and HMAC-SHA256. Integers are big endian;
+the MAC covers `GC/PUSH-BIND/v1\0`, relay service ID and the preceding wire bytes.
+Only newly authenticated GC/2 interactive enqueue admits a hint. Duplicate, cover,
+bulk, unauthorized and rejected-full-queue operations do not. A bounded 256-entry
+relay worker queue coalesces each inbox for 30 seconds and retries HTTPS three
+times with ten-second request timeouts. Best-effort hints never block message
+admission. The gateway URL is fixed by the relay operator, never by queue owners.
+
 SQLite retains registrations, replay state and coalesced pending activity.
 Delivery is coalesced to at most one attempt per reference every 30 seconds.
 Retries back off up to one hour; invalid provider tokens are removed. Registration
@@ -41,3 +61,31 @@ Provider wire formats follow [Apple APNs requests](https://developer.apple.com/d
 and [FCM HTTP v1](https://firebase.google.com/docs/cloud-messaging/send/v1-api).
 This preview will use simulated provider qualification; live credentials, device
 delivery and battery qualification remain deferred.
+
+Android: build native packages with `--push`, then pass `-PgcomsPush=true` and
+`-PgcomsNativeRoot=/absolute/path/to/mobile-push/android` to Gradle. Link exactly
+one `gcoms-client-fcm` or `gcoms-relay-fcm` artifact. Firebase auto-init defaults
+off. The app supplies its own Firebase configuration, opts in, subclasses
+`GComsFirebaseService`, and declares that concrete service for
+`com.google.firebase.MESSAGING_EVENT`. Token callbacks enqueue a fresh
+app-authenticated ticket exchange; hint callbacks enqueue bounded inbox
+reconciliation using the OS's available execution window. Never hold a service
+callback open for an unbounded network operation. `PushGateway` provides
+registration/rotation, durable revision binding, and opt-out; use one instance
+per profile with `KeystorePushStorage` or an equivalent app-owned secure store.
+
+Apple: `--push` builds a separate GComsClientPush/GComsRelayPush Swift package
+with product `GComsPush`. Supply `KeychainPushStorage` and the app's gateway
+origin to `PushGateway`. Pass APNs device-token data and a fresh app ticket to
+`register`; use `hintReference` to validate background notification hints.
+The host app owns notification authorization, registration, signing entitlements,
+`remote-notification` background mode, and completion callbacks. Reopen/reconcile
+only while permitted and unlocked, and complete promptly when protected storage
+is unavailable. The adapter does not claim always-on background networking.
+
+After token registration call `bind` on the live GComs session. Bind again after
+reopen or alias changes and before suspension. Opt-out first unregisters at the
+gateway, then binds a zero reference. Keep the stored revision when unregistering;
+deleting it can make delayed older operations relevant again. Concurrent gateway
+instances for one profile are unsupported. A failed registration response may
+have consumed its ticket; obtain a fresh ticket to reconcile it.

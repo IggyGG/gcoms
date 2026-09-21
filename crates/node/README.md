@@ -15,3 +15,9 @@ It shares retained direct-message and retry admission with the endpoint/transit
 scheduler, including restart and persistence-failure handling. It remains
 experimental; see [the integration ledger](../../docs/GC2_IMPLEMENTATION.md) and
 [flow-control contract](../../docs/GC2_FLOW.md) before selecting it.
+
+Optional `push-notifications` adds owner-authenticated inbox bindings.
+`push-gateway` additionally enables relay hosting and reqwest's rustls HTTPS
+transport to one operator-configured endpoint. Neither is enabled by default.
+Client push bindings do not pull in the relay HTTP gateway. See the
+[app-operated push contract](../../mobile/push/README.md).

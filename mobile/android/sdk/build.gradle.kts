@@ -5,6 +5,7 @@ plugins {
 }
 val nativeRoot = providers.gradleProperty("gcomsNativeRoot")
     .orElse(rootProject.layout.projectDirectory.dir("../../target/mobile/android").asFile.absolutePath).get()
+val pushEnabled = providers.gradleProperty("gcomsPush").orNull == "true"
 android {
     namespace = "boo.gcoms.sdk"
     compileSdk = 36
@@ -49,17 +50,18 @@ afterEvaluate {
                 check(metadata["role"] == role && metadata["fixtures"] == false) {
                     "Release SDKs require native libraries built without fixture support"
                 }
+                check((metadata["push"] == true) == pushEnabled) { "Native push feature differs from the selected distribution" }
             }
         }
         tasks.named("pre${title}ReleaseBuild").configure { dependsOn(verify) }
     }
     publishing.publications {
         create<MavenPublication>("client") {
-            groupId = "boo.gcoms"; artifactId = "gcoms-client"; version = "0.1.0-preview"
+            groupId = "boo.gcoms"; artifactId = "gcoms-client" + (if (pushEnabled) "-push" else ""); version = "0.1.0-preview"
             from(components["clientRelease"])
         }
         create<MavenPublication>("relay") {
-            groupId = "boo.gcoms"; artifactId = "gcoms-relay"; version = "0.1.0-preview"
+            groupId = "boo.gcoms"; artifactId = "gcoms-relay" + (if (pushEnabled) "-push" else ""); version = "0.1.0-preview"
             from(components["relayRelease"])
         }
     }

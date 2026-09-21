@@ -2,6 +2,7 @@ plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
 }
+val pushEnabled = providers.gradleProperty("gcomsPush").orNull == "true"
 android {
     namespace = "boo.gcoms.sample"
     compileSdk = 36
@@ -25,6 +26,21 @@ android {
             signingConfig = signingConfigs.getByName("debug")
             isMinifyEnabled = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"))
+            if (pushEnabled) proguardFiles("push-rules.pro")
+        }
+    }
+    if (pushEnabled) {
+        sourceSets.getByName("client").manifest.srcFile("src/push/AndroidManifest.xml")
+        sourceSets.getByName("relay").manifest.srcFile("src/push/AndroidManifest.xml")
+        sourceSets.getByName("client").java.srcDir("src/push/java")
+        sourceSets.getByName("relay").java.srcDir("src/push/java")
+    }
+    splits {
+        abi {
+            isEnable = true
+            reset()
+            include("arm64-v8a", "x86_64")
+            isUniversalApk = false
         }
     }
     compileOptions {
@@ -39,6 +55,10 @@ kotlin {
 dependencies {
     "clientImplementation"(project(":sdk"))
     "relayImplementation"(project(":sdk"))
+    if (pushEnabled) {
+        "clientImplementation"(project(":push"))
+        "relayImplementation"(project(":push"))
+    }
     androidTestImplementation("androidx.test:runner:1.6.2")
     androidTestImplementation("androidx.test.ext:junit:1.2.1")
     "clientImplementation"("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")

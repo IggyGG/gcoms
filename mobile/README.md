@@ -39,5 +39,24 @@ system frameworks. The C ABI has no foreign allocation ownership or callback
 thread requirements. See [native ownership and limits](native/README.md).
 
 Optional push is a separate app-operated integration. It is a wake-up hint;
-messages and files always remain on GComs. Packaging and push qualification
-instructions will be added with their corresponding implementation.
+messages and files always remain on GComs. The Android FCM adapter is an optional
+Gradle module selected with `-PgcomsPush=true` and Firebase Messaging 25.1.3;
+the base modules have no Firebase dependency. Apple push uses only system
+Foundation/Security APIs. See [registration and ownership](push/README.md).
+
+Build production native packages with `python3 scripts/build-mobile.py android`
+or `python3 scripts/build-mobile.py apple`. Use `--roles client` or `--roles relay`
+to select one distribution; `--profiles 3 s z` compares optimization levels.
+`--push` selects a separate output and never changes the base distribution.
+The summary retains exact source hashes, toolchain, active dependencies, sizes
+and artifact hashes. `--baseline summary.json` enforces at most 5% growth under
+the same toolchain. Android builds require ANDROID_HOME and the pinned NDK;
+Apple builds require macOS/Xcode. Both require the pinned Rust 1.98 toolchain.
+
+The mobile CI workflow exercises each role on an Android 16 KiB emulator and iOS
+simulator. Fixture packages live in a separate output and are forbidden by the
+Android release packaging gate. `scripts/qualify-android.py` builds release AARs
+and per-ABI APKs, records the emulator's installed APK bytes and subtracts an
+equivalent baseline sample. `scripts/qualify-apple.py` records installed simulator
+bundle and unsigned ARM64 device bundle deltas. These are sample costs, not
+physical-device filesystem allocation or store-compressed download estimates.

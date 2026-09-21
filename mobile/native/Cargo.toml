@@ -19,6 +19,8 @@ client = ["gcoms/network-client"]
 relay = ["gcoms/embedded", "gcoms/gc2-carrier"]
 # Disposable emulator/simulator fixtures only; excluded from release packages.
 fixtures = []
+push = ["gcoms/push-notifications"]
+push-gateway = ["push", "relay", "gcoms/push-gateway"]
 
 [dependencies]
 gcoms = { version = "0.1.0", path = "../../crates/application", default-features = false, features = ["files"] }

@@ -9,9 +9,14 @@ Physical-device, battery and live push qualification remain deferred.
 Checkpoint: outbound messaging/channel/file/reopen integration passed on Linux,
 along with 504 application/runtime/SDK/node/file tests (three explicit ignores).
 The native mobile ABI and Kotlin sources compile; the relay ABI fixture verifies
-channel/file operations and suspend/reopen. Swift packaging and emulator/simulator
-execution remain in progress. The optional gateway's nine simulations pass;
-owner-authorized relay bindings and platform push adapters are still being wired.
+channel/file operations and suspend/reopen. Android relay instrumentation passes
+on the API 35 16 KiB emulator. Windows x64, Linux x64 and macOS ARM64 native CI
+passed at e75c72c, including macOS Intel. Mobile CI now builds separate
+client/relay AARs and XCFrameworks and records linked/installed sample deltas.
+Swift execution remains in progress. The optional gateway's nine simulations and
+four owner-binding/admission tests pass. The remote owner-binding integration
+passes, along with strict Rust Clippy and Kotlin FCM adapter compilation/tests.
+Swift adapters and final mobile size evidence remain in qualification.
 
 Implementation order: Windows native gate, Rust role separation, mobile ABI and
 packages, push registration/relay notifications, integrated qualification and

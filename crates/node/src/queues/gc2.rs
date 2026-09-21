@@ -172,6 +172,10 @@ impl LeaseStore {
             cell: msg,
         });
         class.changed.send_replace(());
+        #[cfg(feature = "push-notifications")]
+        if push.class == TrafficClass::Interactive {
+            self.notify_admission(&queue_id, now_unix);
+        }
         Ok(PushOutcome::Enqueued)
     }
 

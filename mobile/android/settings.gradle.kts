@@ -5,3 +5,4 @@ dependencyResolutionManagement {
 }
 rootProject.name = "gcoms-mobile"
 include(":sdk", ":sample")
+if (providers.gradleProperty("gcomsPush").orNull == "true") include(":push")

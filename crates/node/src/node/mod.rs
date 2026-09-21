@@ -47,6 +47,8 @@ mod channel_direct;
 mod channel_recovery;
 mod channels;
 mod commands;
+#[cfg(feature = "push-notifications")]
+mod push_notifications;
 mod direct;
 #[cfg(feature = "experimental-gc2")]
 mod gc2_acks;
@@ -1574,7 +1576,7 @@ async fn start_role(
         }
 
         #[cfg(feature = "relay-host")]
-        if let Some(host) = relay_host {
+        if let Some(ref host) = relay_host {
             tasks.push(host.sweep());
         }
 
@@ -1594,6 +1596,8 @@ async fn start_role(
             _ => None,
         };
         Ok(NodeHandle {
+            #[cfg(feature = "push-gateway")]
+            notification_host: relay_host.as_ref().map(Arc::downgrade),
             state: Arc::downgrade(&state),
             listener_addr: local_addr,
             #[cfg(feature = "relay-host")]

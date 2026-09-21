@@ -8,6 +8,14 @@ Android emulator/iOS simulator consumers and simulated APNs/FCM providers.
 Measure the base SDK and optional push adapter independently. These additions
 do not establish physical-device or live-provider qualification.
 
+- Run `cargo test -p gcoms-node --all-features --lib notification` for binding
+  authorization, revisions, unbind/expiry/rotation/revocation, admission filtering,
+  coalescing and bounded hint backpressure.
+- Run `cargo test -p gcoms --all-features --test network_client` to exercise the
+  remote administrative binding API alongside trusted messaging/channel/files.
+- Run the Mobile SDK preview CI matrix for JNI/Swift execution, 16 KiB alignment,
+  separate client/relay native graphs, 3/s/z measurements and sample app deltas.
+
 - Compile independent `ipc,files` and `embedded,files,gc2-carrier` consumers.
   Reject host/crypto/MLS/RPC dependencies in the IPC graph and forced Tokio
   multithread runtimes in either integration. Also check `network-client,files`

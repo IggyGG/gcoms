@@ -61,6 +61,8 @@ gcoms-crypto = { version = "0.1.0", path = "../crypto", features = ["test-vector
 [features]
 default = ["cli", "relay-host"]
 relay-host = ["dep:quick-xml"]
+push-notifications = ["experimental-gc2"]
+push-gateway = ["push-notifications", "relay-host", "reqwest/rustls-tls"]
 cli = ["tokio/rt-multi-thread", "tokio/signal"]
 chaos-debug = []
 # Queue/runtime plumbing for the explicit GC/2 wire; not a production profile.

@@ -41,6 +41,7 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: boo.gcoms.preview.tests
+        SWIFT_ACTIVE_COMPILATION_CONDITIONS: GCOMS_ENABLED
 schemes:
   Preview:
     build:
