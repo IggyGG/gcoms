@@ -6,7 +6,9 @@ client of an existing host, or `embedded,files,gc2-carrier` for an in-process re
 RPC and automatic daemon launch are optional. GChat consumes the same API.
 
 The Linux relay/client regression suites passed 504 tests (three explicit ignores);
-cross-platform qualification remains in progress.
+native tests and size checks also pass on Linux, macOS ARM64/Intel and Windows
+x64 MSVC. [Measured consumer sizes](docs/RUST_INTEGRATIONS.md). Mobile
+qualification remains in progress.
 See [mobile SDK sources and current status](mobile/README.md).
 
 Windows x64 MSVC is included in the native integration workflow. Android/iOS
