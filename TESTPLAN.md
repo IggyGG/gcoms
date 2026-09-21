@@ -1,7 +1,7 @@
 # Rust integration qualification
 
-Windows/mobile follow-up (in progress): run the native backend and size matrix
-on Windows x64 MSVC as well as Linux/macOS. The private temporary-root helper
+The native backend and size matrix passes on Windows x64 MSVC and Linux/macOS
+at b39199e; mobile size qualification is in progress. The private temporary-root helper
 must preserve current-user ownership and remove inherited Windows grants.
 Qualify outbound-only runtime behavior, mobile ABI cancellation/lifecycle,
 Android emulator/iOS simulator consumers and simulated APNs/FCM providers.

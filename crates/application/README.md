@@ -40,9 +40,10 @@ There are no default features. Choose one integration:
 | Features | Ships in the application |
 | --- | --- |
 | `ipc,files` | Local client with messaging, channels and streaming files |
+| `network-client,files` | Outbound protocol client with inboxes on remote relays |
 | `embedded,files,gc2-carrier` | In-process protocol node, relay and encrypted file cache |
 
-Both reuse the caller's Tokio runtime; neither requires the multithread scheduler.
+All reuse the caller's Tokio runtime without requiring the multithread scheduler.
 Add `rpc` for typed services and encrypted operation journals, `launch` for bundled
 daemon startup, or `wasm` for browser RPC. Build the host with `daemon,files,gc2-carrier`.
 The IPC dependency graph excludes the node, TLS, MLS, transfer engine and RPC.
@@ -53,6 +54,17 @@ checks dependency separation; `--measure` compares stripped opt-level 3/s/z
 executables with LTO and one codegen unit. Keep `panic = "unwind"`: protocol
 channel recovery uses unwind boundaries. The integrating application's root
 Cargo manifest controls these profiles.
+
+## Standalone client
+
+Select `network-client,files` for a protocol client without a local daemon.
+The builder defaults to `Backend::NetworkClient` when `embedded` is disabled.
+If an application enables both backends, choose `.backend(Backend::NetworkClient)`
+explicitly. The client uses the same messaging, invitation, channel, file and
+encrypted-profile APIs. It keeps inboxes on trusted remote relays and excludes
+relay queues, forwarding, local listeners and NAT mapping from a client-only
+build. Supply signed network configuration and a provisioned invitation as
+described below. Keep the application open while transfers should progress.
 
 ## Shared service
 
@@ -89,7 +101,7 @@ identity, routes, invitation, and inbox are independent of other profiles in the
 same process. Application IDs organize profiles; they are not a sandbox against
 other software running as the same OS user with access to those files.
 
-`close()` joins application workers and detaches. Embedded close also stops the
+`close()` joins application workers and detaches. Standalone close also stops the
 owned protocol runtime. Shared close leaves that profile running so another UI
 can attach. `stop_profile()` stops and saves the profile in either mode without
 stopping other applications. Always await one of these on shutdown; dropping a
@@ -106,8 +118,8 @@ arguments. There is no anonymous enrollment. A different signed network config
 can be supplied with `.network_config(json_bytes)`.
 
 Startup does not wait for Internet reachability. `status()` reports whether an
-invitation is needed, inbox routing is recovering, or messaging is online. Relay
-participation is attempted automatically; `Published` means a pinned relay has
+invitation is needed, inbox routing is recovering, or messaging is online. An
+embedded relay attempts participation automatically; `Published` means a pinned relay has
 verified the candidate listener. `Attempting` is not proof of reachability. Public
 DNS remains a separate explicit opt-in through `configure_network_dns`.
 

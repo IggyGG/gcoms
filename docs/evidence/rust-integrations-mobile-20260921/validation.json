@@ -1,0 +1,35 @@
+{
+  "schema": 1,
+  "revision": "b39199e431fa680267eecd566914ff84ee06ef25",
+  "workflow_run": "https://github.com/IggyGG/gcoms/actions/runs/35598613312",
+  "targets": {
+    "linux-x86_64": {
+      "tests_passed": 109,
+      "tests_failed": 0,
+      "tests_ignored": 2,
+      "log_sha256": "446b367bf06479f2b9ed14d35fcd0750208ffa1bb8cb1a46e4c062064b9e6b3f",
+      "maximum_growth_percent": 1.07
+    },
+    "darwin-arm64": {
+      "tests_passed": 109,
+      "tests_failed": 0,
+      "tests_ignored": 1,
+      "log_sha256": "032bd89df4ea777beb70159c84abaef1146e0eeaf485cab5a3e1b8ce8ba8a9c4",
+      "maximum_growth_percent": 2.24
+    },
+    "darwin-x86_64": {
+      "tests_passed": 109,
+      "tests_failed": 0,
+      "tests_ignored": 1,
+      "log_sha256": "0f0a262fdbfd5f22e8a3f508c3442d9adc38e40fc178a70ef35d8e30403348e9",
+      "maximum_growth_percent": 1.499
+    },
+    "windows-amd64": {
+      "tests_passed": 104,
+      "tests_failed": 0,
+      "tests_ignored": 1,
+      "log_sha256": "6268584438f89bf9d78bc0f05d84e7e9a0aa3b48e9cba7e9892d100cd7286c20",
+      "maximum_growth_percent": 1.243
+    }
+  }
+}

@@ -7,8 +7,9 @@ with simulated providers; physical-device, battery and live push work is deferre
 
 Current qualification:
 
-- Linux, macOS ARM64 and Windows x64 native tests and 3/s/z size gates pass at
-  b39199e. Intel Mac measurements are still running.
+- Linux, macOS ARM64/Intel and Windows x64 native tests and 3/s/z size gates pass
+  at b39199e. All executable/source hashes are verified; maximum growth is 2.24%.
+  Current records are in `docs/evidence/rust-integrations-mobile-20260921/`.
 - All four Android base/push roles pass 16 KiB emulator instrumentation. SDK AAR,
   POM/module dependencies, APK alignment and installed deltas are verified.
 - Both base Swift roles passed simulator tests. Both push roles now also pass,

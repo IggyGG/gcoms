@@ -139,5 +139,12 @@
       "name": "npm-audit-final.json",
       "sha256": "0955ca766697d1f47b8a36c6444a271f03dc15015a3f0cd71b860bbab5603d97"
     }
+  },
+  "mobile_build_change_checks": {
+    "revision": "65fc089ba25fe137f578a956981a909c8a298599",
+    "abi_tests_passed": 3,
+    "abi_tests_failed": 0,
+    "client_push_feature_check": "passed",
+    "log_sha256": "70d20298cebcb1244da39c92f292c85e7bac52254e8c6a91ab63675d3531cb94"
   }
 }

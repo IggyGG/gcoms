@@ -1,0 +1,187 @@
+{
+  "schema": 1,
+  "system": "Darwin",
+  "machine": "x86_64",
+  "rustc": "rustc 1.98.0 (88d9e12ae 2026-08-18)\nbinary: rustc\ncommit-hash: 88d9e12ae178fab0fb5cc050a94da85685d449ea\ncommit-date: 2026-08-18\nhost: x86_64-apple-darwin\nrelease: 1.98.0\nLLVM version: 22.1.8\n",
+  "revision": "b39199e431fa680267eecd566914ff84ee06ef25",
+  "dirty": false,
+  "panic": "unwind",
+  "lto": true,
+  "codegen_units": 1,
+  "stripped": true,
+  "binaries": [
+    {
+      "mode": "ipc",
+      "opt_level": "3",
+      "bytes": 1111528,
+      "sha256": "39da879a51a7082fc72bfce3cad2678b34a7cb8bf4a13575c045a262c7f60c87",
+      "artifact": "ipc-opt-3",
+      "imports": [
+        "/usr/lib/libSystem.B.dylib",
+        "/usr/lib/libiconv.2.dylib"
+      ]
+    },
+    {
+      "mode": "ipc",
+      "opt_level": "s",
+      "bytes": 869848,
+      "sha256": "09bf6996b02a1021cb6b92db6d042b11ec9729ca9b55b98974e06a4b519a4223",
+      "artifact": "ipc-opt-s",
+      "imports": [
+        "/usr/lib/libSystem.B.dylib",
+        "/usr/lib/libiconv.2.dylib"
+      ]
+    },
+    {
+      "mode": "ipc",
+      "opt_level": "z",
+      "bytes": 804544,
+      "sha256": "f5ea9846faf6d7b875c87ae44056c512609da51cede4c4701fdd05e312bc5b0f",
+      "artifact": "ipc-opt-z",
+      "imports": [
+        "/usr/lib/libSystem.B.dylib",
+        "/usr/lib/libiconv.2.dylib"
+      ]
+    },
+    {
+      "mode": "embedded",
+      "opt_level": "3",
+      "bytes": 15191696,
+      "sha256": "5716eaf140f317f89d27dd3f8c1017fe002f1e7244875ce939e9502708159c39",
+      "artifact": "embedded-opt-3",
+      "imports": [
+        "/usr/lib/libSystem.B.dylib",
+        "/usr/lib/libiconv.2.dylib"
+      ]
+    },
+    {
+      "mode": "embedded",
+      "opt_level": "s",
+      "bytes": 9641536,
+      "sha256": "950ebe1cfb129712d5f389a7b9685f02f398a05505b8f2aa78a98041423bda56",
+      "artifact": "embedded-opt-s",
+      "imports": [
+        "/usr/lib/libSystem.B.dylib",
+        "/usr/lib/libiconv.2.dylib"
+      ]
+    },
+    {
+      "mode": "embedded",
+      "opt_level": "z",
+      "bytes": 8463808,
+      "sha256": "a066c1c17630b35f09dfd360abc1803cbd6d81b037ddced50bb7798956b55eb2",
+      "artifact": "embedded-opt-z",
+      "imports": [
+        "/usr/lib/libSystem.B.dylib",
+        "/usr/lib/libiconv.2.dylib"
+      ]
+    },
+    {
+      "mode": "network-client",
+      "opt_level": "3",
+      "bytes": 14061528,
+      "sha256": "9c55cf4248c5a87c65d36e150e8a555ea42ab546c903fc1fd254ff5e4ede32a1",
+      "artifact": "network-client-opt-3",
+      "imports": [
+        "/usr/lib/libSystem.B.dylib",
+        "/usr/lib/libiconv.2.dylib"
+      ]
+    },
+    {
+      "mode": "network-client",
+      "opt_level": "s",
+      "bytes": 8855616,
+      "sha256": "2852fc775eb2fd79acb618c6478e8387b1c250abad56f05210d0f8f2228471fd",
+      "artifact": "network-client-opt-s",
+      "imports": [
+        "/usr/lib/libSystem.B.dylib",
+        "/usr/lib/libiconv.2.dylib"
+      ]
+    },
+    {
+      "mode": "network-client",
+      "opt_level": "z",
+      "bytes": 7812840,
+      "sha256": "62b6ca42d2e11fd55a1e8ebdc68bfe6ccc8385b041136eac48137ada0de8c8de",
+      "artifact": "network-client-opt-z",
+      "imports": [
+        "/usr/lib/libSystem.B.dylib",
+        "/usr/lib/libiconv.2.dylib"
+      ]
+    },
+    {
+      "mode": "host",
+      "opt_level": "s",
+      "bytes": 9887816,
+      "sha256": "bd540427503630ffc05724d3daa10eb640291af27af8d3c6e3d4bf16a9b24358",
+      "artifact": "host-opt-s",
+      "imports": [
+        "/usr/lib/libSystem.B.dylib",
+        "/usr/lib/libiconv.2.dylib"
+      ]
+    }
+  ],
+  "consumer_sha256": {
+    "examples/rust-integration/Cargo.toml": "27d3029f625a8c451e3c61197d5af7bbff70ab7e4541f4fd299d4dbe24d589a8",
+    "examples/rust-integration/src/main.rs": "e8247d0e645a994c7a3dfb9ea0ceeaa04e286488cf444006df67688baf900cc4"
+  },
+  "baseline_comparison": [
+    {
+      "mode": "ipc",
+      "opt_level": "3",
+      "growth_percent": 1.499
+    },
+    {
+      "mode": "ipc",
+      "opt_level": "s",
+      "growth_percent": 0.475
+    },
+    {
+      "mode": "ipc",
+      "opt_level": "z",
+      "growth_percent": 0.513
+    },
+    {
+      "mode": "embedded",
+      "opt_level": "3",
+      "growth_percent": 0.435
+    },
+    {
+      "mode": "embedded",
+      "opt_level": "s",
+      "growth_percent": 0.128
+    },
+    {
+      "mode": "embedded",
+      "opt_level": "z",
+      "growth_percent": 0.097
+    },
+    {
+      "mode": "network-client",
+      "opt_level": "3",
+      "growth_percent": 0.44
+    },
+    {
+      "mode": "network-client",
+      "opt_level": "s",
+      "growth_percent": 0.093
+    },
+    {
+      "mode": "network-client",
+      "opt_level": "z",
+      "growth_percent": 0.105
+    },
+    {
+      "mode": "host",
+      "opt_level": "s",
+      "growth_percent": -0.0
+    }
+  ],
+  "evidence": {
+    "workflow_run": "https://github.com/IggyGG/gcoms/actions/runs/35598613312",
+    "report_sha256": "522af29733b9b322c195aede9544fa26dc63e1ace02f051050d9f10ec178e36e",
+    "verified_source_files": 334,
+    "verified_binaries": 10,
+    "baseline": "../rust-integrations-20260921/darwin-x86_64.json"
+  }
+}
