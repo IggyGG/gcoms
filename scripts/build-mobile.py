@@ -28,6 +28,7 @@ def main():
     parser.add_argument('--roles', nargs='+', choices=['client', 'relay'], default=['client', 'relay'])
     parser.add_argument('--profiles', nargs='+', choices=['3', 's', 'z'], default=['z'])
     parser.add_argument('--fixtures', action='store_true', help='Non-distributable simulator/emulator qualification build')
+    parser.add_argument('--baseline', type=Path, help='Same-toolchain native summary; reject size growth above 5 percent')
     parser.add_argument('--output', type=Path, default=ROOT / 'target/mobile')
     args = parser.parse_args()
     output = args.output.resolve()
@@ -39,7 +40,7 @@ def main():
         'schema': 1, 'platform': args.platform, 'fixtures': args.fixtures,
         'revision': subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip(),
         'rustc': subprocess.check_output(['rustc', '-Vv'], text=True),
-        'panic': 'unwind', 'lto': True, 'codegen_units': 1, 'artifacts': []
+        'panic': 'unwind', 'lto': True, 'codegen_units': 1, 'artifacts': [], 'graphs': {}
     }
     sources = subprocess.check_output(['git', 'ls-files', '-z', '--cached', '--others', '--exclude-standard'], cwd=ROOT).decode().split('\0')
     report['source_sha256'] = {name: digest(ROOT / name) for name in sorted(set(sources)) if name and (ROOT / name).is_file() and (name.startswith('mobile/') or name.startswith('crates/') or name in ('Cargo.toml', 'Cargo.lock', 'scripts/build-mobile.py'))}
@@ -69,6 +70,19 @@ def main():
                     env['AR_' + triple.replace('-', '_')] = str(llvm / 'llvm-ar')
                     env['RUSTFLAGS'] = env.get('RUSTFLAGS', '') + ' -C link-arg=-Wl,-z,max-page-size=16384'
                 features = role + (',fixtures' if args.fixtures else '')
+                tree = subprocess.check_output(['cargo', 'tree', '--manifest-path', str(MANIFEST), '--locked',
+                    '--no-default-features', '--features', features, '--target', triple,
+                    '--edges', 'normal,build', '--prefix', 'none', '--format', '{p}|{f}'], env=env, text=True)
+                graph = {}
+                for line in tree.splitlines():
+                    package, active = line.split('|', 1)
+                    name = package.split()[0]
+                    graph[name] = sorted(set(graph.get(name, [])) | set(filter(None, active.removesuffix(' (*)').strip().split(','))))
+                if 'rt-multi-thread' in graph.get('tokio', []) or 'gcoms-rpc' in graph:
+                    raise RuntimeError('Mobile package pulls in optional RPC or multithread scheduling')
+                if role == 'client' and ('relay-host' in graph.get('gcoms-node', []) or 'quick-xml' in graph):
+                    raise RuntimeError('Client package pulls in relay hosting')
+                report['graphs'][role + '/' + triple] = graph
                 run(['cargo', 'build', '--manifest-path', MANIFEST, '--locked', '--release', '--no-default-features', '--features', features, '--target', triple], env)
                 name = 'libgcoms_mobile.so' if args.platform == 'android' else 'libgcoms_mobile.a'
                 library = target / triple / 'release' / name
@@ -90,13 +104,28 @@ def main():
                     destination = output / 'apple' / role / label / name
                 destination.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(retained, destination)
-                report['artifacts'].append({'role': role, 'target': triple, 'opt_level': profile, 'bytes': retained.stat().st_size, 'sha256': digest(retained), 'artifact': str(retained.relative_to(output))})
+                report['artifacts'].append({'role': role, 'target': triple, 'opt_level': profile,
+                    'kind': 'shared_library' if args.platform == 'android' else 'static_archive',
+                    'bytes': retained.stat().st_size, 'sha256': digest(retained), 'artifact': str(retained.relative_to(output))})
                 (output / 'summary.json').write_text(json.dumps(report, indent=2) + '\n')
             if args.platform == 'apple':
                 package_apple(output, role)
+            else:
+                (output / 'android' / role / 'build.json').write_text(json.dumps({'fixtures': args.fixtures, 'role': role, 'revision': report['revision']}) + '\n')
+    if args.baseline:
+        baseline = json.loads(args.baseline.read_text())
+        for field in ('platform', 'fixtures', 'rustc', 'ndk', 'xcode', 'panic', 'lto', 'codegen_units'):
+            if baseline.get(field) != report.get(field):
+                raise RuntimeError(f'baseline {field} differs; establish a baseline for this toolchain')
+        previous = {(item['role'], item['target'], item['opt_level']): item['bytes'] for item in baseline['artifacts']}
+        for item in report['artifacts']:
+            key = (item['role'], item['target'], item['opt_level'])
+            if key in previous and item['bytes'] > previous[key] * 1.05:
+                raise RuntimeError(f'{key} exceeds the 5 percent native size gate')
     for name, expected in report['source_sha256'].items():
         if digest(ROOT / name) != expected:
             raise RuntimeError('Mobile source changed during qualification; rerun against settled inputs')
+    (output / 'summary.json').write_text(json.dumps(report, indent=2) + '\n')
     print(json.dumps(report['artifacts'], indent=2))
 
 

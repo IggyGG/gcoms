@@ -1,0 +1,3 @@
+# Gateway only. No dependency on these packages from either mobile SDK.
+httpx[http2]==0.28.1
+cryptography==46.0.5

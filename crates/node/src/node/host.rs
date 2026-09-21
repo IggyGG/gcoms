@@ -75,8 +75,8 @@ pub(super) async fn start(
         &registry,
         &queue_tokens,
         &authorities,
-        &transit_scheduler,
-        &frwd_target_policy,
+        transit_scheduler,
+        frwd_target_policy,
         service_id,
         stream_emission,
     );
@@ -91,7 +91,7 @@ pub(super) async fn start(
         on_cell,
         on_stream,
         on_queue_cell,
-        &tls_identity,
+        tls_identity,
     )
     .map_err(|e| e.to_string())?
     .with_limits(cfg.profile.server_limits());
@@ -127,7 +127,7 @@ pub(super) async fn start(
     };
     let server = if let Some(runtime) = routing {
         server.with_duplex(runtime.attach(
-            &tls_identity,
+            tls_identity,
             &relay_target,
             leases.clone(),
             registry.clone(),

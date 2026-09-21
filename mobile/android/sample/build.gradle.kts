@@ -19,7 +19,14 @@ android {
         create("relay") { dimension = "role"; applicationIdSuffix = ".relay" }
         create("baseline") { dimension = "role"; applicationIdSuffix = ".baseline" }
     }
-    buildTypes { release { isMinifyEnabled = true; proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt")) } }
+    buildTypes {
+        release {
+            // Disposable qualification application; shipped SDK AARs have no app signing key.
+            signingConfig = signingConfigs.getByName("debug")
+            isMinifyEnabled = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"))
+        }
+    }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17

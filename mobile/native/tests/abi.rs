@@ -69,6 +69,12 @@ fn invalid_inputs_cancel_and_owned_result_lifetime() {
         unsafe { gcoms_mobile_take(session.0, ticket, std::ptr::null_mut(), 0) },
         -1
     );
+    // Cancellation releases the result immediately; the worker skips its queued
+    // input asynchronously. A completed request establishes that it has drained.
+    assert!(session
+        .request(json!({"op": "identity"}))
+        .get("error")
+        .is_some());
     let mut tickets = Vec::new();
     for _ in 0..16 {
         let ticket = session.submit(br#"{"op":"identity"}"#);

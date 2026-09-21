@@ -3,6 +3,8 @@ plugins {
     id("org.jetbrains.kotlin.android")
     id("maven-publish")
 }
+val nativeRoot = providers.gradleProperty("gcomsNativeRoot")
+    .orElse(rootProject.layout.projectDirectory.dir("../../target/mobile/android").asFile.absolutePath).get()
 android {
     namespace = "boo.gcoms.sdk"
     compileSdk = 36
@@ -19,8 +21,8 @@ android {
     }
     buildFeatures { buildConfig = true }
     sourceSets {
-        getByName("client").jniLibs.srcDir("../../../target/mobile/android/client")
-        getByName("relay").jniLibs.srcDir("../../../target/mobile/android/relay")
+        getByName("client").jniLibs.srcDir("$nativeRoot/client")
+        getByName("relay").jniLibs.srcDir("$nativeRoot/relay")
     }
     buildTypes { release { isMinifyEnabled = false } }
     publishing { singleVariant("clientRelease"); singleVariant("relayRelease") }
@@ -39,6 +41,18 @@ dependencies {
     androidTestImplementation("androidx.test.ext:junit:1.2.1")
 }
 afterEvaluate {
+    for (role in listOf("client", "relay")) {
+        val title = role.replaceFirstChar { it.uppercase() }
+        val verify = tasks.register("verify${title}ReleaseNative") {
+            doLast {
+                val metadata = groovy.json.JsonSlurper().parse(file("$nativeRoot/$role/build.json")) as Map<*, *>
+                check(metadata["role"] == role && metadata["fixtures"] == false) {
+                    "Release SDKs require native libraries built without fixture support"
+                }
+            }
+        }
+        tasks.named("pre${title}ReleaseBuild").configure { dependsOn(verify) }
+    }
     publishing.publications {
         create<MavenPublication>("client") {
             groupId = "boo.gcoms"; artifactId = "gcoms-client"; version = "0.1.0-preview"
