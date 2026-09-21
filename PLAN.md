@@ -22,6 +22,10 @@ Current qualification:
   client probe falls from 10.17 to 7.36 MB on ARM64 and 11.97 to 8.80 MB on x86_64.
   Apple release measurements now strip symbols and select the active simulator
   architecture. Final mobile measurements are being repeated for these changes.
+- A slow Swift build exhausted the fixture card's five-minute admission window.
+  Client harnesses now compile before provisioning and then execute immediately.
+  One Android push job hit Maven Central HTTP 429 before testing; targeted
+  platform/role runs qualify these cases independently of the continuing matrix.
 
 Retained pre-LTO records are explicitly marked as superseded under
 `docs/evidence/mobile-preview-20260921/`. Final baselines and the mobile CI size

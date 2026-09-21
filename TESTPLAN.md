@@ -24,6 +24,8 @@ do not establish physical-device or live-provider qualification.
   and measure postprocessed release apps for only the active simulator CPU.
   Ad-hoc sign the disposable Swift simulator host with its own Keychain access
   group; require profile-secret and push-state reopen through fresh providers.
+  Mint client fixture credentials after consumer compilation. Keep production
+  grant expiry unchanged; slow Xcode/Gradle builds must not age the test grant.
   Generate SDK and optional FCM POM/module metadata with `gcomsPublishRole` set
   to the tested role and verify that the FCM dependency names that role's SDK.
   Check APK ZIP offsets as well as ELF alignment: each native entry must be

@@ -25,19 +25,24 @@ command = [args.gradle, "-p", str(ROOT / "mobile/android"),
     "-PgcomsNativeRoot=" + str(native / "android")]
 if args.push:
     command += ["-PgcomsPush=true", ":push:test" + args.role.title() + "DebugUnitTest"]
-with (relay() if args.role == "client" else contextlib.nullcontext(None)) as host, \
-        tempfile.TemporaryDirectory(prefix="fixture-assets-", dir=native) as assets:
-    port = None
-    try:
-        if host:
-            port = "tcp:" + str(host["port"])
-            subprocess.run(adb + ["reverse", port, port], check=True)
-            # A relay card exceeds adb's shell command budget. Keep this
-            # disposable capability in test-only assets, never command logs.
-            (Path(assets) / "relay.json").write_text(json.dumps(host["relay"]))
-            command += ["-PgcomsFixtureAssets=" + assets]
-        subprocess.run(command + [":sdk:connected" + args.role.title() + "DebugAndroidTest", "--no-daemon"],
-            env=dict(os.environ, ANDROID_SERIAL=args.serial), check=True)
-    finally:
-        if port:
-            subprocess.run(adb + ["reverse", "--remove", port], check=False)
+with tempfile.TemporaryDirectory(prefix="fixture-assets-", dir=native) as assets:
+    if args.role == "client":
+        command += ["-PgcomsFixtureAssets=" + assets]
+        # Compile before minting the short-lived grant. Adding its asset below
+        # only repeats asset merging/packaging before installation and testing.
+        subprocess.run(command + [":sdk:assembleClientDebug", ":sdk:assembleClientDebugAndroidTest",
+            "--no-daemon"], check=True)
+    with relay() if args.role == "client" else contextlib.nullcontext(None) as host:
+        port = None
+        try:
+            if host:
+                port = "tcp:" + str(host["port"])
+                subprocess.run(adb + ["reverse", port, port], check=True)
+                # A relay card exceeds adb's shell command budget. Keep this
+                # disposable capability in test-only assets, never command logs.
+                (Path(assets) / "relay.json").write_text(json.dumps(host["relay"]))
+            subprocess.run(command + [":sdk:connected" + args.role.title() + "DebugAndroidTest", "--no-daemon"],
+                env=dict(os.environ, ANDROID_SERIAL=args.serial), check=True)
+        finally:
+            if port:
+                subprocess.run(adb + ["reverse", "--remove", port], check=False)

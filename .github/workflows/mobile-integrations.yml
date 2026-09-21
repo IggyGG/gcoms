@@ -6,6 +6,16 @@ on:
         description: Qualify the separate optional push distribution
         type: boolean
         default: false
+      platform:
+        description: Platform to qualify
+        type: choice
+        options: [all, android, apple]
+        default: all
+      role:
+        description: Distribution to qualify
+        type: choice
+        options: [all, client, relay]
+        default: all
   push:
     branches: [main]
     paths: ['mobile/**', 'scripts/build-mobile.py', 'scripts/prepare-android.py', 'scripts/qualify-*.py', 'scripts/mobile_fixture.py', 'scripts/test-android.py', '.github/workflows/mobile-integrations.yml']
@@ -13,11 +23,12 @@ permissions:
   contents: read
 jobs:
   android:
+    if: github.event_name != 'workflow_dispatch' || inputs.platform != 'apple'
     timeout-minutes: 180
     strategy:
       fail-fast: false
       matrix:
-        role: [client, relay]
+        role: ${{ fromJSON(inputs.role == 'client' && '["client"]' || inputs.role == 'relay' && '["relay"]' || '["client","relay"]') }}
     runs-on: ubuntu-24.04
     env:
       ANDROID_SERIAL: emulator-5580
@@ -58,11 +69,12 @@ jobs:
             emulator.log
           if-no-files-found: error
   apple:
+    if: github.event_name != 'workflow_dispatch' || inputs.platform != 'android'
     timeout-minutes: 180
     strategy:
       fail-fast: false
       matrix:
-        role: [client, relay]
+        role: ${{ fromJSON(inputs.role == 'client' && '["client"]' || inputs.role == 'relay' && '["relay"]' || '["client","relay"]') }}
     runs-on: macos-15
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683

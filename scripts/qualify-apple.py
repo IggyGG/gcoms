@@ -35,11 +35,10 @@ def main():
     parser.add_argument("--test", action="store_true")
     parser.add_argument("--baseline", type=Path)
     args = parser.parse_args()
-    with relay() if args.test and args.role == "client" else contextlib.nullcontext(None) as host:
-        qualify(args, host)
+    qualify(args)
 
 
-def qualify(args, host):
+def qualify(args):
     native = args.native_root.resolve()
     summary = json.loads((native / "summary.json").read_text())
     if bool(summary["fixtures"]) != args.test:
@@ -67,10 +66,6 @@ def qualify(args, host):
     if push:
         spec = spec.replace("product: GComs", "product: GComsPush")
         spec = spec.replace("GCOMS_ENABLED", "GCOMS_ENABLED GCOMS_PUSH")
-    if host:
-        spec = spec.replace("targets: [PreviewTests]",
-            "targets: [PreviewTests]\n      environmentVariables:\n        GCOMS_RELAY: " +
-            json.dumps(json.dumps(host["relay"], separators=(",", ":"))))
     (evidence / "project.yml").write_text(spec)
     run(["xcodegen", "generate", "--spec", evidence / "project.yml",
          "--project", evidence], env=env)
@@ -93,10 +88,20 @@ def qualify(args, host):
         run(["xcrun", "simctl", "boot", device])
         run(["xcrun", "simctl", "bootstatus", device, "-b"])
         if args.test:
-            run(["xcodebuild", "-project", project, "-scheme", "Preview",
+            command = ["xcodebuild", "-project", project, "-scheme", "Preview",
                 "-destination", "platform=iOS Simulator,id=" + device,
-                "-derivedDataPath", evidence / "derived", "-resultBundlePath", evidence / "tests.xcresult",
-                "test"], env=env)
+                "-derivedDataPath", evidence / "derived"]
+            run(command + ["build-for-testing"], env=env)
+            # Provisioning grants expire after five minutes. Mint only after
+            # compilation and simulator startup, immediately before execution.
+            with relay() if args.role == "client" else contextlib.nullcontext(None) as host:
+                test_env = dict(env)
+                if host:
+                    # xcodebuild forwards TEST_RUNNER_ variables to the runner
+                    # with that prefix removed; credentials stay out of argv.
+                    test_env["TEST_RUNNER_GCOMS_RELAY"] = json.dumps(host["relay"], separators=(",", ":"))
+                run(command + ["-resultBundlePath", evidence / "tests.xcresult",
+                    "test-without-building"], env=test_env)
         else:
             for scheme, bundle in [("Baseline", "boo.gcoms.preview.baseline"), ("Preview", "boo.gcoms.preview.sdk")]:
                 derived = evidence / "derived"

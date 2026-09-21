@@ -95,6 +95,11 @@ simulator. The client tests use a separate loopback relay; Android maps it throu
 to own and clean up that fixture. CI installs pinned Android command-line tools
 with a verified checksum; it does not depend on a preinstalled runner SDK.
 The workflow's manual `push` input selects the additional push distribution.
+Its `platform` and `role` inputs can qualify one distribution independently.
+Client fixtures compile the consumer before minting a relay provisioning card,
+so build time does not consume the grant's five-minute lifetime. Swift uses
+`build-for-testing` followed by `test-without-building`; Android repackages the
+fresh test asset after compilation.
 Fixture packages use an unoptimized build for the emulator/simulator architecture;
 the production pass builds every advertised architecture at 3/s/z.
 Swift tests use an ad-hoc signed simulator host with
