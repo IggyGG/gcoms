@@ -3,6 +3,8 @@ plugins {
     id("org.jetbrains.kotlin.android")
     id("maven-publish")
 }
+val publicationRole = providers.gradleProperty("gcomsPublishRole").orElse("client").get()
+    .also { require(it in listOf("client", "relay")) { "gcomsPublishRole must be client or relay" } }
 android {
     namespace = "boo.gcoms.push"
     compileSdk = 36
@@ -30,9 +32,9 @@ dependencies {
 }
 afterEvaluate {
     publishing.publications {
-        for (role in listOf("client", "relay")) create<MavenPublication>(role) {
-            groupId = "boo.gcoms"; artifactId = "gcoms-$role-fcm"; version = "0.1.0-preview"
-            from(components[role + "Release"])
+        create<MavenPublication>(publicationRole) {
+            groupId = "boo.gcoms"; artifactId = "gcoms-$publicationRole-fcm"; version = "0.1.0-preview"
+            from(components[publicationRole + "Release"])
         }
     }
 }

@@ -45,12 +45,17 @@ def main():
     evidence = ROOT / "target/android-evidence" / args.role / ("push" if push else "base")
     evidence.mkdir(parents=True, exist_ok=True)
     title = args.role.title()
-    command = [args.gradle, "-p", PROJECT, "-PgcomsNativeRoot=" + str(native / "android")]
+    command = [args.gradle, "-p", PROJECT, "-PgcomsNativeRoot=" + str(native / "android"),
+        "-PgcomsPublishRole=" + args.role]
     if push:
         command += ["-PgcomsPush=true"]
     if push:
-        command += [":push:assemble" + title + "Release"]
+        command += [":push:assemble" + title + "Release",
+            ":push:generatePomFileFor" + title + "Publication",
+            ":push:generateMetadataFileFor" + title + "Publication"]
     run(command + [":sdk:assemble" + title + "Release", ":sample:assemble" + title + "Release",
+        ":sdk:generatePomFileFor" + title + "Publication",
+        ":sdk:generateMetadataFileFor" + title + "Publication",
         ":sample:assembleBaselineRelease", "--no-daemon"])
     adb = Path(os.environ["ANDROID_HOME"]) / "platform-tools/adb"
     adb_args = [adb, "-s", args.serial]
@@ -61,6 +66,10 @@ def main():
         "ndk": summary["ndk"], "rustc": summary["rustc"], "page_size": page_size,
         "android": capture(adb_args + ["shell", "getprop", "ro.build.fingerprint"]), "apps": {}}
     import shutil
+    for module in (["sdk", "push"] if push else ["sdk"]):
+        publication = PROJECT / module / "build/publications" / args.role
+        for filename, suffix in (("pom-default.xml", ".pom"), ("module.json", ".module")):
+            shutil.copy2(publication / filename, evidence / (module + "-" + args.role + suffix))
     aar = PROJECT / "sdk/build/outputs/aar" / ("sdk-" + args.role + "-release.aar")
     shutil.copy2(aar, evidence / aar.name)
     report["aar"] = archive(aar)

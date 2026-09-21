@@ -26,7 +26,12 @@ Both client instrumentation tests now pass on the 16 KiB emulator, including
 channel/invitation creation, file import/export and profile reopen. GChat's
 unoptimized journey exposed startup stack pressure during identity restoration;
 boxing the application's startup future fixes the journey on the default stack.
-The full workspace and current-source GChat gates are being repeated.
+The current-source GChat gate passes all 137 tests at b39199e with GChat f7a83ce.
+The full workspace gate is being repeated. All four base/push Android role
+instrumentation jobs and the base iOS client simulator tests now pass at b39199e;
+release size measurements and the remaining Apple roles are still running.
+Android publication selects one role per invocation to give the FCM adapter an
+unambiguous dependency on the matching SDK; qualification retains its metadata.
 
 Implementation order: Windows native gate, Rust role separation, mobile ABI and
 packages, push registration/relay notifications, integrated qualification and

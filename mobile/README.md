@@ -33,6 +33,13 @@ Android: API 26+, ARM64 devices and x86_64 emulators, NDK 28.2.13676358 with
 Kotlin coroutines 1.10.2 and Android-only JNI 0.21.1 are the wrapper dependencies.
 AndroidX test dependencies are qualification-only.
 
+Generate or publish Maven metadata for one role per Gradle invocation with
+`-PgcomsPublishRole=client` (the default) or `-PgcomsPublishRole=relay`.
+The selected SDK publication is `boo.gcoms:gcoms-client` or `gcoms-relay`, version
+`0.1.0-preview`. Push SDK coordinates append `-push`; the separate `-fcm` adapter
+depends on that matching SDK. Qualification retains the AAR, POM and Gradle
+module metadata together. Applications must select exactly one role.
+
 iOS: iOS 15+, ARM64 device and ARM64/x86_64 simulator static libraries packaged
 as one XCFramework per role and a Swift package. Apple Foundation/Security are
 system frameworks. The C ABI has no foreign allocation ownership or callback

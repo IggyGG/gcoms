@@ -6,6 +6,8 @@ plugins {
 val nativeRoot = providers.gradleProperty("gcomsNativeRoot")
     .orElse(rootProject.layout.projectDirectory.dir("../../target/mobile/android").asFile.absolutePath).get()
 val pushEnabled = providers.gradleProperty("gcomsPush").orNull == "true"
+val publicationRole = providers.gradleProperty("gcomsPublishRole").orElse("client").get()
+    .also { require(it in listOf("client", "relay")) { "gcomsPublishRole must be client or relay" } }
 android {
     namespace = "boo.gcoms.sdk"
     compileSdk = 36
@@ -59,13 +61,9 @@ afterEvaluate {
         tasks.named("pre${title}ReleaseBuild").configure { dependsOn(verify) }
     }
     publishing.publications {
-        create<MavenPublication>("client") {
-            groupId = "boo.gcoms"; artifactId = "gcoms-client" + (if (pushEnabled) "-push" else ""); version = "0.1.0-preview"
-            from(components["clientRelease"])
-        }
-        create<MavenPublication>("relay") {
-            groupId = "boo.gcoms"; artifactId = "gcoms-relay" + (if (pushEnabled) "-push" else ""); version = "0.1.0-preview"
-            from(components["relayRelease"])
+        create<MavenPublication>(publicationRole) {
+            groupId = "boo.gcoms"; artifactId = "gcoms-$publicationRole" + (if (pushEnabled) "-push" else ""); version = "0.1.0-preview"
+            from(components[publicationRole + "Release"])
         }
     }
 }
