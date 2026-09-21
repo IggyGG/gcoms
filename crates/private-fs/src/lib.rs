@@ -90,12 +90,14 @@ mod windows {
     use std::ptr::null_mut;
     use windows_sys::Win32::Foundation::{CloseHandle, LocalFree};
     use windows_sys::Win32::Security::Authorization::{
-        ConvertSidToStringSidW, GetNamedSecurityInfoW, SE_FILE_OBJECT,
+        ConvertSidToStringSidW, ConvertStringSecurityDescriptorToSecurityDescriptorW,
+        GetNamedSecurityInfoW, SetNamedSecurityInfoW, SDDL_REVISION_1, SE_FILE_OBJECT,
     };
     use windows_sys::Win32::Security::{
-        AclSizeInformation, EqualSid, GetAce, GetAclInformation, GetLengthSid, GetTokenInformation,
-        TokenUser, ACCESS_ALLOWED_ACE, ACL, ACL_SIZE_INFORMATION, DACL_SECURITY_INFORMATION,
-        OWNER_SECURITY_INFORMATION, TOKEN_QUERY, TOKEN_USER,
+        AclSizeInformation, EqualSid, GetAce, GetAclInformation, GetLengthSid,
+        GetSecurityDescriptorDacl, GetSecurityDescriptorOwner, GetTokenInformation, TokenUser,
+        ACCESS_ALLOWED_ACE, ACL, ACL_SIZE_INFORMATION, DACL_SECURITY_INFORMATION,
+        OWNER_SECURITY_INFORMATION, PROTECTED_DACL_SECURITY_INFORMATION, TOKEN_QUERY, TOKEN_USER,
     };
     use windows_sys::Win32::System::SystemServices::{
         ACCESS_ALLOWED_ACE_TYPE, ACCESS_DENIED_ACE_TYPE,
@@ -203,33 +205,82 @@ mod windows {
         Ok(text)
     }
 
-    /// Take ownership and install an owner-only DACL through `icacls`, the
-    /// same tool the installers and the Windows process test rely on.
+    /// Replace the entire DACL, including unrelated explicit grants. Updating
+    /// just the current user's grant would leave other principals authorized.
     pub(super) fn make_owner_only(path: &Path, directory: bool) -> Result<(), String> {
         let sid = current_user_sid_string()?;
-        let grant = if directory {
-            format!("*{sid}:(OI)(CI)F")
-        } else {
-            format!("*{sid}:F")
-        };
-        for arguments in [
-            vec!["/setowner".to_string(), format!("*{sid}")],
-            vec!["/inheritance:r".to_string(), "/grant:r".to_string(), grant],
-        ] {
-            let output = std::process::Command::new("icacls.exe")
-                .arg(path)
-                .args(&arguments)
-                .output()
-                .map_err(|error| format!("run icacls: {error}"))?;
-            if !output.status.success() {
+        let inheritance = if directory { "OICI" } else { "" };
+        let sddl = format!("O:{sid}D:P(A;{inheritance};FA;;;{sid})")
+            .encode_utf16()
+            .chain(Some(0))
+            .collect::<Vec<_>>();
+        let mut descriptor = null_mut();
+        if unsafe {
+            ConvertStringSecurityDescriptorToSecurityDescriptorW(
+                sddl.as_ptr(),
+                SDDL_REVISION_1,
+                &mut descriptor,
+                null_mut(),
+            )
+        } == 0
+        {
+            return Err(format!(
+                "owner-only security descriptor failed: {}",
+                std::io::Error::last_os_error()
+            ));
+        }
+        // Owner and ACL point into this allocation until SetNamedSecurityInfoW
+        // returns. Release it on every path, including descriptor read errors.
+        let result = (|| {
+            let mut owner = null_mut();
+            let mut owner_defaulted = 0;
+            let mut dacl = null_mut();
+            let mut dacl_present = 0;
+            let mut dacl_defaulted = 0;
+            if unsafe { GetSecurityDescriptorOwner(descriptor, &mut owner, &mut owner_defaulted) }
+                == 0
+                || unsafe {
+                    GetSecurityDescriptorDacl(
+                        descriptor,
+                        &mut dacl_present,
+                        &mut dacl,
+                        &mut dacl_defaulted,
+                    )
+                } == 0
+            {
                 return Err(format!(
-                    "icacls {} failed: {}",
-                    arguments.join(" "),
-                    String::from_utf8_lossy(&output.stderr).trim()
+                    "read owner-only security descriptor failed: {}",
+                    std::io::Error::last_os_error()
                 ));
             }
-        }
-        Ok(())
+            if owner.is_null() || dacl_present == 0 || dacl.is_null() {
+                return Err("owner-only security descriptor is incomplete".into());
+            }
+            let wide = path
+                .as_os_str()
+                .encode_wide()
+                .chain(Some(0))
+                .collect::<Vec<_>>();
+            let status = unsafe {
+                SetNamedSecurityInfoW(
+                    wide.as_ptr(),
+                    SE_FILE_OBJECT,
+                    OWNER_SECURITY_INFORMATION
+                        | DACL_SECURITY_INFORMATION
+                        | PROTECTED_DACL_SECURITY_INFORMATION,
+                    owner,
+                    null_mut(),
+                    dacl,
+                    null_mut(),
+                )
+            };
+            if status != 0 {
+                return Err(format!("set owner-only security failed: OS error {status}"));
+            }
+            validate_owner_only(path)
+        })();
+        unsafe { LocalFree(descriptor) };
+        result
     }
 
     fn current_user_sid() -> Result<Vec<u8>, String> {
@@ -283,6 +334,64 @@ mod tests {
         make_private(&file, false).unwrap();
         validate_private_file(&file, "file").unwrap();
         validate_private_parent(&file, "file").unwrap();
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn make_private_removes_other_explicit_grants_and_children_inherit_privacy() {
+        fn grant_everyone(path: &Path, directory: bool) {
+            let grant = if directory {
+                "*S-1-1-0:(OI)(CI)R"
+            } else {
+                "*S-1-1-0:R"
+            };
+            let output = std::process::Command::new("icacls.exe")
+                .arg(path)
+                .args(["/grant", grant])
+                .output()
+                .unwrap();
+            assert!(output.status.success(), "{output:?}");
+        }
+
+        // Elevated Windows tokens may default a newly created object's owner
+        // to Administrators. Normalize ownership only, without touching its
+        // DACL, so the inheritance assertions below remain independent.
+        fn set_current_owner(path: &Path) {
+            let sid = windows::current_user_sid_string().unwrap();
+            let output = std::process::Command::new("icacls.exe")
+                .arg(path)
+                .args(["/setowner", &format!("*{sid}")])
+                .output()
+                .unwrap();
+            assert!(output.status.success(), "{output:?}");
+        }
+
+        let temp = tempfile::tempdir().unwrap();
+        let dir = temp.path().join("private");
+        std::fs::create_dir(&dir).unwrap();
+        make_private(&dir, true).unwrap();
+        grant_everyone(&dir, true);
+        let child = dir.join("inherited");
+        std::fs::write(&child, b"retained bytes").unwrap();
+        set_current_owner(&child);
+        assert!(validate_private_dir(&dir, "directory").is_err());
+        assert!(validate_private_file(&child, "inherited child").is_err());
+        make_private(&dir, true).unwrap();
+        validate_private_dir(&dir, "directory").unwrap();
+        validate_private_file(&child, "inherited child").unwrap();
+        assert_eq!(std::fs::read(&child).unwrap(), b"retained bytes");
+
+        grant_everyone(&child, false);
+        assert!(validate_private_file(&child, "explicit child").is_err());
+        make_private(&child, false).unwrap();
+        validate_private_file(&child, "explicit child").unwrap();
+        assert_eq!(std::fs::read(&child).unwrap(), b"retained bytes");
+
+        let later = dir.join("later");
+        std::fs::write(&later, b"new bytes").unwrap();
+        set_current_owner(&later);
+        validate_private_file(&later, "new child").unwrap();
+        validate_private_parent(&later, "new child").unwrap();
     }
 
     #[cfg(unix)]
