@@ -74,9 +74,13 @@ class PrivacyFilesTest(unittest.TestCase):
                 with patch.object(sys, "argv", argv), \
                      patch.object(privacy, "load_captures", return_value=captures), \
                      patch.object(privacy, "evaluate", side_effect=lambda a, b: evaluate(a, b, bootstrap=100)), \
+                     patch.object(privacy, "write_new") as sink, \
                      redirect_stdout(io.StringIO()):
                     status = privacy.main()
-                report = json.loads((Path(directory) / "privacy-files-report.json").read_text())
+                # Policy and serialization are independent of OS file ACLs.
+                sink.assert_called_once()
+                self.assertEqual(sink.call_args.args[0], Path(directory) / "privacy-files-report.json")
+                report = json.loads(sink.call_args.args[1])
                 self.assertTrue(report["measurement_valid"])
                 self.assertTrue(report["reference_threshold_is_release_veto"])
                 self.assertTrue(report["diagnostic_only"])
@@ -161,9 +165,12 @@ class FilePrivacyPolicyTests(unittest.TestCase):
                 with patch.object(sys,'argv',arguments), \
                      patch.object(privacy,'load_captures',return_value=captures), \
                      patch.object(privacy,'evaluate',return_value={'ok':meets_threshold}), \
+                     patch.object(privacy,'write_new') as sink, \
                      patch('builtins.print'):
                     self.assertEqual(privacy.main(),0 if meets_threshold else 1)
-                report=json.loads((Path(folder)/'privacy-files-report.json').read_text())
+                sink.assert_called_once()
+                self.assertEqual(sink.call_args.args[0], Path(folder)/'privacy-files-report.json')
+                report=json.loads(sink.call_args.args[1])
                 self.assertTrue(report['measurement_valid'])
                 self.assertEqual(report['component_gate_passed'],meets_threshold)
                 self.assertTrue(report['reference_threshold_is_release_veto'])

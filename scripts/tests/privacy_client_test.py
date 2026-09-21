@@ -2,6 +2,7 @@
 from dataclasses import replace
 import importlib.util
 import json
+import os
 from pathlib import Path
 import struct
 import subprocess
@@ -174,6 +175,12 @@ class ClientManifestTest(unittest.TestCase):
             result = subprocess.run([sys.executable, str(SCRIPTS / 'privacy_client_manifest.py'),
                 '--root', str(root), '--output', str(report)], capture_output=True, text=True)
             self.assertEqual(result.returncode, 1, result.stderr)
+            if os.name != 'posix':
+                # The actual CLI must refuse unqualified private-report output.
+                # Pure validators below/above still exercise the policy on all OSes.
+                self.assertIn('private study evidence requires POSIX file permissions', result.stderr)
+                self.assertFalse(report.exists())
+                return
             data = json.loads(report.read_text())
             self.assertFalse(data['measurement_valid'])
             self.assertFalse(data['release_qualified'])
