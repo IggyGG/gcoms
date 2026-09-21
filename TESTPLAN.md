@@ -1,3 +1,18 @@
+# Windows persisted routing profile fixtures
+
+Use the shared owner-only filesystem helper for pre-created temporary roots on
+Windows and Unix. Keep startup/reopen/wrong-seed assertions, plus an existing
+nonprivate-directory case that must fail without rewriting permissions or creating
+routing material. Production permission checks must remain strict.
+
+Both `77e756e` (unified branch) and `115f31b` (bounded Windows release input)
+passed seven profile cases, four routing-cache cases, two private-fs cases and
+strict all-target/all-feature node Clippy locally, with unchanged source snapshots.
+Source/import checks, formatting and diff checks passed. Windows16's complete
+GChat pass and original GComs failure remain separate; the next exact Windows
+pair must produce fresh native and installer receipts.
+[Evidence](docs/evidence/windows-routing-profile-20260921/summary.json).
+
 # Client bootstrap API follow-up
 
 Test the trusted client bundle API through the Node command loop: fresh carrier

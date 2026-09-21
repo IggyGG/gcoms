@@ -1,0 +1,171 @@
+{
+  "schema": 1,
+  "scope": "Windows routing profile test fixture ownership repair; Linux affected validation",
+  "native_red_run": {
+    "id": 35624488869,
+    "gchat": "293ee5f3960e1265fb7469617918aa834eb64722",
+    "gcoms": "9f8b483f41ac0a5a0e3b0530b5428356041d2424",
+    "gchat_native_passed": true,
+    "gcoms_native_passed": false,
+    "failure": "Two node_profile persisted-directory starts refused existing roots not made private on Windows.",
+    "diagnosis": {
+      "path": "/run/media/user/SSD-2/gchat-validation/windows-native-35624488869/diagnosis.json",
+      "sha256": "b5a3083277a9af0b0a2753c6164ad4a74b568383e4f2e71be734b07da2abeb00"
+    },
+    "original_archive_sha256": "f74a2f2a9ed41c2959783619138662e3bd1e5a78b3ef5137f3eaf254db480996"
+  },
+  "changed_source": [
+    "crates/node/tests/node_profile.rs"
+  ],
+  "production_changed": false,
+  "checks": {
+    "main": {
+      "commit": "77e756e18d4a8d595481c036573623d32a4548b7",
+      "tree": "b905a7a9cc3878cb0ed9b8e5d684ea45a29f5017",
+      "source_unchanged": true,
+      "tracked_paths": 665,
+      "summary": {
+        "path": "/run/media/user/SSD-2/gchat-validation/windows-routing-fixture-01/summary.json",
+        "sha256": "8eaa2a019f0fdd270ab2fea0d522a7c34246ba9993d5e6e876e1de1e87ff61e7"
+      },
+      "checks": [
+        {
+          "name": "source",
+          "exit_code": 0,
+          "sha256": "9a2043c15787394ba7773766ca79bcc15b70b4d1c6932752f72fd23bc4a452e7"
+        },
+        {
+          "name": "research",
+          "exit_code": 0,
+          "sha256": "a90ef00a9392ea130dee6807cd368d2a76fc0d0e5ea87e43aca0ccc3c723f8e4"
+        },
+        {
+          "name": "fmt",
+          "exit_code": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "name": "node-profile",
+          "exit_code": 0,
+          "sha256": "74f47a164dbfbc183b18910e8908986baad398ae2a944d0531176c623f90ef63",
+          "rust_counts": {
+            "passed": 7,
+            "failed": 0,
+            "ignored": 0
+          }
+        },
+        {
+          "name": "routing-cache",
+          "exit_code": 0,
+          "sha256": "31bb1be4ebc1cbf459d93f40bfa154c25e251c84cb70027fbe4e777389340165",
+          "rust_counts": {
+            "passed": 4,
+            "failed": 0,
+            "ignored": 0
+          }
+        },
+        {
+          "name": "private-fs",
+          "exit_code": 0,
+          "sha256": "0067a3df8ab32dc2489159071ecf142a46f55efe44a2224c7992a5fd446460db",
+          "rust_counts": {
+            "passed": 2,
+            "failed": 0,
+            "ignored": 0
+          }
+        },
+        {
+          "name": "node-clippy",
+          "exit_code": 0,
+          "sha256": "c41e494a357f1d552ec7fa56ea4d3388262dec8e1182f83359b135961650cdbd"
+        },
+        {
+          "name": "diff",
+          "exit_code": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        }
+      ]
+    },
+    "release": {
+      "commit": "115f31bb2e51bcb3e2da0f6f367dde99ff78db18",
+      "tree": "0f62e82f3e63d8c0bceb91f5fb91756dd0859805",
+      "source_unchanged": true,
+      "tracked_paths": 587,
+      "summary": {
+        "path": "/run/media/user/SSD-2/gchat-validation/windows-routing-fixture-01/release-validation/summary.json",
+        "sha256": "2762a2f8a646a691cb06025bec3a7c365bc7613a51b265c041fd28e90c774e52"
+      },
+      "checks": [
+        {
+          "name": "source",
+          "exit_code": 0,
+          "sha256": "9d032603312fc4a2238860d30f7fa6b555702b6cb648fe7e80c4d2e36af896be"
+        },
+        {
+          "name": "research",
+          "exit_code": 0,
+          "sha256": "a90ef00a9392ea130dee6807cd368d2a76fc0d0e5ea87e43aca0ccc3c723f8e4"
+        },
+        {
+          "name": "fmt",
+          "exit_code": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "name": "node-profile",
+          "exit_code": 0,
+          "sha256": "6f301b5643a92a1ed43ccc41e02504a511f53ea61fd58c7ded19da4e7d2df930",
+          "rust_counts": {
+            "passed": 7,
+            "failed": 0,
+            "ignored": 0
+          }
+        },
+        {
+          "name": "routing-cache",
+          "exit_code": 0,
+          "sha256": "3edb750c958167c008ea106db92b6535aaef5cfa0a3934b643a1a079b3c621de",
+          "rust_counts": {
+            "passed": 4,
+            "failed": 0,
+            "ignored": 0
+          }
+        },
+        {
+          "name": "private-fs",
+          "exit_code": 0,
+          "sha256": "caa416be65638f0be6803b8cd9e08eefdff26c4489615598c3b0deb3ee4b3a42",
+          "rust_counts": {
+            "passed": 2,
+            "failed": 0,
+            "ignored": 0
+          }
+        },
+        {
+          "name": "node-clippy",
+          "exit_code": 0,
+          "sha256": "94c931816615131814be51bfaa5aa0e0e3ba01e9648ff08e40ec2fe7336c16cf"
+        },
+        {
+          "name": "diff",
+          "exit_code": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        }
+      ]
+    }
+  },
+  "windows17": {
+    "freeze": {
+      "path": "/run/media/user/SSD-2/gchat-validation/windows-release-inputs-17/freeze.json",
+      "sha256": "c5b8fc34c7b5c0be99fec15d9675a6b9ed4f5405cc063e8e8aeaec76f81da29b"
+    },
+    "gchat": "293ee5f3960e1265fb7469617918aa834eb64722",
+    "gcoms": "115f31bb2e51bcb3e2da0f6f367dde99ff78db18",
+    "native_validation_pending": true
+  },
+  "limitations": [
+    "Linux affected tests do not qualify the new Windows fixture or an installer.",
+    "Windows16 GChat native pass stays bound to its original paired inputs.",
+    "New Windows paired/native, signing and installed lifecycle evidence is required."
+  ]
+}

@@ -1,3 +1,16 @@
+# Windows routing fixture correction
+
+Windows16 passed the full GChat native entrypoint but stopped in two GComs
+profile tests: the fixtures made their pre-existing temporary routing directories
+private only on Unix. The strict Windows ownership check correctly refused them.
+`77e756e` makes both fixtures private using the cross-platform helper and verifies
+that an existing nonprivate directory is still rejected without repair. No
+production ACL or routing-store behavior changes. The bounded Windows retry uses
+`115f31b`, only this test change atop its original `9f8b483` input; the unified
+SDK branch retains the same fix separately. Both local snapshots passed affected
+tests and strict node Clippy. Native Windows retry/installer results remain pending.
+[Exact failure and local checks](docs/evidence/windows-routing-profile-20260921/summary.json).
+
 # Concurrent bootstrap integration
 
 The subsequent `a5c3b6b` main-line change adds trusted client-side GC/2 bundle
