@@ -60,6 +60,26 @@ and artifact hashes. `--baseline summary.json` enforces at most 5% growth under
 the same toolchain. Android builds require ANDROID_HOME and the pinned NDK;
 Apple builds require macOS/Xcode. Both require the pinned Rust 1.98 toolchain.
 
+Android qualification on 2026-09-21 uses Rust inputs at `b39199e` and publication
+metadata at `b3a21a9`. All four configurations pass instrumentation on the API 35
+16 KiB emulator. Production AARs, POM/module dependencies, native hashes, APK ZIP
+alignment and installed APK deltas are verified. `z` is the smallest of 3/s/z for
+both architectures in every configuration. Sizes below are decimal MB.
+
+| Android distribution | ARM64 native library | SDK AAR (two ABIs) | ARM64 sample APK addition | x86_64 installed APK addition |
+| --- | ---: | ---: | ---: | ---: |
+| Client | 10.17 | 9.75 | 10.22 | 12.02 |
+| Relay | 10.82 | 10.38 | 10.87 | 12.84 |
+| Client + push | 10.19 | 9.76 | 10.74 | 12.55 |
+| Relay + push | 10.87 | 10.42 | 11.43 | 13.40 |
+
+The push adapter AAR is another 25 KB; the sample APK columns include Firebase
+and its transitive dependencies. App additions subtract the same sample without
+GComs. Installed APK bytes exclude OS-generated code caches and application data;
+ARM64 figures are build measurements. These results do not qualify physical
+devices or live push delivery. [Exact inputs and measurements](../docs/evidence/mobile-preview-20260921/)
+retain all three optimization levels and artifact hashes.
+
 The mobile CI workflow exercises each role on an Android 16 KiB emulator and iOS
 simulator. The client tests use a separate loopback relay; Android maps it through
 `adb reverse`. Run `scripts/test-android.py` or `scripts/qualify-apple.py --test`

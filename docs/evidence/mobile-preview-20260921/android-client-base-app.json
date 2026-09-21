@@ -1,0 +1,73 @@
+{
+  "schema": 1,
+  "role": "client",
+  "push": false,
+  "revision": "b39199e431fa680267eecd566914ff84ee06ef25",
+  "ndk": "Pkg.Desc = Android NDK\nPkg.Revision = 27.3.13750724\nPkg.BaseRevision = 27.3.13750724\nPkg.ReleaseName = r27d\n",
+  "rustc": "rustc 1.98.0 (88d9e12ae 2026-08-18)\nbinary: rustc\ncommit-hash: 88d9e12ae178fab0fb5cc050a94da85685d449ea\ncommit-date: 2026-08-18\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.0\nLLVM version: 22.1.8\n",
+  "page_size": 16384,
+  "android": "google/sdk_gphone16k_x86_64/emu64xa16k:15/AE3A.240806.043/12960925:userdebug/dev-keys",
+  "apps": {
+    "baseline": {
+      "arm64-v8a": {
+        "bytes": 20520,
+        "sha256": "ebfd01390fd6dc19e975e12abca4af08c083a885e1c49442f069d3321a886b1a",
+        "uncompressed_bytes": 55961,
+        "native_bytes": 0,
+        "dex_bytes": 2020
+      },
+      "x86_64": {
+        "bytes": 20520,
+        "sha256": "ebfd01390fd6dc19e975e12abca4af08c083a885e1c49442f069d3321a886b1a",
+        "uncompressed_bytes": 55961,
+        "native_bytes": 0,
+        "dex_bytes": 2020,
+        "installed_apk_bytes": 20520
+      }
+    },
+    "client": {
+      "arm64-v8a": {
+        "bytes": 10242786,
+        "sha256": "bb0804e5ccfff096dd19dcfbfa403dba0804ffa036c1133a01f3dc6d891c05fd",
+        "uncompressed_bytes": 10308566,
+        "native_bytes": 10172928,
+        "dex_bytes": 79768
+      },
+      "x86_64": {
+        "bytes": 12044839,
+        "sha256": "fa033b2b8982b6b60265b56c146948421f763ea5ec89762637410cac2dbd4881",
+        "uncompressed_bytes": 12110622,
+        "native_bytes": 11974984,
+        "dex_bytes": 79768,
+        "installed_apk_bytes": 12044839
+      }
+    }
+  },
+  "aar": {
+    "bytes": 9746529,
+    "sha256": "55db664abbc58ddd2fd26a2232700042dd9f07e8ca01c97c6453c0e676f87729",
+    "uncompressed_bytes": 22180531,
+    "native_bytes": 22147912,
+    "dex_bytes": 0
+  },
+  "delta": {
+    "arm64-v8a": {
+      "bytes": 10222266,
+      "uncompressed_bytes": 10252605,
+      "native_bytes": 10172928,
+      "dex_bytes": 77748
+    },
+    "x86_64": {
+      "bytes": 12024319,
+      "uncompressed_bytes": 12054661,
+      "native_bytes": 11974984,
+      "dex_bytes": 77748,
+      "installed_apk_bytes": 12024319
+    }
+  },
+  "evidence": {
+    "workflow_run": "https://github.com/IggyGG/gcoms/actions/runs/35598613291",
+    "native_report_sha256": "2b07bdf8ce8e7003b12f0fb4b75a37e5d1c4236077ede4108f4a3dcc8e440df1",
+    "app_report_sha256": "8aa544c07cba7c8729e51ebb0e91e286d27d7bb852d99c9b165ebf9861a04e24"
+  }
+}

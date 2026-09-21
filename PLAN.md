@@ -32,6 +32,13 @@ instrumentation jobs and the base iOS client simulator tests now pass at b39199e
 release size measurements and the remaining Apple roles are still running.
 Android publication selects one role per invocation to give the FCM adapter an
 unambiguous dependency on the matching SDK; qualification retains its metadata.
+Android qualification is complete for the agreed emulator preview: all four
+base/push roles pass, 3/s/z native and app deltas are retained under
+`docs/evidence/mobile-preview-20260921/`, and publication metadata plus direct
+16 KiB APK loading are verified at b3a21a9. Rust workspace validation passes
+910 tests (seven explicit ignores), strict Clippy, documentation and minimal
+feature checks; GChat's 137 tests and strict Clippy pass. Apple preview and final
+desktop size evidence remain in progress.
 
 Implementation order: Windows native gate, Rust role separation, mobile ABI and
 packages, push registration/relay notifications, integrated qualification and

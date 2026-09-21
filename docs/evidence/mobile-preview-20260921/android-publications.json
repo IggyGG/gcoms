@@ -1,0 +1,129 @@
+{
+  "schema": 1,
+  "native_revision": "b39199e431fa680267eecd566914ff84ee06ef25",
+  "packaging_revision": "b3a21a9a911ea0d4bbfe89446794f24ed7cf96b5",
+  "scope": "Android emulator preview; no physical device or live-provider qualification",
+  "native_inputs_unchanged": true,
+  "distributions": [
+    {
+      "role": "client",
+      "push": false,
+      "page_size": 16384,
+      "packaging_source_digest": "a3515da9c461b60c7131c6db4b9d8d6cdb782d857abb51f670540510dbbe53ad",
+      "native_hashes_match": true,
+      "apk_direct_loading_verified": true,
+      "installed_delta_matches_ci": true,
+      "publication_dependencies_verified": true,
+      "artifacts": {
+        "sdk-client-release.aar": {
+          "bytes": 9746529,
+          "sha256": "32459af1d292f05ae0b84e1738124a03bc69fd99b744f9f6e99fe35c0cff0ec2"
+        },
+        "sdk-client.module": {
+          "bytes": 2519,
+          "sha256": "b8a6978f13c3ee24ff1d9bcacf3b16cf424631a0fcc7e92d6b997e57989e2ce1"
+        },
+        "sdk-client.pom": {
+          "bytes": 1212,
+          "sha256": "ed7bce488563eb91ddfb967f2b0fd096deb457197ddccddbadd6cfab2288542b"
+        }
+      }
+    },
+    {
+      "role": "client",
+      "push": true,
+      "page_size": 16384,
+      "packaging_source_digest": "a3515da9c461b60c7131c6db4b9d8d6cdb782d857abb51f670540510dbbe53ad",
+      "native_hashes_match": true,
+      "apk_direct_loading_verified": true,
+      "installed_delta_matches_ci": true,
+      "publication_dependencies_verified": true,
+      "artifacts": {
+        "push-client-release.aar": {
+          "bytes": 25033,
+          "sha256": "9d999f44e411f8e70dad5efe276b0107f58d6b6dee8cde53c995bbe486a6221b"
+        },
+        "push-client.module": {
+          "bytes": 3219,
+          "sha256": "b6d2f851d18b2bce8e59d725e1262c220b65cd8a362ef27383ac5898fe020a70"
+        },
+        "push-client.pom": {
+          "bytes": 1594,
+          "sha256": "c23e28f7e0f3556567adb662637029dfb411bfcd45fd4bef8e0571d7f64bf3ce"
+        },
+        "sdk-client-release.aar": {
+          "bytes": 9761109,
+          "sha256": "1b5feb17ba8510af4a9fb7b447c395aca8fbec100832f75023f96c710fe74c54"
+        },
+        "sdk-client.module": {
+          "bytes": 2544,
+          "sha256": "8df2f5ad2adb341060445cd07a8fddd4e5461008cd03d3db98d9357719cbcdab"
+        },
+        "sdk-client.pom": {
+          "bytes": 1217,
+          "sha256": "d9671a68ebc645256a1973025032984f4cc8ffe300f3fbd7c82e5cd89c05fcc2"
+        }
+      }
+    },
+    {
+      "role": "relay",
+      "push": false,
+      "page_size": 16384,
+      "packaging_source_digest": "a3515da9c461b60c7131c6db4b9d8d6cdb782d857abb51f670540510dbbe53ad",
+      "native_hashes_match": true,
+      "apk_direct_loading_verified": true,
+      "installed_delta_matches_ci": true,
+      "publication_dependencies_verified": true,
+      "artifacts": {
+        "sdk-relay-release.aar": {
+          "bytes": 10383665,
+          "sha256": "d2661c75c4aca0271f06feb506ef7c715e8e3c5f67070a1365d8e3b95f86b72b"
+        },
+        "sdk-relay.module": {
+          "bytes": 2512,
+          "sha256": "49138173d80af96122e0905814fafb493b937d6b4e12ddfe4c3c07694eb991b0"
+        },
+        "sdk-relay.pom": {
+          "bytes": 1211,
+          "sha256": "48ca5e108c2af63f1456fac4192278b2d5a4f3d2d8c21e36cd823c8bc1d7f16c"
+        }
+      }
+    },
+    {
+      "role": "relay",
+      "push": true,
+      "page_size": 16384,
+      "packaging_source_digest": "a3515da9c461b60c7131c6db4b9d8d6cdb782d857abb51f670540510dbbe53ad",
+      "native_hashes_match": true,
+      "apk_direct_loading_verified": true,
+      "installed_delta_matches_ci": true,
+      "publication_dependencies_verified": true,
+      "artifacts": {
+        "push-relay-release.aar": {
+          "bytes": 25028,
+          "sha256": "293286ed201a6d139fcac958081b0708d243450238d0c0d06f3aced0319d50b8"
+        },
+        "push-relay.module": {
+          "bytes": 3208,
+          "sha256": "54e0fe0304f7b5aa2c9f7b927b640e801adf3f15376c7871bcd7a2d0a920b6ed"
+        },
+        "push-relay.pom": {
+          "bytes": 1592,
+          "sha256": "beaa5b31a8070a46591a856cccc52584ccc52c81cd5f197c2166db651fdc7984"
+        },
+        "sdk-relay-release.aar": {
+          "bytes": 10423167,
+          "sha256": "0a015456533bc60e793a28c246f2d0f05e739203b5d72ff85497bd4fecfec4e7"
+        },
+        "sdk-relay.module": {
+          "bytes": 2537,
+          "sha256": "387bc573845c48b0fb4d94aa6f1d9882bd70d4725badf8a8e8729418bc4c8153"
+        },
+        "sdk-relay.pom": {
+          "bytes": 1216,
+          "sha256": "9036196fc7a1faa8aa775655d69a10509233b943790ea327860d97c51d0252c5"
+        }
+      }
+    }
+  ]
+}
