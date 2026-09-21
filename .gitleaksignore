@@ -1,6 +1,8 @@
 # Reviewed false positives: libcrux-secrets dependency names in Cargo lockfiles.
 # Exact historical fingerprints only; new findings still fail publication.
 f8a648be4686fe9dba7c6bb31d9ca2435203bf8e:Cargo.lock:generic-api-key:2093
+# Same public dependency-name sequence in the isolated mobile lockfile.
+bf050e813709efd26527ede28682ee8455c89c99:mobile/native/Cargo.lock:generic-api-key:1908
 
 # Reviewed source-file SHA-256 digests in the Rust integration evidence.
 # Each digest was recomputed from the recorded GComs/GChat commit; these exact
