@@ -9,6 +9,9 @@ pub struct GatewayConfig {
     pub url: String,
     pub relay_id: String,
     pub key: [u8; 32],
+    /// Empty preserves event-only compatibility; ticket minting is disabled.
+    #[serde(default)]
+    pub apps: Vec<String>,
 }
 impl Drop for GatewayConfig {
     fn drop(&mut self) {
@@ -16,6 +19,15 @@ impl Drop for GatewayConfig {
     }
 }
 impl GatewayConfig {
+    pub(crate) fn issuer(&self) -> Result<super::TicketIssuer, String> {
+        let url = url::Url::parse(&self.url).map_err(|_| "invalid gateway URL")?;
+        Ok(super::TicketIssuer {
+            origin: url.origin().ascii_serialization(),
+            relay_id: self.relay_id.clone(),
+            apps: self.apps.clone(),
+            key: self.key,
+        })
+    }
     pub(crate) fn client(&self) -> Result<reqwest::Client, String> {
         let url = url::Url::parse(&self.url).map_err(|_| "invalid push gateway URL")?;
         if url.scheme() != "https"
@@ -32,6 +44,8 @@ impl GatewayConfig {
                 .bytes()
                 .all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-')
             || self.key == [0; 32]
+            || self.apps.len() > 16
+            || self.apps.iter().any(|app| !super::tickets::valid_name(app))
         {
             return Err("invalid push gateway configuration".into());
         }

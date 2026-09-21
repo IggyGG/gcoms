@@ -9,16 +9,17 @@ import socket
 import sqlite3
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from gateway import Gateway, MAX_REQUEST, NAME
+from gateway import Gateway, MAX_REQUEST, NAME, APP
 from providers import Providers
 
 
 def serve(config, database, port):
     apps, relays = config["apps"], config["relays"]
     for app_id, app in apps.items():
-        if not NAME.fullmatch(app_id): raise ValueError("invalid app id")
-        app["registration_key"] = bytes.fromhex(app["registration_key"])
-        if len(app["registration_key"]) != 32: raise ValueError("registration key must be 32 bytes")
+        if not APP.fullmatch(app_id): raise ValueError("invalid app id")
+        if "registration_key" in app:
+            app["registration_key"] = bytes.fromhex(app["registration_key"])
+            if len(app["registration_key"]) != 32: raise ValueError("registration key must be 32 bytes")
         for name, provider in app["providers"].items():
             if name not in ("apns", "fcm"): raise ValueError("invalid provider")
             if name == "fcm" and not NAME.fullmatch(provider["project_id"]): raise ValueError("invalid project id")
@@ -26,7 +27,7 @@ def serve(config, database, port):
         if not NAME.fullmatch(relay_id): raise ValueError("invalid relay id")
         relay["key"] = bytes.fromhex(relay["key"])
         if len(relay["key"]) != 32 or not set(relay["apps"]).issubset(apps): raise ValueError("invalid relay scope")
-    gateway = Gateway(database, apps, relays, Providers())
+    gateway = Gateway(database, apps, relays, Providers(), public_origin=config.get("public_origin"))
     slots = threading.BoundedSemaphore(32)
     stop = threading.Event()
     class Handler(BaseHTTPRequestHandler):

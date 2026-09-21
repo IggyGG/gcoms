@@ -184,6 +184,10 @@ struct ReplayRecord {
 }
 
 struct LeaseRecord {
+    #[cfg(feature = "push-gateway")]
+    ticket_replays: VecDeque<notifications::TicketReplay>,
+    #[cfg(feature = "push-gateway")]
+    ticket_attempts: VecDeque<u64>,
     #[cfg(feature = "push-notifications")]
     notification: Option<crate::push_notifications::Binding>,
     #[cfg(feature = "push-notifications")]
@@ -346,6 +350,8 @@ impl QueueStore {
 
 /// Owns all boot-scoped admission, lease, replay, and queue state.
 pub struct LeaseStore {
+    #[cfg(feature = "push-gateway")]
+    ticket_issuer: Option<crate::push_notifications::TicketIssuer>,
     #[cfg(feature = "push-notifications")]
     notification_sink: Option<tokio::sync::mpsc::Sender<[u8; 32]>>,
     relay_service_id: RelayServiceId,
@@ -378,6 +384,8 @@ impl LeaseStore {
             OsRng.fill_bytes(&mut admission_key);
         }
         Ok(Self {
+            #[cfg(feature = "push-gateway")]
+            ticket_issuer: None,
             #[cfg(feature = "push-notifications")]
             notification_sink: None,
             relay_service_id,
@@ -524,6 +532,10 @@ impl LeaseStore {
             gc2_push_binding: None,
         });
         let lease = LeaseRecord {
+            #[cfg(feature = "push-gateway")]
+            ticket_replays: VecDeque::new(),
+            #[cfg(feature = "push-gateway")]
+            ticket_attempts: VecDeque::new(),
             #[cfg(feature = "push-notifications")]
             notification: None,
             #[cfg(feature = "push-notifications")]

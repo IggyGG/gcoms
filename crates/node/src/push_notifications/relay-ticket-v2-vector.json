@@ -1,0 +1,19 @@
+{
+  "note": "Public deterministic interoperability fixture; not an operational credential.",
+  "claims": {
+    "version": 2,
+    "issuer": "r1",
+    "app": "boo.gchat.app",
+    "installation": "b10453161675b04b668d285bfdfa8499423c8aa3f5679fbe4e9af3f9a0c0345b",
+    "issued": 1000,
+    "expires": 1200,
+    "nonce": "03030303030303030303030303030303",
+    "revision": 1,
+    "platform": "fcm",
+    "token_sha256": "eacb9ab8f6db03232e40f809d83464809bdfd41203c70051cc4b42e380732afa",
+    "gateway_origin": "https://push.example",
+    "visible": true,
+    "purpose": "register"
+  },
+  "ticket": "eyJhcHAiOiJib28uZ2NoYXQuYXBwIiwiZXhwaXJlcyI6MTIwMCwiZ2F0ZXdheV9vcmlnaW4iOiJodHRwczovL3B1c2guZXhhbXBsZSIsImluc3RhbGxhdGlvbiI6ImIxMDQ1MzE2MTY3NWIwNGI2NjhkMjg1YmZkZmE4NDk5NDIzYzhhYTNmNTY3OWZiZTRlOWFmM2Y5YTBjMDM0NWIiLCJpc3N1ZWQiOjEwMDAsImlzc3VlciI6InIxIiwibm9uY2UiOiIwMzAzMDMwMzAzMDMwMzAzMDMwMzAzMDMwMzAzMDMwMyIsInBsYXRmb3JtIjoiZmNtIiwicHVycG9zZSI6InJlZ2lzdGVyIiwicmV2aXNpb24iOjEsInRva2VuX3NoYTI1NiI6ImVhY2I5YWI4ZjZkYjAzMjMyZTQwZjgwOWQ4MzQ2NDgwOWJkZmQ0MTIwM2M3MDA1MWNjNGI0MmUzODA3MzJhZmEiLCJ2ZXJzaW9uIjoyLCJ2aXNpYmxlIjp0cnVlfQ.9240e071e988c87c325fbc258dcbda809d4c31b68a3078fbf6e22e5090ceea21"
+}

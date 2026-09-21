@@ -53,11 +53,15 @@ class Providers:
             token = jwt({"alg": "ES256", "kid": config["key_id"]}, {"iss": config["team_id"], "iat": now}, Path(config["private_key_file"]).read_bytes())
             self.tokens[key] = (token, now + 3000)
         endpoint = "api.sandbox.push.apple.com" if config.get("sandbox", False) else "api.push.apple.com"
+        visible = bool(registration.get("visible", False))
+        aps = {"content-available": 1}
+        if visible:
+            aps["alert"] = {"title": "GChat", "body": "New activity. Open GChat to receive it."}
         response = self.http.post("https://" + endpoint + "/3/device/" + registration["token"],
             headers={"authorization": "bearer " + self.tokens[key][0], "apns-topic": config["topic"],
-                     "apns-push-type": "background", "apns-priority": "5", "apns-expiration": str(now + 300),
+                     "apns-push-type": "alert" if visible else "background", "apns-priority": "10" if visible else "5", "apns-expiration": str(now + 300),
                      "apns-collapse-id": registration["reference"]},
-            json={"aps": {"content-available": 1}, "gcoms_activity": "message", "gcoms_reference": registration["reference"]})
+            json={"aps": aps, "gcoms_activity": "message", "gcoms_reference": registration["reference"]})
         if response.status_code == 403:
             self.tokens.pop(key, None)
         return self.result(response, lambda code, body: code == 410 or (code == 400 and body.get("reason") in ("BadDeviceToken", "DeviceTokenNotForTopic")))
@@ -81,7 +85,9 @@ class Providers:
         response = self.http.post("https://fcm.googleapis.com/v1/projects/" + config["project_id"] + "/messages:send",
             headers={"authorization": "Bearer " + self.tokens[key][0]},
             json={"message": {"token": registration["token"], "data": {"gcoms_activity": "message", "gcoms_reference": registration["reference"]},
-                              "android": {"priority": "normal", "ttl": "300s", "collapse_key": "gcoms-activity"}}})
+                              # Data-only: native Android checks current permission and opt-in
+                              # before displaying the fixed generic alert, including after opt-out.
+                              "android": {"priority": "high" if registration.get("visible", False) else "normal", "ttl": "300s", "collapse_key": "gcoms-activity"}}})
         if response.status_code == 401:
             self.tokens.pop(key, None)
         def expired(code, body):

@@ -68,5 +68,27 @@ class ProviderTests(unittest.TestCase):
         self.assertEqual(self.providers.send(self.row, config).status, "expired")
         self.assertEqual(len(self.requests), 3)  # OAuth token was reused.
 
+    def test_visible_apns_is_generic_and_android_stays_app_controlled_data_only(self):
+        key = ec.generate_private_key(ec.SECP256R1())
+        config = {"key_id": "KEY", "team_id": "TEAM", "topic": "boo.gchat.app", "private_key_file": self.private(key, "visible.pem")}
+        self.row["visible"] = True
+        self.responses.append(httpx.Response(200, json={}))
+        self.providers.send(self.row, config)
+        request = self.requests[-1]
+        self.assertEqual(request.headers["apns-push-type"], "alert")
+        self.assertEqual(request.headers["apns-priority"], "10")
+        payload = json.loads(request.content)
+        self.assertEqual(payload["aps"]["alert"], {"title": "GChat", "body": "New activity. Open GChat to receive it."})
+        self.assertEqual(set(payload), {"aps", "gcoms_activity", "gcoms_reference"})
+        import time
+        self.providers.tokens[("fcm", "app")] = ("mock-token", int(time.time()) + 100)
+        self.row["platform"] = "fcm"
+        self.responses.append(httpx.Response(200, json={}))
+        self.providers.send(self.row, {"project_id": "project"})
+        payload = json.loads(self.requests[-1].content)["message"]
+        self.assertEqual(payload["android"]["priority"], "high")
+        self.assertNotIn("notification", payload)
+        self.assertEqual(payload["data"], {"gcoms_activity": "message", "gcoms_reference": "a" * 64})
+
 
 if __name__ == "__main__": unittest.main()

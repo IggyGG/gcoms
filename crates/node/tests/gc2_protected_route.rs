@@ -274,3 +274,116 @@ async fn missing_entries_defer_durable_delivery_without_direct_fallback() {
         "message escaped the protected route while entries were unavailable"
     );
 }
+
+#[cfg(feature = "push-gateway")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn push_registration_uses_retained_protected_route_without_direct_fallback() {
+    use gcoms_node::node::{start_persistent_restored_with_routing, RoutingConfig};
+    use gcoms_node::push_notifications::{GatewayConfig, PushPlatform, PushRegistrationRequest};
+    // The older data-only endpoint fixture deliberately has no RoutingConfig;
+    // opt into the actual current administrative connector for this regression.
+    let open = |seed, profile, card| async move {
+        let node = start_persistent_restored_with_routing(
+            NodeConfig {
+                seed: [seed; 32],
+                listen: "127.0.0.1:0".parse().unwrap(),
+                control: None,
+                advertise: None,
+                inbox_relay: Some(card),
+                profile,
+                alias_lifecycle: Default::default(),
+            },
+            RoutingConfig::default(),
+            Arc::new(|_| Ok(())),
+            None,
+        )
+        .await
+        .unwrap();
+        assert!(node.uses_gc2_routing());
+        node
+    };
+    let host = endpoint(113, NodeProfile::gc2_gate_fixture()).await;
+    host.configure_push_gateway(GatewayConfig {
+        url: "https://push.example.invalid/v1/events".into(),
+        relay_id: "fixture".into(),
+        key: [61; 32],
+        apps: vec!["boo.gchat.app".into()],
+    })
+    .await
+    .unwrap();
+    let provision = || async {
+        let card = host.provision_client_relay().await.unwrap();
+        let admin = gcoms_node::scheduler::RelayScheduler::new(Arc::new(
+            gcoms_transport::Tp1Client::new().unwrap(),
+        ));
+        for alias in &card.provisioning.as_ref().unwrap().aliases {
+            admin
+                .admin_post(
+                    alias.contact.target.clone(),
+                    alias.create_path.clone(),
+                    alias.lease_create.clone(),
+                )
+                .unwrap()
+                .completion()
+                .await
+                .accepted()
+                .unwrap();
+        }
+        admin.shutdown();
+        card
+    };
+    let request = |visible| PushRegistrationRequest {
+        app_id: "boo.gchat.app".into(),
+        installation_nonce: [62; 32],
+        platform: PushPlatform::Fcm,
+        token: "fixture-device-token".into(),
+        revision: 1,
+        visible,
+    };
+    let cold = open(
+        111,
+        NodeProfile::gc2_carrier_qualification_fixture(None, 1, 111),
+        provision().await,
+    )
+    .await;
+    assert!(cold.transport_status().owned_aliases >= 2);
+    let absent = tokio::time::timeout(
+        Duration::from_secs(3),
+        cold.request_push_registration(request(true)),
+    )
+    .await;
+    cold.shutdown().await;
+    assert!(
+        !matches!(absent, Ok(Ok(_))),
+        "ticket escaped directly despite missing protected routes"
+    );
+
+    let relays = start_relays().await;
+    let node = open(
+        112,
+        NodeProfile::gc2_carrier_qualification_fixture_seeded(None, 1, 112, seeds(&relays)),
+        provision().await,
+    )
+    .await;
+    tokio::time::timeout(Duration::from_secs(25), async {
+        while node.transport_status().usable_terminal_routes == 0 {
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .unwrap_or_else(|_| {
+        panic!(
+            "protected administrative route did not become ready: {:?}",
+            node.transport_status()
+        )
+    });
+    let ticket = node.request_push_registration(request(true)).await.unwrap();
+    assert_eq!(ticket.gateway_origin, "https://push.example.invalid");
+    assert_eq!(ticket.installation.len(), 64);
+    let revoked = node.request_push_revocation(request(false)).await.unwrap();
+    assert_eq!(revoked.installation, ticket.installation);
+    assert!(relays.entry_connections.load(Ordering::SeqCst) > 0);
+    assert!(relays.middle_connections.load(Ordering::SeqCst) > 0);
+    node.shutdown().await;
+    host.shutdown().await;
+}

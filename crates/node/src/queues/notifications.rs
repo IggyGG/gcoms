@@ -2,6 +2,7 @@ use super::*;
 use crate::push_notifications::Binding;
 
 impl LeaseStore {
+    #[cfg(any(feature = "push-gateway", test))]
     pub(crate) fn install_notification_sink(
         &mut self,
         sender: tokio::sync::mpsc::Sender<[u8; 32]>,
@@ -65,6 +66,102 @@ impl LeaseStore {
         if sender.try_send(binding.reference).is_ok() {
             lease.last_notification = now;
         }
+    }
+}
+
+#[cfg(feature = "push-gateway")]
+pub(super) struct TicketReplay {
+    nonce: [u8; 16],
+    digest: [u8; 32],
+    expires: u64,
+    reply: Vec<u8>,
+}
+
+#[cfg(feature = "push-gateway")]
+impl LeaseStore {
+    pub(crate) fn install_ticket_issuer(
+        &mut self,
+        issuer: crate::push_notifications::TicketIssuer,
+    ) {
+        self.ticket_issuer = Some(issuer);
+    }
+
+    pub(crate) fn issue_push_registration(
+        &mut self,
+        wire: &[u8],
+        now: u64,
+    ) -> Result<Vec<u8>, StoreError> {
+        use sha2::{Digest, Sha256};
+        self.cleanup_expired(now);
+        let issuer = self
+            .ticket_issuer
+            .as_ref()
+            .ok_or(StoreError::Unauthorized)?;
+        let queue: [u8; 32] = wire
+            .get(2..34)
+            .ok_or(StoreError::Unauthorized)?
+            .try_into()
+            .map_err(|_| StoreError::Unauthorized)?;
+        let lease = self
+            .leases
+            .get_mut(&queue)
+            .ok_or(StoreError::Unauthorized)?;
+        let request = crate::push_notifications::TicketRequest::authenticate(
+            wire,
+            lease.epoch,
+            &lease.capabilities.admin,
+            &self.relay_service_id,
+            now,
+        )
+        .map_err(|_| StoreError::Unauthorized)?;
+        if request.expires > lease.expiry
+            || lease
+                .temporary_expiry
+                .is_some_and(|expiry| request.expires > expiry)
+            || !issuer.apps.contains(&request.app)
+        {
+            return Err(StoreError::Unauthorized);
+        }
+        let digest: [u8; 32] = Sha256::digest(wire).into();
+        lease.ticket_replays.retain(|entry| entry.expires > now);
+        if let Some(previous) = lease
+            .ticket_replays
+            .iter()
+            .find(|entry| entry.nonce == request.nonce)
+        {
+            return if previous.digest == digest {
+                Ok(previous.reply.clone())
+            } else {
+                Err(StoreError::Replay)
+            };
+        }
+        // Per-live-lease limits cover expensive identity proof and ticket state;
+        // existing admission capacity already bounds the number of live leases.
+        lease
+            .ticket_attempts
+            .retain(|issued| issued.saturating_add(60) > now);
+        if lease.ticket_replays.len() >= self.config.max_replay_nonces_per_lease.min(80)
+            || lease.ticket_attempts.len() >= self.config.dynamic_grants_per_minute.min(16)
+        {
+            return Err(StoreError::ReplayCapacity);
+        }
+        lease.ticket_attempts.push_back(now);
+        request
+            .verify_identity(&queue, lease.epoch, &self.relay_service_id)
+            .map_err(|_| StoreError::Unauthorized)?;
+        let reply = serde_json::to_vec(
+            &issuer
+                .issue(&request, now)
+                .map_err(|_| StoreError::Unauthorized)?,
+        )
+        .map_err(|_| StoreError::Unauthorized)?;
+        lease.ticket_replays.push_back(TicketReplay {
+            nonce: request.nonce,
+            digest,
+            expires: request.expires,
+            reply: reply.clone(),
+        });
+        Ok(reply)
     }
 }
 
@@ -261,5 +358,85 @@ mod tests {
             .unwrap();
         store.notify_admission(&QUEUE, NOW + 96);
         assert!(events.try_recv().is_err());
+    }
+    #[cfg(feature = "push-gateway")]
+    #[test]
+    fn push_tickets_keep_authority_deadlines_and_reject_identity_replay_and_revocation() {
+        use crate::push_notifications::{
+            PushPlatform, PushRegistrationRequest, TicketIssuer, TicketRequest,
+        };
+        let (mut store, _, _) = setup(8);
+        store.install_ticket_issuer(TicketIssuer {
+            origin: "https://push.example".into(),
+            relay_id: "r1".into(),
+            apps: vec!["boo.gchat.app".into()],
+            key: [90; 32],
+        });
+        let identity = gcoms_crypto::identity::IdentityKeypair::from_seed([80; 32]);
+        let sign = |nonce: u8, expiry: u64, visible: bool| {
+            let mut request = TicketRequest::new(
+                PushRegistrationRequest {
+                    app_id: "boo.gchat.app".into(),
+                    installation_nonce: [81; 32],
+                    platform: PushPlatform::Fcm,
+                    token: "device".into(),
+                    revision: 1,
+                    visible,
+                },
+                &identity.public_bytes(),
+                expiry,
+                [nonce; 16],
+            )
+            .unwrap();
+            let digest = request.digest(&QUEUE, 1, &SERVICE).unwrap();
+            request.signature = gcoms_transport::encode_b64url(
+                &identity.sign(&gcoms_core::identity_digest_signature_payload(&digest)),
+            );
+            request.encode(&QUEUE, 1, &CAPS.admin, &SERVICE).unwrap()
+        };
+        let wire = sign(82, NOW + 200, true);
+        let before = store.leases[&QUEUE].view();
+        let result = store.issue_push_registration(&wire, NOW).unwrap();
+        assert_eq!(
+            store.issue_push_registration(&wire, NOW + 1).unwrap(),
+            result
+        );
+        assert_eq!(store.leases[&QUEUE].view(), before);
+        assert_eq!(
+            store.issue_push_registration(&sign(82, NOW + 200, false), NOW),
+            Err(StoreError::Replay)
+        );
+        store.leases.get_mut(&QUEUE).unwrap().temporary_expiry = Some(NOW + 150);
+        assert_eq!(
+            store.issue_push_registration(&wire, NOW),
+            Err(StoreError::Unauthorized)
+        );
+        store.leases.get_mut(&QUEUE).unwrap().temporary_expiry = None;
+        for nonce in 83..98 {
+            store
+                .issue_push_registration(&sign(nonce, NOW + 200, true), NOW)
+                .unwrap();
+        }
+        assert_eq!(
+            store.issue_push_registration(&sign(99, NOW + 200, true), NOW),
+            Err(StoreError::ReplayCapacity)
+        );
+        assert_eq!(
+            store.issue_push_registration(&wire, NOW + 200),
+            Err(StoreError::Unauthorized)
+        );
+        let revoke = LeaseRevoke {
+            queue_id: QUEUE,
+            epoch: 1,
+            nonce: [100; 16],
+            operation_expiry: NOW + 100,
+        };
+        store
+            .revoke(&revoke.encode(&CAPS.admin, &SERVICE).unwrap(), NOW)
+            .unwrap();
+        assert_eq!(
+            store.issue_push_registration(&wire, NOW),
+            Err(StoreError::Unauthorized)
+        );
     }
 }

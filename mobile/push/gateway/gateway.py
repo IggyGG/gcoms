@@ -8,12 +8,14 @@ import secrets
 import sqlite3
 import threading
 import time
+from urllib.parse import urlsplit
 from dataclasses import dataclass
 
 MAX_REGISTRATIONS = 50000
 MAX_REQUEST = 8192
 REFERENCE = re.compile(r"^[0-9a-f]{64}$")
 NAME = re.compile(r"^[A-Za-z0-9_-]{1,128}$")
+APP = re.compile(r"^[A-Za-z0-9_.-]{1,128}$")
 
 
 def encode(value):
@@ -35,7 +37,7 @@ def sign(key, domain, body):
 def issue_ticket(app, installation, key, now=None):
     """Run only on the application's authenticated server, never in the mobile app."""
     now = int(time.time()) if now is None else now
-    if not NAME.fullmatch(app) or not NAME.fullmatch(installation):
+    if not APP.fullmatch(app) or not NAME.fullmatch(installation):
         raise ValueError("invalid ticket scope")
     body = canonical({"app": app, "installation": installation, "issued": now, "expires": now + 300, "nonce": secrets.token_hex(16)})
     return encode(body) + "." + sign(key, b"GCOMS-PUSH-TICKET-v1\0", body)
@@ -56,7 +58,13 @@ class DeliveryResult:
 
 
 class Gateway:
-    def __init__(self, database, apps, relays, provider, clock=time.time):
+    def __init__(self, database, apps, relays, provider, clock=time.time, public_origin=None):
+        if public_origin is not None:
+            parsed = urlsplit(public_origin)
+            if parsed.scheme != "https" or not parsed.hostname or parsed.username or parsed.password or parsed.path or parsed.query or parsed.fragment:
+                raise ValueError("gateway requires an exact HTTPS public origin")
+            _ = parsed.port  # Reject malformed port syntax.
+        self.public_origin = public_origin
         self.db = sqlite3.connect(database, check_same_thread=False)
         self.db.row_factory = sqlite3.Row
         self.db.execute("PRAGMA journal_mode=WAL")
@@ -68,23 +76,36 @@ class Gateway:
                 due INTEGER NOT NULL DEFAULT 0, attempts INTEGER NOT NULL DEFAULT 0,
                 generation INTEGER NOT NULL DEFAULT 0, UNIQUE(app, installation)
             );
+            CREATE TABLE IF NOT EXISTS registration_revisions (
+                app TEXT NOT NULL, installation TEXT NOT NULL, revision INTEGER NOT NULL,
+                expires INTEGER NOT NULL, PRIMARY KEY(app, installation)
+            );
             CREATE TABLE IF NOT EXISTS replays (
                 scope TEXT NOT NULL, nonce TEXT NOT NULL, expires INTEGER NOT NULL,
                 PRIMARY KEY(scope, nonce)
             );
         """)
+        columns = {row[1] for row in self.db.execute("PRAGMA table_info(registrations)")}
+        if "visible" not in columns:
+            self.db.execute("ALTER TABLE registrations ADD COLUMN visible INTEGER NOT NULL DEFAULT 0")
+        self.db.commit()
         self.apps, self.relays, self.provider, self.clock = apps, relays, provider, clock
         self.lock = threading.Lock()
 
     def cleanup(self, now):
         self.db.execute("DELETE FROM registrations WHERE expires <= ?", (now,))
         self.db.execute("DELETE FROM replays WHERE expires <= ?", (now,))
+        self.db.execute("DELETE FROM registration_revisions WHERE expires <= ?", (now,))
 
     def register(self, data):
-        if set(data) != {"ticket", "platform", "token"}:
+        return self._change_registration(data, "register")
+
+    def _change_registration(self, data, purpose):
+        if set(data) not in ({"ticket", "platform", "token"}, {"ticket", "platform", "token", "visible"}):
             raise ValueError("invalid registration")
         ticket, platform, token = data["ticket"], data["platform"], data["token"]
-        if not isinstance(ticket, str) or len(ticket) > 2048 or platform not in ("apns", "fcm"):
+        visible = data.get("visible", False)
+        if type(visible) is not bool or not isinstance(ticket, str) or len(ticket) > 2048 or platform not in ("apns", "fcm"):
             raise ValueError("invalid registration")
         if not isinstance(token, str) or not 1 <= len(token) <= 4096 or any(ord(c) < 33 or ord(c) > 126 for c in token):
             raise ValueError("invalid device token")
@@ -93,38 +114,74 @@ class Gateway:
         encoded, signature = ticket.split(".")
         body = decode(encoded)
         claims = json.loads(body)
-        if set(claims) != {"app", "installation", "issued", "expires", "nonce"}:
-            raise ValueError("invalid ticket")
-        app = self.apps.get(claims["app"])
+        if not isinstance(claims, dict):
+            raise ValueError("invalid ticket object")
         now = int(self.clock())
-        if not app or not hmac.compare_digest(signature, sign(app["registration_key"], b"GCOMS-PUSH-TICKET-v1\0", body)):
-            raise ValueError("invalid ticket")
+        app = self.apps.get(claims.get("app"))
+        revision = None
+        if claims.get("version") == 2:
+            expected = {"version", "purpose", "issuer", "app", "installation", "issued", "expires", "nonce", "revision", "platform", "token_sha256", "gateway_origin", "visible"}
+            if set(claims) != expected or type(claims["version"]) is not int or claims["purpose"] != purpose or (purpose == "unregister" and visible):
+                raise ValueError("invalid relay ticket")
+            relay = self.relays.get(claims["issuer"])
+            if not app or not relay or claims["app"] not in relay["apps"] or not self.public_origin or claims["gateway_origin"] != self.public_origin:
+                raise ValueError("invalid relay ticket scope")
+            if not hmac.compare_digest(signature, sign(relay["key"], b"GCOMS-PUSH-RELAY-TICKET-v2\0", body)):
+                raise ValueError("invalid relay ticket")
+            if claims["platform"] != platform or type(claims["visible"]) is not bool or claims["visible"] != visible or not REFERENCE.fullmatch(claims["installation"]):
+                raise ValueError("invalid relay ticket registration")
+            if not hmac.compare_digest(claims["token_sha256"], hashlib.sha256(token.encode()).hexdigest()):
+                raise ValueError("device token differs from ticket")
+            revision = claims["revision"]
+            if type(revision) is not int or not 0 < revision <= 2**63 - 1:
+                raise ValueError("invalid registration revision")
+            scope = "ticket-relay:" + claims["issuer"]
+        else:
+            if purpose != "register" or set(claims) != {"app", "installation", "issued", "expires", "nonce"} or visible:
+                raise ValueError("invalid ticket")
+            if not app or not app.get("registration_key") or not hmac.compare_digest(signature, sign(app["registration_key"], b"GCOMS-PUSH-TICKET-v1\0", body)):
+                raise ValueError("invalid ticket")
+            scope = "app:" + claims["app"]
         if not NAME.fullmatch(claims["installation"]) or not re.fullmatch("[0-9a-f]{32}", claims["nonce"]):
             raise ValueError("invalid ticket")
-        if not (now - 300 <= claims["issued"] <= now + 30 and now < claims["expires"] <= claims["issued"] + 300):
+        if type(claims["issued"]) is not int or type(claims["expires"]) is not int or not (now - 300 <= claims["issued"] <= now + 30 and now < claims["expires"] <= claims["issued"] + 300):
             raise ValueError("expired ticket")
-        if platform not in app.get("providers", {}):
+        if purpose == "register" and platform not in app.get("providers", {}):
             raise ValueError("provider not configured")
         management = secrets.token_hex(32)
         with self.lock, self.db:
             self.cleanup(now)
+            previous = self.db.execute("SELECT revision FROM registration_revisions WHERE app=? AND installation=?", (claims["app"], claims["installation"])).fetchone()
+            if previous and (revision is None or revision <= previous["revision"]):
+                raise ValueError("stale registration revision")
             if self.db.execute("SELECT count(*) FROM replays").fetchone()[0] >= 100000:
                 raise ValueError("ticket capacity reached")
-            # One-use tickets; a retry must obtain a fresh ticket from the app server.
-            self.db.execute("INSERT INTO replays VALUES (?, ?, ?)", ("app:" + claims["app"], claims["nonce"], claims["expires"]))
+            self.db.execute("INSERT INTO replays VALUES (?, ?, ?)", (scope, claims["nonce"], claims["expires"]))
             existing = self.db.execute("SELECT reference FROM registrations WHERE app=? AND installation=?", (claims["app"], claims["installation"])).fetchone()
             if not existing and self.db.execute("SELECT count(*) FROM registrations").fetchone()[0] >= MAX_REGISTRATIONS:
                 raise ValueError("registration capacity reached")
+            if revision is not None:
+                if not previous and self.db.execute("SELECT count(*) FROM registration_revisions").fetchone()[0] >= MAX_REGISTRATIONS:
+                    raise ValueError("registration revision capacity reached")
+                # Keep tombstones through opt-out and provider token removal, so a
+                # delayed authorized registration cannot resurrect an old token.
+                self.db.execute("INSERT INTO registration_revisions VALUES(?,?,?,?) ON CONFLICT(app,installation) DO UPDATE SET revision=excluded.revision,expires=excluded.expires",
+                                (claims["app"], claims["installation"], revision, now + 7 * 86400 + 300))
+            if purpose == "unregister":
+                self.db.execute("DELETE FROM registrations WHERE app=? AND installation=?", (claims["app"], claims["installation"]))
+                return {"accepted": True}
             reference = existing["reference"] if existing else secrets.token_hex(32)
             self.db.execute("""
-                INSERT INTO registrations(reference,app,installation,platform,token,management,expires)
-                VALUES(?,?,?,?,?,?,?) ON CONFLICT(app,installation) DO UPDATE SET
+                INSERT INTO registrations(reference,app,installation,platform,token,management,expires,visible)
+                VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(app,installation) DO UPDATE SET
                 platform=excluded.platform,token=excluded.token,management=excluded.management,
-                expires=excluded.expires,generation=generation+1,attempts=0
-            """, (reference, claims["app"], claims["installation"], platform, token, hashlib.sha256(management.encode()).hexdigest(), now + 7 * 86400))
+                expires=excluded.expires,visible=excluded.visible,generation=generation+1,attempts=0
+            """, (reference, claims["app"], claims["installation"], platform, token, hashlib.sha256(management.encode()).hexdigest(), now + 7 * 86400, int(visible)))
         return {"reference": reference, "management_token": management, "expires": now + 7 * 86400}
 
     def unregister(self, data):
+        if "ticket" in data:
+            return self._change_registration(data, "unregister")
         if set(data) != {"reference", "management_token"} or not REFERENCE.fullmatch(data["reference"]) or not REFERENCE.fullmatch(data["management_token"]):
             raise ValueError("invalid unregister")
         with self.lock, self.db:

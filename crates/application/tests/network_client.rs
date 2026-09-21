@@ -66,6 +66,7 @@ async fn outbound_clients_use_remote_inboxes_and_reopen_files_and_identity() {
             .clone();
         host_node
             .configure_push_gateway(GatewayConfig {
+                apps: vec!["boo.gchat.app".into()],
                 url: "https://push.example.invalid/v1/events".into(),
                 relay_id: "fixture-relay".into(),
                 key: [71; 32],
@@ -84,6 +85,49 @@ async fn outbound_clients_use_remote_inboxes_and_reopen_files_and_identity() {
             .unwrap()
             .as_secs()
             + 60;
+        use gcoms::runtime::push_notifications::{PushPlatform, PushRegistrationRequest};
+        let ticket = node
+            .request_push_registration(PushRegistrationRequest {
+                app_id: "boo.gchat.app".into(),
+                installation_nonce: [81; 32],
+                platform: PushPlatform::Fcm,
+                token: "fixture-device-token".into(),
+                revision: 1,
+                visible: true,
+            })
+            .await
+            .unwrap();
+        assert_eq!(ticket.gateway_origin, "https://push.example.invalid");
+        assert_eq!(ticket.installation.len(), 64);
+        let body = base64::engine::general_purpose::URL_SAFE_NO_PAD
+            .decode(ticket.ticket.split('.').next().unwrap())
+            .unwrap();
+        let claims: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(claims["version"], 2);
+        assert_eq!(claims["app"], "boo.gchat.app");
+        assert_eq!(claims["visible"], true);
+        assert_eq!(claims["installation"], ticket.installation);
+        assert!(claims.get("token").is_none());
+        assert_eq!(claims["purpose"], "register");
+        let revoked = node
+            .request_push_revocation(PushRegistrationRequest {
+                app_id: "boo.gchat.app".into(),
+                installation_nonce: [81; 32],
+                platform: PushPlatform::Fcm,
+                token: "0".repeat(64),
+                revision: 2,
+                visible: false,
+            })
+            .await
+            .unwrap();
+        assert_eq!(revoked.installation, ticket.installation);
+        let body = base64::engine::general_purpose::URL_SAFE_NO_PAD
+            .decode(revoked.ticket.split('.').next().unwrap())
+            .unwrap();
+        let claims: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(claims["purpose"], "unregister");
+        assert_eq!(claims["revision"], 2);
+
         node.bind_push_notifications([72; 32], 1, expires)
             .await
             .unwrap();

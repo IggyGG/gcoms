@@ -315,6 +315,30 @@ async fn main() -> std::process::ExitCode {
 }
 
 async fn run() -> Result<(), String> {
+    #[cfg(not(feature = "push-gateway"))]
+    if arg("--push-gateway-config").is_some() {
+        return Err("push gateway support was not compiled".into());
+    }
+    #[cfg(feature = "push-gateway")]
+    let push_gateway = arg("--push-gateway-config")
+        .map(|path| {
+            let path = std::path::Path::new(&path);
+            gcoms_private_fs::validate_private_file(path, "push gateway config")?;
+            if std::fs::metadata(path)
+                .map_err(|_| "cannot inspect push gateway config")?
+                .len()
+                > 16384
+            {
+                return Err("push gateway config exceeds size bound".to_string());
+            }
+            let bytes = zeroize::Zeroizing::new(
+                std::fs::read(path).map_err(|_| "cannot read push gateway config")?,
+            );
+            serde_json::from_slice::<gcoms_node::push_notifications::GatewayConfig>(&bytes)
+                .map_err(|_| "invalid push gateway config".to_string())
+        })
+        .transpose()?;
+
     let cmd = std::env::args().nth(1).unwrap_or_default();
     if has_flag("--help") || has_flag("-h") || cmd.is_empty() {
         print_usage();
@@ -518,6 +542,10 @@ async fn run() -> Result<(), String> {
             )
             .await
             .map_err(|e| format!("node start: {e}"))?;
+            #[cfg(feature = "push-gateway")]
+            if let Some(config) = push_gateway {
+                handle.configure_push_gateway(config).await?;
+            }
             // The listener and control service are already running. Private
             // network state or HTTPS failures cannot prevent ordinary GC use.
             let network_worker = match network_selection.open(&keystore) {

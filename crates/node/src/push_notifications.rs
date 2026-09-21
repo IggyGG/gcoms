@@ -3,6 +3,12 @@ use hmac::{Hmac, Mac};
 use sha2::Sha256;
 
 pub use gcoms_core::lease::OP_BIND_NOTIFICATION;
+pub use gcoms_core::lease::OP_PUSH_REGISTRATION;
+mod tickets;
+#[cfg(feature = "push-gateway")]
+pub(crate) use tickets::TicketIssuer;
+pub(crate) use tickets::TicketRequest;
+pub use tickets::{PushPlatform, PushRegistrationRequest, PushRegistrationTicket};
 const DOMAIN: &[u8] = b"GC/PUSH-BIND/v1\0";
 const BODY: usize = 106;
 pub const WIRE_BYTES: usize = BODY + 32;

@@ -48,6 +48,18 @@ impl From<Peer> for sdk::Peer {
 #[serde(tag = "op", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Command {
     #[cfg(feature = "push")]
+    RequestPushRegistration {
+        #[serde(default)]
+        revoke: bool,
+        app_id: String,
+        installation_nonce: [u8; 32],
+        platform: gcoms::runtime::push_notifications::PushPlatform,
+        token: String,
+        revision: u64,
+        #[serde(default)]
+        visible: bool,
+    },
+    #[cfg(feature = "push")]
     BindPush {
         reference: [u8; 32],
         revision: u64,
@@ -202,6 +214,37 @@ impl State {
         let app = self.app.as_ref().ok_or("profile is suspended")?;
         let client = app.messaging();
         match command {
+            #[cfg(feature = "push")]
+            Command::RequestPushRegistration {
+                revoke,
+                app_id,
+                installation_nonce,
+                platform,
+                token,
+                revision,
+                visible,
+            } => {
+                let request = gcoms::runtime::push_notifications::PushRegistrationRequest {
+                    app_id,
+                    installation_nonce,
+                    platform,
+                    token,
+                    revision,
+                    visible,
+                };
+                let embedded = app
+                    .embedded_runtime()
+                    .ok_or("runtime unavailable")?
+                    .sdk_client()
+                    .embedded();
+                let node = embedded.node();
+                let ticket = if revoke {
+                    node.request_push_revocation(request).await?
+                } else {
+                    node.request_push_registration(request).await?
+                };
+                value(ticket)
+            }
             #[cfg(feature = "push")]
             Command::BindPush {
                 reference,

@@ -456,6 +456,19 @@ pub(crate) fn build_handlers(
                 return Err(QueueReject::Unauthorized);
             }
             let mut store = lease_for_cell.lock().unwrap_or_else(|p| p.into_inner());
+            #[cfg(feature = "push-gateway")]
+            if operation == crate::push_notifications::OP_PUSH_REGISTRATION {
+                let payload = store
+                    .issue_push_registration(&cell.payload, now_unix())
+                    .map_err(|error| match error {
+                        StoreError::Replay => QueueReject::Conflict,
+                        StoreError::Capacity | StoreError::ReplayCapacity => {
+                            QueueReject::Overloaded
+                        }
+                        _ => QueueReject::Unauthorized,
+                    })?;
+                return Ok(Some(Cell::new(CellType::Ack, 0, 0, payload)));
+            }
             if operation == OP_GRANT_REQUEST {
                 let provision = match store.issue_dynamic_grant(&cell.payload, now_unix()) {
                     Ok(provision) => provision,
