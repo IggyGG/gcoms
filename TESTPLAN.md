@@ -18,6 +18,8 @@ do not establish physical-device or live-provider qualification.
   Verify both LOAD and GNU_RELRO alignment, compatible simulator selection, and
   the client through its separately hosted fixture relay. Development fixture
   sizes cannot establish production baselines.
+  Ad-hoc sign the disposable Swift simulator host with its own Keychain access
+  group; require profile-secret and push-state reopen through fresh providers.
   Generate SDK and optional FCM POM/module metadata with `gcomsPublishRole` set
   to the tested role and verify that the FCM dependency names that role's SDK.
   Check APK ZIP offsets as well as ELF alignment: each native entry must be

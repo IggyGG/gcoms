@@ -39,6 +39,10 @@ base/push roles pass, 3/s/z native and app deltas are retained under
 910 tests (seven explicit ignores), strict Clippy, documentation and minimal
 feature checks; GChat's 137 tests and strict Clippy pass. Apple preview and final
 desktop size evidence remain in progress.
+The first optional Swift push run exposed missing Keychain entitlements in the
+unsigned simulator host. The test harness now ad-hoc signs its disposable host
+with an application access group and checks profile-secret and push-state reopen.
+The corrected Apple runs remain in qualification; SDK storage protection is unchanged.
 
 Implementation order: Windows native gate, Rust role separation, mobile ABI and
 packages, push registration/relay notifications, integrated qualification and

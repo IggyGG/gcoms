@@ -6,6 +6,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import plistlib
 import subprocess
 from mobile_fixture import relay
 
@@ -50,6 +51,18 @@ def qualify(args, host):
     spec = (ROOT / "mobile/apple/project.yml").read_text()
     spec = spec.replace("sources: [Sample]", "sources: [" + str(ROOT / "mobile/apple/Sample") + "]")
     spec = spec.replace("sources: [Tests/GComsTests]", "sources: [" + str(ROOT / "mobile/apple/Tests/GComsTests") + "]")
+    if args.test:
+        # Keychain requires an application access group, even in the simulator.
+        # These ad-hoc identities belong only to the disposable test host; device
+        # size builds remain unsigned and real apps supply their own signing.
+        entitlements = evidence / "Simulator.entitlements"
+        entitlements.write_bytes(plistlib.dumps({
+            "application-identifier": "$(PRODUCT_BUNDLE_IDENTIFIER)",
+            "keychain-access-groups": ["$(PRODUCT_BUNDLE_IDENTIFIER)"],
+            "get-task-allow": True,
+        }))
+        spec = spec.replace("CODE_SIGNING_ALLOWED: NO",
+            "CODE_SIGNING_ALLOWED: YES\n    CODE_SIGN_IDENTITY: '-'\n    CODE_SIGN_ENTITLEMENTS: " + str(entitlements))
     if push:
         spec = spec.replace("product: GComs", "product: GComsPush")
         spec = spec.replace("GCOMS_ENABLED", "GCOMS_ENABLED GCOMS_PUSH")
