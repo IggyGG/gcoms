@@ -17,3 +17,17 @@ f96b601ae7afdf319f56684c4a654bbc4458917d:release/rust-integration-packages-2026-
 f96b601ae7afdf319f56684c4a654bbc4458917d:release/rust-integration-packages-2026-09-20.json:generic-api-key:811
 f96b601ae7afdf319f56684c4a654bbc4458917d:release/rust-integration-packages-2026-09-20.json:generic-api-key:861
 f96b601ae7afdf319f56684c4a654bbc4458917d:release/rust-integration-packages-2026-09-20.json:generic-api-key:867
+
+# 2026-09-21: exact native evidence SHA-256 source digests, verified against e75c72c.
+19403023b166904161826f3c1acf1f913e2b3eba:docs/evidence/rust-integrations-20260921/darwin-arm64.json:generic-api-key:2237
+19403023b166904161826f3c1acf1f913e2b3eba:docs/evidence/rust-integrations-20260921/darwin-arm64.json:generic-api-key:2245
+19403023b166904161826f3c1acf1f913e2b3eba:docs/evidence/rust-integrations-20260921/darwin-arm64.json:generic-api-key:2441
+19403023b166904161826f3c1acf1f913e2b3eba:docs/evidence/rust-integrations-20260921/darwin-x86_64.json:generic-api-key:2239
+19403023b166904161826f3c1acf1f913e2b3eba:docs/evidence/rust-integrations-20260921/darwin-x86_64.json:generic-api-key:2247
+19403023b166904161826f3c1acf1f913e2b3eba:docs/evidence/rust-integrations-20260921/darwin-x86_64.json:generic-api-key:2443
+19403023b166904161826f3c1acf1f913e2b3eba:docs/evidence/rust-integrations-20260921/linux-x86_64.json:generic-api-key:2258
+19403023b166904161826f3c1acf1f913e2b3eba:docs/evidence/rust-integrations-20260921/linux-x86_64.json:generic-api-key:2266
+19403023b166904161826f3c1acf1f913e2b3eba:docs/evidence/rust-integrations-20260921/linux-x86_64.json:generic-api-key:2462
+19403023b166904161826f3c1acf1f913e2b3eba:docs/evidence/rust-integrations-20260921/windows-amd64.json:generic-api-key:2442
+19403023b166904161826f3c1acf1f913e2b3eba:docs/evidence/rust-integrations-20260921/windows-amd64.json:generic-api-key:2450
+19403023b166904161826f3c1acf1f913e2b3eba:docs/evidence/rust-integrations-20260921/windows-amd64.json:generic-api-key:2646

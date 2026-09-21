@@ -47,8 +47,6 @@ mod channel_direct;
 mod channel_recovery;
 mod channels;
 mod commands;
-#[cfg(feature = "push-notifications")]
-mod push_notifications;
 mod direct;
 #[cfg(feature = "experimental-gc2")]
 mod gc2_acks;
@@ -65,6 +63,8 @@ mod gc2_gate;
 #[cfg(feature = "experimental-gc2")]
 mod gc2_receipts;
 mod peer_session;
+#[cfg(feature = "push-notifications")]
+mod push_notifications;
 #[cfg(feature = "experimental-gc2")]
 mod retained;
 use peer_session::PeerSession;
