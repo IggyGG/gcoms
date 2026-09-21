@@ -76,11 +76,31 @@ def init(args):
     versions = {tomllib.loads((path / "Cargo.toml").read_text())["workspace"]["package"]["version"] for path in roots.values()}
     require(len(versions) == 1, "candidate versions differ")
     policies = set()
+    configurations = {}
     for root in roots.values():
         publication = root / "release/publication.json"
         config = read_json(publication) if publication.is_file() else {}
+        configurations[root] = config
         policies.add(config.get("signing_policy", "publicly-trusted"))
-    require(len(policies) == 1 and policies <= {"publicly-trusted", "self-signed-preview"}, "source signing policies differ or are unknown")
+    require(len(policies) == 1 and policies <= {"publicly-trusted", "self-signed-preview", "self-signed"}, "source signing policies differ or are unknown")
+    channels = {config.get("channel", "developer-preview") for config in configurations.values()}
+    require(len(channels) == 1 and channels <= {"developer-preview", "production"}, "source release channels differ or are unknown")
+    channel = channels.pop()
+    require("self-signed-preview" not in policies or channel == "developer-preview", "preview signing requires the preview channel")
+    targets = args.target or (configurations[roots["gchat"]].get("qualification_targets", ["linux-x86_64"])
+                              if channel == "production" else list(TARGETS))
+    require(isinstance(targets, list) and bool(targets) and len(set(targets)) == len(targets)
+            and all(target in TARGETS for target in targets), "invalid qualification targets")
+    require(channel == "production" or targets == list(TARGETS), "preview requires all qualification targets")
+    improvements = []
+    if channel == "production":
+        for config in configurations.values():
+            policy = config.get("release_policy", {})
+            require(policy.get("name") == "production-minutes-v1" and policy.get("privacy_qualified") is False
+                    and isinstance(policy.get("privacy_improvements"), str) and policy["privacy_improvements"],
+                    "production requires the explicit policy and privacy disclosure")
+            if policy["privacy_improvements"] not in improvements:
+                improvements.append(policy["privacy_improvements"])
     require((args.wire_profile == "GC/2") == (args.traffic_config is not None),
             "GC/2 requires --traffic-config; GC/1 does not accept it")
     if args.traffic_config:
@@ -97,9 +117,12 @@ def init(args):
         subprocess.run(["git", "archive", "--format=tar", "--output", str(archive), sources[project]["commit"]], cwd=root, check=True)
         require(source_identity(root) == sources[project], "source changed while creating candidate")
         sources[project]["archive"] = reference(base, archive)
-    candidate = {"schema_version": 1, "version": versions.pop(), "channel": "developer-preview",
-                 "wire_profile": "GC/1", "signing_policy": policies.pop(), "created_at": now(), "targets": list(TARGETS),
+    candidate = {"schema_version": 1, "version": versions.pop(), "channel": channel,
+                 "wire_profile": "GC/1", "signing_policy": policies.pop(), "created_at": now(), "targets": targets,
                  "sources": sources, "artifacts": {}, "checks": {}, "attempts": []}
+    if channel == "production":
+        candidate.update(release_policy="production-minutes-v1", privacy_qualified=False,
+                         privacy_improvements=improvements)
     if args.wire_profile == "GC/2":
         traffic = base / "sources" / "traffic-config.json"
         traffic.write_bytes(traffic_bytes)
@@ -242,6 +265,7 @@ def main():
     commands = parser.add_subparsers(dest="action", required=True)
     create = commands.add_parser("init")
     create.add_argument("--output", type=Path, required=True)
+    create.add_argument("--target", choices=TARGETS, action="append", help="production qualification target; repeat for several platforms")
     create.add_argument("--wire-profile", choices=("GC/1", "GC/2"), default="GC/1")
     create.add_argument("--traffic-config", type=Path, help="frozen profile-22 traffic configuration (GC/2 only)")
     for project in PROJECTS:

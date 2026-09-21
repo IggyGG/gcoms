@@ -59,6 +59,41 @@ class CandidateTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertEqual(self.manifest.read_bytes(), original)
 
+    def production_sources(self):
+        for root in self.roots.values():
+            (root / "release").mkdir()
+            (root / "release/publication.json").write_text(json.dumps({
+                "channel": "production", "signing_policy": "self-signed",
+                "qualification_targets": ["linux-x86_64"],
+                "release_policy": {"name": "production-minutes-v1",
+                    "privacy_qualified": False,
+                    "privacy_improvements": "docs/PRODUCTION_RELEASE.md"},
+            }))
+            subprocess.run(["git", "add", "."], cwd=root, check=True)
+            subprocess.run(["git", "-c", "user.name=Fixture", "-c",
+                "user.email=fixture@example.invalid", "commit", "-qm", "production"],
+                cwd=root, check=True)
+
+    def test_production_native_candidate_preserves_policy_and_selected_target(self):
+        self.production_sources()
+        result = self.run_cli("init", *self.sources(), "--output", self.manifest.parent,
+                              "--target", "macos-aarch64")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        candidate = json.loads(self.manifest.read_text())
+        self.assertEqual(candidate["channel"], "production")
+        self.assertEqual(candidate["signing_policy"], "self-signed")
+        self.assertEqual(candidate["targets"], ["macos-aarch64"])
+        self.assertEqual(candidate["release_policy"], "production-minutes-v1")
+        self.assertIs(candidate["privacy_qualified"], False)
+        self.assertEqual(candidate["privacy_improvements"], ["docs/PRODUCTION_RELEASE.md"])
+        self.assertEqual(candidate["checks"], {})
+
+    def test_preview_cannot_omit_required_targets(self):
+        result = self.run_cli("init", *self.sources(), "--output", self.manifest.parent,
+                              "--target", "macos-aarch64")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertFalse(self.manifest.exists())
+
     def test_failed_attempt_supersedes_pass_without_erasing_evidence(self):
         self.initialize()
         self.assertEqual(self.record("packages.rust", "print('passed')").returncode, 0)

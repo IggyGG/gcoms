@@ -171,7 +171,12 @@ impl LocalListener {
     ) -> Result<(ServerStream, LocalPeer), SdkError> {
         loop {
             let (stream, _) = self.0.accept().await.map_err(runtime_error)?;
-            let uid = stream.peer_cred().map_err(runtime_error)?.uid();
+            // A disconnected credential probe is a rejected connection, not a
+            // failed listener. macOS may return ENOTCONN for this stream.
+            let Ok(credentials) = stream.peer_cred() else {
+                continue;
+            };
+            let uid = credentials.uid();
             let peer = LocalPeer {
                 uid,
                 owner_uid: rustix::process::getuid().as_raw(),
