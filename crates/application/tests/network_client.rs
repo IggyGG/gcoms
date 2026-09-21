@@ -62,6 +62,8 @@ async fn outbound_clients_use_remote_inboxes_and_reopen_files_and_identity() {
         assert_eq!(client.node().diagnostics().relay_resources.bytes, 0);
     }
     let peer = bob.peer().await.unwrap();
+    bob.trust_peer(alice.peer().await.unwrap()).await.unwrap();
+    alice.trust_peer(peer.clone()).await.unwrap();
     alice
         .messaging()
         .submit_durable_opaque(&peer.contact, "test.message", b"outbound hello")

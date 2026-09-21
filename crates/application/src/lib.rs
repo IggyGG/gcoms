@@ -31,7 +31,7 @@ pub use application::*;
 pub mod control;
 #[cfg(all(
     not(target_arch = "wasm32"),
-    any(feature = "embedded", feature = "network-client"),
+    feature = "embedded",
     feature = "ipc"
 ))]
 pub mod daemon;

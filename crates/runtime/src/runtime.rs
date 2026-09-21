@@ -1593,11 +1593,7 @@ mod protected_profile_tests {
     #[tokio::test]
     async fn protected_profile_creates_and_reopens_the_carrier_instance() {
         let dir = tempfile::tempdir().unwrap();
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            std::fs::set_permissions(dir.path(), std::fs::Permissions::from_mode(0o700)).unwrap();
-        }
+        crate::private_fs::make_private(dir.path(), true).unwrap();
         let profile = dir.path().join("carrier.gcprotocol");
         let listen: SocketAddr = "127.0.0.1:0".parse().unwrap();
         let first = ProtocolRuntime::create_protected(

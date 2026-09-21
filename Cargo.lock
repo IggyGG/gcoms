@@ -911,6 +911,7 @@ name = "gcoms"
 version = "0.1.0"
 dependencies = [
  "argon2",
+ "base64",
  "fs2",
  "gcoms-private-fs",
  "gcoms-rpc",
