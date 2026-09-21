@@ -48,7 +48,8 @@ def main():
         'schema': 1, 'platform': args.platform, 'fixtures': args.fixtures, 'push': args.push,
         'revision': subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip(),
         'rustc': subprocess.check_output(['rustc', '-Vv'], text=True),
-        'panic': 'unwind', 'lto': True, 'codegen_units': 1, 'artifacts': [], 'graphs': {}
+        'panic': 'unwind', 'lto': not args.fixtures, 'codegen_units': 256 if args.fixtures else 1,
+        'build_profile': 'dev' if args.fixtures else 'release', 'artifacts': [], 'graphs': {}
     }
     report['source_sha256'] = source_hashes()
     if args.platform == 'android':
@@ -57,17 +58,22 @@ def main():
         host = 'darwin-x86_64' if platform.system() == 'Darwin' else 'linux-x86_64'
         llvm = ndk / 'toolchains/llvm/prebuilt' / host / 'bin'
         targets = [('aarch64-linux-android', 'arm64-v8a'), ('x86_64-linux-android', 'x86_64')]
+        if args.fixtures:
+            targets = [('x86_64-linux-android', 'x86_64')]
         report['ndk'] = (ndk / 'source.properties').read_text()
     else:
         if platform.system() != 'Darwin':
             raise RuntimeError('Apple packages require a macOS runner with Xcode')
         targets = [('aarch64-apple-ios', 'device'), ('aarch64-apple-ios-sim', 'sim-arm64'), ('x86_64-apple-ios', 'sim-x86_64')]
+        if args.fixtures:
+            targets = [('aarch64-apple-ios-sim', 'sim-arm64')] if platform.machine() == 'arm64' else [('x86_64-apple-ios', 'sim-x86_64')]
         report['xcode'] = subprocess.check_output(['xcodebuild', '-version'], text=True)
         environment['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'
     run(['rustup', 'target', 'add', *[t for t, _ in targets]])
     for role in args.roles:
-        for profile in args.profiles:
-            build_env = dict(environment, CARGO_PROFILE_RELEASE_OPT_LEVEL=profile)
+        for profile in (['0'] if args.fixtures else args.profiles):
+            build_env = dict(environment, CARGO_PROFILE_RELEASE_OPT_LEVEL=profile,
+                CARGO_PROFILE_DEV_DEBUG='0', CARGO_PROFILE_DEV_OPT_LEVEL='0')
             for triple, label in targets:
                 env = dict(build_env)
                 if args.platform == 'android':
@@ -75,7 +81,7 @@ def main():
                     env['CARGO_TARGET_' + triple.replace('-', '_').upper() + '_LINKER'] = compiler
                     env['CC_' + triple.replace('-', '_')] = compiler
                     env['AR_' + triple.replace('-', '_')] = str(llvm / 'llvm-ar')
-                    env['RUSTFLAGS'] = env.get('RUSTFLAGS', '') + ' -C link-arg=-Wl,-z,max-page-size=16384'
+                    env['RUSTFLAGS'] = env.get('RUSTFLAGS', '') + ' -C link-arg=-Wl,-z,max-page-size=16384 -C link-arg=-Wl,-z,common-page-size=16384'
                 features = role + (',fixtures' if args.fixtures else '') + ((',push-gateway' if role == 'relay' else ',push') if args.push else '')
                 tree = subprocess.check_output(['cargo', 'tree', '--manifest-path', str(MANIFEST), '--locked',
                     '--no-default-features', '--features', features, '--target', triple,
@@ -92,9 +98,10 @@ def main():
                 if role == 'client' and 'push-gateway' in graph.get('gcoms-node', []):
                     raise RuntimeError('Client package pulls in the relay HTTP gateway')
                 report['graphs'][role + '/' + triple] = graph
-                run(['cargo', 'build', '--manifest-path', MANIFEST, '--locked', '--release', '--no-default-features', '--features', features, '--target', triple], env)
+                run(['cargo', 'build', '--manifest-path', MANIFEST, '--locked', '--profile',
+                    report['build_profile'], '--no-default-features', '--features', features, '--target', triple], env)
                 name = 'libgcoms_mobile.so' if args.platform == 'android' else 'libgcoms_mobile.a'
-                library = target / triple / 'release' / name
+                library = target / triple / ('debug' if args.fixtures else 'release') / name
                 retained = output / 'evidence' / f'{role}-{triple}-opt-{profile}{library.suffix}'
                 retained.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(library, retained)
@@ -118,12 +125,12 @@ def main():
                     'bytes': retained.stat().st_size, 'sha256': digest(retained), 'artifact': str(retained.relative_to(output))})
                 (output / 'summary.json').write_text(json.dumps(report, indent=2) + '\n')
             if args.platform == 'apple':
-                package_apple(output, role, args.push)
+                package_apple(output, role, args.push, targets)
             else:
                 (output / 'android' / role / 'build.json').write_text(json.dumps({'fixtures': args.fixtures, 'push': args.push, 'role': role, 'revision': report['revision']}) + '\n')
     if args.baseline:
         baseline = json.loads(args.baseline.read_text())
-        for field in ('platform', 'fixtures', 'push', 'rustc', 'ndk', 'xcode', 'panic', 'lto', 'codegen_units'):
+        for field in ('platform', 'fixtures', 'push', 'rustc', 'ndk', 'xcode', 'panic', 'lto', 'codegen_units', 'build_profile'):
             if baseline.get(field) != report.get(field):
                 raise RuntimeError(f'baseline {field} differs; establish a baseline for this toolchain')
         previous = {(item['role'], item['target'], item['opt_level']): item['bytes'] for item in baseline['artifacts']}
@@ -137,12 +144,13 @@ def main():
     print(json.dumps(report['artifacts'], indent=2))
 
 
-def package_apple(output, role, push):
+def package_apple(output, role, push, targets):
     native = output / 'apple' / role
     package = output / 'packages' / (('GComsClient' if role == 'client' else 'GComsRelay') + ('Push' if push else ''))
     package.mkdir(parents=True, exist_ok=True)
     simulator = native / 'libgcoms_sim.a'
-    run(['xcrun', 'lipo', '-create', native / 'sim-arm64/libgcoms_mobile.a', native / 'sim-x86_64/libgcoms_mobile.a', '-output', simulator])
+    simulators = [native / label / 'libgcoms_mobile.a' for _, label in targets if label.startswith('sim-')]
+    run(['xcrun', 'lipo', '-create', *simulators, '-output', simulator])
     framework = package / 'GComsNative.xcframework'
     if framework.exists():
         shutil.rmtree(framework)  # Generated package under the selected output only.
@@ -150,7 +158,10 @@ def package_apple(output, role, push):
     headers.mkdir(exist_ok=True)
     shutil.copy2(ROOT / 'mobile/native/include/gcoms_mobile.h', headers)
     (headers / 'module.modulemap').write_text('module CGComs { header "gcoms_mobile.h" export * }\n')
-    run(['xcodebuild', '-create-xcframework', '-library', native / 'device/libgcoms_mobile.a', '-headers', headers, '-library', simulator, '-headers', headers, '-output', framework])
+    libraries = ['-library', simulator, '-headers', headers]
+    if any(label == 'device' for _, label in targets):
+        libraries += ['-library', native / 'device/libgcoms_mobile.a', '-headers', headers]
+    run(['xcodebuild', '-create-xcframework', *libraries, '-output', framework])
     for directory in ('Sources/GComs', 'Tests'):
         shutil.copytree(ROOT / 'mobile/apple' / directory, package / directory, dirs_exist_ok=True)
     if push:

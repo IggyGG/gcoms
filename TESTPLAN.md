@@ -15,6 +15,9 @@ do not establish physical-device or live-provider qualification.
   remote administrative binding API alongside trusted messaging/channel/files.
 - Run the Mobile SDK preview CI matrix for JNI/Swift execution, 16 KiB alignment,
   separate client/relay native graphs, 3/s/z measurements and sample app deltas.
+  Verify both LOAD and GNU_RELRO alignment, compatible simulator selection, and
+  the client through its separately hosted fixture relay. Development fixture
+  sizes cannot establish production baselines.
 
 - Compile independent `ipc,files` and `embedded,files,gc2-carrier` consumers.
   Reject host/crypto/MLS/RPC dependencies in the IPC graph and forced Tokio

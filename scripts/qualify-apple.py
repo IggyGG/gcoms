@@ -62,10 +62,15 @@ def qualify(args, host):
          "--project", evidence], env=env)
     project = evidence / "GComsPreview.xcodeproj"
     runtimes = json.loads(capture(["xcrun", "simctl", "list", "runtimes", "--json"]))["runtimes"]
-    runtime = next(r["identifier"] for r in reversed(runtimes)
-        if r["isAvailable"] and r["identifier"].startswith("com.apple.CoreSimulator.SimRuntime.iOS"))
-    types = json.loads(capture(["xcrun", "simctl", "list", "devicetypes", "--json"]))["devicetypes"]
-    device_type = next(d["identifier"] for d in reversed(types) if d["name"].startswith("iPhone"))
+    available = json.loads(capture(["xcrun", "simctl", "list", "devices", "available", "--json"]))["devices"]
+    # Device-type ordering is unrelated to runtime compatibility.
+    candidates = [(r["identifier"], d["deviceTypeIdentifier"])
+        for r in runtimes if r["isAvailable"] and r["identifier"].startswith("com.apple.CoreSimulator.SimRuntime.iOS")
+        for d in available.get(r["identifier"], [])
+        if d["isAvailable"] and d["name"].startswith("iPhone") and d.get("deviceTypeIdentifier")]
+    if not candidates:
+        raise RuntimeError("Xcode runner has no compatible available iPhone simulator")
+    runtime, device_type = candidates[-1]
     device = capture(["xcrun", "simctl", "create", "GComs qualification", device_type, runtime])
     report = {"schema": 1, "role": args.role, "push": push, "revision": summary["revision"],
         "xcode": capture(["xcodebuild", "-version"]), "runtime": runtime, "apps": {}}

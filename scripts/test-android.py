@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import tempfile
 from mobile_fixture import relay, ROOT
 
 parser = argparse.ArgumentParser(description=__doc__)
@@ -24,14 +25,17 @@ command = [args.gradle, "-p", str(ROOT / "mobile/android"),
     "-PgcomsNativeRoot=" + str(native / "android")]
 if args.push:
     command += ["-PgcomsPush=true", ":push:test" + args.role.title() + "DebugUnitTest"]
-with relay() if args.role == "client" else contextlib.nullcontext(None) as host:
+with (relay() if args.role == "client" else contextlib.nullcontext(None)) as host, \
+        tempfile.TemporaryDirectory(prefix="fixture-assets-", dir=native) as assets:
     port = None
     try:
         if host:
             port = "tcp:" + str(host["port"])
             subprocess.run(adb + ["reverse", port, port], check=True)
-            command += ["-Pandroid.testInstrumentationRunnerArguments.gcoms_relay=" +
-                json.dumps(host["relay"], separators=(",", ":"))]
+            # A relay card exceeds adb's shell command budget. Keep this
+            # disposable capability in test-only assets, never command logs.
+            (Path(assets) / "relay.json").write_text(json.dumps(host["relay"]))
+            command += ["-PgcomsFixtureAssets=" + assets]
         subprocess.run(command + [":sdk:connected" + args.role.title() + "DebugAndroidTest", "--no-daemon"],
             env=dict(os.environ, ANDROID_SERIAL=args.serial), check=True)
     finally:

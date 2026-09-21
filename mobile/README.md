@@ -59,7 +59,9 @@ simulator. The client tests use a separate loopback relay; Android maps it throu
 to own and clean up that fixture. CI installs pinned Android command-line tools
 with a verified checksum; it does not depend on a preinstalled runner SDK.
 The workflow's manual `push` input selects the additional push distribution.
-Fixture packages live in a separate output and are forbidden by the
+Fixture packages use an unoptimized build for the emulator/simulator architecture;
+the production pass builds every advertised architecture at 3/s/z. Fixture sizes
+are excluded from release comparisons. They live in a separate output and are forbidden by the
 Android release packaging gate. `scripts/qualify-android.py` builds release AARs
 and per-ABI APKs, records the emulator's installed APK bytes and subtracts an
 equivalent baseline sample. `scripts/qualify-apple.py` records installed simulator

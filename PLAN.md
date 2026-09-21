@@ -17,6 +17,11 @@ Swift execution remains in progress. The optional gateway's nine simulations and
 four owner-binding/admission tests pass. The remote owner-binding integration
 passes, along with strict Rust Clippy and Kotlin FCM adapter compilation/tests.
 Swift adapters and final mobile size evidence remain in qualification.
+Native Apple archives build for device and both simulator architectures. The
+first mobile CI runs exposed simulator selection and Android RELRO alignment
+issues; fixes retain the production three-profile measurements and use smaller
+development fixtures for functional tests. Android client fixtures pass relay
+configuration through test assets to avoid adb's command-length limit.
 
 Implementation order: Windows native gate, Rust role separation, mobile ABI and
 packages, push registration/relay notifications, integrated qualification and

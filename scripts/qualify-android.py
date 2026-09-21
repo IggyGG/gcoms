@@ -48,6 +48,8 @@ def main():
     command = [args.gradle, "-p", PROJECT, "-PgcomsNativeRoot=" + str(native / "android")]
     if push:
         command += ["-PgcomsPush=true"]
+    if push:
+        command += [":push:assemble" + title + "Release"]
     run(command + [":sdk:assemble" + title + "Release", ":sample:assemble" + title + "Release",
         ":sample:assembleBaselineRelease", "--no-daemon"])
     adb = Path(os.environ["ANDROID_HOME"]) / "platform-tools/adb"
@@ -62,6 +64,10 @@ def main():
     aar = PROJECT / "sdk/build/outputs/aar" / ("sdk-" + args.role + "-release.aar")
     shutil.copy2(aar, evidence / aar.name)
     report["aar"] = archive(aar)
+    if push:
+        adapter = PROJECT / "push/build/outputs/aar" / ("push-" + args.role + "-release.aar")
+        shutil.copy2(adapter, evidence / adapter.name)
+        report["push_aar"] = archive(adapter)
     for role in ("baseline", args.role):
         report["apps"][role] = {}
         for abi in ("arm64-v8a", "x86_64"):

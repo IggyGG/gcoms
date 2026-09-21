@@ -8,7 +8,7 @@ on:
         default: false
   push:
     branches: [main]
-    paths: ['mobile/**', 'scripts/build-mobile.py', 'scripts/qualify-*.py', 'scripts/mobile_fixture.py', 'scripts/test-android.py', '.github/workflows/mobile-integrations.yml']
+    paths: ['mobile/**', 'scripts/build-mobile.py', 'scripts/prepare-android.py', 'scripts/qualify-*.py', 'scripts/mobile_fixture.py', 'scripts/test-android.py', '.github/workflows/mobile-integrations.yml']
 permissions:
   contents: read
 jobs:

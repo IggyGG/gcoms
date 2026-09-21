@@ -24,6 +24,9 @@ android {
     sourceSets {
         getByName("client").jniLibs.srcDir("$nativeRoot/client")
         getByName("relay").jniLibs.srcDir("$nativeRoot/relay")
+        providers.gradleProperty("gcomsFixtureAssets").orNull?.let {
+            getByName("androidTest").assets.srcDir(it)
+        }
     }
     buildTypes { release { isMinifyEnabled = false } }
     publishing { singleVariant("clientRelease"); singleVariant("relayRelease") }

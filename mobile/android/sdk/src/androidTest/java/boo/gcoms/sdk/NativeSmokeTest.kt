@@ -29,8 +29,8 @@ class NativeSmokeTest {
             .put("profile", File(directory, "profile").absolutePath)
             .put("secret", "disposable-emulator-secret").put("fixture", true)
         if (BuildConfig.NATIVE_ROLE == 1) {
-            val relay = InstrumentationRegistry.getArguments().getString("gcoms_relay")
-            check(relay != null) { "Run scripts/test-android.py to provide the separate relay fixture" }
+            val relay = InstrumentationRegistry.getInstrumentation().context.assets
+                .open("relay.json").bufferedReader().use { it.readText() }
             config.put("relay", JSONArray(relay))
         }
         try {
