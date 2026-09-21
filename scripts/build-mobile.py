@@ -89,7 +89,7 @@ def main():
                     raise RuntimeError('Mobile package pulls in optional RPC or multithread scheduling')
                 if role == 'client' and ('relay-host' in graph.get('gcoms-node', []) or 'quick-xml' in graph):
                     raise RuntimeError('Client package pulls in relay hosting')
-                if role == 'client' and 'hyper-rustls' in graph:
+                if role == 'client' and 'push-gateway' in graph.get('gcoms-node', []):
                     raise RuntimeError('Client package pulls in the relay HTTP gateway')
                 report['graphs'][role + '/' + triple] = graph
                 run(['cargo', 'build', '--manifest-path', MANIFEST, '--locked', '--release', '--no-default-features', '--features', features, '--target', triple], env)
