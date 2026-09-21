@@ -64,11 +64,7 @@ async fn gc2_carrier_fixture_starts_and_stops_with_an_in_memory_directory() {
 #[tokio::test(flavor = "multi_thread")]
 async fn gc2_carrier_production_profile_starts_and_restores_its_directory() {
     let dir = tempfile::tempdir().unwrap();
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        std::fs::set_permissions(dir.path(), std::fs::Permissions::from_mode(0o700)).unwrap();
-    }
+    gcoms_private_fs::make_private(dir.path(), true).unwrap();
     let make = |seed: [u8; 32]| NodeConfig {
         seed,
         listen: "127.0.0.1:0".parse().unwrap(),
@@ -101,11 +97,7 @@ async fn gc2_carrier_production_profile_starts_and_restores_its_directory() {
 #[tokio::test(flavor = "multi_thread")]
 async fn gc2_carrier_fixture_restores_its_directory_and_refuses_a_wrong_seed() {
     let dir = tempfile::tempdir().unwrap();
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        std::fs::set_permissions(dir.path(), std::fs::Permissions::from_mode(0o700)).unwrap();
-    }
+    gcoms_private_fs::make_private(dir.path(), true).unwrap();
     let make = |seed: [u8; 32]| NodeConfig {
         seed,
         listen: "127.0.0.1:0".parse().unwrap(),
@@ -128,4 +120,37 @@ async fn gc2_carrier_fixture_restores_its_directory_and_refuses_a_wrong_seed() {
         .err()
         .expect("another identity must not open the directory");
     assert!(!error.is_empty());
+}
+
+#[cfg(all(feature = "experimental-gc2", any(unix, windows)))]
+#[tokio::test(flavor = "multi_thread")]
+async fn gc2_carrier_refuses_existing_nonprivate_directory_without_repairing_it() {
+    let dir = tempfile::tempdir().unwrap();
+    gcoms_private_fs::make_private(dir.path(), true).unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(dir.path(), std::fs::Permissions::from_mode(0o750)).unwrap();
+    }
+    #[cfg(windows)]
+    {
+        let output = std::process::Command::new("icacls.exe")
+            .arg(dir.path())
+            .args(["/grant", "*S-1-1-0:(OI)(CI)R"])
+            .output()
+            .unwrap();
+        assert!(output.status.success(), "{output:?}");
+    }
+    assert!(gcoms_private_fs::validate_private_dir(dir.path(), "fixture").is_err());
+    let error = start(config(
+        "127.0.0.1:0",
+        NodeProfile::gc2_carrier_production(Some(dir.path().to_path_buf()), 1),
+    ))
+    .await
+    .err()
+    .expect("an existing nonprivate directory must be refused");
+    assert!(error.contains("routing state"), "{error}");
+    assert!(gcoms_private_fs::validate_private_dir(dir.path(), "fixture").is_err());
+    assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), 0);
+    gcoms_private_fs::make_private(dir.path(), true).unwrap();
 }
