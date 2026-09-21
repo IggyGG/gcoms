@@ -494,7 +494,17 @@ class ScenarioTests(unittest.TestCase):
         self.assertEqual([e['source'] for e in c.events if e['event']=='source_contribution'],[4,8])
 
 class DeploymentTests(unittest.TestCase):
-    def host(self): return Host({'run_id':'ff-test','host':0,'base':'/var/tmp'})
+    def host(self):
+        # These command/receipt fixtures model the Linux relay filesystem.
+        # Darwin's /var symlink and Windows paths are not a remote-host sample.
+        with patch.object(Path, 'resolve', autospec=True, side_effect=lambda path: path), \
+             patch.object(Path, 'is_symlink', return_value=False):
+            return Host({'run_id':'ff-test','host':0,'base':'/var/tmp'})
+
+    def test_real_host_policy_still_rejects_symbolic_test_roots(self):
+        with patch.object(Path, 'is_symlink', return_value=True):
+            with self.assertRaisesRegex(ValueError, 'symlinks'):
+                Host({'run_id':'ff-test','host':0,'base':'/var/tmp'})
 
     def test_diagnostic_counters_include_restarts_without_counting_samples_twice(self):
         with tempfile.TemporaryDirectory() as folder:
