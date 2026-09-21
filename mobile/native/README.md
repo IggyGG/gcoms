@@ -1,6 +1,6 @@
 # GComs mobile native interface
 
-Work in progress toward an Android/iOS tested preview. Link exactly one build:
+Android emulator/iOS simulator qualified preview. Link exactly one build:
 `--no-default-features --features client` or `--no-default-features --features relay`.
 Both expose ABI 1 in `include/gcoms_mobile.h`. The client excludes relay hosting,
 NAT mapping and relay queue storage. The relay embeds these facilities.

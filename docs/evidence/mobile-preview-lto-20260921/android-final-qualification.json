@@ -1,0 +1,45 @@
+{
+  "schema": 1,
+  "status": "passed",
+  "packaging_revision": "6cf6c0abe6a72e63f4b116832c97e780b412fe37",
+  "scope": "Android 16 KiB emulator; CI native libraries reused and every release APK payload reverified",
+  "datastore": "1.2.1",
+  "native_counter_write_read_tests": [
+    {
+      "role": "client",
+      "tests": {
+        "sdk": [
+          "profileChannelsFilesAndLifecycle",
+          "loadsRoleAndOwnsNativeResults"
+        ],
+        "push": [
+          "nativeSharedCounterSupportsTheQualificationEmulator"
+        ],
+        "push-unit": [
+          "acceptsOnlyGenericOpaqueHint"
+        ]
+      }
+    },
+    {
+      "role": "relay",
+      "tests": {
+        "sdk": [
+          "profileChannelsFilesAndLifecycle",
+          "loadsRoleAndOwnsNativeResults"
+        ],
+        "push": [
+          "nativeSharedCounterSupportsTheQualificationEmulator"
+        ],
+        "push-unit": [
+          "acceptsOnlyGenericOpaqueHint"
+        ]
+      }
+    }
+  ],
+  "elf_regression_tests_passed": 4,
+  "log_sha256": "0e09764d6877c848deacfe7ac5db98b68d38203f8a277aa6c5f275ca68348a29",
+  "references": [
+    "https://developer.android.com/guide/practices/page-sizes#elf-alignment",
+    "https://developer.android.com/jetpack/androidx/releases/datastore#1.2.1"
+  ]
+}

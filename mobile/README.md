@@ -1,8 +1,8 @@
 # Android and iOS SDKs
 
-Implementation in progress. These packages target an emulator/simulator-tested
-preview. Physical devices, background battery use and live APNs/FCM qualification
-are outside the current acceptance scope.
+Qualified Android emulator/iOS simulator preview (2026-09-21). Physical devices,
+background battery use and live APNs/FCM qualification are outside the current
+acceptance scope.
 
 The same native API has two mutually exclusive distributions: **client** hosts no
 relay; **relay** embeds relay services while the app is allowed to execute. Android
@@ -47,11 +47,12 @@ thread requirements. See [native ownership and limits](native/README.md).
 
 Optional push is a separate app-operated integration. It is a wake-up hint;
 messages and files always remain on GComs. The Android FCM adapter is an optional
-Gradle module selected with `-PgcomsPush=true` and Firebase Messaging 25.1.3;
+Gradle module selected with `-PgcomsPush=true` and Firebase Messaging 25.1.3.
 DataStore 1.2.1 replaces Firebase's older transitive native library so both LOAD
 and RELRO segments support 16 KiB pages. Release APK checks cover every native
 payload, and push instrumentation exercises the native multiprocess counter.
-the base modules have no Firebase dependency. Apple push uses only system
+See the [Android ELF requirements](https://developer.android.com/guide/practices/page-sizes#elf-alignment).
+The base modules have no Firebase dependency. Apple push uses only system
 Foundation/Security APIs. See [registration and ownership](push/README.md).
 
 Build production native packages with `python3 scripts/build-mobile.py android`
@@ -64,33 +65,52 @@ the same toolchain. Android builds require ANDROID_HOME and the pinned NDK;
 Apple builds require macOS/Xcode. Both require the pinned Rust 1.98 toolchain.
 
 Production builds emit one foreign library type per invocation: Android `cdylib`
-or Apple `staticlib`. This enables LTO; the previous combined rlib/native build
-disabled it despite the requested release profile. A local client probe reduces
-the ARM64 library from 10,172,928 to 7,359,720 bytes and x86_64 from 11,974,984 to
-8,796,864 bytes. Full production size qualification is being repeated. Apple
-release samples enable symbol stripping and count only the active simulator
-architecture. Archives retain linker-required external symbols.
+or Apple `staticlib`, with full LTO, one codegen unit, unwind and stripping.
+The manifest's default rlib is for Rust tests. Apple archives retain external
+symbols needed by the host linker; release sample apps also strip symbols and
+select the active simulator architecture.
 
-The superseded Android size record below uses Rust inputs at `b39199e` and publication
-metadata at `b3a21a9`. All four configurations pass instrumentation on the API 35
-16 KiB emulator. Production AARs, POM/module dependencies, native hashes, APK ZIP
-alignment and installed APK deltas are verified. `z` is the smallest of 3/s/z for
-both architectures in every configuration. These pre-LTO sizes are decimal MB;
-they are retained as historical evidence, not final release baselines.
+The verified production measurements below use Rust 1.98.0. All architectures
+were built at 3/s/z. Linked sample comparisons select z for Apple, and z also
+minimizes Android native libraries. ARM64 static archives are slightly smaller
+at s; their retained code does not predict the linked app's size. Figures are
+decimal MB. Native archives include code that the app linker can remove;
+the app-addition columns measure the resulting host application cost.
 
 | Android distribution | ARM64 native library | SDK AAR (two ABIs) | ARM64 sample APK addition | x86_64 installed APK addition |
 | --- | ---: | ---: | ---: | ---: |
-| Client | 10.17 | 9.75 | 10.22 | 12.02 |
-| Relay | 10.82 | 10.38 | 10.87 | 12.84 |
-| Client + push | 10.19 | 9.76 | 10.74 | 12.55 |
-| Relay + push | 10.87 | 10.42 | 11.43 | 13.40 |
+| Client | 7.35 | 8.19 | 7.40 | 8.86 |
+| Relay | 7.92 | 8.83 | 7.97 | 9.53 |
+| Client + push | 7.36 | 8.20 | 7.93 | 9.39 |
+| Relay + push | 7.96 | 8.87 | 8.52 | 10.08 |
 
-The push adapter AAR is another 25 KB; the sample APK columns include Firebase
-and its transitive dependencies. App additions subtract the same sample without
-GComs. Installed APK bytes exclude OS-generated code caches and application data;
-ARM64 figures are build measurements. These results do not qualify physical
-devices or live push delivery. [Exact inputs and measurements](../docs/evidence/mobile-preview-20260921/)
-retain all three optimization levels and artifact hashes.
+| iOS distribution | ARM64 static archive | XCFramework (three architectures) | ARM64 sample app addition | Installed simulator app addition |
+| --- | ---: | ---: | ---: | ---: |
+| Client | 15.48 | 45.61 | 6.26 | 6.29 |
+| Relay | 16.45 | 48.39 | 6.76 | 6.78 |
+| Client + push | 15.50 | 45.66 | 6.32 | 6.36 |
+| Relay + push | 16.51 | 48.57 | 6.85 | 6.87 |
+
+The Android push adapter AAR adds about 25 KB; its sample APK measurements also
+include Firebase and transitive dependencies. Base packages have no Firebase
+dependency. The Apple push wrapper uses system frameworks.
+
+App additions subtract the equivalent sample without GComs. Android installed
+APK bytes include uncompressed, 16 KiB-aligned native libraries and exclude
+OS-generated code caches and app data. ARM64 Android and iOS device figures
+come from release builds; simulator figures are measured after installation.
+These are sample costs, not physical-device filesystem allocation or
+store-compressed download estimates.
+
+[Exact sources, toolchains, all optimization levels and artifact hashes](../docs/evidence/mobile-preview-lto-20260921/)
+include independently verified AAR/POM/module metadata, APK payloads and all
+XCFramework slices. CI rejects native or sample-app size growth above 5% against
+these same-toolchain baselines. An unmeasured native target/profile or changed
+toolchain requires a new baseline. NDK 27.3.13750724 is explicitly selected in CI;
+the recorded compiler previously came from the runner's NDK environment override.
+
+The [pre-LTO evidence](../docs/evidence/mobile-preview-20260921/) is retained as
+historical data and is excluded from the final mobile size gate.
 
 The mobile CI workflow exercises each role on an Android 16 KiB emulator and iOS
 simulator. The client tests use a separate loopback relay; Android maps it through

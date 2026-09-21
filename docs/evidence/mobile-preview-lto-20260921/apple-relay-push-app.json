@@ -1,0 +1,31 @@
+{
+  "schema": 1,
+  "role": "relay",
+  "push": true,
+  "revision": "65fc089ba25fe137f578a956981a909c8a298599",
+  "xcode": "Xcode 16.4\nBuild version 16F6",
+  "runtime": "com.apple.CoreSimulator.SimRuntime.iOS-26-2",
+  "simulator_arch": "arm64",
+  "deployment_postprocessing": true,
+  "apps": {
+    "Baseline": {
+      "installed_bundle_bytes": 75306,
+      "unsigned_device_bundle_bytes": 74590
+    },
+    "Preview": {
+      "installed_bundle_bytes": 6946004,
+      "unsigned_device_bundle_bytes": 6925040
+    }
+  },
+  "delta": {
+    "installed_bundle_bytes": 6870698,
+    "unsigned_device_bundle_bytes": 6850450
+  },
+  "evidence": {
+    "workflow_run": "https://github.com/IggyGG/gcoms/actions/runs/35606654147",
+    "native_report_sha256": "ad0c28399a57f4749f3db337264a0ec2ce7afc342a7c6eccb9f532055dd4000c",
+    "app_report_sha256": "8bbd91e3c043c8a8713401c92ba025d4faf7b3f1a124a62a558502a4f520a79e",
+    "native_profile_verified_by": "apple-publications.json"
+  },
+  "native_opt_level": "z"
+}

@@ -1,0 +1,75 @@
+{
+  "schema": 1,
+  "platform": "android",
+  "fixtures": false,
+  "push": false,
+  "revision": "65fc089ba25fe137f578a956981a909c8a298599",
+  "rustc": "rustc 1.98.0 (88d9e12ae 2026-08-18)\nbinary: rustc\ncommit-hash: 88d9e12ae178fab0fb5cc050a94da85685d449ea\ncommit-date: 2026-08-18\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.0\nLLVM version: 22.1.8\n",
+  "crate_type": "cdylib",
+  "panic": "unwind",
+  "lto": true,
+  "codegen_units": 1,
+  "build_profile": "release",
+  "artifacts": [
+    {
+      "role": "client",
+      "target": "aarch64-linux-android",
+      "opt_level": "3",
+      "kind": "shared_library",
+      "bytes": 12369368,
+      "sha256": "5d5a92b6cbd4e8ba3f2fe366a1336dbeb6525104b4a6af3d88d815b175d43c05",
+      "artifact": "evidence/client-aarch64-linux-android-opt-3.so"
+    },
+    {
+      "role": "client",
+      "target": "x86_64-linux-android",
+      "opt_level": "3",
+      "kind": "shared_library",
+      "bytes": 14827656,
+      "sha256": "7de8fcf151c6e31fcd9b34371852f9114b6b2d69ccb84947ab609cba69d175e9",
+      "artifact": "evidence/client-x86_64-linux-android-opt-3.so"
+    },
+    {
+      "role": "client",
+      "target": "aarch64-linux-android",
+      "opt_level": "s",
+      "kind": "shared_library",
+      "bytes": 8148224,
+      "sha256": "f7f54a7a8baa457dee74e8768709394d1263f5f66e4a32fafba1af2e7f92dd93",
+      "artifact": "evidence/client-aarch64-linux-android-opt-s.so"
+    },
+    {
+      "role": "client",
+      "target": "x86_64-linux-android",
+      "opt_level": "s",
+      "kind": "shared_library",
+      "bytes": 9369952,
+      "sha256": "e1901a9938ea55a3933a73fe0f4b1731802fce1a97868f6d4757179787317a7a",
+      "artifact": "evidence/client-x86_64-linux-android-opt-s.so"
+    },
+    {
+      "role": "client",
+      "target": "aarch64-linux-android",
+      "opt_level": "z",
+      "kind": "shared_library",
+      "bytes": 7351000,
+      "sha256": "c359ed940719e27dfd8c75c76b965e4afd969556a3f4682b9ab54b36d8284d59",
+      "artifact": "evidence/client-aarch64-linux-android-opt-z.so"
+    },
+    {
+      "role": "client",
+      "target": "x86_64-linux-android",
+      "opt_level": "z",
+      "kind": "shared_library",
+      "bytes": 8811088,
+      "sha256": "fe8cccbccccd21dad6b55149f43c10c3e59c606d2e3b7f60bc2e9ffe57989844",
+      "artifact": "evidence/client-x86_64-linux-android-opt-z.so"
+    }
+  ],
+  "ndk": "Pkg.Desc = Android NDK\nPkg.Revision = 27.3.13750724\nPkg.BaseRevision = 27.3.13750724\nPkg.ReleaseName = r27d\n",
+  "evidence": {
+    "workflow_run": "https://github.com/IggyGG/gcoms/actions/runs/35606582546",
+    "native_report_sha256": "935a267e947e7531de676e37414de50b60ce094f279f1f6c303c7a6812c7b92d",
+    "app_report_sha256": "12f46af0977097fa4af4241874e6694462d131a3d885725b76807b425eb00e38"
+  }
+}

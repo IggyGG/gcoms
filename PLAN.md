@@ -1,35 +1,34 @@
 # Windows and mobile integrations
 
-In progress (2026-09-21, Codex). The outbound-only Rust backend, minimal mobile
-C ABI, Kotlin/Swift client and relay packages, and optional app-operated APNs/FCM
-hint gateway are implemented. Acceptance remains an emulator/simulator preview
-with simulated providers; physical-device, battery and live push work is deferred.
-
-Current qualification:
+Completed the emulator/simulator preview on 2026-09-21. The outbound-only Rust
+backend, minimal C ABI, Kotlin/Swift client and relay packages, and optional
+app-operated APNs/FCM hint adapters are implemented and qualified. Physical-device,
+battery and live-provider qualification remains outside this accepted scope.
 
 - Linux, macOS ARM64/Intel and Windows x64 native tests and 3/s/z size gates pass
   at b39199e. All executable/source hashes are verified; maximum growth is 2.24%.
-  Current records are in `docs/evidence/rust-integrations-mobile-20260921/`.
-- All four Android base/push roles pass 16 KiB emulator instrumentation. SDK AAR,
-  POM/module dependencies, APK alignment and installed deltas are verified.
-- Both base Swift roles passed simulator tests. Both push roles now also pass,
-  including profile-secret and push-state Keychain reopen in an ad-hoc signed host.
+- All four Android base/push roles pass 16 KiB emulator instrumentation.
+  Release AARs, POM/module dependencies, APK alignment and installed deltas pass.
+- All four Swift base/push roles pass simulator tests, including secure profile
+  reopen and push-state Keychain persistence in ad-hoc signed test hosts.
+- Production libraries cover both Android ABIs and all three Apple architectures.
+  Full LTO is active; z minimizes Android libraries and linked Apple samples
+  across 3/s/z. App additions are measured for
+  installed emulators/simulators and built ARM64 samples. Mobile CI enforces a
+  separate 5% same-toolchain size baseline for each platform, role and push option.
 - Full Rust workspace: 910 passed, seven explicit ignores; strict Clippy,
   documentation, minimal features and packaged Rust/npm consumers pass.
   GChat f7a83ce against GComs b39199e passes 137 tests and strict Clippy.
-- Size inspection found that producing an rlib alongside foreign libraries
-  disabled LTO. Production now selects only the OS library type. The Android
-  client probe falls from 10.17 to 7.36 MB on ARM64 and 11.97 to 8.80 MB on x86_64.
-  Apple release measurements now strip symbols and select the active simulator
-  architecture. Final mobile measurements are being repeated for these changes.
-- A slow Swift build exhausted the fixture card's five-minute admission window.
-  Client harnesses now compile before provisioning and then execute immediately.
-  One Android push job hit Maven Central HTTP 429 before testing; targeted
-  platform/role runs qualify these cases independently of the continuing matrix.
+- Client fixtures compile before provisioning their five-minute relay card.
+  Production grant expiry is unchanged. Android explicitly selects the qualified
+  NDK 27.3.13750724 and DataStore 1.2.1. Every packaged native library passes LOAD,
+  RELRO and ZIP alignment checks; both push roles exercise the native counter.
 
-Retained pre-LTO records are explicitly marked as superseded under
-`docs/evidence/mobile-preview-20260921/`. Final baselines and the mobile CI size
-gate will be committed after all corrected distributions are verified.
+[Desktop evidence](docs/evidence/rust-integrations-mobile-20260921/),
+[mobile qualification and final baselines](docs/evidence/mobile-preview-lto-20260921/),
+and [combined workspace/GChat checks](docs/evidence/mobile-preview-20260921/combined-checks.json)
+retain exact source revisions and artifact/report hashes. Pre-LTO mobile records
+are historical evidence; they are excluded from final size comparisons.
 
 # Minimal Rust application integrations
 

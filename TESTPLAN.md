@@ -1,7 +1,9 @@
 # Rust integration qualification
 
 The native backend and size matrix passes on Windows x64 MSVC and Linux/macOS
-at b39199e; mobile size qualification is in progress. The private temporary-root helper
+at b39199e. All Android/iOS base/push preview distributions and final size gates
+pass; [exact mobile evidence](docs/evidence/mobile-preview-lto-20260921/) records
+the qualified revisions and toolchains. The private temporary-root helper
 must preserve current-user ownership and remove inherited Windows grants.
 Qualify outbound-only runtime behavior, mobile ABI cancellation/lifecycle,
 Android emulator/iOS simulator consumers and simulated APNs/FCM providers.
@@ -30,6 +32,9 @@ do not establish physical-device or live-provider qualification.
   to the tested role and verify that the FCM dependency names that role's SDK.
   Check APK ZIP offsets as well as ELF alignment: each native entry must be
   uncompressed and aligned to 16 KiB so installed APK bytes include native code.
+  Validate LOAD and RELRO boundaries for every packaged native dependency.
+  Require the optional push adapter to exercise DataStore native counter writes
+  and reads on the 16 KiB emulator; its runtime dependency is DataStore 1.2.1.
 - Keep the public startup future below 16 KiB and run GChat's complete channel
   journey on the default thread stack, including restored post-quantum identity.
   Native desktop CI compares 3/s/z results with the committed platform baselines

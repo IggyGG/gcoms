@@ -1,0 +1,19 @@
+{
+  "schema": 1,
+  "ndk": "27.3.13750724",
+  "status": "passed",
+  "scope": "Release client AAR/POM/module and both ABI sample APKs with explicit NDK pin; CI native inputs reused",
+  "log_sha256": "2d1b8744e599c9f3aaab9bf9ece8c1c2b7d00ef3356b346f12debdd49e147f53",
+  "deltas": {
+    "arm64-v8a": {
+      "apk_delta": 7400338,
+      "ci_apk_delta": 7400338,
+      "native_payload_identical": true
+    },
+    "x86_64": {
+      "apk_delta": 8860423,
+      "ci_apk_delta": 8860423,
+      "native_payload_identical": true
+    }
+  }
+}

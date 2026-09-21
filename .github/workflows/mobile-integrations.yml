@@ -38,6 +38,7 @@ jobs:
           persist-credentials: false
       - name: Install pinned Rust and Android tools
         run: |
+          python3 -m unittest discover -s scripts/tests -p mobile_elf_test.py
           rustup toolchain install 1.98.0 --profile minimal
           rustup default 1.98.0
           python3 scripts/prepare-android.py
@@ -51,9 +52,9 @@ jobs:
           test "$(adb -s emulator-5580 shell getconf PAGE_SIZE | tr -d "\r")" = 16384
           python3 scripts/test-android.py --role ${{ matrix.role }} --native-root target/mobile-fixtures --serial emulator-5580 ${{ inputs.push && '--push' || '' }}
       - name: Measure production native packages
-        run: python3 scripts/build-mobile.py android --roles ${{ matrix.role }} --profiles 3 s z ${{ inputs.push && '--push' || '' }} --output target/mobile
+        run: python3 scripts/build-mobile.py android --roles ${{ matrix.role }} --profiles 3 s z ${{ inputs.push && '--push' || '' }} --output target/mobile --baseline docs/evidence/mobile-preview-lto-20260921/android-${{ matrix.role }}-${{ inputs.push && 'push' || 'base' }}-native.json
       - name: Measure release AAR and installed sample delta
-        run: python3 scripts/qualify-android.py --role ${{ matrix.role }} --native-root target/mobile --serial emulator-5580
+        run: python3 scripts/qualify-android.py --role ${{ matrix.role }} --native-root target/mobile --serial emulator-5580 --baseline docs/evidence/mobile-preview-lto-20260921/android-${{ matrix.role }}-${{ inputs.push && 'push' || 'base' }}-app.json
       - name: Stop qualification emulator
         if: always()
         run: adb -s emulator-5580 emu kill || true
@@ -91,9 +92,9 @@ jobs:
       - name: Exercise Swift on an iOS simulator
         run: python3 scripts/qualify-apple.py --role ${{ matrix.role }} --native-root target/mobile-fixtures --test
       - name: Measure production native packages
-        run: python3 scripts/build-mobile.py apple --roles ${{ matrix.role }} --profiles 3 s z ${{ inputs.push && '--push' || '' }} --output target/mobile
+        run: python3 scripts/build-mobile.py apple --roles ${{ matrix.role }} --profiles 3 s z ${{ inputs.push && '--push' || '' }} --output target/mobile --baseline docs/evidence/mobile-preview-lto-20260921/apple-${{ matrix.role }}-${{ inputs.push && 'push' || 'base' }}-native.json
       - name: Measure linked application delta
-        run: python3 scripts/qualify-apple.py --role ${{ matrix.role }} --native-root target/mobile
+        run: python3 scripts/qualify-apple.py --role ${{ matrix.role }} --native-root target/mobile --baseline docs/evidence/mobile-preview-lto-20260921/apple-${{ matrix.role }}-${{ inputs.push && 'push' || 'base' }}-app.json
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: always()
         with:

@@ -1,0 +1,102 @@
+{
+  "schema": 1,
+  "platform": "apple",
+  "fixtures": false,
+  "push": false,
+  "revision": "3a47609b448003cae6d7775cbaf7ebe1d3f5a05a",
+  "rustc": "rustc 1.98.0 (88d9e12ae 2026-08-18)\nbinary: rustc\ncommit-hash: 88d9e12ae178fab0fb5cc050a94da85685d449ea\ncommit-date: 2026-08-18\nhost: aarch64-apple-darwin\nrelease: 1.98.0\nLLVM version: 22.1.8\n",
+  "crate_type": "staticlib",
+  "panic": "unwind",
+  "lto": true,
+  "codegen_units": 1,
+  "build_profile": "release",
+  "artifacts": [
+    {
+      "role": "client",
+      "target": "aarch64-apple-ios",
+      "opt_level": "3",
+      "kind": "static_archive",
+      "bytes": 19990264,
+      "sha256": "3381163d55ceb92828311183d13ae84f67dc355bd41343c1bf488618ecee7aa5",
+      "artifact": "evidence/client-aarch64-apple-ios-opt-3.a"
+    },
+    {
+      "role": "client",
+      "target": "aarch64-apple-ios-sim",
+      "opt_level": "3",
+      "kind": "static_archive",
+      "bytes": 19961496,
+      "sha256": "7cf01fafaa9dd279fd40fbfe413054ed996ef76435e5e9ce3dc4f000a02212da",
+      "artifact": "evidence/client-aarch64-apple-ios-sim-opt-3.a"
+    },
+    {
+      "role": "client",
+      "target": "x86_64-apple-ios",
+      "opt_level": "3",
+      "kind": "static_archive",
+      "bytes": 21352448,
+      "sha256": "81c93019f7d37b5a13e6c854a306ced8f89988a19340eef473fea669628f0dbe",
+      "artifact": "evidence/client-x86_64-apple-ios-opt-3.a"
+    },
+    {
+      "role": "client",
+      "target": "aarch64-apple-ios",
+      "opt_level": "s",
+      "kind": "static_archive",
+      "bytes": 15341760,
+      "sha256": "b32b94fc80e524167f7ee02e4cb575cab27e321d97094699df720b151bf2f31e",
+      "artifact": "evidence/client-aarch64-apple-ios-opt-s.a"
+    },
+    {
+      "role": "client",
+      "target": "aarch64-apple-ios-sim",
+      "opt_level": "s",
+      "kind": "static_archive",
+      "bytes": 15305416,
+      "sha256": "74172f5d588558db17a66b4ff0451ec7a4dec9134de813563238ccac5e639058",
+      "artifact": "evidence/client-aarch64-apple-ios-sim-opt-s.a"
+    },
+    {
+      "role": "client",
+      "target": "x86_64-apple-ios",
+      "opt_level": "s",
+      "kind": "static_archive",
+      "bytes": 15502304,
+      "sha256": "12c21694fe63360bd4d6b63bf631e6b789f241cb4b46185d6cddf43280192228",
+      "artifact": "evidence/client-x86_64-apple-ios-opt-s.a"
+    },
+    {
+      "role": "client",
+      "target": "aarch64-apple-ios",
+      "opt_level": "z",
+      "kind": "static_archive",
+      "bytes": 15483928,
+      "sha256": "055992edc8111bd3dda762635a8b3691db8ad66d761c30cd6298d60d20750279",
+      "artifact": "evidence/client-aarch64-apple-ios-opt-z.a"
+    },
+    {
+      "role": "client",
+      "target": "aarch64-apple-ios-sim",
+      "opt_level": "z",
+      "kind": "static_archive",
+      "bytes": 15467120,
+      "sha256": "cc23dbc726f7de734154719f916609cf75332b7d2b28107c8095987a02fb340e",
+      "artifact": "evidence/client-aarch64-apple-ios-sim-opt-z.a"
+    },
+    {
+      "role": "client",
+      "target": "x86_64-apple-ios",
+      "opt_level": "z",
+      "kind": "static_archive",
+      "bytes": 14651608,
+      "sha256": "331efa50a186455652360cdfa8fc420c3d474be933bd0325f14ef32400f25c99",
+      "artifact": "evidence/client-x86_64-apple-ios-opt-z.a"
+    }
+  ],
+  "xcode": "Xcode 16.4\nBuild version 16F6\n",
+  "evidence": {
+    "workflow_run": "https://github.com/IggyGG/gcoms/actions/runs/35608962490",
+    "native_report_sha256": "b5b3e802d75fbf60760108fb324fbfc4109e19eda7b6620f6ee701674e7e45ed",
+    "app_report_sha256": "4ea68feed7975ecd0fc27820f8e855833db5cbc1fcf5a89d332da376bdda29e0"
+  }
+}

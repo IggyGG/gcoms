@@ -8,13 +8,13 @@ RPC and automatic daemon launch are optional. GChat consumes the same API.
 
 The Linux workspace passes 910 tests (seven explicit ignores), and GChat passes
 137 tests against the shared API. Native tests and size checks pass on Linux,
-macOS ARM64/Intel and Windows x64 MSVC. [Measured consumer sizes](docs/RUST_INTEGRATIONS.md). Mobile
-qualification remains in progress.
-See [mobile SDK sources and current status](mobile/README.md).
+macOS ARM64/Intel and Windows x64 MSVC. [Measured consumer sizes](docs/RUST_INTEGRATIONS.md).
+Android/iOS client and relay SDKs are qualified as an emulator/simulator preview.
+See [mobile packages and measured app additions](mobile/README.md).
 
-Windows x64 MSVC is included in the native integration workflow. Android/iOS
-client and relay SDKs, with optional app-operated push delivery, are being added
-as a preview; their qualification status is tracked in [PLAN.md](PLAN.md).
+Mobile packages include separate optional app-operated push-hint adapters.
+Physical-device, battery and live-provider qualification remains deferred;
+[PLAN.md](PLAN.md) records the completed preview scope.
 The `network-client,files` feature set adds a self-contained outbound protocol
 client. Select `Backend::NetworkClient` when combining it with `embedded` in one
 build. It hosts its inbox on remote relays and excludes local queue hosting,

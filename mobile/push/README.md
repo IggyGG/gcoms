@@ -1,6 +1,7 @@
 # Optional app-operated push
 
-Work in progress. The base Rust, Kotlin and Swift SDKs have no Firebase/APNs
+Qualified preview using emulator/simulator tests and mock providers.
+The base Rust, Kotlin and Swift SDKs have no Firebase/APNs
 dependency. Each application operator runs this gateway behind their own HTTPS
 proxy and supplies their own APNs key / Firebase service account. Provider
 credentials and registration signing keys never ship in an app.
@@ -59,8 +60,10 @@ and `service_account_file`. `relays` is keyed by relay ID, with a distinct
 
 Provider wire formats follow [Apple APNs requests](https://developer.apple.com/documentation/usernotifications/sending-notification-requests-to-apns)
 and [FCM HTTP v1](https://firebase.google.com/docs/cloud-messaging/send/v1-api).
-This preview will use simulated provider qualification; live credentials, device
-delivery and battery qualification remain deferred.
+This preview passes simulated provider qualification; live credentials, device
+delivery and battery qualification remain deferred. See the
+[qualification evidence](../../docs/evidence/mobile-preview-lto-20260921/validation.json)
+and [gateway checks](../../docs/evidence/mobile-preview-20260921/combined-checks.json).
 
 Android: build native packages with `--push`, then pass `-PgcomsPush=true` and
 `-PgcomsNativeRoot=/absolute/path/to/mobile-push/android` to Gradle. Link exactly

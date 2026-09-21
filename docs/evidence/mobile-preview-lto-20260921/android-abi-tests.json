@@ -1,0 +1,101 @@
+{
+  "schema": 1,
+  "distributions": [
+    {
+      "distribution": "android-client-base",
+      "revision": "65fc089ba25fe137f578a956981a909c8a298599",
+      "native_exports": [
+        "Java_boo_gcoms_sdk_Native_cancel",
+        "Java_boo_gcoms_sdk_Native_create",
+        "Java_boo_gcoms_sdk_Native_destroy",
+        "Java_boo_gcoms_sdk_Native_role",
+        "Java_boo_gcoms_sdk_Native_submit",
+        "Java_boo_gcoms_sdk_Native_take",
+        "gcoms_mobile_abi_version",
+        "gcoms_mobile_cancel",
+        "gcoms_mobile_create",
+        "gcoms_mobile_destroy",
+        "gcoms_mobile_role",
+        "gcoms_mobile_submit",
+        "gcoms_mobile_take"
+      ],
+      "instrumentation_tests": [
+        "profileChannelsFilesAndLifecycle",
+        "loadsRoleAndOwnsNativeResults"
+      ],
+      "all_architectures_and_profiles_match": true
+    },
+    {
+      "distribution": "android-relay-base",
+      "revision": "65fc089ba25fe137f578a956981a909c8a298599",
+      "native_exports": [
+        "Java_boo_gcoms_sdk_Native_cancel",
+        "Java_boo_gcoms_sdk_Native_create",
+        "Java_boo_gcoms_sdk_Native_destroy",
+        "Java_boo_gcoms_sdk_Native_role",
+        "Java_boo_gcoms_sdk_Native_submit",
+        "Java_boo_gcoms_sdk_Native_take",
+        "gcoms_mobile_abi_version",
+        "gcoms_mobile_cancel",
+        "gcoms_mobile_create",
+        "gcoms_mobile_destroy",
+        "gcoms_mobile_role",
+        "gcoms_mobile_submit",
+        "gcoms_mobile_take"
+      ],
+      "instrumentation_tests": [
+        "profileChannelsFilesAndLifecycle",
+        "loadsRoleAndOwnsNativeResults"
+      ],
+      "all_architectures_and_profiles_match": true
+    },
+    {
+      "distribution": "android-client-push",
+      "revision": "65fc089ba25fe137f578a956981a909c8a298599",
+      "native_exports": [
+        "Java_boo_gcoms_sdk_Native_cancel",
+        "Java_boo_gcoms_sdk_Native_create",
+        "Java_boo_gcoms_sdk_Native_destroy",
+        "Java_boo_gcoms_sdk_Native_role",
+        "Java_boo_gcoms_sdk_Native_submit",
+        "Java_boo_gcoms_sdk_Native_take",
+        "gcoms_mobile_abi_version",
+        "gcoms_mobile_cancel",
+        "gcoms_mobile_create",
+        "gcoms_mobile_destroy",
+        "gcoms_mobile_role",
+        "gcoms_mobile_submit",
+        "gcoms_mobile_take"
+      ],
+      "instrumentation_tests": [
+        "profileChannelsFilesAndLifecycle",
+        "loadsRoleAndOwnsNativeResults"
+      ],
+      "all_architectures_and_profiles_match": true
+    },
+    {
+      "distribution": "android-relay-push",
+      "revision": "3a47609b448003cae6d7775cbaf7ebe1d3f5a05a",
+      "native_exports": [
+        "Java_boo_gcoms_sdk_Native_cancel",
+        "Java_boo_gcoms_sdk_Native_create",
+        "Java_boo_gcoms_sdk_Native_destroy",
+        "Java_boo_gcoms_sdk_Native_role",
+        "Java_boo_gcoms_sdk_Native_submit",
+        "Java_boo_gcoms_sdk_Native_take",
+        "gcoms_mobile_abi_version",
+        "gcoms_mobile_cancel",
+        "gcoms_mobile_create",
+        "gcoms_mobile_destroy",
+        "gcoms_mobile_role",
+        "gcoms_mobile_submit",
+        "gcoms_mobile_take"
+      ],
+      "instrumentation_tests": [
+        "profileChannelsFilesAndLifecycle",
+        "loadsRoleAndOwnsNativeResults"
+      ],
+      "all_architectures_and_profiles_match": true
+    }
+  ]
+}
