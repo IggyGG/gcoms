@@ -53,6 +53,7 @@ EXCLUSIONS = {
 # Native package tests record the exclusion; they never imply installed coverage.
 GCHAT_EXCLUSIONS = {
     "bootstrap_gc2_tests::production_bootstrap_fresh_reopen_and_recovery",
+    "bootstrap::gc2_tests::production_bootstrap_fresh_reopen_and_recovery",
     "chat_service::networks::journey::combined_invitation_joins_another_network_and_retains_chat_and_file",
     "chat_service::networks::tests::joined_network_registry_is_private_isolated_and_reopens",
 }
