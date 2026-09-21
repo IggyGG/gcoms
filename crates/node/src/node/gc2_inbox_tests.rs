@@ -226,3 +226,76 @@ async fn fresh_carrier_node_provisions_its_inbox_over_the_protected_route() {
     );
     assert!(advertised.is_none(), "legacy cards carry no advertisement");
 }
+
+/// Live-fabric probe: does a DEPLOYED relay answer the GCP2 inbox provisioning
+/// request? Run explicitly with a freshly fetched GCRB v2 bundle:
+///   GC2_PROBE_BUNDLE=/path/bundle.b64 cargo test -p gcoms-node --features experimental-gc2 --lib deployed_relay_probe
+#[tokio::test]
+async fn deployed_relay_probe() {
+    let path = std::env::var("GC2_PROBE_BUNDLE")
+        .expect("GC2_PROBE_BUNDLE must name a file with a GCRB v2 base64 bundle");
+    let raw = std::fs::read_to_string(path).expect("read bundle file");
+    let bytes = gcoms_transport::decode_b64url(raw.trim()).expect("base64url bundle");
+    let bundle = gcoms_routing::gc2::directory::BootstrapBundle::decode(&bytes)
+        .expect("deployed bundle decodes");
+    let intros: Vec<Vec<u8>> = bundle
+        .relays
+        .iter()
+        .take(3)
+        .map(|i| i.encode().unwrap().to_vec())
+        .collect();
+    assert_eq!(intros.len(), 3, "probe needs three fleet introductions");
+    // Deployed relays are public addresses: use the production carrier profile
+    // (public address policy), not the loopback fixture directory.
+    let cfg = NodeConfig {
+        seed: [11; 32],
+        listen: "127.0.0.1:0".parse().unwrap(),
+        control: None,
+        advertise: None,
+        profile: NodeProfile::Gc2Carrier(crate::node::Gc2CarrierProfile {
+            directory: None,
+            entries: 3,
+            record_len: 4096,
+            period_ms: 1000,
+            cover_mode: gcoms_routing::gc2::CoverMode::Interactive,
+            scheduler: crate::scheduler::SchedulerProfile::fixture(),
+            introductions: intros,
+        }),
+        inbox_relay: None,
+        alias_lifecycle: Default::default(),
+    };
+    let runtime = RoutingRuntime::new(RoutingConfig::default(), Directory::new(), true).unwrap();
+    let prepared = super::gc2_bootstrap::prepare(&cfg, Some(&runtime))
+        .expect("carrier prepare")
+        .expect("carrier profile engages the runtime");
+    let _owner_task = tokio::spawn(prepared.owner.run());
+    let reply = tokio::time::timeout(std::time::Duration::from_secs(240), async {
+        loop {
+            if let Ok(reply) = runtime
+                .provision_inbox(
+                    &[gcoms_protocol::proto::PROVISION_OPTION_GC2],
+                    &[],
+                    None,
+                )
+                .await
+            {
+                return Ok::<_, String>(reply);
+            }
+            tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+        }
+    })
+    .await
+    .expect("GCP2 answers within the startup window")
+    .expect("GCP2 provisioning answers");
+    let (card, advertised) =
+        NodeInfo::decode_private_any(&reply).expect("private card decodes");
+    assert_eq!(
+        card.provisioning.as_ref().map(|p| p.aliases.len()),
+        Some(2),
+        "the deployed relay mints normal and control aliases"
+    );
+    assert!(
+        advertised.is_some(),
+        "the deployed relay advertises its GC/2 introduction"
+    );
+}
