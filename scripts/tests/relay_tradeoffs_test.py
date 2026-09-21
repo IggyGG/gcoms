@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import importlib.util
+import os
 import json
 from pathlib import Path
 import tempfile
@@ -189,6 +190,11 @@ class TradeoffsTest(unittest.TestCase):
     def test_evidence_is_exclusive_private_and_failed_write_does_not_publish(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "result.json"
+            if os.name != "posix":
+                with self.assertRaisesRegex(NotImplementedError, "POSIX file permissions"):
+                    study.write_new(path, "original")
+                self.assertEqual(list(path.parent.iterdir()), [])
+                return
             study.write_new(path, "original")
             self.assertEqual(path.stat().st_mode & 0o777, 0o600)
             with self.assertRaises(FileExistsError):

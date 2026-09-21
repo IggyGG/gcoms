@@ -55,7 +55,7 @@ class PackageConsumersTest(unittest.TestCase):
                     "integrity": "sha512-" + base64.b64encode(bytes(64)).decode()}
             (source / "package-lock.json").write_text(json.dumps(
                 {"name": "fixture-chat", "lockfileVersion": 3, "packages": packages}))
-            original = {str(p.relative_to(source)): p.read_bytes()
+            original = {p.relative_to(source).as_posix(): p.read_bytes()
                         for p in source.rglob("*") if p.is_file()}
             snapshot = root / "snapshot"
             shutil.copytree(source, snapshot)
@@ -74,7 +74,7 @@ class PackageConsumersTest(unittest.TestCase):
                 self.assertTrue(package["resolved"].startswith("file:"))
                 self.assertEqual(package["integrity"], "sha512-" +
                                  base64.b64encode(hashlib.sha512(archive.read_bytes()).digest()).decode())
-            self.assertEqual(original, {str(p.relative_to(source)): p.read_bytes()
+            self.assertEqual(original, {p.relative_to(source).as_posix(): p.read_bytes()
                                         for p in source.rglob("*") if p.is_file()})
             self.assertEqual((snapshot / "ui/package.json").read_bytes(), original["ui/package.json"])
 

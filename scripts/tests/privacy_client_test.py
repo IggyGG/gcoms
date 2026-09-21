@@ -135,7 +135,10 @@ class ClientIpcDeadlineTest(unittest.TestCase):
                     raise TimeoutError('response exceeded socket timeout')
                 result, self.data = self.data[:n], self.data[n:]
                 return result
-        with patch.object(driver.time, 'monotonic', return_value=100.0), \
+        # The IPC socket is entirely fake; Windows Python does not expose
+        # AF_UNIX. Model its family without claiming a native Unix-socket test.
+        with patch.object(driver.socket, 'AF_UNIX', 1, create=True), \
+                patch.object(driver.time, 'monotonic', return_value=100.0), \
                 patch.object(driver.socket, 'socket', side_effect=lambda *_: Socket()):
             self.assertEqual(worker.probe(0, {}), {'joined': True})
             worker.rpc_deadline = 99.0

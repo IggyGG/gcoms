@@ -1,6 +1,7 @@
 """Regression tests for the privacy audit's measurement failures."""
 import copy
 import importlib.util
+import os
 import json
 from pathlib import Path
 import sys
@@ -130,11 +131,32 @@ class PrivacyMeasurementTest(unittest.TestCase):
     def test_reports_are_private_and_never_overwritten(self):
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder) / "report.json"
+            if os.name != "posix":
+                with self.assertRaisesRegex(NotImplementedError, "POSIX file permissions"):
+                    write_new(path, "first")
+                self.assertEqual(list(path.parent.iterdir()), [])
+                return
             write_new(path, "first")
             self.assertEqual(path.stat().st_mode & 0o777, 0o600)
             with self.assertRaises(FileExistsError):
                 write_new(path, "second")
             self.assertEqual(path.read_text(), "first")
+
+    def test_study_writers_refuse_unqualified_acl_platform_without_output(self):
+        writers = [write_new]
+        for filename in ("relay-performance.py", "relay-tradeoffs.py", "relay-utilization.py"):
+            spec = importlib.util.spec_from_file_location(filename, SCRIPTS / filename)
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            writers.append(module.write_new)
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            path = root / "not-created" / "report.json"
+            for writer in writers:
+                with self.subTest(writer=writer.__module__), patch.object(os, "name", "nt"):
+                    with self.assertRaisesRegex(NotImplementedError, "POSIX file permissions"):
+                        writer(path, "private evidence")
+                self.assertEqual(list(root.iterdir()), [])
 
     def test_valid_unfavorable_result_is_informative(self):
         with tempfile.TemporaryDirectory() as folder:

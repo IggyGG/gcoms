@@ -37,6 +37,13 @@ This staging check does not publish anything or require registry credentials.
 Use `--consumer-target-dir` to reuse a Cargo build cache while retaining a fresh
 archive/evidence directory for each `--release` check.
 
+The Python analyzer calculations and provenance checks also run on Windows.
+Private study-report writers currently require POSIX permissions and explicitly
+refuse other platforms before creating files; Windows mode bits are not a DACL
+privacy check. This limitation applies to measurement tooling, not the native
+Windows client, whose profile ACLs have separate native tests. Mocked Unix IPC
+deadline tests exercise controller timing only, not Windows socket support.
+
 ## Application facade
 
 `gcoms` is the public application dependency. The [application guide](crates/application/README.md)

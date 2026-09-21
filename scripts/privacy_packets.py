@@ -121,6 +121,10 @@ def new_connections(rows):
 
 
 def write_new(path, text):
+    # POSIX mode bits do not establish a private Windows DACL. Fail before
+    # creating evidence rather than silently publishing with inherited access.
+    if os.name != "posix":
+        raise NotImplementedError("private study evidence requires POSIX file permissions")
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)

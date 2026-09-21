@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import copy
 import importlib.util
+import os
 from pathlib import Path
 import tempfile
 import unittest
@@ -209,6 +210,11 @@ class UtilizationTest(unittest.TestCase):
     def test_exclusive_evidence_and_write_failure_preserve_prior_results(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory)/"evidence.json"
+            if os.name != "posix":
+                with self.assertRaisesRegex(NotImplementedError, "POSIX file permissions"):
+                    study.write_new(path,"first")
+                self.assertEqual(list(path.parent.iterdir()), [])
+                return
             study.write_new(path,"first")
             self.assertEqual(path.stat().st_mode & 0o777, 0o600)
             with self.assertRaises(FileExistsError): study.write_new(path,"second")

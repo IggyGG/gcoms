@@ -264,6 +264,10 @@ def markdown(summary):
 
 
 def write_new(path, value):
+    # POSIX mode bits do not establish a private Windows DACL. Fail before
+    # creating evidence rather than silently publishing with inherited access.
+    if os.name != "posix":
+        raise NotImplementedError("private study evidence requires POSIX file permissions")
     descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     with os.fdopen(descriptor, "w", encoding="utf-8") as output:
         output.write(value)

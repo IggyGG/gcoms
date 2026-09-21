@@ -294,6 +294,10 @@ def markdown(report):
 
 
 def write_new(path, text):
+    # POSIX mode bits do not establish a private Windows DACL. Fail before
+    # creating evidence rather than silently publishing with inherited access.
+    if os.name != "posix":
+        raise NotImplementedError("private study evidence requires POSIX file permissions")
     path = Path(path)
     fd, staged = tempfile.mkstemp(prefix=".utilization-", dir=path.parent)
     try:
