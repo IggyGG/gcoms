@@ -1,0 +1,144 @@
+{
+  "schema": 1,
+  "scope": "Manual admission fixture ordering and bounded delayed-Welcome recovery",
+  "native_red_run": {
+    "id": 35633312255,
+    "gchat": "293ee5f3960e1265fb7469617918aa834eb64722",
+    "gcoms": "115f31bb2e51bcb3e2da0f6f367dde99ff78db18",
+    "gchat_native_passed": true,
+    "gcoms_native_passed": false,
+    "diagnosis": {
+      "path": "/run/media/user/SSD-2/gchat-validation/windows-native-35633312255/diagnosis.json",
+      "sha256": "e519d08abe7967c47ebb7ac45faad997ca36edcf874fe98aaf95ca87c6f5ce03"
+    }
+  },
+  "root_cause_proven": false,
+  "fixture_contract": [
+    "Eight admission tasks, four channel sends and two direct sends remain; owner current_info must stay below500ms and all work must drain successfully.",
+    "A fixture mutex spans each manual admission and caller Welcome application before the next epoch; preparations use a bounded30s barrier.",
+    "All completed admission cycles must report Active, including the last; no retry or swallowed pending-ACK result.",
+    "Separate control observes real MembershipPending while the first member has not applied Welcome, checks current_info responsiveness, then applies Welcome before the original90s convergence bound and requires Active recovery."
+  ],
+  "production_changed": false,
+  "main_test_commit": "ff3025cb3cad45c6392347ea9e38c6fb07c05053",
+  "main_final_test_sha256": "fa6ae879cc8d10e5532173f8f84bc083744a4ca8747d790cd67ae6bf964702f2",
+  "final_main_file_identical_to_release_test": true,
+  "checks": {
+    "initial_main": {
+      "commit": "0c22dee0bbfe39cfdf2c58512643ddeec5a5d3cd",
+      "tree": "cf6e945447995ba84ee39f5b99ae278098d7ca81",
+      "source_unchanged": true,
+      "summary": {
+        "path": "/run/media/user/SSD-2/gchat-validation/windows-concurrency-fixture-01/summary.json",
+        "sha256": "f681dfcf577fe599b7d9a149a32c320eec42e28a6071e0aa14480b0e131421b9"
+      },
+      "checks": [
+        {
+          "name": "source",
+          "exit_code": 0,
+          "sha256": "0033efd6ff3021de59205055c8387c83006345c370d31a913ca3a86b24ba2505"
+        },
+        {
+          "name": "research",
+          "exit_code": 0,
+          "sha256": "a90ef00a9392ea130dee6807cd368d2a76fc0d0e5ea87e43aca0ccc3c723f8e4"
+        },
+        {
+          "name": "fmt",
+          "exit_code": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "name": "concurrency",
+          "exit_code": 0,
+          "sha256": "876d05900b8f22a80b4486c383b718631452eeb83d1283a8fdd896c036f5cbd9",
+          "rust_counts": {
+            "passed": 2,
+            "failed": 0,
+            "ignored": 0
+          }
+        },
+        {
+          "name": "node-clippy",
+          "exit_code": 0,
+          "sha256": "dfd5b8f0af4182d6f3ebf0ca26c42f4967c57d92e5135eed9e994073348df281"
+        },
+        {
+          "name": "diff",
+          "exit_code": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        }
+      ]
+    },
+    "final_release": {
+      "commit": "7eec615e4478a166ee71f3144bc04c3070c92f72",
+      "tree": "e15b77be27aaafe2ad8e3d8c2e9ac0e19dfe1b5e",
+      "source_unchanged": true,
+      "summary": {
+        "path": "/run/media/user/SSD-2/gchat-validation/windows-concurrency-fixture-01/release-validation/summary.json",
+        "sha256": "5176a557a2f8502157a02079eb2a899cd1009186f2a52aeb95b6f9977627d541"
+      },
+      "checks": [
+        {
+          "name": "source",
+          "exit_code": 0,
+          "sha256": "9d032603312fc4a2238860d30f7fa6b555702b6cb648fe7e80c4d2e36af896be"
+        },
+        {
+          "name": "research",
+          "exit_code": 0,
+          "sha256": "a90ef00a9392ea130dee6807cd368d2a76fc0d0e5ea87e43aca0ccc3c723f8e4"
+        },
+        {
+          "name": "fmt",
+          "exit_code": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "name": "concurrency",
+          "exit_code": 0,
+          "sha256": "6ebeb4a0349c8113b3ec51d6cdff870c3f1b3d5a742390b58cb299620391738e",
+          "rust_counts": {
+            "passed": 2,
+            "failed": 0,
+            "ignored": 0
+          }
+        },
+        {
+          "name": "node-profile",
+          "exit_code": 0,
+          "sha256": "0a1627581a0e7b9cf467c3f9b58185c68241c2273ed51cb94ff1b52b384fefb8",
+          "rust_counts": {
+            "passed": 7,
+            "failed": 0,
+            "ignored": 0
+          }
+        },
+        {
+          "name": "node-clippy",
+          "exit_code": 0,
+          "sha256": "39b1bd601fa7e24cba38bc4d7b97dc027d5288f983620e904df71c1f944c0c54"
+        },
+        {
+          "name": "diff",
+          "exit_code": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        }
+      ]
+    }
+  },
+  "windows18": {
+    "gchat": "293ee5f3960e1265fb7469617918aa834eb64722",
+    "gcoms": "7eec615e4478a166ee71f3144bc04c3070c92f72",
+    "freeze": {
+      "path": "/run/media/user/SSD-2/gchat-validation/windows-release-inputs-18/freeze.json",
+      "sha256": "e21636ec34de1b12aae84bc1ec2c5af334423384c7fb9d2583d569c749793e94"
+    },
+    "native_validation_pending": true
+  },
+  "limitations": [
+    "Windows17 log does not identify the missing ACK participant or prove a runtime root cause.",
+    "Linux local passes do not qualify Windows native or an installer.",
+    "Initial main receipt precedes the final preparation-timeout guard; the final release receipt compiles/tests that exact guard and matches the current main test file."
+  ]
+}

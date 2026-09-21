@@ -1,3 +1,16 @@
+# Windows concurrent membership fixture
+
+Windows17 again passed GChat native CI, then failed the GComs command-loop load
+fixture when a later admission found a prior membership change still awaiting
+ACKs. Its exact cause is not established by that log. The test now orders each
+manual admission through the caller's Welcome application while retaining all
+eight tasks, channel/direct load, fast current-info queries and successful drain.
+Every admission must return to Active. A separate gated delayed-Welcome case
+proves that genuinely pending membership can recover while other commands remain
+responsive. No production behavior, error handling or convergence deadline changed.
+The final bounded Windows source is `7eec615`; local tests/Clippy passed, native
+retry remains pending. [Evidence](docs/evidence/windows-concurrency-fixture-20260921/summary.json).
+
 # Windows routing fixture correction
 
 Windows16 passed the full GChat native entrypoint but stopped in two GComs

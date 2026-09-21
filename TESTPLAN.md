@@ -1,3 +1,18 @@
+# Concurrent manual admissions and delayed Welcome
+
+Keep the eight-task fixture's channel/direct load, <500ms current-info bound and
+successful task drain. Order manual admit plus member join as one fixture cycle;
+require Active membership after every cycle so the final90s timeout cannot pass
+silently. Bound preparation failure. Separately hold a Welcome until the next
+admission reports MembershipPending, verify responsive commands, then join and
+require bounded Active recovery with no retry or swallowed error.
+
+Initial main `0c22dee` passed both cases and strict node Clippy. Final release
+`7eec615` additionally includes the30s preparation guard; both cases, all seven
+routing-profile cases, strict node Clippy/source/import/fmt/diff passed unchanged.
+Its test bytes equal main `ff3025c`. Windows17 remains failed; its complete GChat
+native pass is not relabeled for the successor. [Receipts](docs/evidence/windows-concurrency-fixture-20260921/summary.json).
+
 # Windows persisted routing profile fixtures
 
 Use the shared owner-only filesystem helper for pre-created temporary roots on
