@@ -18,6 +18,10 @@ do not establish physical-device or live-provider qualification.
   Verify both LOAD and GNU_RELRO alignment, compatible simulator selection, and
   the client through its separately hosted fixture relay. Development fixture
   sizes cannot establish production baselines.
+- Keep the public startup future below 16 KiB and run GChat's complete channel
+  journey on the default thread stack, including restored post-quantum identity.
+  Native desktop CI compares 3/s/z results with the committed platform baselines
+  and rejects growth above 5% on the same Rust toolchain.
 
 - Compile independent `ipc,files` and `embedded,files,gc2-carrier` consumers.
   Reject host/crypto/MLS/RPC dependencies in the IPC graph and forced Tokio

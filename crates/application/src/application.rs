@@ -156,7 +156,13 @@ impl ApplicationBuilder {
         self.services.push((dispatcher, authorize));
         self
     }
-    pub async fn open(self) -> Result<Application, String> {
+    /// Open the profile without embedding the large startup state in the
+    /// caller's future. This also leaves stack space for post-quantum key setup.
+    pub fn open(self) -> impl std::future::Future<Output = Result<Application, String>> + Send {
+        Box::pin(self.open_inner())
+    }
+
+    async fn open_inner(self) -> Result<Application, String> {
         validate_application(&self.application)?;
         if self.secret.is_empty() || self.secret.len() > 4096 {
             return Err("supply an unlock secret of 1–4096 bytes".into());

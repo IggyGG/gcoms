@@ -5,6 +5,10 @@ identity and encrypted profile for each application, with the same API whether
 the protocol runs in process or in a shared `gcomsd` service. GChat is a consumer;
 it is not required by this library or daemon.
 
+Opening keeps its large startup state on the heap so composed application
+futures leave room on the default thread stack for post-quantum key setup.
+This adds one allocation per profile open, with no extra worker threads.
+
 ```toml
 [dependencies]
 gcoms = { version = "0.1.0", default-features = false, features = ["embedded", "files", "gc2-carrier"] }

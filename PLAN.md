@@ -22,6 +22,11 @@ first mobile CI runs exposed simulator selection and Android RELRO alignment
 issues; fixes retain the production three-profile measurements and use smaller
 development fixtures for functional tests. Android client fixtures pass relay
 configuration through test assets to avoid adb's command-length limit.
+Both client instrumentation tests now pass on the 16 KiB emulator, including
+channel/invitation creation, file import/export and profile reopen. GChat's
+unoptimized journey exposed startup stack pressure during identity restoration;
+boxing the application's startup future fixes the journey on the default stack.
+The full workspace and current-source GChat gates are being repeated.
 
 Implementation order: Windows native gate, Rust role separation, mobile ABI and
 packages, push registration/relay notifications, integrated qualification and

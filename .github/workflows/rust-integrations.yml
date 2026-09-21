@@ -20,6 +20,15 @@ jobs:
       fail-fast: false
       matrix:
         runner: [ubuntu-24.04, macos-15, macos-15-intel, windows-2022]
+        include:
+          - runner: ubuntu-24.04
+            baseline: linux-x86_64
+          - runner: macos-15
+            baseline: darwin-arm64
+          - runner: macos-15-intel
+            baseline: darwin-x86_64
+          - runner: windows-2022
+            baseline: windows-amd64
     runs-on: ${{ matrix.runner }}
     steps:
       - name: Preserve source bytes on every platform
@@ -41,7 +50,7 @@ jobs:
       - name: Check and measure isolated consumer graphs
         env:
           CARGO_BUILD_JOBS: '2'
-        run: ${{ runner.os == 'Windows' && 'python' || 'python3' }} scripts/check-rust-integrations.py --measure --output integration-evidence
+        run: ${{ runner.os == 'Windows' && 'python' || 'python3' }} scripts/check-rust-integrations.py --measure --output integration-evidence --baseline docs/evidence/rust-integrations-20260921/${{ matrix.baseline }}.json
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: rust-integrations-${{ matrix.runner }}-${{ github.sha }}
