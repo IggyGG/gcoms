@@ -10,6 +10,27 @@ pub fn validate_private_file(path: &Path, label: &str) -> Result<(), String> {
     validate_private_metadata(path, &metadata, label, false)
 }
 
+/// Validate an installed, owner-only executable without relaxing checks on
+/// secret/configuration files, which must never carry executable permissions.
+pub fn validate_private_executable(path: &Path, label: &str) -> Result<(), String> {
+    let metadata = std::fs::symlink_metadata(path)
+        .map_err(|error| format!("inspect {label} {}: {error}", path.display()))?;
+    if !metadata.file_type().is_file() || metadata.file_type().is_symlink() {
+        return Err(format!("{label} must be a regular non-symlink file"));
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        validate_private_metadata(path, &metadata, label, true)?;
+        if metadata.mode() & 0o7777 != 0o500 || metadata.nlink() != 1 {
+            return Err(format!("{label} requires mode 0500 and one link"));
+        }
+        Ok(())
+    }
+    #[cfg(not(unix))]
+    validate_private_metadata(path, &metadata, label, false)
+}
+
 pub fn validate_private_dir(path: &Path, label: &str) -> Result<(), String> {
     let metadata = std::fs::symlink_metadata(path)
         .map_err(|error| format!("inspect {label} {}: {error}", path.display()))?;
@@ -321,6 +342,28 @@ mod windows {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(unix)]
+    #[test]
+    fn installed_executable_refuses_writable_public_privileged_and_aliased_files() {
+        use std::os::unix::fs::{symlink, PermissionsExt};
+        let root = tempfile::tempdir().unwrap();
+        let image = root.path().join("client");
+        std::fs::write(&image, b"client").unwrap();
+        for mode in [0o700, 0o600, 0o555, 0o4500, 0o2500] {
+            std::fs::set_permissions(&image, std::fs::Permissions::from_mode(mode)).unwrap();
+            assert!(validate_private_executable(&image, "client").is_err());
+        }
+        std::fs::set_permissions(&image, std::fs::Permissions::from_mode(0o500)).unwrap();
+        validate_private_executable(&image, "client").unwrap();
+        assert!(validate_private_file(&image, "secret").is_err());
+        let alias = root.path().join("alias");
+        symlink(&image, &alias).unwrap();
+        assert!(validate_private_executable(&alias, "client").is_err());
+        std::fs::remove_file(alias).unwrap();
+        std::fs::hard_link(&image, root.path().join("hardlink")).unwrap();
+        assert!(validate_private_executable(&image, "client").is_err());
+    }
 
     #[test]
     fn make_private_then_validate_round_trips() {
