@@ -5,13 +5,15 @@ use alloc::vec::Vec;
 use gcoms_core::MAX_MESSAGE;
 use gcoms_crypto::{FirstMove, Frame};
 
-#[cfg(feature = "std")]
+#[cfg(any(feature = "std", feature = "gc2-session"))]
 mod handshake;
-#[cfg(feature = "std")]
+#[cfg(any(feature = "std", feature = "gc2-session"))]
 mod storage;
 #[cfg(feature = "std")]
-pub use handshake::{accept, initiate, initiate_recovery, Accepted, Initiated};
-#[cfg(feature = "std")]
+pub use handshake::{accept, initiate, initiate_recovery};
+#[cfg(any(feature = "std", feature = "gc2-session"))]
+pub use handshake::{accept_at, initiate_at, initiate_recovery_at, Accepted, Initiated};
+#[cfg(any(feature = "std", feature = "gc2-session"))]
 pub use storage::SealedState;
 #[cfg(all(test, feature = "std"))]
 mod tests;
@@ -167,7 +169,7 @@ pub fn encode_frame(tag: &[u8; 16], frame: &Frame) -> Result<Vec<u8>, Error> {
     validate_frame(frame)?;
     Ok(envelope(FRAME, tag, &frame.encode()))
 }
-#[cfg(feature = "std")]
+#[cfg(any(feature = "std", feature = "gc2-session"))]
 pub(crate) fn encode_frame_bytes(tag: &[u8; 16], bytes: &[u8]) -> Result<Vec<u8>, Error> {
     validate_tag(tag)?;
     if bytes.len() > MAX_MESSAGE - SESSION_HEADER {

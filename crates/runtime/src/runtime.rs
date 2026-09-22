@@ -22,6 +22,8 @@ pub type ErrorSink = Arc<dyn Fn(String) + Send + Sync>;
 
 struct Inner {
     node: NodeHandle,
+    #[cfg(feature = "component-services")]
+    components: tokio::sync::RwLock<Option<Arc<dyn crate::components::ComponentServices>>>,
     closing: std::sync::atomic::AtomicBool,
     #[cfg(feature = "files")]
     files: tokio::sync::Mutex<Option<Arc<crate::files::FileService>>>,
@@ -634,6 +636,8 @@ impl ProtocolRuntime {
             #[cfg(feature = "files")]
             file_default,
             node,
+            #[cfg(feature = "component-services")]
+            components: tokio::sync::RwLock::new(None),
             _store: std::sync::Mutex::new(Some(store)),
             persistence: PersistenceCounters::default(),
             events: broadcast::channel(256).0,
@@ -654,6 +658,24 @@ impl ProtocolRuntime {
         runtime.spawn_event_persistence();
         runtime.spawn_periodic_save();
         Ok(runtime)
+    }
+
+    /// Install host-owned privileged services once. Only trusted host code calls this;
+    /// IPC callers must pass the machine registry's authentication and capabilities.
+    #[cfg(feature = "component-services")]
+    pub async fn install_component_services(
+        &self,
+        services: Arc<dyn crate::components::ComponentServices>,
+    ) -> Result<(), SdkError> {
+        let mut slot = self.0.components.write().await;
+        if self.0.closing.load(std::sync::atomic::Ordering::Acquire) {
+            return Err(SdkError::ConnectionClosed);
+        }
+        if slot.is_some() {
+            return Err(SdkError::PermissionDenied);
+        }
+        *slot = Some(services);
+        Ok(())
     }
 
     /// Enable the persistent application inbox for typed services and structured messages.
@@ -733,6 +755,11 @@ impl ProtocolRuntime {
         #[cfg(feature = "files")]
         if let Some(files) = self.0.files.lock().await.take() {
             files.shutdown().await;
+        }
+
+        #[cfg(feature = "component-services")]
+        if let Some(services) = self.0.components.write().await.take() {
+            services.shutdown().await;
         }
 
         // A weak reference can still be upgraded by an in-flight save or event
@@ -1032,6 +1059,50 @@ impl ProtocolClient {
 
 #[async_trait]
 impl GcClient for ProtocolClient {
+    #[cfg(feature = "component-services")]
+    async fn component_shell(
+        &self,
+        component: [u8; 16],
+        request: gcoms_sdk::shell::ShellRequest,
+    ) -> Result<gcoms_sdk::shell::ShellReply, SdkError> {
+        let services = self.runtime.0.components.read().await;
+        if self
+            .runtime
+            .0
+            .closing
+            .load(std::sync::atomic::Ordering::Acquire)
+        {
+            return Err(SdkError::ConnectionClosed);
+        }
+        services
+            .as_ref()
+            .ok_or(SdkError::PermissionDenied)?
+            .shell(component, request)
+            .await
+    }
+
+    #[cfg(feature = "component-services")]
+    async fn component_files(
+        &self,
+        component: [u8; 16],
+        request: gcoms_sdk::files::FileRequest,
+    ) -> Result<gcoms_sdk::files::FileReply, SdkError> {
+        let services = self.runtime.0.components.read().await;
+        if self
+            .runtime
+            .0
+            .closing
+            .load(std::sync::atomic::Ordering::Acquire)
+        {
+            return Err(SdkError::ConnectionClosed);
+        }
+        services
+            .as_ref()
+            .ok_or(SdkError::PermissionDenied)?
+            .files(component, request)
+            .await
+    }
+
     #[cfg(feature = "files")]
     async fn sharing(
         &self,

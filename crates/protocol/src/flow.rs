@@ -19,9 +19,9 @@ use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 
 mod storage;
 pub use storage::MAX_PRIVATE_BYTES;
-#[cfg(feature = "std")]
+#[cfg(any(feature = "std", feature = "gc2-session"))]
 mod session;
-#[cfg(feature = "std")]
+#[cfg(any(feature = "std", feature = "gc2-session"))]
 pub use session::{CreditedSession, PreparedCredit, PreparedReceive, PreparedSend, SessionError};
 #[cfg(all(test, feature = "std"))]
 mod tests;

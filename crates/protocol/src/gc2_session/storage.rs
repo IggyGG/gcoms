@@ -4,7 +4,9 @@ use aes_gcm::{
     aead::{Aead, Payload},
     Aes256Gcm, KeyInit, Nonce,
 };
-use gcoms_crypto::{CryptoError, SealedSession, SessionContext};
+use alloc::vec::Vec;
+use core::time::Duration;
+use gcoms_crypto::{CryptoError, SealedSession, SessionContext, SessionTime};
 use hkdf::Hkdf;
 use rand_core::{CryptoRng, RngCore};
 use sha2::Sha256;
@@ -79,10 +81,28 @@ impl SealedState {
         bytes.extend_from_slice(&cipher);
         Self::from_bytes(bytes)
     }
+    #[cfg(feature = "std")]
     pub fn open(
         &self,
         wrapping_key: &[u8; 32],
         context: &SessionContext,
+    ) -> Result<CreditedSession, SessionError> {
+        self.open_at(
+            wrapping_key,
+            context,
+            std::time::Instant::now(),
+            Duration::ZERO,
+            &mut rand_core::OsRng,
+        )
+    }
+
+    pub fn open_at(
+        &self,
+        wrapping_key: &[u8; 32],
+        context: &SessionContext,
+        now: SessionTime,
+        offline: Duration,
+        entropy: &mut (impl RngCore + CryptoRng),
     ) -> Result<CreditedSession, SessionError> {
         let key = key(wrapping_key, self.tag());
         let plain = Aes256Gcm::new_from_slice(&*key)
@@ -108,11 +128,14 @@ impl SealedState {
         }
         let ratchet =
             SealedSession::from_bytes(plain.get(4..4 + length).ok_or(Error::Length)?.to_vec())?;
-        let session = CreditedSession::restore(
+        let session = CreditedSession::restore_at(
             &ratchet,
             plain.get(4 + length..).ok_or(Error::Length)?,
             wrapping_key,
             context,
+            now,
+            offline,
+            entropy,
         )?;
         if session.window().session() != self.tag() {
             return Err(Error::Authentication.into());

@@ -13,6 +13,7 @@ default = ["relay-host"]
 relay-host = ["gcoms-node/relay-host"]
 push-notifications = ["gcoms-node/push-notifications"]
 push-gateway = ["push-notifications", "relay-host", "gcoms-node/push-gateway"]
+component-services = []
 files = ["dep:gcoms-file-transfer", "dep:sha2"]
 gc2-carrier = ["gcoms-node/experimental-gc2", "gcoms-network-client/experimental-gc2"]
 
