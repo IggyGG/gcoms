@@ -115,6 +115,12 @@ fn consent_withdrawal_survives_unreadable_invitation() {
 
 #[derive(Default)]
 struct Calls {
+    #[cfg(feature = "experimental-gc2")]
+    current: AtomicBool,
+    #[cfg(feature = "experimental-gc2")]
+    current_fetch: AtomicUsize,
+    #[cfg(feature = "experimental-gc2")]
+    current_fetch_error: AtomicBool,
     opted_in: AtomicBool,
     invitation: AtomicBool,
     cached: AtomicBool,
@@ -166,6 +172,17 @@ impl Network for Fixture {
         }
         Ok(BootstrapBundle { relays: vec![] })
     }
+    #[cfg(feature = "experimental-gc2")]
+    async fn fetch_current(
+        &self,
+        _: Instant,
+    ) -> Result<gcoms_routing::gc2::directory::BootstrapBundle> {
+        self.0.current_fetch.fetch_add(1, SeqCst);
+        if self.0.current_fetch_error.load(SeqCst) {
+            return Err("current provider unavailable".into());
+        }
+        Ok(gcoms_routing::gc2::directory::BootstrapBundle { relays: vec![] })
+    }
     async fn flush(&self, _: Instant) -> Result<()> {
         let _cancelled = Cancelled(self.0.clone());
         self.0.flush.fetch_add(1, SeqCst);
@@ -181,6 +198,15 @@ impl Network for Fixture {
 }
 
 impl Node for Fixture {
+    #[cfg(feature = "experimental-gc2")]
+    fn current(&self) -> bool {
+        self.0.current.load(SeqCst)
+    }
+    #[cfg(feature = "experimental-gc2")]
+    fn install_current(&self, _: &gcoms_routing::gc2::directory::BootstrapBundle) -> Result<()> {
+        self.0.installed.store(true, SeqCst);
+        Ok(())
+    }
     fn cached(&self) -> bool {
         self.0.cached.load(SeqCst)
     }
@@ -347,4 +373,53 @@ fn pending_and_expired_name_work_stays_bounded() {
     );
     assert_eq!(lease_wake(None, true, 1000), Some(Duration::from_secs(5)));
     assert_eq!(lease_wake(None, false, 1000), None);
+}
+
+#[cfg(feature = "experimental-gc2")]
+#[tokio::test]
+async fn current_relay_refreshes_typed_referrals_even_with_a_usable_inbox() {
+    let fixture = Fixture::default();
+    fixture.0.current.store(true, SeqCst);
+    fixture.0.invitation.store(true, SeqCst);
+    // Startup and a later ready-inbox cycle must both replenish the explicitly
+    // advertised peer directory, not only the private client guard directory.
+    bootstrap_cycle(&fixture, &fixture, deadline())
+        .await
+        .unwrap();
+    fixture.0.cached.store(true, SeqCst);
+    fixture.0.reachable.store(true, SeqCst);
+    bootstrap_cycle(&fixture, &fixture, deadline())
+        .await
+        .unwrap();
+    assert_eq!(fixture.0.current_fetch.load(SeqCst), 2);
+    assert_eq!(
+        fixture.0.fetch.load(SeqCst),
+        0,
+        "no legacy provider fallback"
+    );
+    assert!(fixture.0.installed.load(SeqCst));
+    fixture.0.invitation.store(false, SeqCst);
+    bootstrap_cycle(&fixture, &fixture, deadline())
+        .await
+        .unwrap();
+    assert_eq!(
+        fixture.0.current_fetch.load(SeqCst),
+        2,
+        "no provisioning without a grant"
+    );
+}
+
+#[cfg(feature = "experimental-gc2")]
+#[tokio::test]
+async fn current_provider_failure_never_falls_back_to_legacy() {
+    let fixture = Fixture::default();
+    fixture.0.current.store(true, SeqCst);
+    fixture.0.invitation.store(true, SeqCst);
+    fixture.0.current_fetch_error.store(true, SeqCst);
+    assert!(bootstrap_cycle(&fixture, &fixture, deadline())
+        .await
+        .is_err());
+    assert_eq!(fixture.0.current_fetch.load(SeqCst), 1);
+    assert_eq!(fixture.0.fetch.load(SeqCst), 0);
+    assert!(!fixture.0.installed.load(SeqCst));
 }
