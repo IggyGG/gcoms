@@ -51,6 +51,14 @@ pub struct Snapshot {
     pub config: CacheConfig,
     pub used_bytes: u64,
 }
+/// Public commitment of a cached file. File encryption keys never leave the host.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Metadata {
+    pub id: ShareId,
+    pub name: String,
+    pub sha256: [u8; 32],
+    pub size_bytes: u64,
+}
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Request {
     List,
@@ -88,6 +96,10 @@ pub enum Request {
     SetEnabled(bool),
     /// IPC20: reuse verified same-scope content and return the canonical handle.
     CommitReusing {
+        id: ShareId,
+    },
+    /// IPC21: inspect an authorized immutable file commitment.
+    Inspect {
         id: ShareId,
     },
 }
@@ -139,4 +151,5 @@ pub enum Reply {
         canonical: ShareId,
         snapshot: Snapshot,
     },
+    Metadata(Metadata),
 }

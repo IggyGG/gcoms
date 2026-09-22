@@ -198,6 +198,16 @@ impl FileService {
         let mut committed = None;
         match request {
             api::Request::List | api::Request::SetEnabled(_) => {}
+            api::Request::Inspect { id } => {
+                b.authorize(id)?;
+                let state = b.engine.cache.get(id).map_err(error)?;
+                return Ok(api::Reply::Metadata(api::Metadata {
+                    id,
+                    name: state.manifest.name.clone(),
+                    sha256: state.manifest.sha256,
+                    size_bytes: state.manifest.size,
+                }));
+            }
             api::Request::Prepare {
                 id,
                 scope,
