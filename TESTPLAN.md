@@ -139,3 +139,8 @@ to their recorded source revision.
 ## Five-relay carrier update — 2026-09-23
 
 Offline five-relay gates: 54 routing unit, 6 discovery, 10 carrier, 11 persistent-node integration, 1 fresh-inbox, and 124 consumer tests passed (2 consumer tests remain explicitly ignored). Evidence and exact executed commands: test-evidence/gc2-five-relay-20260923/verification.json. These results do not establish live fleet or cross-OS deployment acceptance.
+
+
+## Minimal native carrier interop — 2026-09-23
+
+The optional native transport gate now checks five independently pinned TLS/HTTP2 layers and a 128 KiB response. Run `DS_MINIMAL_TLS_PROBE=<native Dropship qualification binary> cargo test -p gcoms-transport --test minimal_tls -- --include-ignored --test-threads=1` under the workstation runner. Six tests passed on Linux x64 against Dropship 9b486cd carrier sources; size/fixture evidence is in that repository at test-evidence/native-carrier-20260923. This verifies transport primitives, not five-relay route selection or fleet deployment.

@@ -1,0 +1,12 @@
+{
+  "result": "PASS: six native transport gates",
+  "dropshipCarrierCommit": "9b486cd",
+  "nativeBinarySha256": "0d4f0840d05bb4af74fbf0900a8f4087db4b8f81bc3aaaee00336815306bbc8e",
+  "platform": "linux-x64",
+  "loopbackOnly": true,
+  "nestedLayers": 5,
+  "perLayerWrongPinTests": 5,
+  "responseBytes": 131072,
+  "fleetAcceptance": false,
+  "codematch": "unavailable"
+}

@@ -1,0 +1,9 @@
+running 6 tests
+test certificate_and_signature_parsers_reject_truncation_and_extensions ... ok
+test native_c_deadline_bounds_stalled_and_trickling_peers ... ok
+test native_c_handshake_accepts_only_the_pinned_relay_and_h2 ... ok
+test native_c_http2_uses_existing_tp1_post_and_stream_paths ... ok
+test native_c_nested_carriers_pin_every_layer_and_preserve_stream_credit ... ok
+test same_spki_pin_survives_certificate_renewal_and_proves_handshake_key ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 7.74s
