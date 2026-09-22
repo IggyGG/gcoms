@@ -139,6 +139,35 @@ pub async fn connect(endpoint: &LocalEndpoint) -> Result<ClientStream, SdkError>
     unreachable!("named-pipe retry loop always returns")
 }
 
+/// Authenticate the live named-pipe server against an independently pinned SID
+/// before sending application bytes. The listener separately admits its owner.
+#[cfg(windows)]
+pub async fn connect_pinned(
+    endpoint: &LocalEndpoint,
+    expected_server_sid: &str,
+) -> Result<ClientStream, SdkError> {
+    if !endpoint.path().is_absolute()
+        || endpoint.path().components().any(|c| {
+            matches!(
+                c,
+                std::path::Component::ParentDir | std::path::Component::CurDir
+            )
+        })
+    {
+        return Err(SdkError::Runtime("unsafe pinned IPC endpoint".into()));
+    }
+    windows_security::validate_sid(expected_server_sid)?;
+    let stream = connect(endpoint).await?;
+    windows_security::verify_server(&stream, expected_server_sid)?;
+    Ok(stream)
+}
+
+/// Windows account identifier for staging an independent local service pin.
+#[cfg(windows)]
+pub fn current_user_sid() -> Result<String, SdkError> {
+    windows_security::current_user_sid()
+}
+
 #[cfg(unix)]
 pub struct LocalListener(tokio::net::UnixListener);
 
@@ -349,15 +378,136 @@ mod windows_security {
     use windows_sys::Win32::Foundation::{CloseHandle, LocalFree, HANDLE};
     use windows_sys::Win32::Security::Authorization::{
         ConvertSidToStringSidW, ConvertStringSecurityDescriptorToSecurityDescriptorW,
+        ConvertStringSidToSidW,
     };
     use windows_sys::Win32::Security::{
         EqualSid, GetTokenInformation, RevertToSelf, TokenUser, SECURITY_ATTRIBUTES, TOKEN_QUERY,
         TOKEN_USER,
     };
-    use windows_sys::Win32::System::Pipes::ImpersonateNamedPipeClient;
-    use windows_sys::Win32::System::Threading::{
-        GetCurrentProcess, GetCurrentThread, OpenProcessToken, OpenThreadToken,
+    use windows_sys::Win32::System::Pipes::{
+        GetNamedPipeServerProcessId, ImpersonateNamedPipeClient,
     };
+    use windows_sys::Win32::System::Threading::{
+        GetCurrentProcess, GetCurrentThread, OpenProcess, OpenProcessToken, OpenThreadToken,
+        WaitForSingleObject, PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_SYNCHRONIZE,
+    };
+
+    pub(super) fn validate_sid(value: &str) -> Result<(), SdkError> {
+        if value.is_empty() || value.len() > 184 || value.contains('\0') {
+            return Err(SdkError::Runtime("invalid IPC server SID".into()));
+        }
+        let wide = value.encode_utf16().chain(Some(0)).collect::<Vec<_>>();
+        let mut sid = null_mut();
+        if unsafe { ConvertStringSidToSidW(wide.as_ptr(), &mut sid) } == 0 {
+            return Err(runtime_error(std::io::Error::last_os_error()));
+        }
+        let canonical = sid_string(sid);
+        unsafe { LocalFree(sid) };
+        if canonical? != value {
+            return Err(SdkError::Runtime("noncanonical IPC server SID".into()));
+        }
+        Ok(())
+    }
+
+    pub(super) fn current_user_sid() -> Result<String, SdkError> {
+        let token = open_process_token()?;
+        let sid = token_user(token);
+        unsafe { CloseHandle(token) };
+        let sid = sid?;
+        sid_string(sid.as_ptr().cast_mut().cast())
+    }
+
+    pub(super) fn verify_server(
+        pipe: &tokio::net::windows::named_pipe::NamedPipeClient,
+        expected_sid: &str,
+    ) -> Result<(), SdkError> {
+        let handle = pipe.as_raw_handle() as HANDLE;
+        // Bind the token check to this pipe object as well as the live process;
+        // a PID alone can be recycled after the original server terminates.
+        use windows_sys::Win32::Security::{
+            GetKernelObjectSecurity, GetSecurityDescriptorOwner, OWNER_SECURITY_INFORMATION,
+        };
+        let mut length = 0;
+        unsafe {
+            GetKernelObjectSecurity(
+                handle,
+                OWNER_SECURITY_INFORMATION,
+                null_mut(),
+                0,
+                &mut length,
+            )
+        };
+        if length == 0 || length > 65536 {
+            return Err(runtime_error(std::io::Error::last_os_error()));
+        }
+        let mut descriptor = vec![0u8; length as usize];
+        if unsafe {
+            GetKernelObjectSecurity(
+                handle,
+                OWNER_SECURITY_INFORMATION,
+                descriptor.as_mut_ptr().cast(),
+                length,
+                &mut length,
+            )
+        } == 0
+        {
+            return Err(runtime_error(std::io::Error::last_os_error()));
+        }
+        let mut owner = null_mut();
+        let mut defaulted = 0;
+        if unsafe {
+            GetSecurityDescriptorOwner(descriptor.as_mut_ptr().cast(), &mut owner, &mut defaulted)
+        } == 0
+            || owner.is_null()
+            || sid_string(owner)? != expected_sid
+        {
+            return Err(SdkError::Runtime(
+                "IPC pipe owner differs from server pin".into(),
+            ));
+        }
+        let mut pid = 0;
+        if unsafe { GetNamedPipeServerProcessId(handle, &mut pid) } == 0 || pid == 0 {
+            return Err(runtime_error(std::io::Error::last_os_error()));
+        }
+        let process = unsafe {
+            OpenProcess(
+                PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_SYNCHRONIZE,
+                0,
+                pid,
+            )
+        };
+        if process.is_null() {
+            return Err(runtime_error(std::io::Error::last_os_error()));
+        }
+        // Keep the process handle while checking its token and pipe association.
+        let result = (|| {
+            let alive = || unsafe {
+                WaitForSingleObject(process, 0) == windows_sys::Win32::Foundation::WAIT_TIMEOUT
+            };
+            if !alive() {
+                return Err(SdkError::Runtime("IPC server exited".into()));
+            }
+            let mut token = null_mut();
+            if unsafe { OpenProcessToken(process, TOKEN_QUERY, &mut token) } == 0 {
+                return Err(runtime_error(std::io::Error::last_os_error()));
+            }
+            let sid = token_user(token);
+            unsafe { CloseHandle(token) };
+            let sid = sid?;
+            let actual_sid = sid_string(sid.as_ptr().cast_mut().cast())?;
+            let mut confirmed_pid = 0;
+            if actual_sid != expected_sid
+                || unsafe { GetNamedPipeServerProcessId(handle, &mut confirmed_pid) } == 0
+                || confirmed_pid != pid
+                || !alive()
+            {
+                return Err(SdkError::Runtime("IPC server ownership changed".into()));
+            }
+            Ok(())
+        })();
+        unsafe { CloseHandle(process) };
+        result
+    }
 
     pub(super) struct PipeSecurity {
         descriptor: *mut c_void,
@@ -582,5 +732,57 @@ mod windows_tests {
         let security = windows_security::PipeSecurity::current_user().unwrap();
         assert!(!security.attributes().is_null());
         assert!(security.is_current_user_only());
+    }
+
+    #[tokio::test]
+    async fn pinned_pipe_authenticates_the_server_before_request_bytes() {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        let endpoint = LocalEndpoint::new(format!(
+            r"C:\gc-pinned-{}-{}.sock",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let mut listener = LocalListener::bind(&endpoint).unwrap();
+        let server = tokio::spawn(async move {
+            let mut denied = listener.accept().await.unwrap();
+            let mut byte = [0];
+            let read = denied.read(&mut byte).await;
+            assert!(
+                matches!(read, Ok(0)) || read.is_err(),
+                "rejected connection sent bytes"
+            );
+            let mut accepted = listener.accept().await.unwrap();
+            accepted.read_exact(&mut byte).await.unwrap();
+            assert_eq!(byte, [7]);
+            accepted.write_all(&[9]).await.unwrap();
+        });
+        let sid = current_user_sid().unwrap();
+        let wrong = if sid == "S-1-5-18" {
+            "S-1-5-19"
+        } else {
+            "S-1-5-18"
+        };
+        assert!(connect_pinned(&endpoint, wrong).await.is_err());
+        let mut accepted = connect_pinned(&endpoint, &sid).await.unwrap();
+        accepted.write_all(&[7]).await.unwrap();
+        let mut reply = [0];
+        accepted.read_exact(&mut reply).await.unwrap();
+        assert_eq!(reply, [9]);
+        server.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn pinned_pipe_refuses_invalid_pins_and_relative_paths() {
+        let relative = LocalEndpoint::new("bridge.sock");
+        assert!(connect_pinned(&relative, &current_user_sid().unwrap())
+            .await
+            .is_err());
+        let absolute = LocalEndpoint::new(r"C:\gc-invalid-pin.sock");
+        for sid in ["", "garbage", "BA", "S-1-5-18\0S-1-5-19"] {
+            assert!(connect_pinned(&absolute, sid).await.is_err());
+        }
     }
 }
