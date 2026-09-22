@@ -194,6 +194,8 @@ impl FileService {
         }
         let mut inner = self.inner.lock().map_err(error)?;
         let b = inner.as_mut().ok_or(SdkError::ConnectionClosed)?;
+        let reuse = matches!(request, api::Request::CommitReusing { .. });
+        let mut committed = None;
         match request {
             api::Request::List | api::Request::SetEnabled(_) => {}
             api::Request::Prepare {
@@ -222,9 +224,13 @@ impl FileService {
                     .import_piece(id, piece, &bytes)
                     .map_err(error)?;
             }
-            api::Request::Commit { id } => {
+            api::Request::Commit { id } | api::Request::CommitReusing { id } => {
                 b.authorize(id)?;
-                let manifest = b.engine.cache.finish_import(id, now()).map_err(error)?;
+                let mut manifest = b.engine.cache.finish_import(id, now()).map_err(error)?;
+                if reuse {
+                    manifest = b.engine.cache.reuse_import(id).map_err(error)?;
+                    committed = Some((id, manifest.id));
+                }
                 let members = b
                     .rosters
                     .get(&manifest.scope.channel)
@@ -277,7 +283,15 @@ impl FileService {
                 };
             }
         }
-        Ok(api::Reply::Snapshot(b.snapshot()))
+        let snapshot = b.snapshot();
+        Ok(match committed {
+            Some((original, canonical)) => api::Reply::Committed {
+                original,
+                canonical,
+                snapshot,
+            },
+            None => api::Reply::Snapshot(snapshot),
+        })
     }
     fn spawn(service: &Arc<Self>) -> tokio::task::JoinHandle<()> {
         let weak = Arc::downgrade(service);

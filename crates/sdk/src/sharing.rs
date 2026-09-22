@@ -86,6 +86,10 @@ pub enum Request {
     },
     Configure(CacheConfig),
     SetEnabled(bool),
+    /// IPC20: reuse verified same-scope content and return the canonical handle.
+    CommitReusing {
+        id: ShareId,
+    },
 }
 impl Request {
     pub fn validate(&self) -> Result<(), crate::SdkError> {
@@ -129,4 +133,10 @@ impl Request {
 pub enum Reply {
     Snapshot(Snapshot),
     Piece(Vec<u8>),
+    /// Only returned for CommitReusing; existing Snapshot wire layout is unchanged.
+    Committed {
+        original: ShareId,
+        canonical: ShareId,
+        snapshot: Snapshot,
+    },
 }

@@ -51,6 +51,8 @@ pub struct State {
     pub error: Option<String>,
     #[serde(default)]
     pub completed_by: Vec<Member>,
+    #[serde(default)]
+    pub duplicate_of: Option<ShareId>,
 }
 impl State {
     pub fn verified_bytes(&self) -> u64 {
@@ -62,7 +64,8 @@ impl State {
             .sum()
     }
     fn reserved(&self) -> u64 {
-        if matches!(self.status, Status::Offered | Status::Cancelled) {
+        if self.duplicate_of.is_some() || matches!(self.status, Status::Offered | Status::Cancelled)
+        {
             4096 + self.have.len() as u64 * 8
         } else {
             self.manifest.reservation()
@@ -187,7 +190,7 @@ impl Cache {
 
             // Finish cleanup interrupted by process or power loss while this
             // exclusive cache owner was replacing or cancelling a piece.
-            if state.status == Status::Cancelled {
+            if state.status == Status::Cancelled || state.duplicate_of.is_some() {
                 cache.remove_pieces(id)?;
             }
             for artifact in std::fs::read_dir(entry.path())? {
@@ -340,6 +343,7 @@ impl Cache {
             completed: None,
             error: None,
             completed_by: Vec::new(),
+            duplicate_of: None,
         })
     }
     pub fn accept(&mut self, id: ShareId, now: u64) -> Result<()> {
@@ -434,7 +438,17 @@ impl Cache {
         now: u64,
     ) -> Result<()> {
         if let Some(old) = self.entries.get(&id) {
-            return if matches!(old.status, Status::Importing | Status::Complete)
+            if let Some(target) = old.duplicate_of {
+                if !self
+                    .entries
+                    .get(&target)
+                    .is_some_and(|s| s.status == Status::Complete)
+                {
+                    return Err(Error::Unavailable);
+                }
+            }
+            return if (old.duplicate_of.is_some()
+                || matches!(old.status, Status::Importing | Status::Complete))
                 && old.manifest.scope == scope
                 && old.manifest.name == name
                 && old.manifest.size == size
@@ -475,6 +489,7 @@ impl Cache {
             completed: None,
             error: None,
             completed_by: Vec::new(),
+            duplicate_of: None,
         })
     }
     pub fn import_piece(&mut self, id: ShareId, index: u32, plain: &[u8]) -> Result<()> {
@@ -501,6 +516,14 @@ impl Cache {
     }
     pub fn finish_import(&mut self, id: ShareId, now: u64) -> Result<Manifest> {
         let mut state = self.get(id)?.clone();
+        if let Some(existing) = state.duplicate_of {
+            let target = self.get(existing)?;
+            return if target.status == Status::Complete && target.duplicate_of.is_none() {
+                Ok(target.manifest.clone())
+            } else {
+                Err(Error::Unavailable)
+            };
+        }
         if state.status == Status::Complete {
             return Ok(state.manifest.clone());
         }
@@ -529,6 +552,58 @@ impl Cache {
         self.replace(state)?;
         Ok(manifest)
     }
+    /// Reuse only verified complete content in the exact authorization scope.
+    /// The import ID remains a durable alias so a lost commit reply is retryable.
+    /// No ciphertext is transplanted between distinct keys, IDs or scopes.
+    pub fn reuse_import(&mut self, id: ShareId) -> Result<Manifest> {
+        let mut source = self.get(id)?.clone();
+        if let Some(existing) = source.duplicate_of {
+            let target = self.get(existing)?;
+            return if target.status == Status::Complete && target.duplicate_of.is_none() {
+                Ok(target.manifest.clone())
+            } else {
+                Err(Error::Unavailable)
+            };
+        }
+        if source.status != Status::Complete {
+            return Err(Error::Unavailable);
+        }
+        let existing = self
+            .entries
+            .values()
+            .find(|state| {
+                state.manifest.id != id
+                    && state.duplicate_of.is_none()
+                    && state.status == Status::Complete
+                    && state.manifest.scope == source.manifest.scope
+                    && state.manifest.size == source.manifest.size
+                    && state.manifest.sha256 == source.manifest.sha256
+            })
+            .cloned();
+        let Some(existing) = existing else {
+            return Ok(source.manifest);
+        };
+        // Revalidate retained bytes before announcing this cache as a source.
+        let mut digest = Sha256::new();
+        for index in 0..existing.manifest.pieces() {
+            let plain = Zeroizing::new(self.export_piece(existing.manifest.id, index as u32)?);
+            digest.update(&plain);
+        }
+        if <[u8; 32]>::from(digest.finalize()) != source.manifest.sha256 {
+            return Err(Error::Invalid("retained content digest"));
+        }
+        source.duplicate_of = Some(existing.manifest.id);
+        // Older readers ignore duplicate_of. Keep the superseded import in a
+        // non-serving state they already understand, never Complete without
+        // its bytes. The canonical file remains complete and unchanged.
+        source.status = Status::Cancelled;
+        source.completed = None;
+        source.have.fill(false);
+        self.replace(source)?;
+        self.remove_pieces(id)?;
+        Ok(existing.manifest)
+    }
+
     pub fn import(
         &mut self,
         id: ShareId,
@@ -539,6 +614,9 @@ impl Cache {
         now: u64,
     ) -> Result<Manifest> {
         self.begin_import(id, scope, name, size, now)?;
+        if let Some(canonical) = self.get(id)?.duplicate_of {
+            return Ok(self.get(canonical)?.manifest.clone());
+        }
         if self.get(id)?.status == Status::Complete {
             return Ok(self.get(id)?.manifest.clone());
         }

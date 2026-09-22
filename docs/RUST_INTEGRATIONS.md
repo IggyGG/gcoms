@@ -12,7 +12,7 @@ GChat consumes the facade and retains its own network trust, archives and cache 
 
 No variant forces Tokio's multithread scheduler. Typed RPC and daemon launch
 are separate opt-ins. IPC excludes the node, TLS, MLS, file engine and RPC from
-its dependency graph. The current client requires a matching IPC19/control2 host. IPC19 retains the IPC18 request/response prefix and appends channel management. Ambiguous plain IPC17 handshakes are refused before requests; update those clients and hosts together.
+its dependency graph. The current client requires a matching IPC20/control2 host. IPC20 retains the IPC19 layouts and appends opt-in verified file reuse with an explicit canonical-handle response. Ordinary file commits retain their existing behavior. Superseded import records use the existing non-serving cancelled state, so older cache readers cannot advertise discarded bytes as complete. Ambiguous plain IPC17 handshakes are refused before requests; update those clients and hosts together.
 
 See the [application guide](../crates/application/README.md) and
 [standalone consumer](../examples/rust-integration/README.md) for integration code.

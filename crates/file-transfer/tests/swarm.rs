@@ -702,3 +702,101 @@ fn revoked_downloads_release_slots_and_remain_locally_manageable() {
     e.cache.offer(m, 3).unwrap();
     e.accept([3; 16], 3).unwrap();
 }
+
+#[test]
+fn repeated_import_reuses_verified_scope_and_retains_commit_identity() {
+    let dir = temp();
+    let mut c = cache(dir.path());
+    let bytes = input(PIECE_BYTES + 31);
+    let first = c
+        .import(
+            [61; 16],
+            scope(),
+            "first.bin".into(),
+            bytes.len() as u64,
+            &mut Cursor::new(&bytes),
+            1,
+        )
+        .unwrap();
+    let baseline = c.used();
+    c.import(
+        [62; 16],
+        scope(),
+        "another-name.bin".into(),
+        bytes.len() as u64,
+        &mut Cursor::new(&bytes),
+        2,
+    )
+    .unwrap();
+    assert_eq!(c.reuse_import([62; 16]).unwrap().id, first.id);
+    assert_eq!(
+        c.get([62; 16]).unwrap().status,
+        Status::Cancelled,
+        "readers without alias support must never advertise the discarded copy as complete"
+    );
+    assert!(
+        c.used() < baseline + 8192,
+        "duplicate retained only as a small journal alias"
+    );
+    assert!(!dir.path().join(hex::encode([62; 16])).join("tree").exists());
+    drop(c);
+    let mut c = cache(dir.path());
+    assert_eq!(
+        c.import(
+            [62; 16],
+            scope(),
+            "another-name.bin".into(),
+            bytes.len() as u64,
+            &mut Cursor::new(Vec::<u8>::new()),
+            3,
+        )
+        .unwrap()
+        .id,
+        first.id,
+        "an admitted retry returns the canonical file without reading the source again"
+    );
+    assert_eq!(c.finish_import([62; 16], 3).unwrap().id, first.id);
+    assert_eq!(c.reuse_import([62; 16]).unwrap().id, first.id);
+    let mut out = Vec::new();
+    c.export(first.id, &mut out).unwrap();
+    assert_eq!(out, bytes);
+    let other = Scope {
+        channel: [17; 32],
+        participants: vec![],
+    };
+    c.import(
+        [63; 16],
+        other,
+        "first.bin".into(),
+        bytes.len() as u64,
+        &mut Cursor::new(&bytes),
+        4,
+    )
+    .unwrap();
+    assert_eq!(c.reuse_import([63; 16]).unwrap().id, [63; 16]);
+    let private = Scope {
+        channel: CH,
+        participants: vec![[1; 32], [2; 32]],
+    };
+    c.import(
+        [64; 16],
+        private,
+        "first.bin".into(),
+        bytes.len() as u64,
+        &mut Cursor::new(&bytes),
+        4,
+    )
+    .unwrap();
+    assert_eq!(c.reuse_import([64; 16]).unwrap().id, [64; 16]);
+    let different = vec![99; bytes.len()];
+    c.import(
+        [65; 16],
+        scope(),
+        "first.bin".into(),
+        different.len() as u64,
+        &mut Cursor::new(&different),
+        5,
+    )
+    .unwrap();
+    assert_eq!(c.reuse_import([65; 16]).unwrap().id, [65; 16]);
+}

@@ -361,3 +361,55 @@ mod handshakes {
         client.node().shutdown().await;
     }
 }
+
+#[test]
+fn file_reuse_is_ipc20_only_and_existing_file_snapshot_bytes_stay_unchanged() {
+    use crate::sharing::{FileInfo, Scope, Status};
+    let file = FileInfo {
+        id: [1; 16],
+        scope: Scope {
+            channel: [2; 32],
+            participants: vec![],
+        },
+        name: "a".into(),
+        size_bytes: 3,
+        verified_bytes: 3,
+        status: Status::Complete,
+        sources: 1,
+        verified_sources: 0,
+        completed_by: 0,
+        error: None,
+    };
+    // Independent pre-change field layout, including the next vector element.
+    let legacy = (
+        [1u8; 16],
+        ([2u8; 32], Vec::<[u8; 32]>::new()),
+        "a",
+        3u64,
+        3u64,
+        5u32,
+        1u16,
+        0u16,
+        0u16,
+        Option::<String>::None,
+    );
+    let bytes = postcard::to_allocvec(&vec![legacy.clone(), legacy]).unwrap();
+    assert_eq!(
+        postcard::to_allocvec(&vec![file.clone(), file.clone()]).unwrap(),
+        bytes
+    );
+    assert_eq!(
+        postcard::from_bytes::<Vec<FileInfo>>(&bytes).unwrap(),
+        vec![file.clone(), file]
+    );
+    assert_eq!(
+        Request::Sharing(crate::sharing::Request::Commit { id: [1; 16] }).minimum_version(),
+        18
+    );
+    let request = Request::Sharing(crate::sharing::Request::CommitReusing { id: [1; 16] });
+    assert_eq!(request.minimum_version(), 20);
+    assert_eq!(request.required_capability(), Capability::FileSharing);
+    let mut expected = vec![46, 11];
+    expected.extend_from_slice(&[1; 16]);
+    assert_eq!(postcard::to_allocvec(&request).unwrap(), expected);
+}

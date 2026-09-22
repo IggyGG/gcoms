@@ -256,6 +256,7 @@ impl Engine {
         self.cache
             .entries()
             .values()
+            .filter(|state| state.duplicate_of.is_none())
             .map(|state| {
                 let sources = self
                     .sources
@@ -385,6 +386,7 @@ impl Engine {
                     .iter()
                     .filter(|(id, s)| {
                         after.is_none_or(|a| **id > a)
+                            && s.duplicate_of.is_none()
                             && self.permits(peer, &s.manifest.scope)
                             && !matches!(
                                 s.status,
