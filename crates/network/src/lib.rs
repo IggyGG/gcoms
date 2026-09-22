@@ -6,7 +6,10 @@ use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
 
 mod invitation;
-pub use invitation::{JoinInvitation, NetworkIdentity, JOIN_INVITATION_PREFIX};
+pub use invitation::{
+    invitation_code, invitation_link, JoinInvitation, NetworkIdentity, JOIN_INVITATION_PREFIX,
+    JOIN_LINK_PREFIX, MAX_JOIN_LINK_BYTES,
+};
 
 pub const INVITATION_PREFIX: &str = "GCNI1-";
 pub const MAX_DOCUMENT_BYTES: usize = 128 * 1024;
