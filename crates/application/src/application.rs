@@ -55,6 +55,8 @@ pub struct ApplicationBuilder {
     network: Option<Vec<u8>>,
     network_recovery: bool,
     providers: Vec<String>,
+    #[cfg(any(feature = "embedded", feature = "network-client"))]
+    central: Option<(sdk::component::RoutingPolicy, Vec<[u8; 16]>, String)>,
     invitation: Option<Zeroizing<String>>,
     receive: bool,
     peers: Vec<Peer>,
@@ -64,6 +66,18 @@ pub struct ApplicationBuilder {
     services: Vec<(Arc<dyn rpc::Dispatch>, Arc<dyn rpc::Authorize>)>,
 }
 impl ApplicationBuilder {
+    /// Explicit local host ownership of component routes under this identity.
+    /// Only in-process backends support a separately authenticated component IPC.
+    #[cfg(any(feature = "embedded", feature = "network-client"))]
+    pub fn central_components(
+        mut self,
+        policy: sdk::component::RoutingPolicy,
+        primary: Vec<[u8; 16]>,
+        safety_number: String,
+    ) -> Self {
+        self.central = Some((policy, primary, safety_number));
+        self
+    }
     pub fn carrier_profile(mut self, carrier: sdk::CarrierProfile) -> Self {
         self.carrier = carrier;
         self
@@ -164,6 +178,12 @@ impl ApplicationBuilder {
 
     async fn open_inner(self) -> Result<Application, String> {
         validate_application(&self.application)?;
+        #[cfg(any(feature = "embedded", feature = "network-client"))]
+        if self.central.is_some()
+            && !matches!(self.backend, Backend::Embedded | Backend::NetworkClient)
+        {
+            return Err("component hosts require an in-process backend".into());
+        }
         if self.secret.is_empty() || self.secret.len() > 4096 {
             return Err("supply an unlock secret of 1–4096 bytes".into());
         }
@@ -261,18 +281,29 @@ impl ApplicationBuilder {
                     }
                 };
                 let ready = async {
-                    runtime.personal_profile().await?;
+                    let client = if let Some((policy, primary, safety)) = self.central {
+                        if runtime.sdk_client().identity().safety_number != safety {
+                            return Err("component host identity does not match its pin".into());
+                        }
+                        runtime.central_client(policy, primary).await?
+                    } else {
+                        runtime.personal_profile().await?;
+                        runtime.sdk_client()
+                    };
                     runtime.enable_durable_applications().await?;
                     runtime
                         .start_network_maintenance(self.providers.clone(), self.network_recovery)?;
-                    Ok::<_, String>(())
+                    Ok::<_, String>(client)
                 }
                 .await;
-                if let Err(error) = ready {
-                    let _ = runtime.shutdown().await;
-                    return Err(error);
-                }
-                (Arc::new(runtime.sdk_client()), Backing::Embedded(runtime))
+                let client = match ready {
+                    Ok(client) => client,
+                    Err(error) => {
+                        let _ = runtime.shutdown().await;
+                        return Err(error);
+                    }
+                };
+                (Arc::new(client), Backing::Embedded(runtime))
             }
             #[cfg(feature = "launch")]
             Backend::Shared {
@@ -562,6 +593,8 @@ impl Application {
             relay: None,
             #[cfg(any(feature = "embedded", feature = "network-client"))]
             storage: None,
+            #[cfg(any(feature = "embedded", feature = "network-client"))]
+            central: None,
             network: None,
             network_recovery: true,
             providers: Vec::new(),
