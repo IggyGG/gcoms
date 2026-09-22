@@ -116,6 +116,11 @@ trait Network: Clone + Send + Sync + 'static {
     fn opted_in(&self) -> Result<bool>;
     fn name_wake(&self) -> Result<Option<Duration>>;
     fn fetch(&self, deadline: Instant) -> impl Future<Output = Result<BootstrapBundle>> + Send;
+    #[cfg(feature = "experimental-gc2")]
+    fn fetch_current(
+        &self,
+        deadline: Instant,
+    ) -> impl Future<Output = Result<gcoms_routing::gc2::directory::BootstrapBundle>> + Send;
     fn flush(&self, deadline: Instant) -> impl Future<Output = Result<()>> + Send;
     fn update(
         &self,
@@ -146,6 +151,13 @@ impl Network for NetworkClient {
     async fn fetch(&self, deadline: Instant) -> Result<BootstrapBundle> {
         self.fetch_routing(deadline).await
     }
+    #[cfg(feature = "experimental-gc2")]
+    async fn fetch_current(
+        &self,
+        deadline: Instant,
+    ) -> Result<gcoms_routing::gc2::directory::BootstrapBundle> {
+        self.fetch_gc2_routing(deadline).await
+    }
     async fn flush(&self, deadline: Instant) -> Result<()> {
         self.flush_name(deadline).await.map(|_| ())
     }
@@ -155,6 +167,13 @@ impl Network for NetworkClient {
 }
 
 trait Node: Clone + Send + Sync + 'static {
+    #[cfg(feature = "experimental-gc2")]
+    fn current(&self) -> bool;
+    #[cfg(feature = "experimental-gc2")]
+    fn install_current(
+        &self,
+        bundle: &gcoms_routing::gc2::directory::BootstrapBundle,
+    ) -> Result<()>;
     fn cached(&self) -> bool;
     fn introduction(&self) -> Result<Option<BootstrapBundle>>;
     fn inbox(&self, deadline: Instant) -> impl Future<Output = Result<()>> + Send;
@@ -162,8 +181,19 @@ trait Node: Clone + Send + Sync + 'static {
 }
 
 impl Node for NodeHandle {
+    #[cfg(feature = "experimental-gc2")]
+    fn current(&self) -> bool {
+        self.uses_gc2_routing()
+    }
+    #[cfg(feature = "experimental-gc2")]
+    fn install_current(
+        &self,
+        bundle: &gcoms_routing::gc2::directory::BootstrapBundle,
+    ) -> Result<()> {
+        self.install_gc2_routing_bootstrap(bundle)
+    }
     fn cached(&self) -> bool {
-        self.routing_bootstrap().is_ok()
+        self.has_routing_bootstrap()
     }
     fn introduction(&self) -> Result<Option<BootstrapBundle>> {
         self.local_relay_introduction()
@@ -229,6 +259,24 @@ async fn bootstrap_cycle(
     network: &impl Network,
     deadline: Instant,
 ) -> Result<()> {
+    #[cfg(feature = "experimental-gc2")]
+    if node.current() {
+        // This CLI worker owns a configured relay, including its advertised
+        // referral directory. A working inbox does not refresh those referrals.
+        // Fetch the authenticated current bundle on the bounded background
+        // cadence; NetworkClient retains its credential-bounded HTTP cache.
+        // Never copy the private guard directory into public advertisements.
+        if network.has_invitation()? {
+            let bundle = network.fetch_current(deadline).await?;
+            node.install_current(&bundle)?;
+            return node.inbox(deadline).await;
+        }
+        return if node.cached() {
+            node.inbox(deadline).await
+        } else {
+            Ok(())
+        };
+    }
     let cached_deadline = deadline.min(Instant::now() + Duration::from_secs(30));
     if node.cached() && node.inbox(cached_deadline).await.is_ok() {
         return Ok(());
