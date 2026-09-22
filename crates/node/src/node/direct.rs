@@ -2500,20 +2500,21 @@ pub(crate) fn direct_session_context_for_tag(
 }
 
 /// Derive the local scheduling class from the authenticated logical record.
-/// Durable file data is the bulk producer; chat, acknowledgements, presence and
+/// Durable and admitted volatile file data are bulk; chat, acknowledgements, presence and
 /// contact updates stay interactive. Deriving from the record keeps deferred,
 /// materialized and retried copies consistent without a new archive field.
 pub(crate) fn direct_traffic_class(record: &[u8]) -> gcoms_core::TrafficClass {
-    let Some(crate::proto::DirectRecord::Data { body, .. }) =
-        crate::proto::decode_direct_record(record)
-    else {
-        return gcoms_core::TrafficClass::Interactive;
+    let body = match crate::proto::decode_direct_record(record) {
+        Some(crate::proto::DirectRecord::Data { body, .. }
+            | crate::proto::DirectRecord::VolatileApplication { body, .. }) => body,
+        _ => return gcoms_core::TrafficClass::Interactive,
     };
     let Some(application) = gcoms_core::component::RoutedApplication::decode(&body).ok() else {
         return gcoms_core::TrafficClass::Interactive;
     };
     match gcoms_core::component::application_parts(&application.application) {
-        Some((kind, _)) if kind == gcoms_core::FILE_RECORD_CONTENT_TYPE => {
+        Some((kind, _)) if kind == gcoms_core::FILE_RECORD_CONTENT_TYPE
+            || kind == gcoms_core::VOLATILE_FILE_CONTENT_TYPE => {
             gcoms_core::TrafficClass::Bulk
         }
         _ => gcoms_core::TrafficClass::Interactive,

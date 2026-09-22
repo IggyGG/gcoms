@@ -132,3 +132,5 @@ optimization levels; downloaded binary and source hashes were independently veri
 After the concurrent crypto merge, the combined application/runtime/SDK/swarm/crypto
 suites passed 157 Linux tests (two explicit ignores) and strict Clippy. Native results remain bound
 to their recorded source revision.
+
+2026-09-22 bootstrap bulk routing: volatile D13 file records use the GC/2 bulk class; contact, command and acknowledgement records remain interactive. The seven direct-maintenance tests pass, including class derivation and retry/ownership gates. Minimal receivers must subscribe to both classes. Live end-to-end transfer and installation remain pending. codematch=unreachable.
