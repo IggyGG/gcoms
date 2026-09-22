@@ -1,0 +1,74 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 7.44s
+     Running unittests src/lib.rs (/run/media/user/SSD-2/git/ghost/coms/.worktrees/gdrop-gdrone/build/gcoms/debug/deps/gcoms_routing-b813151b0c60b496)
+
+running 54 tests
+test catalog::tests::catalog_scope_rejects_proxy_and_redirect_inputs ... ok
+test carrier::tests::arbitrary_h2_fragmentation_and_partial_eof ... ok
+test catalog::tests::https_uses_remote_dns_and_end_to_end_certificate_validation ... ok
+test gc2::channel::tests::bulk_rides_the_same_lattice_and_covers_when_idle ... ok
+test gc2::channel::tests::file_bulk_is_idle_without_cover_and_uses_available_credit_immediately ... ok
+test gc2::channel::tests::fragmented_records_preserve_half_close_and_reply ... ok
+test gc2::channel::tests::idle_and_burst_have_identical_interactive_opportunities ... ok
+test gc2::channel::tests::independent_jitter_keeps_idle_interactive_slots_bounded ... ok
+test gc2::channel::tests::interactive_cover_profile_sends_bulk_immediately_without_idle_records ... ok
+test gc2::channel::tests::stalled_write_skips_slots_without_catchup ... ok
+test gc2::channel::tests::trailing_data_after_close_is_rejected ... ok
+test gc2::channel::tests::validates_whole_record_before_exposing_payload ... ok
+test gc2::directory::tests::address_updates_cannot_turn_retained_guards_into_one_hop ... ok
+test gc2::directory::tests::bundle_is_bounded_canonical_and_version_separated ... ok
+test gc2::directory::tests::capacity_preserves_guards_and_excludes_owned_and_terminal_services ... ok
+test gc2::directory::tests::checkpoint_failure_never_publishes_new_authority_or_guard_changes ... ok
+test gc2::directory::tests::checkpoint_written_then_error_requires_reload_of_new_authority ... ok
+test gc2::directory::tests::complete_bundle_is_validated_before_directory_mutation ... ok
+test gc2::directory::tests::expiry_preserves_reentry_without_reviving_circuit_authority ... ok
+test gc2::directory::tests::private_decoder_rejects_truncation_duplicate_records_and_invalid_guards ... ok
+test gc2::directory::tests::private_restart_keeps_stale_guards_exclusions_and_exact_authority ... ok
+test gc2::directory::tests::referral_authority_change_requires_explicit_migration ... ok
+test gc2::discovery::tests::reentry_seed_requires_nonzero_authorities ... ok
+test gc2::entry::lifetime_tests::client_cap_ends_both_classes_while_authority_is_fresh ... ok
+test gc2::entry::lifetime_tests::server_cap_reclaims_both_classes_while_authority_is_fresh ... ok
+test gc2::mux::tests::canceled_open_cancels_target_connection_and_returns_both_credits ... ok
+test gc2::mux::tests::class_channels_share_sixteen_circuits_with_an_interactive_reserve ... ok
+test gc2::mux::tests::server_enforces_shared_budget_even_with_uncooperative_client_budgets ... ok
+test gc2::mux::tests::slow_bulk_consumer_does_not_block_interactive_streams ... ok
+test catalog::tests::gc2_https_uses_ready_entries_remote_dns_and_end_to_end_certificate_validation ... ok
+test gc2::owner::expiry_tests::real_expiry_reacquires_carrier_and_both_retained_subscriptions has been running for over 60 seconds
+test gc2::owner::expiry_tests::real_expiry_reacquires_carrier_and_both_retained_subscriptions ... ok
+test gc2::owner::tests::configured_entry_count_bounds_background_attempts_and_preserves_guards ... ok
+test gc2::owner::tests::dropping_owner_cancels_in_progress_entry_and_private_renewal_dials ... ok
+test gc2::owner::tests::failed_unpublished_dials_do_not_change_ready_revision ... ok
+test gc2::owner::tests::message_requests_cannot_dial_or_advance_background_retry_schedule ... ok
+test gc2::owner::tests::renewal_backoff_survives_intermediate_maintenance_wakeups ... ok
+test gc2::owner::tests::renewal_honors_near_expiry_without_shortening_failure_backoff ... ok
+test gc2::owner::tests::simultaneous_renewal_and_entry_completion_cannot_lose_the_ready_slot ... ok
+test gc2::owner::tests::unsaved_guards_cannot_trigger_entry_or_control_dials ... ok
+test gc2::path::tests::every_position_checks_endpoint_exclusions_and_nonadjacent_reuse ... ok
+test gc2::path::tests::selection_backtracks_around_overlapping_addresses_and_pins ... ok
+test gc2::path::tests::selection_never_falls_back_to_fewer_than_three_middles ... ok
+test gc2::tests::all_candidates_keep_both_classes_size_fixed_and_padded ... ok
+test gc2::tests::authority_expiry_does_not_round_up_or_revive_invalid_timestamps ... ok
+test gc2::tests::experimental_modes_use_distinct_ids_and_bounded_bulk_frames ... ok
+test gc2::tests::file_profile_is_explicit_and_does_not_reinterpret_old_ids ... ok
+test gc2::tests::raw_cover_cost_is_explicit_and_never_an_adaptive_quota ... ok
+test gc2::tests::wrong_version_profile_class_lengths_and_padding_fail_closed ... ok
+test gc2::transit::tests::authority_expiry_cancels_partial_open_before_a_target_is_dialed ... ok
+test gc2::transit::tests::reset_cancels_an_admitted_middle_target_connection ... ok
+test service::connectivity_tests::address_change_preserves_service_keys_and_unprobed_transit_is_refused ... ok
+test wire::tests::record_bounds_and_control_validation ... ok
+test wire::tests::target_vectors_and_strict_decoding ... ok
+test gc2::owner::expiry_tests::three_real_expiries_keep_authority_and_reacquire_both_classes has been running for over 60 seconds
+test gc2::owner::expiry_tests::three_real_expiries_keep_authority_and_reacquire_both_classes ... ok
+
+test result: ok. 54 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 236.45s
+
+     Running tests/gc2_discovery.rs (/run/media/user/SSD-2/git/ghost/coms/.worktrees/gdrop-gdrone/build/gcoms/debug/deps/gc2_discovery-caf41e240e4c095e)
+
+running 6 tests
+test expired_private_seed_renews_bounded_referrals_on_one_pinned_connection ... ok
+test authenticated_reply_cannot_silently_replace_stable_authority_or_revive_expiry ... ok
+test malformed_private_requests_and_wrong_pin_fail_without_fallback ... ok
+test registered_endpoint_cannot_bypass_control_role_or_then_switch_to_control ... ok
+test private_refresh_budget_is_bounded_and_does_not_consume_circuit_capacity ... ok
+test roles_cannot_mix_and_gc1_authority_cannot_authenticate_v2_discovery ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.08s
