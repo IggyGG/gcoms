@@ -5,7 +5,7 @@ use gcoms_routing::{
     gc2::{
         connector::PreparedConnector,
         entry::{self, EntryCarrier, EntryDescriptor},
-        transit::TransitDescriptor,
+        path::MiddlePath,
         CandidateProfile, RecordCodec, RecordKind,
     },
     route::now_unix,
@@ -145,7 +145,9 @@ impl Fixture {
     async fn middle(&mut self) -> Arc<RelayService> {
         let identity = TlsIdentity::generate().unwrap();
         let server = Tp1Server::bind_with_identity(
-            "127.0.0.84:0".parse().unwrap(),
+            format!("127.0.0.{}:0", 81 + self.stop.len())
+                .parse()
+                .unwrap(),
             TokenRegistry::new(),
             Arc::new(|_, _| Ok(None)),
             Arc::new(|_| None),
@@ -178,6 +180,14 @@ impl Fixture {
         service
     }
 
+    async fn middle_path(&mut self) -> [Arc<RelayService>; 3] {
+        [
+            self.middle().await,
+            self.middle().await,
+            self.middle().await,
+        ]
+    }
+
     async fn stop(mut self) {
         for stop in self.stop.drain(..) {
             stop.send(()).unwrap();
@@ -191,7 +201,7 @@ impl Fixture {
     }
 }
 
-struct FullConnector(EntryCarrier, TrafficClass, TransitDescriptor);
+struct FullConnector(EntryCarrier, TrafficClass, MiddlePath);
 impl Connector for FullConnector {
     fn connect(&self, addr: SocketAddr, service_id: [u8; 32]) -> ConnectFuture<'_> {
         Box::pin(async move {
@@ -221,13 +231,18 @@ impl Connector for FullConnector {
 }
 
 #[tokio::test]
-async fn complete_gc2_circuits_authenticate_all_three_hops_on_one_entry() {
+async fn complete_gc2_circuits_authenticate_all_five_hops_on_one_entry() {
     let mut fixture = Fixture::new().await;
-    let middle = fixture.middle().await;
+    let middles = fixture.middle_path().await;
     let carrier = fixture.carrier().await;
-    let descriptor = middle.gc2_transit_descriptor(now_unix());
+    let descriptor = middles
+        .each_ref()
+        .map(|middle| middle.gc2_transit_descriptor(now_unix()));
     let mut clients = Vec::new();
-    for class in [TrafficClass::Bulk, TrafficClass::Interactive] {
+    for class in [TrafficClass::Bulk; 6]
+        .into_iter()
+        .chain([TrafficClass::Interactive])
+    {
         let client = Tp1Client::with_connector(Arc::new(FullConnector(
             carrier.clone(),
             class,
@@ -248,14 +263,14 @@ async fn complete_gc2_circuits_authenticate_all_three_hops_on_one_entry() {
         .unwrap()
         .unwrap();
         let gcoms_transport::HopOutcome::Accepted(Some(echo)) = outcome else {
-            panic!("expected three-hop echo");
+            panic!("expected five-hop echo");
         };
         assert_eq!(echo.payload, cell.payload);
         clients.push(client);
     }
     assert_eq!(fixture.connections.load(Ordering::SeqCst), 1);
-    assert_eq!(carrier.active_circuits(), 2);
-    assert_eq!(middle.active_circuits(), 2);
+    assert_eq!(carrier.active_circuits(), 7);
+    assert!(middles.iter().all(|middle| middle.active_circuits() == 7));
     assert!(clients[0]
         .get_pinned(fixture.terminal_addr, [0xc7; 32], "/")
         .await
@@ -264,7 +279,7 @@ async fn complete_gc2_circuits_authenticate_all_three_hops_on_one_entry() {
     fixture.carriers[0].abort();
     timeout(Duration::from_secs(3), async {
         while fixture.service.active_circuits() != 0
-            || middle.active_circuits() != 0
+            || middles.iter().any(|middle| middle.active_circuits() != 0)
             || carrier.active_circuits() != 0
         {
             tokio::task::yield_now().await;
@@ -278,9 +293,11 @@ async fn complete_gc2_circuits_authenticate_all_three_hops_on_one_entry() {
 #[tokio::test]
 async fn one_terminal_client_reuses_separate_class_circuits_on_one_entry() {
     let mut fixture = Fixture::new().await;
-    let middle = fixture.middle().await;
+    let middles = fixture.middle_path().await;
     let carrier = fixture.carrier().await;
-    let descriptor = middle.gc2_transit_descriptor(now_unix());
+    let descriptor = middles
+        .each_ref()
+        .map(|middle| middle.gc2_transit_descriptor(now_unix()));
     let client = Tp1Client::with_connector(Arc::new(PreparedConnector::new(
         carrier.clone(),
         descriptor.clone(),
@@ -314,9 +331,9 @@ async fn one_terminal_client_reuses_separate_class_circuits_on_one_entry() {
     }
     assert_eq!(client.pooled_connections().await, 2);
     assert_eq!(carrier.active_circuits(), 2);
-    assert_eq!(middle.active_circuits(), 2);
+    assert!(middles.iter().all(|middle| middle.active_circuits() == 2));
     assert_eq!(fixture.connections.load(Ordering::SeqCst), 1);
-    let forbidden = [(descriptor.addr, descriptor.service_id)];
+    let forbidden = [(descriptor[0].addr, descriptor[0].service_id)];
     assert!(client
         .warm_excluding_with_class(
             fixture.terminal_addr,
@@ -337,60 +354,69 @@ async fn one_terminal_client_reuses_separate_class_circuits_on_one_entry() {
 #[tokio::test]
 async fn middle_pin_capability_and_complete_route_exclusions_fail_closed() {
     let mut fixture = Fixture::new().await;
-    let middle = fixture.middle().await;
+    let middles = fixture.middle_path().await;
     let carrier = fixture.carrier().await;
-    let descriptor = middle.gc2_transit_descriptor(now_unix());
-    let mut wrong_pin = descriptor.clone();
-    wrong_pin.service_id = [0x44; 32];
-    let mut wrong_role = descriptor.clone();
-    wrong_role.transit_cap = middle.gc2_entry_descriptor(now_unix()).entry_cap;
-    let mut old_cap = descriptor.clone();
-    old_cap.transit_cap = middle.introduction(now_unix()).circuit_cap;
-    for invalid in [wrong_pin, wrong_role, old_cap] {
-        assert!(timeout(
-            Duration::from_secs(3),
-            carrier.connect_via(TrafficClass::Bulk, &invalid, &fixture.target(), &[])
-        )
-        .await
-        .unwrap()
-        .is_err());
-    }
-    for excluded in [
-        (descriptor.addr, [1; 32]),
-        ("127.0.0.98:443".parse().unwrap(), descriptor.service_id),
-        (fixture.service.address(), [2; 32]),
-        (
-            "127.0.0.99:443".parse().unwrap(),
-            fixture.service.gc2_entry_descriptor(now_unix()).service_id,
-        ),
-    ] {
-        assert!(carrier
-            .connect_via(
-                TrafficClass::Interactive,
-                &descriptor,
-                &fixture.target(),
-                &[excluded]
+    let descriptor = middles
+        .each_ref()
+        .map(|middle| middle.gc2_transit_descriptor(now_unix()));
+    for index in 0..3 {
+        let mut wrong_pin = descriptor.clone();
+        wrong_pin[index].service_id = [0x44; 32];
+        let mut wrong_role = descriptor.clone();
+        wrong_role[index].transit_cap = middles[index].gc2_entry_descriptor(now_unix()).entry_cap;
+        let mut old_cap = descriptor.clone();
+        old_cap[index].transit_cap = middles[index].introduction(now_unix()).circuit_cap;
+        for invalid in [wrong_pin, wrong_role, old_cap] {
+            assert!(timeout(
+                Duration::from_secs(15),
+                carrier.connect_via(TrafficClass::Bulk, &invalid, &fixture.target(), &[])
             )
             .await
+            .unwrap()
             .is_err());
-    }
-    for target in [
-        Target::Relay {
-            addr: descriptor.addr,
-            service_id: [3; 32],
-        },
-        Target::Relay {
-            addr: fixture.terminal_addr,
-            service_id: descriptor.service_id,
-        },
-    ] {
-        assert!(carrier
-            .connect_via(TrafficClass::Bulk, &descriptor, &target, &[])
-            .await
-            .is_err());
+        }
+        for excluded in [
+            (descriptor[index].addr, [1; 32]),
+            (
+                "127.0.0.98:443".parse().unwrap(),
+                descriptor[index].service_id,
+            ),
+            (fixture.service.address(), [2; 32]),
+            (
+                "127.0.0.99:443".parse().unwrap(),
+                fixture.service.gc2_entry_descriptor(now_unix()).service_id,
+            ),
+        ] {
+            assert!(carrier
+                .connect_via(
+                    TrafficClass::Interactive,
+                    &descriptor,
+                    &fixture.target(),
+                    &[excluded],
+                )
+                .await
+                .is_err());
+        }
+        for target in [
+            Target::Relay {
+                addr: descriptor[index].addr,
+                service_id: [3; 32],
+            },
+            Target::Relay {
+                addr: fixture.terminal_addr,
+                service_id: descriptor[index].service_id,
+            },
+        ] {
+            assert!(carrier
+                .connect_via(TrafficClass::Bulk, &descriptor, &target, &[])
+                .await
+                .is_err());
+        }
     }
     timeout(Duration::from_secs(3), async {
-        while fixture.service.active_circuits() != 0 || middle.active_circuits() != 0 {
+        while fixture.service.active_circuits() != 0
+            || middles.iter().any(|middle| middle.active_circuits() != 0)
+        {
             tokio::task::yield_now().await;
         }
     })
@@ -797,6 +823,18 @@ async fn malformed_middle_open_is_rejected_before_any_target_dial() {
     fixture.stop().await;
 }
 
+struct CountBackgroundDials(Arc<AtomicUsize>);
+impl Connector for CountBackgroundDials {
+    fn connect(&self, addr: SocketAddr, pin: [u8; 32]) -> ConnectFuture<'_> {
+        Box::pin(async move {
+            self.0.fetch_add(1, Ordering::SeqCst);
+            gcoms_transport::connector::DirectConnector
+                .connect(addr, pin)
+                .await
+        })
+    }
+}
+
 #[tokio::test]
 async fn background_owner_preconnects_without_messages_and_never_dials_from_send() {
     use gcoms_routing::gc2::{
@@ -804,10 +842,10 @@ async fn background_owner_preconnects_without_messages_and_never_dials_from_send
         owner::EntryOwner,
     };
     let mut fixture = Fixture::new().await;
-    let middle = fixture.middle().await;
+    let middles = fixture.middle_path().await;
     let directory = Arc::new(Gc2Directory::for_loopback_fixture());
     let first = fixture.service.gc2_introduction(now_unix() - 7200);
-    let second = middle.gc2_introduction(now_unix() - 7200);
+    let second = middles[0].gc2_introduction(now_unix() - 7200);
     directory
         .remember(
             &BootstrapBundle {
@@ -820,26 +858,42 @@ async fn background_owner_preconnects_without_messages_and_never_dials_from_send
         .set_guards(vec![first.service_id, second.service_id])
         .unwrap();
     assert!(directory.eligible(&[], now_unix()).unwrap().is_empty());
-    let (owner, ready) = EntryOwner::new(
+    directory
+        .remember(
+            &BootstrapBundle {
+                relays: middles[1..]
+                    .iter()
+                    .map(|relay| relay.gc2_introduction(now_unix()))
+                    .collect(),
+            },
+            now_unix(),
+        )
+        .unwrap();
+    let background_dials = Arc::new(AtomicUsize::new(0));
+    let (owner, ready) = EntryOwner::with_entry_connector(
         directory.clone(),
         CandidateProfile::new(4096, 250).unwrap(),
         1,
+        Arc::new(CountBackgroundDials(background_dials.clone())),
     )
     .unwrap();
     let owner = fixture.tasks.spawn(async move {
         let _ = owner.run().await;
     });
     timeout(Duration::from_secs(8), async {
-        while ready.ready_entries() != 1 || directory.eligible(&[], now_unix()).unwrap().len() != 2
+        while ready.ready_entries() != 1
+            || directory.eligible(&[], now_unix()).unwrap().len() != 4
+            || background_dials.load(Ordering::SeqCst) < directory.guards().len() + 1
         {
             tokio::task::yield_now().await;
         }
     })
     .await
     .unwrap();
-    // One protected entry and one periodic private control connection to this
-    // guard exist before any application request. Neither depends on messages.
-    assert_eq!(fixture.connections.load(Ordering::SeqCst), 2);
+    // This socket provider owns entry and retained-guard control connections.
+    // Record the completed startup baseline; application sends must not add
+    // physical dials even when their middle TLS connections are newly opened.
+    let startup_dials = background_dials.load(Ordering::SeqCst);
     let client = Tp1Client::with_connector(ready.clone()).unwrap();
     for class in [TrafficClass::Bulk, TrafficClass::Interactive] {
         let cell = Cell::new(CellType::Msg, 0, 0, vec![5; 128]);
@@ -862,7 +916,7 @@ async fn background_owner_preconnects_without_messages_and_never_dials_from_send
         };
         assert_eq!(echo.payload, cell.payload);
         assert_eq!(ready.ready_entries(), 1);
-        assert_eq!(fixture.connections.load(Ordering::SeqCst), 2);
+        assert_eq!(background_dials.load(Ordering::SeqCst), startup_dials);
     }
     assert!(ready
         .connect_excluding(
@@ -880,7 +934,7 @@ async fn background_owner_preconnects_without_messages_and_never_dials_from_send
         )
         .await
         .is_err());
-    assert_eq!(fixture.connections.load(Ordering::SeqCst), 2);
+    assert_eq!(background_dials.load(Ordering::SeqCst), startup_dials);
     owner.abort();
     timeout(Duration::from_secs(3), async {
         while ready.ready_entries() != 0 {
@@ -893,6 +947,6 @@ async fn background_owner_preconnects_without_messages_and_never_dials_from_send
         .connect(fixture.terminal_addr, fixture.terminal_pin)
         .await
         .is_err());
-    assert_eq!(fixture.connections.load(Ordering::SeqCst), 2);
+    assert_eq!(background_dials.load(Ordering::SeqCst), startup_dials);
     fixture.stop().await;
 }

@@ -104,3 +104,8 @@ listener regression is fixed and covered on every target.
 The subsequent concurrent crypto merge was preserved and validated with 157
 combined Linux tests and strict Clippy; the native size record retains its exact
 measured revision.
+
+
+## Five-relay carrier update — 2026-09-23
+
+The shared Rust GC/2 application carrier now selects exactly three independent middles between the retained entry and terminal inbox. Whole-path validation rejects reused IPs/service identities, excluded endpoints and expired authority before opening streams. Minimal payload route integration, uniform framing, passive attachments, replicated durability and fleet rollout remain pending.

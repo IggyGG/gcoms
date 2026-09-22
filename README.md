@@ -116,3 +116,8 @@ a purpose-specific host cache key. TLS fixture dependencies (`rcgen`, `rustls`,
 All three Rust variants are tested natively on Linux x86_64, macOS arm64/x86_64
 and Windows x64 MSVC.
 Measured sizes and exact validation inputs are in [the Rust integration report](docs/RUST_INTEGRATIONS.md).
+
+
+## Five-relay carrier update — 2026-09-23
+
+The shared experimental GC/2 application carrier requires an entry, three independent middles and a terminal inbox. It defers delivery when a complete route is unavailable. This is a client routing change; live fleet rollout and minimal payload integration are not yet qualified. Offline validation is recorded in test-evidence/gc2-five-relay-20260923/verification.json.

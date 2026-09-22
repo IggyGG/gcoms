@@ -134,3 +134,8 @@ suites passed 157 Linux tests (two explicit ignores) and strict Clippy. Native r
 to their recorded source revision.
 
 2026-09-22 bootstrap bulk routing: volatile D13 file records use the GC/2 bulk class; contact, command and acknowledgement records remain interactive. The seven direct-maintenance tests pass, including class derivation and retry/ownership gates. Minimal receivers must subscribe to both classes. Live end-to-end transfer and installation remain pending. codematch=unreachable.
+
+
+## Five-relay carrier update — 2026-09-23
+
+Offline five-relay gates: 54 routing unit, 6 discovery, 10 carrier, 11 persistent-node integration, 1 fresh-inbox, and 124 consumer tests passed (2 consumer tests remain explicitly ignored). Evidence and exact executed commands: test-evidence/gc2-five-relay-20260923/verification.json. These results do not establish live fleet or cross-OS deployment acceptance.

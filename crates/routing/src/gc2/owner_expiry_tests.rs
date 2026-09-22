@@ -30,6 +30,10 @@ use tokio::{
 };
 
 const WAIT: Duration = Duration::from_secs(20);
+// The fixed one-second interactive cover schedule is unchanged. Three nested
+// TLS/H2 middles plus terminal setup can consume more than the old 20-second
+// three-hop setup bound; keep readiness and teardown bounds at WAIT.
+const SETUP_WAIT: Duration = Duration::from_secs(40);
 
 #[derive(Default)]
 struct Dials {
@@ -147,15 +151,8 @@ async fn relay_epochs(
     assert!(!expiries.is_empty());
     assert!(expiries.windows(2).all(|pair| pair[0] < pair[1]));
     let identity = TlsIdentity::generate().unwrap();
-    let server = bind(
-        if index == 0 {
-            "127.0.0.105"
-        } else {
-            "127.0.0.106"
-        },
-        &identity,
-    )
-    .await;
+    let host = if index < 2 { 105 + index } else { 110 + index };
+    let server = bind(&format!("127.0.0.{host}"), &identity).await;
     let old = Introduction {
         addr: server.local_addr().unwrap(),
         service_id: identity.service_id(),
@@ -377,7 +374,7 @@ impl Terminal {
             nonce: rand::random(),
         };
         let mut stream = timeout(
-            WAIT,
+            SETUP_WAIT,
             client.open_natural_prepared(
                 NaturalRoute {
                     addr: self.addr,
@@ -417,6 +414,23 @@ async fn until(mut condition: impl FnMut() -> bool, reason: &str) {
     .unwrap_or_else(|_| panic!("{reason}"));
 }
 
+// A fourth, non-guard relay completes the three-middle path. All three
+// retained guards rotate together; this support relay cannot mask loss of
+// their authenticated entry connections by becoming a new guard.
+async fn supporting_middle(tasks: &mut JoinSet<()>, expiry: u64, trace: Trace) -> Introduction {
+    let (_release, available) = watch::channel(true);
+    relay_epochs(
+        tasks,
+        3,
+        &[expiry],
+        Arc::new(AtomicUsize::new(usize::MAX)),
+        available,
+        trace,
+    )
+    .await
+    .remove(0)
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn real_expiry_reacquires_carrier_and_both_retained_subscriptions() {
     let mut tasks = JoinSet::new();
@@ -424,7 +438,7 @@ async fn real_expiry_reacquires_carrier_and_both_retained_subscriptions() {
         start: Instant::now(),
         events: Arc::new(Mutex::new(Vec::new())),
     };
-    let expiry = now_unix() + 24;
+    let expiry = now_unix() + 48;
     let first_refreshed = Arc::new(AtomicUsize::new(usize::MAX));
     let (release, held) = watch::channel(false);
     let a = relay(
@@ -436,19 +450,29 @@ async fn real_expiry_reacquires_carrier_and_both_retained_subscriptions() {
         trace.clone(),
     )
     .await;
-    let b = relay(&mut tasks, 1, expiry, first_refreshed, held, trace.clone()).await;
+    let b = relay(
+        &mut tasks,
+        1,
+        expiry,
+        first_refreshed.clone(),
+        held.clone(),
+        trace.clone(),
+    )
+    .await;
+    let c = relay(&mut tasks, 2, expiry, first_refreshed, held, trace.clone()).await;
     let terminal = Terminal::new(&mut tasks, expiry + 180, trace.clone()).await;
+    let supporting = supporting_middle(&mut tasks, expiry + 180, trace.clone()).await;
     let directory = Arc::new(Directory::for_loopback_fixture());
     directory
         .remember(
             &BootstrapBundle {
-                relays: vec![a[0].clone(), b[0].clone()],
+                relays: vec![a[0].clone(), b[0].clone(), c[0].clone(), supporting],
             },
             now_unix(),
         )
         .unwrap();
     directory
-        .set_guards(vec![a[0].service_id, b[0].service_id])
+        .set_guards(vec![a[0].service_id, b[0].service_id, c[0].service_id])
         .unwrap();
     let retained_guards = directory.guards();
     let (mut owner, ready) =
@@ -503,13 +527,13 @@ async fn real_expiry_reacquires_carrier_and_both_retained_subscriptions() {
         .is_err());
     assert!(original.introduction.entry(now_unix()).is_err());
     until(
-        || directory.eligible(&[], now_unix()).unwrap().len() == 1 && ready.ready_entries() == 1,
+        || directory.eligible(&[], now_unix()).unwrap().len() == 2 && ready.ready_entries() == 1,
         "one refreshed introduction and a newly authenticated entry",
     )
     .await;
     assert!(
         !ready.can_route((terminal.addr, terminal.pin)),
-        "fresh own entry alone is insufficient"
+        "fresh entry and only one middle are insufficient"
     );
     assert!(ready.connect(terminal.addr, terminal.pin).await.is_err());
     trace.record("fresh entry acquired; independent middle still unavailable");
@@ -530,11 +554,11 @@ async fn real_expiry_reacquires_carrier_and_both_retained_subscriptions() {
     .await;
     tokio::time::sleep(Duration::from_millis(250)).await;
     assert!(!ready.can_route((terminal.addr, terminal.pin)));
-    assert_eq!(directory.eligible(&[], now_unix()).unwrap().len(), 1);
+    assert_eq!(directory.eligible(&[], now_unix()).unwrap().len(), 2);
     release.send(true).unwrap();
     until(
         || {
-            directory.eligible(&[], now_unix()).unwrap().len() == 2
+            directory.eligible(&[], now_unix()).unwrap().len() == 4
                 && ready.can_route((terminal.addr, terminal.pin))
         },
         "fresh independently authenticated middle",
@@ -581,11 +605,11 @@ async fn three_real_expiries_keep_authority_and_reacquire_both_classes() {
     };
     // Issuers release only the current epoch. These are real SystemTime
     // deadlines, not paused Tokio time or edits to production credential TTLs.
-    let first_expiry = now_unix() + 24;
+    let first_expiry = now_unix() + 48;
     let expiries = [
         first_expiry,
-        first_expiry + 40,
-        first_expiry + 80,
+        first_expiry + 60,
+        first_expiry + 120,
         first_expiry + 260,
     ];
     let first_refreshed = Arc::new(AtomicUsize::new(usize::MAX));
@@ -603,23 +627,33 @@ async fn three_real_expiries_keep_authority_and_reacquire_both_classes() {
         &mut tasks,
         1,
         &expiries,
+        first_refreshed.clone(),
+        available.clone(),
+        trace.clone(),
+    )
+    .await;
+    let c = relay_epochs(
+        &mut tasks,
+        2,
+        &expiries,
         first_refreshed,
         available,
         trace.clone(),
     )
     .await;
     let terminal = Terminal::new(&mut tasks, first_expiry + 300, trace.clone()).await;
+    let supporting = supporting_middle(&mut tasks, first_expiry + 300, trace.clone()).await;
     let directory = Arc::new(Directory::for_loopback_fixture());
     directory
         .remember(
             &BootstrapBundle {
-                relays: vec![a[0].clone(), b[0].clone()],
+                relays: vec![a[0].clone(), b[0].clone(), c[0].clone(), supporting],
             },
             now_unix(),
         )
         .unwrap();
     directory
-        .set_guards(vec![a[0].service_id, b[0].service_id])
+        .set_guards(vec![a[0].service_id, b[0].service_id, c[0].service_id])
         .unwrap();
     let guards = directory.guards();
     let (mut owner, ready) =
@@ -637,7 +671,7 @@ async fn three_real_expiries_keep_authority_and_reacquire_both_classes() {
                     && entries
                         .iter()
                         .all(|entry| entry.introduction.expires_at == expiry)
-                    && directory.eligible(&[], now_unix()).unwrap().len() == 2
+                    && directory.eligible(&[], now_unix()).unwrap().len() == 4
             },
             "both fresh authenticated entries after each turnover",
         )
