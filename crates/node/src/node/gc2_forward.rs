@@ -33,6 +33,7 @@ pub(crate) fn handler(
                 let _permit = match permit {
                     Ok(permit) => permit,
                     Err(_) => {
+                        refused("capacity", "all_slots_busy");
                         reply(&mut respond, HopReply::Overloaded);
                         return;
                     }
@@ -52,7 +53,10 @@ pub(crate) fn handler(
                         let _bulk_permit = if forward.class == TrafficClass::Bulk {
                             match bulk_slots.try_acquire_owned() {
                                 Ok(permit) => Some(permit),
-                                Err(_) => return Some(HopReply::Overloaded),
+                                Err(_) => {
+                                    refused("capacity", "bulk_slots_busy");
+                                    return Some(HopReply::Overloaded);
+                                }
                             }
                         } else {
                             None
@@ -65,6 +69,7 @@ pub(crate) fn handler(
                             if guard.transit_ready.as_ref().is_some_and(|ready| {
                                 !ready.load(std::sync::atomic::Ordering::Acquire)
                             }) {
+                                refused("readiness", "transit_not_ready");
                                 return Some(HopReply::Overloaded);
                             }
                         }
@@ -73,7 +78,18 @@ pub(crate) fn handler(
                         }
                         let receipt = match scheduler.forward_gc2(forward) {
                             Ok(receipt) => receipt,
-                            Err(_) => return Some(HopReply::Overloaded),
+                            Err(error) => {
+                                refused(
+                                    "scheduler",
+                                    match error {
+                                        EnqueueError::Full => "full",
+                                        EnqueueError::Pending => "pending",
+                                        EnqueueError::Shutdown => "shutdown",
+                                        EnqueueError::InvalidCell => "invalid_cell",
+                                    },
+                                );
+                                return Some(HopReply::Overloaded);
+                            }
                         };
                         {
                             let mut guard = authorities.lock().unwrap_or_else(|p| p.into_inner());
@@ -82,10 +98,12 @@ pub(crate) fn handler(
                                 .admitted
                                 .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                         }
-                        Some(if receipt.completion().await.accepted().is_ok() {
-                            HopReply::Accepted
-                        } else {
-                            HopReply::Overloaded
+                        Some(match receipt.completion().await.accepted() {
+                            Ok(_) => HopReply::Accepted,
+                            Err(error) => {
+                                refused("last_hop", failure_class(&error));
+                                HopReply::Overloaded
+                            }
                         })
                     }
                     .await;
@@ -105,5 +123,38 @@ pub(crate) fn handler(
 fn reply(respond: &mut h2::server::SendResponse<bytes::Bytes>, result: HopReply) {
     if let Ok(mut send) = respond.send_response(http::Response::new(()), false) {
         let _ = send.send_data(bytes::Bytes::from(status_cell(result).encode()), true);
+    }
+}
+
+// Only fixed diagnostic labels leave this boundary. Transport errors can carry
+// remote identifiers, so never record their raw text, tokens, or payloads.
+fn refused(stage: &'static str, reason: &'static str) {
+    metrics::log_event(
+        "gc2_forward_refused",
+        &[("stage", stage.into()), ("reason", reason.into())],
+    );
+}
+
+fn failure_class(error: &str) -> &'static str {
+    if error.contains("expired") {
+        "expired"
+    } else if error.contains("overloaded") {
+        "overloaded"
+    } else if error.contains("denied")
+        || error.contains("unauthorized")
+        || error.contains("refused")
+    {
+        "refused"
+    } else if error.contains("no ready") {
+        "no_ready_route"
+    } else if error.contains("deadline") || error.contains("timed out") || error.contains("timeout")
+    {
+        "timeout"
+    } else if error.contains("closed") {
+        "closed"
+    } else if error.contains("shutdown") || error.contains("shut down") {
+        "shutdown"
+    } else {
+        "transport_failure"
     }
 }
