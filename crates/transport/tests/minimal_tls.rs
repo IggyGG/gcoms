@@ -460,3 +460,135 @@ async fn native_c_http2_uses_existing_tp1_post_and_stream_paths() {
         );
     }
 }
+
+// This is a transport primitive gate, not proof of route selection: the local
+// server terminates all five independent TLS identities in one test process.
+// Each inner handshake and the 128 KiB response use real nested HTTP/2 streams.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "requires a native DS_MINIMAL_TLS_PROBE executable and the qualification lock"]
+async fn native_c_nested_carriers_pin_every_layer_and_preserve_stream_credit() {
+    use gcoms_transport::{connector::BoxStream, duplex::H2Stream};
+    use std::{
+        future::{poll_fn, Future},
+        pin::Pin,
+        sync::{
+            atomic::{AtomicBool, AtomicUsize, Ordering},
+            Arc,
+        },
+        time::Duration,
+    };
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    use tokio_rustls::TlsAcceptor;
+    type TestResult = Result<(), Box<dyn std::error::Error + Send + Sync>>;
+    const TOKEN: &str = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+
+    fn serve(
+        io: BoxStream,
+        configs: Arc<Vec<Arc<rustls::ServerConfig>>>,
+        depth: usize,
+        accepted: Arc<AtomicUsize>,
+        completed: Arc<AtomicBool>,
+    ) -> Pin<Box<dyn Future<Output = TestResult> + Send>> {
+        Box::pin(async move {
+            let tls = TlsAcceptor::from(configs[depth].clone()).accept(io).await?;
+            let mut connection = h2::server::Builder::new()
+                .initial_window_size(32 * 1024)
+                .initial_connection_window_size(64 * 1024)
+                .handshake(tls)
+                .await?;
+            let (request, mut respond) = connection.accept().await.ok_or("missing request")??;
+            assert_eq!(request.uri().path(), format!("/{TOKEN}"));
+            assert_eq!(request.method(), "POST");
+            accepted.fetch_add(1, Ordering::SeqCst);
+            let response = http::Response::builder()
+                .header("content-type", "application/octet-stream")
+                .body(())?;
+            let send = respond.send_response(response, false)?;
+            let mut stream = H2Stream::new(request.into_body(), send);
+            let work = async {
+                if depth < 4 {
+                    serve(Box::new(stream), configs, depth + 1, accepted, completed).await
+                } else {
+                    let mut cell = [0u8; 4096];
+                    stream.read_exact(&mut cell).await?;
+                    assert_eq!(&cell[..7], &[0x19, 0, 0, 0, 0, 1, 0x5a]);
+                    assert!(cell[7..].iter().all(|byte| *byte == 0));
+                    assert_eq!(stream.read(&mut [0u8; 1]).await?, 0);
+                    for _ in 0..32 {
+                        stream.write_all(&cell).await?;
+                    }
+                    stream.shutdown().await?;
+                    completed.store(true, Ordering::SeqCst);
+                    Ok(())
+                }
+            };
+            tokio::pin!(work);
+            tokio::select! {
+                result = &mut work => result?,
+                result = poll_fn(|cx| connection.poll_closed(cx)) => {
+                    result?;
+                    return Err("carrier closed during nested exchange".into());
+                }
+            }
+            // Keep driving accepted outbound bytes until the client closes.
+            let _ = poll_fn(|cx| connection.poll_closed(cx)).await;
+            Ok(())
+        })
+    }
+
+    for wrong_pin in [None, Some(0), Some(1), Some(2), Some(3), Some(4)] {
+        let identities: Vec<_> = (0..5).map(|_| TlsIdentity::generate().unwrap()).collect();
+        let configs = Arc::new(
+            identities
+                .iter()
+                .map(|identity| Arc::new(identity.server_config().unwrap()))
+                .collect(),
+        );
+        let accepted = Arc::new(AtomicUsize::new(0));
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let count = accepted.clone();
+        let completed = Arc::new(AtomicBool::new(false));
+        let done = completed.clone();
+        let server = tokio::spawn(async move {
+            tokio::time::timeout(Duration::from_secs(35), async move {
+                let (socket, _) = listener.accept().await?;
+                serve(Box::new(socket), configs, 0, count, done).await
+            })
+            .await
+        });
+        let pins: Vec<String> = identities
+            .iter()
+            .enumerate()
+            .map(|(i, identity)| {
+                let pin = if wrong_pin == Some(i) {
+                    [0xab; 32]
+                } else {
+                    identity.service_id()
+                };
+                pin.iter().map(|byte| format!("{byte:02x}")).collect()
+            })
+            .collect();
+        let mut args = vec![
+            "--relay-nested".into(),
+            "127.0.0.1".into(),
+            address.port().to_string(),
+            pins[0].clone(),
+            TOKEN.into(),
+        ];
+        args.extend_from_slice(&pins[1..]);
+        let status = run_native_probe(args).await;
+        let result = server.await.unwrap().expect("bounded native exchange");
+        assert_eq!(
+            status.success(),
+            wrong_pin.is_none(),
+            "wrong pin {wrong_pin:?}: {status}; accepted={}; server={result:?}",
+            accepted.load(Ordering::SeqCst)
+        );
+        // The freestanding client closes its socket after authenticating the
+        // complete response; an outer driver can observe that close before an
+        // inner driver finishes unwinding. Check actual transfer completion.
+        assert_eq!(completed.load(Ordering::SeqCst), wrong_pin.is_none());
+        assert_eq!(accepted.load(Ordering::SeqCst), wrong_pin.unwrap_or(5));
+    }
+}
