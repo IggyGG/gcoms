@@ -139,50 +139,44 @@ impl EntryCarrier {
         self.budget.active()
     }
 
-    /// Construct a complete two-relay circuit using this already connected
-    /// entry and an independently pinned middle. No new entry connection or
-    /// profile change is triggered. The caller still authenticates the terminal.
+    /// Construct the entry and three independently pinned middle extensions.
+    /// The caller authenticates the fifth (terminal) relay inside the result.
+    /// No new entry connection or profile change is triggered.
     pub async fn connect_via(
         &self,
         class: TrafficClass,
-        middle: &super::transit::TransitDescriptor,
+        middles: &super::path::MiddlePath,
         target: &Target,
         excluded: &[(SocketAddr, [u8; 32])],
     ) -> Result<BoxStream> {
-        middle.validate()?;
-        if excluded.len() > 64 {
-            return Err("too many GC/2 route exclusions".into());
-        }
         let entry = (self.descriptor.addr, self.descriptor.service_id);
-        let middle_service = (middle.addr, middle.service_id);
-        let conflict = |a: (SocketAddr, [u8; 32]), b: (SocketAddr, [u8; 32])| {
-            a.0.ip() == b.0.ip() || a.1 == b.1
-        };
-        if conflict(entry, middle_service)
-            || excluded
-                .iter()
-                .any(|excluded| conflict(entry, *excluded) || conflict(middle_service, *excluded))
-            || matches!(target, Target::Relay { addr, service_id }
-                if conflict(entry, (*addr, *service_id)) || conflict(middle_service, (*addr, *service_id)))
-        {
-            return Err("GC/2 route conflicts with an endpoint or adjacent hop".into());
-        }
-        Target::decode(&target.encode())?;
-        let stream = self
-            .open(
+        super::path::validate(entry, middles, target, excluded)?;
+        let first = &middles[0];
+        let mut stream: BoxStream = Box::new(
+            self.open(
                 class,
                 &Target::Relay {
-                    addr: middle.addr,
-                    service_id: middle.service_id,
+                    addr: first.addr,
+                    service_id: first.service_id,
                 },
             )
-            .await?;
-        let (terminal, driver) = super::transit::open(stream, middle, target).await?;
-        self.nested
-            .send(driver)
-            .await
-            .map_err(|_| "GC/2 entry owner stopped")?;
-        Ok(terminal)
+            .await?,
+        );
+        for (index, middle) in middles.iter().enumerate() {
+            let next = middles.get(index + 1).map(|relay| Target::Relay {
+                addr: relay.addr,
+                service_id: relay.service_id,
+            });
+            let (extended, driver) =
+                super::transit::open(stream, class, middle, next.as_ref().unwrap_or(target))
+                    .await?;
+            self.nested
+                .send(driver)
+                .await
+                .map_err(|_| "GC/2 entry owner stopped")?;
+            stream = extended;
+        }
+        Ok(stream)
     }
 
     /// Extend to an adjacent relay. The complete route must be selected with all
@@ -294,7 +288,7 @@ async fn own_nested(mut receiver: mpsc::Receiver<NestedDriver>) -> Result<()> {
     let mut closed = false;
     loop {
         tokio::select! {
-            driver = receiver.recv(), if !closed && active.len() < mux::MAX_CIRCUITS => {
+            driver = receiver.recv(), if !closed && active.len() < mux::MAX_CIRCUITS * super::path::MIDDLE_HOPS => {
                 match driver { Some(driver) => active.push(driver), None => closed = true }
             },
             Some(()) = active.next(), if !active.is_empty() => (),

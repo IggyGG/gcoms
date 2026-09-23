@@ -305,7 +305,7 @@ mod tests {
         let resolved = Arc::new(AtomicUsize::new(0));
         let mut servers = Vec::new();
         let mut services = Vec::new();
-        for n in 2..4 {
+        for n in 2..6 {
             let identity = TlsIdentity::generate().unwrap();
             let server = Tp1Server::bind_with_identity(
                 format!("127.0.0.{n}:0").parse().unwrap(),

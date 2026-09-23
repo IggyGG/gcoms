@@ -2,7 +2,7 @@
 //! circuit. No second cover schedule or fixed padding is added at this hop.
 use super::{
     entry::MAX_LIFETIME,
-    mux::{CircuitStream, PendingSend, TargetConnector},
+    mux::{PendingSend, TargetConnector},
 };
 use crate::{route::now_unix, wire::Target, Result};
 use gcoms_core::TrafficClass;
@@ -57,12 +57,12 @@ impl TransitDescriptor {
 }
 
 pub(super) async fn open(
-    stream: CircuitStream,
+    stream: BoxStream,
+    class: TrafficClass,
     relay: &TransitDescriptor,
     target: &Target,
 ) -> Result<(BoxStream, Driver)> {
     relay.validate()?;
-    let class = stream.class();
     let deadline = super::authority_deadline(relay.expires_at, MAX_LIFETIME)
         .ok_or("GC/2 middle authority expired")?;
     timeout_at(deadline.min(tokio::time::Instant::now() + HANDSHAKE_TIMEOUT), async {

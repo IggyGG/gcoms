@@ -144,7 +144,7 @@ impl ReadyConnector {
         &self,
         target: &Target,
         excluded: &[(SocketAddr, [u8; 32])],
-    ) -> Result<(EntryCarrier, super::transit::TransitDescriptor)> {
+    ) -> Result<(EntryCarrier, super::path::MiddlePath)> {
         let entries = self.state.entries.read().unwrap_or_else(|p| p.into_inner());
         self.select_from(&entries, target, excluded)
     }
@@ -154,7 +154,7 @@ impl ReadyConnector {
         ready: &[ReadyEntry],
         target: &Target,
         excluded: &[(SocketAddr, [u8; 32])],
-    ) -> Result<(EntryCarrier, super::transit::TransitDescriptor)> {
+    ) -> Result<(EntryCarrier, super::path::MiddlePath)> {
         if excluded.len() > 64 {
             return Err("too many GC/2 route exclusions".into());
         }
@@ -185,10 +185,12 @@ impl ReadyConnector {
             {
                 continue;
             }
-            if let Some(middle) = available.iter().find(|relay| {
-                !relay.conflicts(entry.introduction.addr, entry.introduction.service_id)
-            }) {
-                return Ok((entry.carrier, middle.transit(now)?));
+            if let Some(middles) = super::path::select(
+                &available,
+                (entry.introduction.addr, entry.introduction.service_id),
+                now,
+            )? {
+                return Ok((entry.carrier, middles));
             }
         }
         Err("no ready independent GC/2 route".into())

@@ -1,6 +1,6 @@
 //! Terminal acquisition through an already connected GC/2 entry. Route selection
 //! and entry lifetime belong to the runtime; this adapter never dials an entry.
-use super::{entry::EntryCarrier, transit::TransitDescriptor};
+use super::{entry::EntryCarrier, path::MiddlePath};
 use crate::wire::Target;
 use gcoms_core::TrafficClass;
 use gcoms_transport::connector::{ConnectFuture, Connector};
@@ -8,12 +8,12 @@ use std::net::SocketAddr;
 
 pub struct PreparedConnector {
     entry: EntryCarrier,
-    middle: TransitDescriptor,
+    middles: MiddlePath,
 }
 
 impl PreparedConnector {
-    pub fn new(entry: EntryCarrier, middle: TransitDescriptor) -> Self {
-        Self { entry, middle }
+    pub fn new(entry: EntryCarrier, middles: MiddlePath) -> Self {
+        Self { entry, middles }
     }
 }
 
@@ -46,7 +46,7 @@ impl Connector for PreparedConnector {
             self.entry
                 .connect_via(
                     class,
-                    &self.middle,
+                    &self.middles,
                     &Target::Relay { addr, service_id },
                     excluded,
                 )

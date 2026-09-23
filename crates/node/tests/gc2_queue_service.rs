@@ -260,7 +260,11 @@ impl Fixture {
     }
     async fn protected_client(&mut self) -> Tp1Client {
         let relay = self.relay("127.0.0.86", true).await;
-        let middle = self.relay("127.0.0.87", false).await;
+        let middles = [
+            self.relay("127.0.0.87", false).await,
+            self.relay("127.0.0.88", false).await,
+            self.relay("127.0.0.89", false).await,
+        ];
         let descriptor = relay.gc2_entry_descriptor(now_unix());
         let socket = tokio::net::TcpStream::connect(descriptor.addr)
             .await
@@ -279,7 +283,9 @@ impl Fixture {
         let entry = timeout(Duration::from_secs(10), rx).await.unwrap().unwrap();
         Tp1Client::with_connector(Arc::new(PreparedConnector::new(
             entry,
-            middle.gc2_transit_descriptor(now_unix()),
+            middles
+                .each_ref()
+                .map(|middle| middle.gc2_transit_descriptor(now_unix())),
         )))
         .unwrap()
     }
@@ -534,7 +540,7 @@ async fn revoked_subscription_cancels_a_writer_blocked_on_receive_credit() {
     assert!(result.is_ok() || result.unwrap_err().is_cancelled());
     fixture.finish().await;
 }
-/// Real GCT2 entry + middle + TLS/H2 terminal: public scheduler API, separate
+/// Real GCT2 entry + three middles + TLS/H2 terminal: public scheduler API, separate
 /// authenticated subscriptions, many bulk records and interleaved chat.
 #[tokio::test]
 async fn natural_scheduler_delivers_bulk_and_chat_over_owned_ready_entries() {
@@ -550,6 +556,8 @@ async fn natural_scheduler_delivers_bulk_and_chat_over_owned_ready_entries() {
     let mut fixture = Fixture::new().await;
     let entry = fixture.relay("127.0.0.88", true).await;
     let middle = fixture.relay("127.0.0.89", false).await;
+    let second = fixture.relay("127.0.0.90", false).await;
+    let third = fixture.relay("127.0.0.91", false).await;
     let now = now_unix();
     let intro = entry.gc2_introduction(now);
     let guard = intro.service_id;
@@ -557,7 +565,12 @@ async fn natural_scheduler_delivers_bulk_and_chat_over_owned_ready_entries() {
     directory
         .remember(
             &BootstrapBundle {
-                relays: vec![intro, middle.gc2_introduction(now)],
+                relays: vec![
+                    intro,
+                    middle.gc2_introduction(now),
+                    second.gc2_introduction(now),
+                    third.gc2_introduction(now),
+                ],
             },
             now,
         )
@@ -567,7 +580,9 @@ async fn natural_scheduler_delivers_bulk_and_chat_over_owned_ready_entries() {
         EntryOwner::new(directory, CandidateProfile::new(4096, 250).unwrap(), 1).unwrap();
     let owner = tokio::spawn(owner.run());
     timeout(Duration::from_secs(15), async {
-        while ready.ready_entries() == 0 || fixture.entry_connections.load(Ordering::SeqCst) < 2 {
+        while !ready.can_route((fixture.address, fixture.pin))
+            || fixture.entry_connections.load(Ordering::SeqCst) < 2
+        {
             tokio::time::sleep(Duration::from_millis(10)).await;
         }
     })
@@ -633,10 +648,9 @@ async fn natural_scheduler_delivers_bulk_and_chat_over_owned_ready_entries() {
             gcoms_core::Cell::new(CellType::Msg, 0, 0, b"interleaved chat".to_vec()),
         )
         .unwrap();
-    // Bulk and chat share the carrier lattice: one padded record per profile
-    // slot on each hop, so 64 records over three hops complete in tens of
-    // seconds. The bound is the shared lattice cadence, not a GC/1
-    // application slot.
+    // The root carrier uses fixed profile slots. Nested TLS/H2 and queue
+    // acknowledgements share that bounded link with these 704 KiB of data;
+    // the deadline covers the full five-relay path at the fixture cadence.
     let transferred = timeout(Duration::from_secs(120), async {
         let mut received = std::collections::HashSet::new();
         while received.len() < 64 {
