@@ -2,6 +2,10 @@
 
 use super::*;
 
+#[cfg(test)]
+#[path = "lease_authority_tests.rs"]
+mod lease_authority_tests;
+
 /// Idle lifetime of forwarding authority activated by a consumed provision or
 /// refreshed by later administrative traffic on its create paths.
 pub(crate) const PROVISION_FRWD_IDLE_SECS: u64 = 24 * 60 * 60;

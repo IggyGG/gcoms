@@ -65,9 +65,14 @@ impl PendingRequest {
             excluded,
             subscription,
             natural: true,
-            make: Box::new(move || {
-                encode(semantic, traffic, &mut StdRng::from_seed(seed))
-                    .map(|cell| bytes::Bytes::from(cell.encode()))
+            authority: authority::contact(&semantic).cloned(),
+            make: Box::new(move |proof| {
+                encode(
+                    authority::apply(semantic, proof)?,
+                    traffic,
+                    &mut StdRng::from_seed(seed),
+                )
+                .map(|cell| bytes::Bytes::from(cell.encode()))
             }),
         })
     }
@@ -162,6 +167,7 @@ fn encode(
 pub(super) async fn send(
     client: &Tp1Client,
     request: PendingRequest,
+    proof: Option<authority::VerifiedAuthority>,
     retry_base: Duration,
     traffic: TrafficClass,
 ) -> JobResult {
@@ -181,6 +187,7 @@ pub(super) async fn send(
         class: traffic,
     };
     let mut make = Some(make);
+    let mut proof = proof;
     let mut wire: Option<bytes::Bytes> = None;
     let mut attempt = 0;
     // This absolute bound also covers a server that accepts but never emits a
@@ -192,6 +199,7 @@ pub(super) async fn send(
                 wire = Some(make
                     .take()
                     .ok_or("request preparation already consumed")?(
+                    proof.take()
                 )?);
             }
             Ok(NaturalCell::decode(wire.as_ref().expect("prepared"))?)
@@ -314,7 +322,7 @@ mod tests {
         .unwrap();
         assert!(pending.natural);
         assert_eq!(pending.token, crate::gc2::queue_token(&contact.queue_id));
-        assert!((pending.make)()
+        assert!((pending.make)(None)
             .unwrap_err()
             .contains("expired before transport admission"));
         assert!(PendingRequest::natural(
@@ -443,6 +451,7 @@ mod tests {
         let result = send(
             &Tp1Client::new().unwrap(),
             request,
+            None,
             Duration::from_millis(1),
             TrafficClass::Bulk,
         )

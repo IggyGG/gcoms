@@ -9,7 +9,10 @@ pub(super) struct PendingRequest {
     pub subscription: bool,
     #[cfg(feature = "experimental-gc2")]
     pub natural: bool,
-    pub make: Box<dyn FnOnce() -> Result<bytes::Bytes, String> + Send>,
+    pub authority: Option<AliasContact>,
+    pub make: Box<
+        dyn FnOnce(Option<authority::VerifiedAuthority>) -> Result<bytes::Bytes, String> + Send,
+    >,
 }
 
 impl PendingRequest {
@@ -56,12 +59,20 @@ impl PendingRequest {
                 true,
             ),
         };
+        let authority = authority::contact(&semantic).cloned();
         Ok(Self::new(
             target,
             token,
             excluded,
             subscription,
-            move || prepare(semantic, round, &mut StdRng::from_seed(seed)),
+            authority,
+            move |proof| {
+                prepare(
+                    authority::apply(semantic, proof)?,
+                    round,
+                    &mut StdRng::from_seed(seed),
+                )
+            },
         ))
     }
 
@@ -81,7 +92,8 @@ impl PendingRequest {
             key.token,
             excluded,
             false,
-            move || auth.cover_request(round, &mut StdRng::from_seed(seed)),
+            None,
+            move |_| auth.cover_request(round, &mut StdRng::from_seed(seed)),
         )
     }
 
@@ -90,30 +102,33 @@ impl PendingRequest {
         token: String,
         excluded: Vec<(SocketAddr, [u8; 32])>,
         subscription: bool,
-        prepare: impl FnOnce() -> Result<Request, String> + Send + 'static,
+        authority: Option<AliasContact>,
+        prepare: impl FnOnce(Option<authority::VerifiedAuthority>) -> Result<Request, String>
+            + Send
+            + 'static,
     ) -> Self {
         // Keep the admitted pinned route and the authenticated envelope bound
         // even if a future encoder changes its routing decisions.
         let expected_target = target.clone();
         let expected_token = token.clone();
         let expected_excluded = excluded.clone();
-        let make = Box::new(move || {
-            let (actual_target, actual_token, actual_excluded, actual_sub, wire) = match prepare()?
-            {
-                Request::Post {
-                    target,
-                    token,
-                    excluded,
-                    wire,
-                } => (target, token, excluded, false, wire),
-                Request::Subscribe { alias, auth } => (
-                    alias.contact.target.clone(),
-                    gcoms_transport::encode_b64url(&alias.contact.queue_id),
-                    Vec::new(),
-                    true,
-                    auth,
-                ),
-            };
+        let make = Box::new(move |proof| {
+            let (actual_target, actual_token, actual_excluded, actual_sub, wire) =
+                match prepare(proof)? {
+                    Request::Post {
+                        target,
+                        token,
+                        excluded,
+                        wire,
+                    } => (target, token, excluded, false, wire),
+                    Request::Subscribe { alias, auth } => (
+                        alias.contact.target.clone(),
+                        gcoms_transport::encode_b64url(&alias.contact.queue_id),
+                        Vec::new(),
+                        true,
+                        auth,
+                    ),
+                };
             if actual_target != expected_target
                 || actual_token != expected_token
                 || actual_excluded != expected_excluded
@@ -128,6 +143,7 @@ impl PendingRequest {
             token,
             excluded,
             subscription,
+            authority,
             #[cfg(feature = "experimental-gc2")]
             natural: false,
             make,
