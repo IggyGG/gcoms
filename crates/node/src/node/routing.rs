@@ -123,6 +123,7 @@ pub(crate) struct RoutingRuntime {
     pub service: Mutex<Option<Arc<RelayService>>>,
     pub catalog_origins: Mutex<Vec<String>>,
     pub recovering_owner: AtomicBool,
+    pub recovery_status: Mutex<RecoveryStatus>,
     pub published: Arc<AtomicBool>,
     #[cfg(feature = "relay-host")]
     pub automatic_connectivity: bool,
@@ -136,7 +137,32 @@ pub(crate) struct RoutingRuntime {
     entry: Arc<PersistedEntry>,
 }
 
+/// Local bounded diagnostics; never changes the recovery schedule or authority.
+#[derive(Debug, Default, Clone, serde::Serialize)]
+pub struct RecoveryStatus {
+    pub attempts: u64,
+    pub phase: &'static str,
+    pub failure: Option<String>,
+}
+
 impl RoutingRuntime {
+    fn recovery_observed(&self, phase: &'static str, failure: Option<&str>) {
+        let mut status = self
+            .recovery_status
+            .lock()
+            .unwrap_or_else(|p| p.into_inner());
+        status.phase = phase;
+        if failure.is_some()
+            || phase == "inbox recovery completed"
+            || phase == "waiting for next recovery check"
+        {
+            status.failure = failure.map(|message| message.chars().take(240).collect());
+        }
+        if phase == "recovering inbox" {
+            status.attempts = status.attempts.saturating_add(1);
+        }
+    }
+
     async fn provision_inbox(
         &self,
         options: &[u8],
@@ -264,6 +290,7 @@ impl RoutingRuntime {
             service: Mutex::new(None),
             catalog_origins: Mutex::new(config.catalog_origins),
             recovering_owner: AtomicBool::new(true),
+            recovery_status: Mutex::new(RecoveryStatus::default()),
             published: Arc::new(AtomicBool::new(false)),
             #[cfg(feature = "relay-host")]
             automatic_connectivity: config.connectivity.is_some(),
@@ -574,12 +601,16 @@ pub(crate) fn spawn(
             {
                 let mut st = state.lock().unwrap_or_else(|p| p.into_inner());
                 refresh_public_info(&mut st);
-                if persist_current_direct_state(&st).is_err() {
+                if let Err(error) = persist_current_direct_state(&st) {
+                    runtime.recovery_observed("checkpoint failed", Some(&error));
                     return;
                 }
             }
-            if !current_protocol && runtime.entry.checkpoint().is_err() {
-                return;
+            if !current_protocol {
+                if let Err(error) = runtime.entry.checkpoint() {
+                    runtime.recovery_observed("directory checkpoint failed", Some(&error));
+                    return;
+                }
             }
             if runtime.recovering_owner.load(Ordering::Acquire) {
                 let deadline = if runtime.fixture && !current_protocol {
@@ -587,13 +618,19 @@ pub(crate) fn spawn(
                 } else {
                     std::time::Duration::from_secs(90)
                 };
-                if tokio::time::timeout(
+                runtime.recovery_observed("recovering inbox", None);
+                let result = tokio::time::timeout(
                     deadline,
                     recover_owner(&state, &scheduler, &events, &runtime, failures >= 2),
                 )
-                .await
-                .is_ok_and(|r| r.is_ok())
-                {
+                .await;
+                let failure = match &result {
+                    Ok(Ok(())) => None,
+                    Ok(Err(error)) => Some(error.as_str()),
+                    Err(_) => Some("inbox restoration deadline exceeded"),
+                };
+                runtime.recovery_observed("inbox recovery completed", failure);
+                if result.is_ok_and(|r| r.is_ok()) {
                     runtime.recovering_owner.store(false, Ordering::Release);
                     runtime
                         .channel_ready
@@ -611,7 +648,12 @@ pub(crate) fn spawn(
                 }
             }
             if !runtime.recovering_owner.load(Ordering::Acquire) {
-                let _ = recover_channels(&state, &scheduler, &runtime).await;
+                runtime.recovery_observed("recovering channel routes", None);
+                let result = recover_channels(&state, &scheduler, &runtime).await;
+                runtime.recovery_observed(
+                    "waiting for next recovery check",
+                    result.as_ref().err().map(String::as_str),
+                );
             }
             #[cfg(feature = "relay-host")]
             {
@@ -856,14 +898,12 @@ async fn recover_owner(
                 })
         });
     if live {
-        if resume_owner(state, scheduler, events, runtime, &current)
-            .await
-            .is_ok()
-        {
-            return Ok(());
-        }
-        if !allow_replacement {
-            return Err("retained inbox recovery is still pending".into());
+        match resume_owner(state, scheduler, events, runtime, &current).await {
+            Ok(()) => return Ok(()),
+            Err(error) if !allow_replacement => {
+                return Err(format!("retained inbox recovery: {error}"));
+            }
+            Err(_) => {}
         }
     }
     let excluded: Vec<_> = current

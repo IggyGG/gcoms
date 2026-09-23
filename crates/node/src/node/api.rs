@@ -456,7 +456,10 @@ pub struct NodeDiagnostics {
     pub relay_resources: crate::scheduler::ResourceSnapshot,
 }
 
-/// Local readiness and class counts. No private addresses, tokens or identities.
+/// Local readiness, class counts and bounded backend failure context.
+/// Never includes authority objects or application payloads.
+pub use super::routing::RecoveryStatus;
+
 #[derive(Debug, Default, serde::Serialize)]
 pub struct TransportStatus {
     pub protocol: &'static str,
@@ -470,6 +473,8 @@ pub struct TransportStatus {
     pub recovering_inbox: bool,
     pub owned_aliases: usize,
     pub subscribed_owned_aliases: usize,
+    pub owner_transition_failed: bool,
+    pub recovery: RecoveryStatus,
 }
 
 #[derive(Clone)]
@@ -568,6 +573,14 @@ impl NodeHandle {
         };
         let st = state.lock().unwrap_or_else(|p| p.into_inner());
         result.recovering_inbox = super::routing::recovering(&st);
+        result.owner_transition_failed = st.owner_transition_failed;
+        if let Some(runtime) = &st.routing {
+            result.recovery = runtime
+                .recovery_status
+                .lock()
+                .unwrap_or_else(|p| p.into_inner())
+                .clone();
+        }
         result.owned_aliases = st.client_relay.aliases.len();
         result.subscribed_owned_aliases = st
             .client_relay
