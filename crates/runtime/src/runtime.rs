@@ -284,6 +284,29 @@ impl ProtocolRuntime {
             Ok(())
         }
     }
+
+    /// A trusted local host may partition one identity between its ordinary
+    /// application and authenticated components. The returned primary client
+    /// cannot read, acknowledge or impersonate the scoped components.
+    pub async fn central_client(
+        &self,
+        policy: gcoms_sdk::component::RoutingPolicy,
+        primary: Vec<[u8; 16]>,
+    ) -> Result<ProtocolClient, String> {
+        let scoped = policy
+            .components
+            .iter()
+            .copied()
+            .filter(|id| !primary.contains(id))
+            .collect();
+        self.0
+            .node
+            .configure_central_component_routes(policy, primary.clone())
+            .await?;
+        let mut client = self.sdk_client();
+        client.central_primary = Some((primary, scoped));
+        Ok(client)
+    }
     pub async fn recover(&self, urls: &[String]) -> Result<String, String> {
         crate::bootstrap::recover_network(
             &self.0.node,
