@@ -1,0 +1,197 @@
+warning: patch `gcoms v0.1.0 (/run/media/user/SSD-2/git/ghost/gcoms/crates/application)` was not used in the crate graph
+  |
+  = help: perhaps you meant one of the following:
+          	/run/media/user/SSD-2/git/ghost/coms/.worktrees/gdrop-gdrone/gcoms/crates/application
+warning: patch `gcoms-catalog v0.1.0 (/run/media/user/SSD-2/git/ghost/gcoms/crates/catalog)` was not used in the crate graph
+  |
+  = help: perhaps you meant one of the following:
+          	/run/media/user/SSD-2/git/ghost/coms/.worktrees/gdrop-gdrone/gcoms/crates/catalog
+warning: patch `gcoms-conformance v0.1.0 (/run/media/user/SSD-2/git/ghost/gcoms/crates/conformance)` was not used in the crate graph
+  |
+  = help: perhaps you meant one of the following:
+          	/run/media/user/SSD-2/git/ghost/coms/.worktrees/gdrop-gdrone/gcoms/crates/conformance
+warning: patch `gcoms-core v0.1.0 (/run/media/user/SSD-2/git/ghost/gcoms/crates/core)` was not used in the crate graph
+  |
+  = help: perhaps you meant one of the following:
+          	/run/media/user/SSD-2/git/ghost/coms/.worktrees/gdrop-gdrone/gcoms/crates/core
+warning: patch `gcoms-crypto v0.1.0 (/run/media/user/SSD-2/git/ghost/gcoms/crates/crypto)` was not used in the crate graph
+  |
+  = help: perhaps you meant one of the following:
+          	/run/media/user/SSD-2/git/ghost/coms/.worktrees/gdrop-gdrone/gcoms/crates/crypto
+warning: patch `gcoms-file-transfer v0.1.0 (/run/media/user/SSD-2/git/ghost/gcoms/crates/file-transfer)` was not used in the crate graph
+  |
+  = help: perhaps you meant one of the following:
+          	/run/media/user/SSD-2/git/ghost/coms/.worktrees/gdrop-gdrone/gcoms/crates/file-transfer
+warning: patch `gcoms-fuzz v0.1.0 (/run/media/user/SSD-2/git/ghost/gcoms/crates/fuzz)` was not used in the crate graph
+  |
+  = help: perhaps you meant one of the following:
+          	/run/media/user/SSD-2/git/ghost/coms/.worktrees/gdrop-gdrone/gcoms/crates/fuzz
+warning: patch `gcoms-gossip v0.1.0 (/run/media/user/SSD-2/git/ghost/gcoms/crates/gossip)` was not used in the crate graph
+  |
+  = help: perhaps you meant one of the following:
+          	/run/media/user/SSD-2/git/ghost/coms/.worktrees/gdrop-gdrone/gcoms/crates/gossip
+warning: patch `gcoms-mls v0.1.0 (/run/media/user/SSD-2/git/ghost/gcoms/crates/mls)` was not used in the crate graph
+  |
+  = help: perhaps you meant one of the following:
+          	/run/media/user/SSD-2/git/ghost/coms/.worktrees/gdrop-gdrone/gcoms/crates/mls
+warning: patch `gcoms-network v0.1.0 (/run/media/user/SSD-2/git/ghost/gcoms/crates/network)` was not used in the crate graph
+  |
+  = help: perhaps you meant one of the following:
+          	/run/media/user/SSD-2/git/ghost/coms/.worktrees/gdrop-gdrone/gcoms/crates/network
+warning: patch `gcoms-network-client v0.1.0 (/run/media/user/SSD-2/git/ghost/gcoms/crates/network-client)` was not used in the crate graph
+  |
+  = help: perhaps you meant one of the following:
+          	/run/media/user/SSD-2/git/ghost/coms/.worktrees/gdrop-gdrone/gcoms/crates/network-client
+warning: patch `gcoms-node v0.1.0 (/run/media/user/SSD-2/git/ghost/gcoms/crates/node)` was not used in the crate graph
+  |
+  = help: perhaps you meant one of the following:
+          	/run/media/user/SSD-2/git/ghost/coms/.worktrees/gdrop-gdrone/gcoms/crates/node
+warning: patch `gcoms-private-fs v0.1.0 (/run/media/user/SSD-2/git/ghost/gcoms/crates/private-fs)` was not used in the crate graph
+  |
+  = help: perhaps you meant one of the following:
+          	/run/media/user/SSD-2/git/ghost/coms/.worktrees/gdrop-gdrone/gcoms/crates/private-fs
+warning: patch `gcoms-protocol v0.1.0 (/run/media/user/SSD-2/git/ghost/gcoms/crates/protocol)` was not used in the crate graph
+  |
+  = help: perhaps you meant one of the following:
+          	/run/media/user/SSD-2/git/ghost/coms/.worktrees/gdrop-gdrone/gcoms/crates/protocol
+warning: patch `gcoms-routing v0.1.0 (/run/media/user/SSD-2/git/ghost/gcoms/crates/routing)` was not used in the crate graph
+  |
+  = help: perhaps you meant one of the following:
+          	/run/media/user/SSD-2/git/ghost/coms/.worktrees/gdrop-gdrone/gcoms/crates/routing
+warning: patch `gcoms-rpc v0.1.0 (/run/media/user/SSD-2/git/ghost/gcoms/crates/rpc)` was not used in the crate graph
+  |
+  = help: perhaps you meant one of the following:
+          	/run/media/user/SSD-2/git/ghost/coms/.worktrees/gdrop-gdrone/gcoms/crates/rpc
+warning: patch `gcoms-rpc-contract v0.1.0 (/run/media/user/SSD-2/git/ghost/gcoms/crates/rpc-contract)` was not used in the crate graph
+  |
+  = help: perhaps you meant one of the following:
+          	/run/media/user/SSD-2/git/ghost/coms/.worktrees/gdrop-gdrone/gcoms/crates/rpc-contract
+warning: patch `gcoms-rpc-macros v0.1.0 (/run/media/user/SSD-2/git/ghost/gcoms/crates/rpc-macros)` was not used in the crate graph
+  |
+  = help: perhaps you meant one of the following:
+          	/run/media/user/SSD-2/git/ghost/coms/.worktrees/gdrop-gdrone/gcoms/crates/rpc-macros
+warning: patch `gcoms-runtime v0.1.0 (/run/media/user/SSD-2/git/ghost/gcoms/crates/runtime)` was not used in the crate graph
+  |
+  = help: perhaps you meant one of the following:
+          	/run/media/user/SSD-2/git/ghost/coms/.worktrees/gdrop-gdrone/gcoms/crates/runtime
+warning: patch `gcoms-sdk v0.1.0 (/run/media/user/SSD-2/git/ghost/gcoms/crates/sdk)` was not used in the crate graph
+  |
+  = help: perhaps you meant one of the following:
+          	/run/media/user/SSD-2/git/ghost/coms/.worktrees/gdrop-gdrone/gcoms/crates/sdk
+warning: patch `gcoms-sim v0.1.0 (/run/media/user/SSD-2/git/ghost/gcoms/crates/sim)` was not used in the crate graph
+  |
+  = help: perhaps you meant one of the following:
+          	/run/media/user/SSD-2/git/ghost/coms/.worktrees/gdrop-gdrone/gcoms/crates/sim
+warning: patch `gcoms-transport v0.1.0 (/run/media/user/SSD-2/git/ghost/gcoms/crates/transport)` was not used in the crate graph
+  |
+  = help: perhaps you meant one of the following:
+          	/run/media/user/SSD-2/git/ghost/coms/.worktrees/gdrop-gdrone/gcoms/crates/transport
+warning: patch `gc-persona v0.1.0 (/run/media/user/SSD-2/git/ghost/coms/crates/persona)` was not used in the crate graph
+warning: patch `ghost-bootstrap-protocol v0.1.0 (/run/media/user/SSD-2/git/ghost/coms/crates/bootstrap-protocol)` was not used in the crate graph
+warning: patch `ghost-command-envelope v0.1.0 (/run/media/user/SSD-2/git/ghost/coms/crates/command-envelope)` was not used in the crate graph
+warning: patch `ghost-fleet-network v0.1.0 (/run/media/user/SSD-2/git/ghost/coms/crates/fleet-network)` was not used in the crate graph
+warning: patch `ghost-fleet-protocol v0.1.0 (/run/media/user/SSD-2/git/ghost/coms/crates/fleet-protocol)` was not used in the crate graph
+warning: patch `ghost-gc-authority v0.1.0 (/run/media/user/SSD-2/git/ghost/coms/crates/gc-authority)` was not used in the crate graph
+warning: patch `ghost-machine-commands v0.1.0 (/run/media/user/SSD-2/git/ghost/coms/crates/machine-commands)` was not used in the crate graph
+warning: patch `ghost-machine-lease-protocol v0.1.0 (/run/media/user/SSD-2/git/ghost/coms/crates/machine-lease-protocol)` was not used in the crate graph
+warning: patch `ghost-principal-renewal v0.1.0 (/run/media/user/SSD-2/git/ghost/coms/crates/principal-renewal)` was not used in the crate graph
+warning: patch `ghost-recorder-protocol v0.1.0 (/run/media/user/SSD-2/git/ghost/coms/crates/recorder-protocol)` was not used in the crate graph
+warning: patch `ghost-request-protocol v0.1.0 (/run/media/user/SSD-2/git/ghost/coms/crates/request-protocol)` was not used in the crate graph
+warning: patch `machine-agent v0.1.0 (/run/media/user/SSD-2/git/ghost/coms/crates/machine-agent)` was not used in the crate graph
+warning: patch `machine-identity v0.1.0 (/run/media/user/SSD-2/git/ghost/coms/crates/machine-identity)` was not used in the crate graph
+warning: patch `principal-binding v0.1.0 (/run/media/user/SSD-2/git/ghost/coms/crates/principal-binding)` was not used in the crate graph
+help: Check that the patched package version and available features are compatible
+      with the dependency requirements. If the patch has a different version from
+      what is locked in the Cargo.lock file, run `cargo update` to use the new
+      version. This may also occur with an optional dependency that is not enabled.
+   Compiling gcoms-file-transfer v0.1.0 (/run/media/user/SSD-2/git/ghost/coms/.worktrees/gdrop-gdrone/gcoms/crates/file-transfer)
+    Finished `test` profile [unoptimized] target(s) in 1.35s
+     Running unittests src/lib.rs (../build/gcoms/debug/deps/gcoms_file_transfer-b240e31ec373d942)
+     Running tests/swarm.rs (../build/gcoms/debug/deps/swarm-830e2a1056a86a5e)
+
+running 2 tests
+test journal::tests::corrupt_journal_and_path_fields_fail_closed ... ok
+test journal::tests::recomputed_checksum_cannot_forge_authenticated_state ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+
+running 16 tests
+test block_window_reorders_deduplicates_and_retries_only_missing_offsets_after_send_completion ... ok
+test codec_enforces_transport_budget_trailing_and_metadata_bounds ... ok
+test gib_import_resume_export_is_streaming ... ignored, release qualification: writes and verifies a 1 GiB cache
+test import_is_resumable_and_never_reencrypts_changed_bytes ... ok
+test import_restart_export_boundaries_and_ciphertext_at_rest ... ok
+test later_sources_are_discovered_and_bad_sources_are_replaced ... ok
+test pm_scope_does_not_expand_to_channel_members ... ok
+test private_multisource_late_join_after_sender_leaves_and_both_seeders_restart ... ok
+test proof_context_duplicates_and_manifest_conflicts ... ok
+test queued_data_is_denied_after_cancel_and_membership_revocation ... ok
+test queued_payload_copies_are_reserved_before_allocation_and_released_on_drop ... ok
+test quota_does_not_evict_active_and_expiry_releases_complete_files ... ok
+test repeated_import_reuses_verified_scope_and_retains_commit_identity ... ok
+test revoked_downloads_release_slots_and_remain_locally_manageable ... ok
+test source_crash_before_journal_and_receipts_survive_reopen ... ok
+test sparse_resume_and_corruption_repair_preserve_good_pieces ... ok
+
+test result: ok. 15 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 14.42s
+
+     Running tests/swarm_recovery.rs (../build/gcoms/debug/deps/swarm_recovery-856a13f9beca9422)
+
+running 3 tests
+test overnight_restart_waits_for_membership_then_requests_only_missing_pieces ... ok
+test recovery_preserves_user_pauses_cancellation_and_unaccepted_offers ... ok
+test waiting_download_cannot_request_or_accept_data_without_current_scope ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.92s
+
+
+running 32 tests
+test bootstrap::gc2_tests::gc2_https_bootstrap_refuses_legacy_and_preserves_explicit_selection ... ok
+test bootstrap::gc2_tests::production_bootstrap_fresh_reopen_and_recovery ... ignored, requires the disconnected namespace created by scripts/test-bootstrap-namespace.py
+test bootstrap::tests::bootstrap_bounds_a_chunked_body_without_content_length ... ok
+test bootstrap::tests::bootstrap_rejects_unsafe_urls ... ok
+test bootstrap::tests::bootstrap_rejects_wrong_version_and_oversized_responses ... ok
+test bootstrap::tests::bootstrap_tries_endpoints_and_validates_cards ... ok
+test bootstrap::tests::circuit_bootstrap_negotiates_v2_and_never_uses_a_legacy_queue_card ... ok
+test bootstrap::tests::decode_relay_card_accepts_private_and_rejects_public ... ok
+test components::tests::host_services_default_deny_install_once_and_drain_before_shutdown ...      Running unittests src/lib.rs (../build/gcoms/debug/deps/gcoms_runtime-463cb3c87dde685b)
+ok
+test contacts::tests::channel_change_validation_retains_node_text_bounds ... ok
+test contacts::tests::invitation_details_distinguish_absent_current_bootstrap ... ok
+test contacts::tests::invitation_details_preserve_exact_current_service_ids_without_capabilities ... ok
+test dns::tests::literal_addresses_skip_lookup ... ok
+test dns::tests::nameserver_list_ends_with_public_resolvers ... ok
+test dns::tests::query_and_answer_roundtrip ... ok
+test files::tests::incoming_file_completes_while_outbound_receipts_are_stalled ... ok
+test files::tests::locking_during_send_completion_does_not_lose_download_retry ... ok
+test runtime::frwd_policy_tests::empty_cidrs_keep_the_profile_default ... ok
+test runtime::frwd_policy_tests::invalid_cidr_fails_closed ... ok
+test runtime::frwd_policy_tests::invalid_pinned_port_fails_closed ... ok
+test runtime::frwd_policy_tests::pinned_cidr_port_entries_parse ... ok
+test runtime::frwd_policy_tests::valid_cidrs_build_a_policy ... ok
+test runtime::persistence_tests::channel_management_through_arc_runtime_survives_profile_reopen ... ok
+test runtime::persistence_tests::channel_text_cancellation_after_admission_retains_send_without_a_success_receipt ... ok
+test runtime::persistence_tests::channel_text_survives_a_failed_hop_and_sender_reopen ... ok
+test runtime::persistence_tests::channel_text_wrapper_save_failure_stays_an_error_and_reopens_admitted_send ... ok
+test runtime::persistence_tests::event_write_measurement_by_subscriber_count ... ok
+test runtime::persistence_tests::persistence_barrier_precedes_every_observer_and_failed_write_closes_them ... ok
+test runtime::persistence_tests::persistence_failure_cannot_be_lost_behind_a_slow_observer ... ok
+test runtime::persistence_tests::persistence_fanout_reports_lag_without_another_save ... ok
+test runtime::protected_profile_tests::protected_profile_creates_and_reopens_the_carrier_instance ... ok
+test runtime::shutdown_tests::shutdown_cancels_in_flight_save_before_releasing_profile ... ok
+
+test result: ok. 31 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 109.42s
+
+   Doc-tests gcoms_file_transfer
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests gcoms_runtime
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
