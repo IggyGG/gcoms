@@ -33,7 +33,8 @@ pub const VERSION: u16 = 21;
 
 #[cfg(test)]
 mod metadata_compat;
-// IPC21 appends opt-in immutable file metadata; IPC20 adds same-scope file reuse.
+// IPC21 appends opt-in immutable file metadata and authenticated channel reconnect.
+// IPC20 adds same-scope file reuse; existing request layouts are unchanged.
 // new operations/capabilities/events are never admitted under an older version.
 #[cfg(all(any(unix, windows), feature = "ipc"))]
 const MIN_SERVER_VERSION: u16 = 10;
@@ -263,12 +264,17 @@ pub enum Request {
         channel: String,
         change: crate::ChannelChange,
     },
+    ChannelReconnect {
+        channel: String,
+        code: Option<String>,
+    },
 }
 
 impl Request {
     pub fn minimum_version(&self) -> u16 {
         match self {
-            Self::Sharing(crate::sharing::Request::Inspect { .. }) => 21,
+            Self::Sharing(crate::sharing::Request::Inspect { .. })
+            | Self::ChannelReconnect { .. } => 21,
             Self::Sharing(crate::sharing::Request::CommitReusing { .. }) => 20,
             Self::Sharing(_) | Self::NetworkStatus => 18,
             Self::PersistProfile
@@ -293,6 +299,7 @@ impl Request {
     }
     pub fn required_capability(&self) -> Capability {
         match self {
+            Self::ChannelReconnect { .. } => Capability::ChannelMember,
             Self::Sharing(_) => Capability::FileSharing,
             Self::NetworkStatus => Capability::IdentityRead,
             Self::RuntimeStatus | Self::NetworkDnsStatus => Capability::IdentityRead,
@@ -356,6 +363,11 @@ impl Request {
 
     fn validate_application_payload(&self) -> Result<(), SdkError> {
         match self {
+            Self::ChannelReconnect { channel, code }
+                if channel.len() > 256 || code.as_ref().is_some_and(|v| v.len() > 8 * 1024) =>
+            {
+                Err(SdkError::Protocol("channel reconnect exceeds limit".into()))
+            }
             Self::Sharing(request) => request.validate(),
             Self::CatalogHttp(request) => request.validate_size(),
             Self::ConfigureCatalogOrigins { origins }
@@ -477,6 +489,7 @@ impl Zeroize for Request {
             Self::Sharing(crate::sharing::Request::WritePiece { bytes, .. }) => {
                 bytes.as_mut_slice().zeroize()
             }
+            Self::ChannelReconnect { code, .. } => code.zeroize(),
             Self::ImportNetworkInvitation { invitation } => invitation.zeroize(),
             Self::JoinChannelInvitation { link, .. } | Self::InspectChannelInvitation { link } => {
                 link.zeroize()
@@ -1390,6 +1403,24 @@ impl GcClient for IpcClient {
         }
     }
 
+    async fn channel_reconnect(
+        &self,
+        channel: &str,
+        code: Option<&str>,
+    ) -> Result<String, SdkError> {
+        match self
+            .request(Request::ChannelReconnect {
+                channel: channel.into(),
+                code: code.map(str::to_owned),
+            })
+            .await?
+        {
+            Response::Blob(Blob(bytes)) => String::from_utf8(bytes)
+                .map_err(|_| SdkError::Protocol("invalid reconnect response".into())),
+            _ => Err(SdkError::Protocol("reconnect response mismatch".into())),
+        }
+    }
+
     async fn recover_channel_route(
         &self,
         channel: &str,
@@ -2197,6 +2228,10 @@ pub(crate) async fn dispatch<C: GcClient>(
             .admit_channel(&channel, &key_package, &member_name)
             .await
             .map(Response::Blob),
+        Request::ChannelReconnect { channel, code } => client
+            .channel_reconnect(&channel, code.as_deref())
+            .await
+            .map(|code| Response::Blob(Blob(code.into_bytes()))),
         Request::RecoverChannelRoute {
             channel,
             expected_channel_id,
@@ -2522,6 +2557,27 @@ mod tests {
             },
         });
         assert_eq!(decode(&encode(&frame).unwrap()).unwrap(), frame);
+    }
+
+    #[test]
+    fn channel_reconnect_is_member_only_bounded_and_versioned() {
+        let request = Request::ChannelReconnect {
+            channel: "room".into(),
+            code: Some("gchat-reconnect1:test".into()),
+        };
+        assert_eq!(request.minimum_version(), 21);
+        assert_eq!(request.required_capability(), Capability::ChannelMember);
+        let frame = Frame::Request(RequestEnvelope {
+            version: VERSION,
+            request_id: 9,
+            request,
+        });
+        assert_eq!(decode(&encode(&frame).unwrap()).unwrap(), frame);
+        let oversized = Request::ChannelReconnect {
+            channel: "room".into(),
+            code: Some("x".repeat(8193)),
+        };
+        assert!(oversized.validate_application_payload().is_err());
     }
 
     #[test]

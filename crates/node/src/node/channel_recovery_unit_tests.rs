@@ -520,3 +520,77 @@ async fn recovery_expired_local_route_keeps_authenticated_owner_dir_and_exact_ac
         );
     }
 }
+
+fn reconnect_fixture() -> (NodeState, NodeState) {
+    let (mut a, mut b, _) = fixture();
+    a.durable_state_sink = Some(Arc::new(|_| Ok(())));
+    b.durable_state_sink = Some(Arc::new(|_| Ok(())));
+    let seed = a.identity_seed;
+    let cs = a.channels.get_mut("recovery").unwrap();
+    cs.own_route = current_owned(93, &cs.role, &seed, "recovery");
+    cs.directory
+        .insert("owner".into(), cs.own_route.public.clone());
+    (a, b)
+}
+
+#[tokio::test]
+async fn reconnect_code_authenticates_self_route_and_rolls_back_failed_save() {
+    let (mut a, mut b) = reconnect_fixture();
+    let old = b.channels["recovery"].directory["owner"].clone();
+    let code = export_channel_reconnect(&mut a, "recovery").unwrap();
+    assert_eq!(code, export_channel_reconnect(&mut a, "recovery").unwrap());
+    let encoded = code.strip_prefix(RECONNECT_PREFIX).unwrap();
+    let bytes = gcoms_transport::decode_b64url(encoded).unwrap();
+    for index in [0, 39, bytes.len() - 1] {
+        let mut changed = bytes.clone();
+        changed[index] ^= 1;
+        let bad = format!("{RECONNECT_PREFIX}{}", encode_b64url(&changed));
+        assert!(import_channel_reconnect(&mut b, "recovery", &bad).is_err());
+        assert_eq!(b.channels["recovery"].directory["owner"], old);
+    }
+    assert!(import_channel_reconnect(&mut b, "recovery", &"x".repeat(8193)).is_err());
+    b.durable_state_sink = Some(Arc::new(|_| Err("reconnect durable failure".into())));
+    assert!(import_channel_reconnect(&mut b, "recovery", &code).is_err());
+    assert_eq!(b.channels["recovery"].directory["owner"], old);
+    b.durable_state_sink = Some(Arc::new(|_| Ok(())));
+    import_channel_reconnect(&mut b, "recovery", &code).unwrap();
+    assert_eq!(
+        b.channels["recovery"].directory["owner"],
+        a.channels["recovery"].own_route.public
+    );
+    let pending = b.channels["recovery"].pending_control.len();
+    import_channel_reconnect(&mut b, "recovery", &code).unwrap();
+    assert_eq!(b.channels["recovery"].pending_control.len(), pending);
+    b.channels
+        .get_mut("recovery")
+        .unwrap()
+        .own_route
+        .public
+        .data
+        .expiry = now_unix() - 1;
+    assert!(import_channel_reconnect(&mut b, "recovery", &code).is_err());
+}
+
+#[tokio::test]
+async fn reconnect_rejects_other_member_route_text_and_expired_authority() {
+    for mode in 0..3 {
+        let (mut a, mut b) = reconnect_fixture();
+        let cs = a.channels.get_mut("recovery").unwrap();
+        let mut route = cs.own_route.public.clone();
+        if mode == 2 {
+            route.data.expiry = now_unix() - 1;
+        }
+        let payload = match mode {
+            0 => crate::channel::encode_dir("member", &route),
+            1 => b"not a directory announcement".to_vec(),
+            _ => crate::channel::encode_dir("owner", &route),
+        };
+        let mut bytes = cs.id.0.to_vec();
+        bytes.extend_from_slice(&cs.role.epoch().to_be_bytes());
+        bytes.extend_from_slice(&cs.role.send(&payload).unwrap());
+        let code = format!("{RECONNECT_PREFIX}{}", encode_b64url(&bytes));
+        let old = b.channels["recovery"].directory.clone();
+        assert!(import_channel_reconnect(&mut b, "recovery", &code).is_err());
+        assert_eq!(b.channels["recovery"].directory, old);
+    }
+}
