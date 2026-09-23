@@ -748,6 +748,15 @@ pub trait GcClient: Send + Sync {
         member_name: &str,
     ) -> Result<Blob, SdkError>;
 
+    /// A local, out-of-band exchange between existing members; not a new invitation.
+    async fn channel_reconnect(
+        &self,
+        _channel: &str,
+        _code: Option<&str>,
+    ) -> Result<String, SdkError> {
+        Err(SdkError::PermissionDenied)
+    }
+
     /// Existing owner admission only. Returns the exact locally durable Dir ID
     /// after a bounded hop receipt; never asserts membership/application delivery.
     async fn recover_channel_route(
@@ -1072,6 +1081,14 @@ impl<T: GcClient + ?Sized> GcClient for std::sync::Arc<T> {
             .admit_channel(channel, key_package, member_name)
             .await
     }
+    async fn channel_reconnect(
+        &self,
+        channel: &str,
+        code: Option<&str>,
+    ) -> Result<String, SdkError> {
+        (**self).channel_reconnect(channel, code).await
+    }
+
     async fn recover_channel_route(
         &self,
         _channel: &str,

@@ -1497,6 +1497,16 @@ impl GcClient for ProtocolClient {
         Ok(welcome)
     }
 
+    async fn channel_reconnect(
+        &self,
+        channel: &str,
+        code: Option<&str>,
+    ) -> Result<String, SdkError> {
+        // The native transition commits before returning. Do not turn a later
+        // redundant wrapper save into ambiguity about this exact import.
+        self.embedded.channel_reconnect(channel, code).await
+    }
+
     async fn recover_channel_route(
         &self,
         channel: &str,
