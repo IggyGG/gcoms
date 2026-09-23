@@ -50,6 +50,15 @@ async fn wait_ack(node: &NodeHandle, wanted: [u8; 16]) {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn cold_both_expired_channel_queues_recover_over_bound_base_contact() {
+    cold_recovery(false).await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn cold_both_expired_channel_queues_recover_with_member_reconnect_code() {
+    cold_recovery(true).await;
+}
+
+async fn cold_recovery(reconnect: bool) {
     let name = "retained-cold-channel";
     let a_seed = [0xb1; 32];
     let b_seed = [0xb2; 32];
@@ -178,6 +187,13 @@ async fn cold_both_expired_channel_queues_recover_over_bound_base_contact() {
                 }
             }).await;
         assert!(blocked.is_err(), "observe the full blocked interval");
+        if reconnect {
+            // Either existing member can supply its fresh encrypted self-route.
+            let code = member.export_channel_reconnect(name).await?;
+            assert_eq!(code, member.export_channel_reconnect(name).await?);
+            owner.import_channel_reconnect(name, &code).await?;
+            owner.import_channel_reconnect(name, &code).await?;
+        } else {
         let announced = owner
             .recover_channel_route(name, id, epoch, &welcome, &peer)
             .await?;
@@ -188,6 +204,7 @@ async fn cold_both_expired_channel_queues_recover_over_bound_base_contact() {
                 .await?,
             "exact retry must reuse MLS ciphertext"
         );
+        }
         let recovered = wait_text(&member, b"pending across route repair").await;
         assert_eq!(
             before_wire, recovered,

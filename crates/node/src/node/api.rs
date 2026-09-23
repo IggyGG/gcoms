@@ -163,6 +163,15 @@ pub enum Cmd {
         member_name: String,
         done: tokio::sync::oneshot::Sender<Result<Vec<u8>, String>>,
     },
+    ExportChannelReconnect {
+        channel: String,
+        done: tokio::sync::oneshot::Sender<Result<String, String>>,
+    },
+    ImportChannelReconnect {
+        channel: String,
+        code: String,
+        done: tokio::sync::oneshot::Sender<Result<(), String>>,
+    },
     RecoverChannelRoute {
         channel: String,
         expected_id: crate::channel::ChannelId,
@@ -1254,6 +1263,36 @@ impl NodeHandle {
             .await
             .map_err(|e| e.to_string())?;
         done_rx.await.map_err(|e| e.to_string())?
+    }
+
+    /// Export a durable MLS self announcement for another existing member.
+    pub async fn export_channel_reconnect(&self, channel: &str) -> Result<String, String> {
+        let (done, receive) = tokio::sync::oneshot::channel();
+        self.cmd_tx
+            .send(Cmd::ExportChannelReconnect {
+                channel: channel.into(),
+                done,
+            })
+            .await
+            .map_err(|e| e.to_string())?;
+        receive.await.map_err(|e| e.to_string())?
+    }
+
+    /// Accept only a current member's authenticated self announcement.
+    pub async fn import_channel_reconnect(&self, channel: &str, code: &str) -> Result<(), String> {
+        if code.len() > 8 * 1024 {
+            return Err("channel reconnect code exceeds limit".into());
+        }
+        let (done, receive) = tokio::sync::oneshot::channel();
+        self.cmd_tx
+            .send(Cmd::ImportChannelReconnect {
+                channel: channel.into(),
+                code: code.into(),
+                done,
+            })
+            .await
+            .map_err(|e| e.to_string())?;
+        receive.await.map_err(|e| e.to_string())?
     }
 
     /// Recover only an existing admission's transport. A hop receipt is not a member ACK.

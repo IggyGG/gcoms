@@ -256,6 +256,159 @@ pub(crate) async fn recover_channel_route(
     Ok(id)
 }
 
+// An out-of-band reconnect carries only an existing member's MLS-encrypted
+// self-Dir. It grants no membership and changes no relay authority or deadline.
+const RECONNECT_PREFIX: &str = "gchat-reconnect1:";
+const MAX_RECONNECT_CODE: usize = 8 * 1024;
+
+pub(crate) fn export_channel_reconnect(
+    st: &mut NodeState,
+    channel: &str,
+) -> Result<String, String> {
+    if st.durable_state_sink.is_none() || st.owner_transition_failed {
+        return Err("channel reconnect requires healthy persistent state".into());
+    }
+    let cs = st.channels.get(channel).ok_or("no channel")?;
+    let id = cs.id;
+    let epoch = cs.role.epoch();
+    let recipient = cs
+        .directory
+        .values()
+        .find(|route| {
+            route.pseudonym != cs.role.own_pseudonym()
+                && cs
+                    .role
+                    .roster_members()
+                    .iter()
+                    .any(|m| m.pseudonym == route.pseudonym)
+        })
+        .cloned()
+        .ok_or("channel has no other retained member")?;
+    let (wire, _) = stage_own_route_announcement(st, channel, &recipient)?;
+    let mut bytes = Vec::with_capacity(40 + wire.len());
+    bytes.extend_from_slice(&id.0);
+    bytes.extend_from_slice(&epoch.to_be_bytes());
+    bytes.extend_from_slice(&wire);
+    let code = format!("{RECONNECT_PREFIX}{}", encode_b64url(&bytes));
+    if code.len() > MAX_RECONNECT_CODE {
+        return Err("channel reconnect code exceeds limit".into());
+    }
+    Ok(code)
+}
+
+pub(crate) fn import_channel_reconnect(
+    st: &mut NodeState,
+    channel: &str,
+    code: &str,
+) -> Result<(), String> {
+    if st.durable_state_sink.is_none() || st.owner_transition_failed {
+        return Err("channel reconnect requires healthy persistent state".into());
+    }
+    if code.len() > MAX_RECONNECT_CODE {
+        return Err("channel reconnect code exceeds limit".into());
+    }
+    let encoded = code
+        .strip_prefix(RECONNECT_PREFIX)
+        .ok_or("invalid channel reconnect code")?;
+    let bytes =
+        gcoms_transport::decode_b64url(encoded).ok_or("invalid channel reconnect encoding")?;
+    if bytes.len() <= 40 || encode_b64url(&bytes) != encoded {
+        return Err("invalid channel reconnect encoding".into());
+    }
+    let epoch = u64::from_be_bytes(bytes[32..40].try_into().expect("checked header"));
+    let wire = &bytes[40..];
+    let id = crate::channel::msg_id(channel, wire);
+    let key = channel_archive_key(&st.identity_seed);
+    let seed = channel_seed(st, channel);
+    let cs = st
+        .channels
+        .get(channel)
+        .ok_or("join the channel before reconnecting it")?;
+    if bytes[..32] != cs.id.0 || epoch != cs.role.epoch() {
+        return Err("reconnect code belongs to another channel or membership epoch".into());
+    }
+    // A durable authenticated reply is also the receipt for an exact import.
+    // Do not advance the MLS receive ratchet twice on a UI retry.
+    if let Some((route, _)) = cs.commit_ack_cache.get(&id) {
+        // A receipt does not renew its authority. A repeat after another expiry
+        // must ask for a fresh exchange instead of reporting reconnection.
+        let now = now_unix();
+        if route.data.expiry <= now
+            || route.control.expiry <= now
+            || cs.own_route.public.data.expiry <= now
+            || cs.own_route.public.control.expiry <= now
+        {
+            return Err("reconnect addresses have expired; create a fresh code".into());
+        }
+        return Ok(());
+    }
+    let checkpoint = cs.role.checkpoint(&key).map_err(|e| e.to_string())?;
+    let mut candidate = cs
+        .role
+        .restore_checkpoint(&key, &checkpoint, || IdentityKeypair::from_seed(seed))
+        .map_err(|e| e.to_string())?;
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| candidate.receive(wire)))
+        .map_err(|_| "invalid reconnect MLS message")?
+        .map_err(|_| "reconnect authentication failed")?;
+    let gcoms_mls::ReceiveOutcome::Application {
+        sender_index,
+        payload,
+    } = result
+    else {
+        return Err("reconnect must contain a self directory announcement".into());
+    };
+    let Some(crate::channel::ChannelInner::Dir(name, route)) =
+        crate::channel::decode_inner(&payload)
+    else {
+        return Err("reconnect must contain a self directory announcement".into());
+    };
+    let sender = candidate
+        .roster()
+        .into_iter()
+        .find(|(index, _)| *index == sender_index)
+        .map(|(_, name)| name)
+        .ok_or("reconnect sender is not a member")?;
+    let route = *route;
+    let now = now_unix();
+    if name != sender
+        || candidate.pseudonym_for_name(&sender) != Some(route.pseudonym)
+        || route.pseudonym == candidate.own_pseudonym()
+        || !route.is_valid()
+        || route.data.expiry <= now
+        || route.control.expiry <= now
+        || cs.directory.get(&name).is_some_and(|old| {
+            old.pseudonym != route.pseudonym
+                || route.data.expiry < old.data.expiry
+                || route.control.expiry < old.control.expiry
+        })
+    {
+        return Err(
+            "reconnect self announcement is expired or does not match current membership".into(),
+        );
+    }
+    // Require a live return route so one exchange repairs both directions.
+    if cs.own_route.public.data.expiry <= now || cs.own_route.public.control.expiry <= now {
+        return Err("local channel route is still reconnecting; try again when ready".into());
+    }
+    st.channels.get_mut(channel).expect("held state").role = candidate;
+    if !commit_authenticated_directory(
+        st,
+        channel,
+        id,
+        &[(name, route.clone())],
+        &checkpoint,
+        Some(&route),
+    ) {
+        return Err("channel reconnect could not be saved; retry the same code".into());
+    }
+    st.channels
+        .get_mut(channel)
+        .expect("held state")
+        .overlay
+        .first_sighting(id);
+    Ok(())
+}
+
 #[cfg(all(test, feature = "client-persist"))]
 #[path = "channel_recovery_unit_tests.rs"]
 mod tests;

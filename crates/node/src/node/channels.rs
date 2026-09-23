@@ -1025,7 +1025,7 @@ fn commit_channel_metadata(
 
 /// Commit authenticated route descriptors together with the MLS receive state.
 /// No queued wire, recipient set or ACK is recreated when a member changes relay.
-fn commit_authenticated_directory(
+pub(crate) fn commit_authenticated_directory(
     st: &mut NodeState,
     chan: &str,
     id: [u8; 16],

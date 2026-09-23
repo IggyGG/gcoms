@@ -578,6 +578,27 @@ impl GcClient for EmbeddedClient {
             .map_err(SdkError::Runtime)
     }
 
+    async fn channel_reconnect(
+        &self,
+        channel: &str,
+        code: Option<&str>,
+    ) -> Result<String, SdkError> {
+        match code {
+            Some(code) => {
+                self.node
+                    .import_channel_reconnect(channel, code)
+                    .await
+                    .map_err(SdkError::Runtime)?;
+                Ok(String::new())
+            }
+            None => self
+                .node
+                .export_channel_reconnect(channel)
+                .await
+                .map_err(SdkError::Runtime),
+        }
+    }
+
     async fn recover_channel_route(
         &self,
         channel: &str,

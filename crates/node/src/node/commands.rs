@@ -623,6 +623,26 @@ pub(crate) fn spawn_command_loop(ctx: CommandLoopContext) -> tokio::task::JoinHa
                     };
                     let _ = done.send(result);
                 }
+                Cmd::ExportChannelReconnect { channel, done } => {
+                    let result = export_channel_reconnect(
+                        &mut state.lock().unwrap_or_else(|p| p.into_inner()),
+                        &channel,
+                    );
+                    let _ = done.send(result);
+                }
+                Cmd::ImportChannelReconnect {
+                    channel,
+                    code,
+                    done,
+                } => {
+                    let code = zeroize::Zeroizing::new(code);
+                    let result = import_channel_reconnect(
+                        &mut state.lock().unwrap_or_else(|p| p.into_inner()),
+                        &channel,
+                        &code,
+                    );
+                    let _ = done.send(result);
+                }
                 Cmd::RecoverChannelRoute {
                     channel,
                     expected_id,
