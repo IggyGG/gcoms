@@ -29,8 +29,11 @@ use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 #[cfg(all(any(unix, windows), feature = "ipc"))]
 use tokio::sync::{broadcast, mpsc, oneshot, watch, Mutex};
 
-pub const VERSION: u16 = 20;
-// IPC20 preserves existing layouts and appends opt-in same-scope file reuse.
+pub const VERSION: u16 = 21;
+
+#[cfg(test)]
+mod metadata_compat;
+// IPC21 appends opt-in immutable file metadata; IPC20 adds same-scope file reuse.
 // new operations/capabilities/events are never admitted under an older version.
 #[cfg(all(any(unix, windows), feature = "ipc"))]
 const MIN_SERVER_VERSION: u16 = 10;
@@ -265,6 +268,7 @@ pub enum Request {
 impl Request {
     pub fn minimum_version(&self) -> u16 {
         match self {
+            Self::Sharing(crate::sharing::Request::Inspect { .. }) => 21,
             Self::Sharing(crate::sharing::Request::CommitReusing { .. }) => 20,
             Self::Sharing(_) | Self::NetworkStatus => 18,
             Self::PersistProfile
@@ -2522,7 +2526,7 @@ mod tests {
 
     #[test]
     fn requests_declare_required_capability() {
-        assert_eq!(VERSION, 20);
+        assert_eq!(VERSION, 21);
         for request in [
             Request::SubmitDurableOpaque {
                 recipient: ContactCard(Vec::new()),
