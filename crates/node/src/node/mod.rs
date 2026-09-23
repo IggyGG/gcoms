@@ -1714,8 +1714,24 @@ fn checkpoint_direct_state(
             Some((peer, sealed)) => persist::encode_state_with_session(st, peer, sealed),
             None => persist::encode_state(st),
         }
-        .map_err(DirectPersistenceError::Storage)?;
-        sink(bytes).map_err(DirectPersistenceError::Storage)?;
+        .map_err(|error| {
+            if !st.owner_transition_failed {
+                eprintln!(
+                    "gcoms: protocol checkpoint encoding failed: {}",
+                    error.chars().take(240).collect::<String>()
+                );
+            }
+            DirectPersistenceError::Storage(error)
+        })?;
+        sink(bytes).map_err(|error| {
+            if !st.owner_transition_failed {
+                eprintln!(
+                    "gcoms: protocol checkpoint storage failed: {}",
+                    error.chars().take(240).collect::<String>()
+                );
+            }
+            DirectPersistenceError::Storage(error)
+        })?;
     }
     #[cfg(not(feature = "client-persist"))]
     let _ = (st, session_override);

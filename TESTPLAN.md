@@ -1,3 +1,13 @@
+# First checkpoint failure diagnostics
+
+Keep the accepted-owner-renewal and failed-promotion rollback fixtures, including
+failure after a sink sees the candidate bytes. New local logs distinguish encoding
+from sink failures and identify the first branch that pauses the owner. No new
+network request, retry, authority change or persistence success follows from
+logging. Check the affected node failure cases and strict node Clippy on frozen
+cluster inputs. Physical Android reproduction must retain the original generic
+failure and the first underlying error separately.
+
 # Inbox installation with a stalled peer
 
 `installed_inbox_does_not_wait_for_peer_update_delivery` accepts both queue

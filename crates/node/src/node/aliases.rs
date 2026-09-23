@@ -570,7 +570,11 @@ pub(super) fn owner_transition(
     let result = changed.and_then(|()| persist_current_direct_state(st));
     #[cfg(feature = "client-persist")]
     let result = result.and_then(|()| super::persist::owner_aliases::validate_current_live(st));
-    if result.is_err() {
+    if let Err(error) = &result {
+        eprintln!(
+            "gcoms: owner lifecycle checkpoint failed: {}",
+            error.chars().take(240).collect::<String>()
+        );
         (
             st.client_relay,
             st.info,

@@ -1,3 +1,15 @@
+# Android first checkpoint failure, 2026-09-24
+
+Physical Android 1015 reached the sticky `owner lifecycle persistence outcome is
+unconfirmed` state during the recovery follow-up. Later periodic-save messages
+hide the originating error. Capture the bounded first encoding/storage/lifecycle
+error and static caller location in local native logs. This diagnostic change
+preserves the exact failure classification, rollback, durable barriers and
+scheduler shutdown; it does not repair or waive the underlying failure. The
+last confirmed profile is reopened by restarting the app without clearing data.
+Cluster workload reproduction and focused checkpoint-failure checks are ongoing.
+`codematch=unreachable` in this environment.
+
 # Inbox installation recovery, 2026-09-23
 
 Fleet-files owns the Android recovery follow-up. A targeted authenticated fixture

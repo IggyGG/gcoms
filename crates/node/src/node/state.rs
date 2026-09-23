@@ -321,7 +321,19 @@ impl NodeState {
     /// A failed lifecycle checkpoint has an unknown durable outcome. Refuse new
     /// application jobs until the last confirmed archive is reopened. The relay
     /// transit scheduler is independent and holds no local application state.
+    #[track_caller]
     pub(crate) fn pause_failed_owner_transition(&mut self) {
+        if !self.owner_transition_failed {
+            // Local source location only: no identity, capability or message.
+            // Preserve the first failing branch before later saves report only
+            // the sticky unconfirmed-outcome refusal.
+            let caller = std::panic::Location::caller();
+            eprintln!(
+                "gcoms: owner checkpoint paused at {}:{}",
+                caller.file(),
+                caller.line()
+            );
+        }
         self.owner_transition_failed = true;
         self.scheduler.shutdown();
     }
