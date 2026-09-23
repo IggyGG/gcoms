@@ -3,9 +3,13 @@
 Fleet-files owns the Android recovery follow-up. A targeted authenticated fixture
 reproduced installation waiting on peer notification after both queues and the
 replacement checkpoint committed. The candidate leaves exact peer updates to the
-existing bounded durable retry owner. Cluster validation and physical Android
-verification are in progress; no phone-delivery or full-rollout pass is claimed.
-Evidence: GChat `target/channel-reconnect-20260923/inbox-install-01`.
+existing bounded durable retry owner. Exact candidate `15be948` passed 333 node tests (two existing exclusions) and
+strict all-target/all-feature node Clippy in the cluster. The same final test
+fails against the original implementation after its peer request reaches the
+held TLS response. All 691 source bindings stayed unchanged. Physical Android
+verification remains open; Android 1015 is building on `15be948` / `48ccdfb`.
+No phone-delivery or full-rollout pass is claimed.
+[Receipt](docs/evidence/inbox-install-20260923/summary.json).
 
 # Windows concurrent membership fixture
 
