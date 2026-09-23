@@ -151,3 +151,8 @@ The optional native transport gate now checks five independently pinned TLS/HTTP
 Accepted downloads retain verified pieces and resume automatically after restart or temporary conversation membership loss. No requests or incoming pieces are accepted without current authorization. Explicit pauses/cancellations remain stopped. Reopening repairs the older automatic membership-pause marker; other errors keep their existing recovery behavior. Transport completions continue to arm retries while files are disabled or roster refresh fails.
 
 Validation: 51 component tests passed, two existing qualification tests ignored, including an overnight restart at 80% and a send completion delivered while locked. Evidence: `test-evidence/file-resume-20260923/verification.json`. Android live recovery remains pending; these gates do not establish fleet end-to-end acceptance. No new dependencies.
+
+
+## Retained inbox authority (2026-09-23)
+
+Run `cargo test -p gcoms-node --all-features --lib lease_authority_tests -- --test-threads=1`. Cover real TLS/H2 admission for owner-renewed leases, concurrent-send coalescing, stale capability/epoch rejection, expired leases, unexpected responses, queue-path binding, GC/2 without legacy fallback, and entry plus three middles plus inbox. Also check the client-only feature graph and scheduler Clippy gates. Live acceptance requires the Android partial download to continue from its retained verified pieces through final integrity verification; offline tests alone do not establish it.
