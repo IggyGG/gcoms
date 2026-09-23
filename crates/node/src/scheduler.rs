@@ -14,6 +14,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tokio::sync::{oneshot, watch, Notify};
 
+mod authority;
 mod budget;
 #[cfg(feature = "experimental-gc2")]
 mod gc2;
@@ -574,6 +575,7 @@ impl FairQueue {
 
 struct Lane {
     queue: Mutex<FairQueue>,
+    authority: authority::Memo,
     /// Authority for cover on this lane. `None` for administrative lanes and
     /// for lanes opened by a forwarded job (an intermediary never emits
     /// cover on behalf of a remote submitter).
@@ -1014,6 +1016,7 @@ impl RelayScheduler {
         };
         let lane = Arc::new(Lane {
             queue: Mutex::new(FairQueue::new(capacity)),
+            authority: authority::Memo::default(),
             auth: Mutex::new(auth),
             notify: Notify::new(),
             pinned: std::sync::atomic::AtomicBool::new(false),
@@ -1476,13 +1479,20 @@ fn spawn_lane(
             let cover = done.is_none();
             cover_running |= cover;
             let inner = inner.clone();
+            let sending_lane = lane.clone();
             running.spawn(async move {
                 let _reservation = reservation;
                 let started = inner.diagnostics.start();
                 let result = match request {
                     Ok(request) => {
-                        send_request(&inner.client, request, inner.connect_retry_base, traffic)
-                            .await
+                        send_request(
+                            &inner.client,
+                            request,
+                            &sending_lane.authority,
+                            inner.connect_retry_base,
+                            traffic,
+                        )
+                        .await
                     }
                     Err(error) => JobResult::Failed(error),
                 };
@@ -1550,12 +1560,24 @@ fn prepare_pending(
 async fn send_request(
     client: &Tp1Client,
     request: PendingRequest,
+    authority: &authority::Memo,
     retry_base: Duration,
     traffic: TrafficClass,
 ) -> JobResult {
     #[cfg(feature = "experimental-gc2")]
+    let natural = request.natural;
+    #[cfg(not(feature = "experimental-gc2"))]
+    let natural = false;
+    let proof = match authority
+        .resolve(client, request.authority.as_ref(), natural)
+        .await
+    {
+        Ok(proof) => proof,
+        Err(error) => return JobResult::Failed(error),
+    };
+    #[cfg(feature = "experimental-gc2")]
     if request.natural {
-        return gc2::send(client, request, retry_base, traffic).await;
+        return gc2::send(client, request, proof, retry_base, traffic).await;
     }
     let PendingRequest {
         target,
@@ -1566,6 +1588,7 @@ async fn send_request(
         ..
     } = request;
     let mut make = Some(make);
+    let mut proof = proof;
     let mut wire: Option<bytes::Bytes> = None;
     let mut attempt = 0;
     loop {
@@ -1575,7 +1598,7 @@ async fn send_request(
             if let Some(wire) = &wire {
                 return Ok(wire.clone());
             }
-            let bytes = make.take().ok_or("request preparation already consumed")?()?;
+            let bytes = make.take().ok_or("request preparation already consumed")?(proof.take())?;
             wire = Some(bytes.clone());
             Ok(bytes)
         };

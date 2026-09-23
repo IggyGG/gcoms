@@ -44,7 +44,7 @@ async fn scenario() {
     let metrics = scratch.path().join("metrics.jsonl");
     gcoms_node::metrics::init(&metrics).unwrap();
     let mut relays = Vec::new();
-    for seed in 71..75 {
+    for seed in 71..77 {
         relays.push(
             start_with_routing(config(seed), RoutingConfig::default())
                 .await
@@ -66,8 +66,8 @@ async fn scenario() {
         gc2_bootstrap: Some(BootstrapBundle::decode(&encoded).unwrap()),
         ..Default::default()
     };
-    let sender = start_with_routing(config(75), routing()).await.unwrap();
-    let receiver = start_with_routing(config(76), routing()).await.unwrap();
+    let sender = start_with_routing(config(77), routing()).await.unwrap();
+    let receiver = start_with_routing(config(78), routing()).await.unwrap();
     sender.enable_diagnostics();
     receiver.enable_diagnostics();
     tokio::join!(ready(&sender), ready(&receiver));

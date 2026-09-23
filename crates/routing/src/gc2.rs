@@ -14,6 +14,7 @@ pub mod discovery;
 pub mod entry;
 pub mod mux;
 pub mod owner;
+pub mod path;
 pub mod transit;
 
 const MAGIC: &[u8; 4] = b"GCT2";

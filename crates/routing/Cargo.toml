@@ -32,7 +32,7 @@ url = "2"
 
 [dev-dependencies]
 gcoms-protocol = { version = "0.1.0", path = "../protocol", features = ["experimental-gc2"] }
-tokio = { version = "1", features = ["test-util"] }
+tokio = { version = "1", features = ["test-util", "rt-multi-thread"] }
 gcoms-core = { version = "0.1.0", path = "../core" }
 rcgen = { version = "0.13", default-features = false, features = ["aws_lc_rs", "pem"] }
 

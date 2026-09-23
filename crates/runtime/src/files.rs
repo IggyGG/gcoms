@@ -198,6 +198,16 @@ impl FileService {
         let mut committed = None;
         match request {
             api::Request::List | api::Request::SetEnabled(_) => {}
+            api::Request::Inspect { id } => {
+                b.authorize(id)?;
+                let state = b.engine.cache.get(id).map_err(error)?;
+                return Ok(api::Reply::Metadata(api::Metadata {
+                    id,
+                    name: state.manifest.name.clone(),
+                    sha256: state.manifest.sha256,
+                    size_bytes: state.manifest.size,
+                }));
+            }
             api::Request::Prepare {
                 id,
                 scope,
@@ -311,6 +321,16 @@ impl FileService {
                 };
                 let Some(service) = weak.upgrade() else { break };
                 let operation = tokio::select! { _ = stopped.changed() => break, guard = service.operations.lock() => guard };
+                // Transport completion owns the retry timer even when the UI is
+                // locked or roster refresh fails. Dropping this token leaves a
+                // Want waiting forever for a send which already finished.
+                if let Some((token, outcome)) = completion {
+                    if let Ok(mut inner) = service.inner.lock() {
+                        if let Some(b) = inner.as_mut() {
+                            b.engine.send_finished(token, outcome, now());
+                        }
+                    }
+                }
                 if !service.enabled.load(Ordering::Acquire) {
                     continue;
                 }
@@ -319,9 +339,7 @@ impl FileService {
                 }
                 let worker = service.clone();
                 let capacity = 4usize.saturating_sub(sends.len());
-                let work =
-                    tokio::task::spawn_blocking(move || worker.tick(event, completion, capacity))
-                        .await;
+                let work = tokio::task::spawn_blocking(move || worker.tick(event, capacity)).await;
                 drop(operation);
                 if let Ok(Ok(actions)) = work {
                     for (channel, action) in actions {
@@ -373,14 +391,10 @@ impl FileService {
     fn tick(
         &self,
         event: Option<ClientEvent>,
-        completion: Option<(Option<SendToken>, SendOutcome)>,
         capacity: usize,
     ) -> Result<Vec<(String, Action)>, SdkError> {
         let mut inner = self.inner.lock().map_err(error)?;
         let b = inner.as_mut().ok_or(SdkError::ConnectionClosed)?;
-        if let Some((token, outcome)) = completion {
-            b.engine.send_finished(token, outcome, now());
-        }
         let mut actions = Vec::new();
         if let Some(ClientEvent::ChannelDirectMessage {
             channel,

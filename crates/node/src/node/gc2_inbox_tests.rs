@@ -126,6 +126,19 @@ async fn fresh_carrier_node_provisions_its_inbox_over_the_protected_route() {
     })
     .await;
 
+    let mut extra_relays = Vec::new();
+    let mut extra_introductions = Vec::new();
+    for (ip, secret) in [("127.0.0.89", 11), ("127.0.0.90", 12)] {
+        let (introduction, relay) = start_relay(ip, [secret; 32], |_| ServicePolicy {
+            carrier: CarrierConfig::fixture(),
+            target_allowed: Arc::new(|addr| addr.ip().is_loopback()),
+            ..ServicePolicy::default()
+        })
+        .await;
+        extra_introductions.push(introduction.encode().unwrap().to_vec());
+        extra_relays.push(relay);
+    }
+
     // Fresh carrier node: directory seeded only with the relay's private
     // introduction; nothing else is shared.
     let cfg = NodeConfig {
@@ -137,11 +150,14 @@ async fn fresh_carrier_node_provisions_its_inbox_over_the_protected_route() {
             None,
             3,
             5,
-            vec![
+            [
                 introduction.encode().unwrap().to_vec(),
                 middle.encode().unwrap().to_vec(),
                 third.encode().unwrap().to_vec(),
-            ],
+            ]
+            .into_iter()
+            .chain(extra_introductions)
+            .collect(),
         ),
         inbox_relay: None,
         alias_lifecycle: Default::default(),
@@ -415,7 +431,7 @@ async fn exhausted_retained_inbox_recovery_does_not_starve_replacement() {
         alias_lifecycle: Default::default(),
     };
     let mut relays = Vec::new();
-    for seed in 131..134 {
+    for seed in 131..136 {
         relays.push(
             start_with_routing(config(seed), RoutingConfig::default())
                 .await
@@ -440,7 +456,7 @@ async fn exhausted_retained_inbox_recovery_does_not_starve_replacement() {
         true,
     )
     .unwrap();
-    let prepared = super::super::gc2_bootstrap::prepare(&config(134), Some(&runtime))
+    let prepared = super::super::gc2_bootstrap::prepare(&config(140), Some(&runtime))
         .unwrap()
         .unwrap();
     let ready = prepared.ready.clone();
@@ -461,7 +477,7 @@ async fn exhausted_retained_inbox_recovery_does_not_starve_replacement() {
     // administrative-request stall.
     let identity = TlsIdentity::generate().unwrap();
     let terminal = Tp1Server::bind_with_identity(
-        "127.0.0.135:0".parse().unwrap(),
+        "127.0.0.141:0".parse().unwrap(),
         TokenRegistry::new(),
         Arc::new(|_, _| Ok(None)),
         Arc::new(|_| None),

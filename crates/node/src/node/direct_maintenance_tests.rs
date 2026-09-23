@@ -41,7 +41,7 @@ fn component_record(kind: &str, body: &[u8]) -> Vec<u8> {
 }
 
 #[test]
-fn durable_file_records_are_bulk_while_chat_control_and_volatile_stay_interactive() {
+fn file_records_are_bulk_while_chat_control_and_acknowledgements_stay_interactive() {
     assert_eq!(
         direct_traffic_class(&component_record(
             gcoms_core::FILE_RECORD_CONTENT_TYPE,
@@ -63,6 +63,17 @@ fn durable_file_records_are_bulk_while_chat_control_and_volatile_stay_interactiv
         )),
         gcoms_core::TrafficClass::Interactive
     );
+    for (kind, expected) in [
+        (gcoms_core::VOLATILE_FILE_CONTENT_TYPE, gcoms_core::TrafficClass::Bulk),
+        (gcoms_core::VOLATILE_FILE_ACK_CONTENT_TYPE, gcoms_core::TrafficClass::Interactive),
+        (gcoms_core::VOLATILE_CONTACT_CONTENT_TYPE, gcoms_core::TrafficClass::Interactive),
+        (gcoms_core::bootstrap::CONTENT_TYPE, gcoms_core::TrafficClass::Interactive),
+    ] {
+        let record = component_record(kind, b"record");
+        let Some(crate::proto::DirectRecord::Data { body, .. }) = crate::proto::decode_direct_record(&record) else {panic!("fixture")};
+        let volatile = crate::proto::encode_volatile_application([6; 16], 1, &body);
+        assert_eq!(direct_traffic_class(&volatile), expected, "{kind}");
+    }
 }
 
 #[cfg(feature = "experimental-gc2")]

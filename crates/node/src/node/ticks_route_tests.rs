@@ -63,7 +63,18 @@ impl Fixture {
         let (second_entry, held_entry) = watch::channel(None);
         let second_entry_closed = Arc::new(AtomicUsize::new(0));
         let mut introductions = Vec::new();
-        for (index, ip) in ["127.0.0.102", "127.0.0.103"].into_iter().enumerate() {
+        // Two entry guards plus three distinct middle candidates are required
+        // by the production five-relay path. Keep the second guard held below.
+        for (index, ip) in [
+            "127.0.0.102",
+            "127.0.0.103",
+            "127.0.0.105",
+            "127.0.0.106",
+            "127.0.0.107",
+        ]
+        .into_iter()
+        .enumerate()
+        {
             let identity = TlsIdentity::generate().unwrap();
             let server = bind(ip, &identity).await;
             let relay = RelayService::new(
@@ -134,7 +145,13 @@ impl Fixture {
             )
             .unwrap();
         directory
-            .set_guards(introductions.iter().map(|intro| intro.service_id).collect())
+            .set_guards(
+                introductions
+                    .iter()
+                    .take(2)
+                    .map(|intro| intro.service_id)
+                    .collect(),
+            )
             .unwrap();
         let (owner, ready) = EntryOwner::new(
             directory,

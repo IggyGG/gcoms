@@ -133,6 +133,6 @@ fn delayed_preparation_cannot_extend_expired_authority() {
     )
     .unwrap();
     let cover = PendingRequest::cover(LaneAuth::Push { contact }, 1, [2; 32]);
-    assert!((data.make)().unwrap_err().contains("expired"));
-    assert!((cover.make)().unwrap_err().contains("expired"));
+    assert!((data.make)(None).unwrap_err().contains("expired"));
+    assert!((cover.make)(None).unwrap_err().contains("expired"));
 }

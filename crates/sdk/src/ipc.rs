@@ -30,7 +30,11 @@ use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use tokio::sync::{broadcast, mpsc, oneshot, watch, Mutex};
 
 pub const VERSION: u16 = 21;
-// IPC21 appends authenticated existing-member channel reconnect; old layouts are unchanged.
+
+#[cfg(test)]
+mod metadata_compat;
+// IPC21 appends opt-in immutable file metadata and authenticated channel reconnect.
+// IPC20 adds same-scope file reuse; existing request layouts are unchanged.
 // new operations/capabilities/events are never admitted under an older version.
 #[cfg(all(any(unix, windows), feature = "ipc"))]
 const MIN_SERVER_VERSION: u16 = 10;
@@ -269,7 +273,8 @@ pub enum Request {
 impl Request {
     pub fn minimum_version(&self) -> u16 {
         match self {
-            Self::ChannelReconnect { .. } => 21,
+            Self::Sharing(crate::sharing::Request::Inspect { .. })
+            | Self::ChannelReconnect { .. } => 21,
             Self::Sharing(crate::sharing::Request::CommitReusing { .. }) => 20,
             Self::Sharing(_) | Self::NetworkStatus => 18,
             Self::PersistProfile

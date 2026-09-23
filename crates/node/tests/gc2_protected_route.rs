@@ -1,6 +1,6 @@
 #![cfg(all(feature = "experimental-gc2", feature = "client-persist"))]
-//! Live protected-route fixture: two real relay services (entry and middle)
-//! and two carrier nodes whose directories are seeded with both introductions.
+//! Live protected-route fixture: four real relay services and two carrier
+//! endpoints. Every application leg uses an entry, three middles and its target.
 //! The durable application must cross the protected circuit; the relay
 //! dispatch counters prove the circuit was dialed.
 use gcoms_node::{
@@ -26,6 +26,8 @@ struct Relays {
     middle_connections: Arc<AtomicUsize>,
     _entry_server: tokio::task::JoinHandle<()>,
     _middle_server: tokio::task::JoinHandle<()>,
+    additional_middles: [Arc<RelayService>; 2],
+    _additional_servers: [tokio::task::JoinHandle<()>; 2],
 }
 
 async fn start_relay(
@@ -79,7 +81,11 @@ async fn start_relays() -> Relays {
 async fn start_relays_after(delay: Duration) -> Relays {
     let (entry, entry_connections, entry_server) = start_relay("127.0.0.86", delay).await;
     let (middle, middle_connections, middle_server) = start_relay("127.0.0.87", delay).await;
+    let (second, _, second_server) = start_relay("127.0.0.88", delay).await;
+    let (third, _, third_server) = start_relay("127.0.0.89", delay).await;
     Relays {
+        additional_middles: [second, third],
+        _additional_servers: [second_server, third_server],
         entry,
         middle,
         entry_connections,
@@ -136,20 +142,11 @@ async fn cold_entry_readiness_retries_without_the_minute_timer() {
 
 fn seeds(relays: &Relays) -> Vec<Vec<u8>> {
     let now = now_unix();
-    vec![
-        relays
-            .entry
-            .gc2_introduction(now)
-            .encode()
-            .unwrap()
-            .to_vec(),
-        relays
-            .middle
-            .gc2_introduction(now)
-            .encode()
-            .unwrap()
-            .to_vec(),
-    ]
+    [&relays.entry, &relays.middle]
+        .into_iter()
+        .chain(relays.additional_middles.iter())
+        .map(|relay| relay.gc2_introduction(now).encode().unwrap().to_vec())
+        .collect()
 }
 
 async fn endpoint(seed: u8, profile: NodeProfile) -> NodeHandle {
