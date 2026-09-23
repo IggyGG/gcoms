@@ -144,3 +144,10 @@ Offline five-relay gates: 54 routing unit, 6 discovery, 10 carrier, 11 persisten
 ## Minimal native carrier interop — 2026-09-23
 
 The optional native transport gate now checks five independently pinned TLS/HTTP2 layers and a 128 KiB response. Run `DS_MINIMAL_TLS_PROBE=<native Dropship qualification binary> cargo test -p gcoms-transport --test minimal_tls -- --include-ignored --test-threads=1` under the workstation runner. Six tests passed on Linux x64 against Dropship 9b486cd carrier sources; size/fixture evidence is in that repository at test-evidence/native-carrier-20260923. This verifies transport primitives, not five-relay route selection or fleet deployment.
+
+
+## Transfer recovery — 2026-09-23
+
+Accepted downloads retain verified pieces and resume automatically after restart or temporary conversation membership loss. No requests or incoming pieces are accepted without current authorization. Explicit pauses/cancellations remain stopped. Reopening repairs the older automatic membership-pause marker; other errors keep their existing recovery behavior. Transport completions continue to arm retries while files are disabled or roster refresh fails.
+
+Validation: 51 component tests passed, two existing qualification tests ignored, including an overnight restart at 80% and a send completion delivered while locked. Evidence: `test-evidence/file-resume-20260923/verification.json`. Android live recovery remains pending; these gates do not establish fleet end-to-end acceptance. No new dependencies.

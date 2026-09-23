@@ -258,20 +258,29 @@ impl Engine {
             .values()
             .filter(|state| state.duplicate_of.is_none())
             .map(|state| {
+                let authorized = self.own_scope(&state.manifest.scope);
+                let mut state = state.clone();
+                if state.status == Status::Downloading && !authorized {
+                    state.error = Some(
+                        "Waiting for conversation membership; download will resume automatically"
+                            .into(),
+                    );
+                }
                 let sources = self
                     .sources
                     .get(&state.manifest.id)
                     .map_or(0, BTreeSet::len);
                 View {
-                    state: state.clone(),
                     sources,
                     verified_sources: self
                         .verified_sources
                         .get(&state.manifest.id)
                         .map_or(0, BTreeSet::len),
                     waiting_for_peers: state.status == Status::Downloading
-                        && !self.pulls.keys().any(|(id, _)| id == &state.manifest.id),
+                        && (!authorized
+                            || !self.pulls.keys().any(|(id, _)| id == &state.manifest.id)),
                     delivered: state.completed_by.len(),
+                    state,
                 }
             })
             .collect()
@@ -340,7 +349,9 @@ impl Engine {
                 request,
             } => {
                 self.cache.get(*id).is_ok_and(|s| {
-                    s.status == Status::Downloading && self.permits(action.peer, &s.manifest.scope)
+                    s.status == Status::Downloading
+                        && self.own_scope(&s.manifest.scope)
+                        && self.permits(action.peer, &s.manifest.scope)
                 }) && self.pulls.get(&(*id, *piece)).is_some_and(|p| {
                     p.peer == action.peer
                         && p.request == *request
@@ -349,7 +360,9 @@ impl Engine {
                 })
             }
             Message::Inventory { id, .. } => self.cache.get(*id).is_ok_and(|s| {
-                s.status == Status::Downloading && self.permits(action.peer, &s.manifest.scope)
+                s.status == Status::Downloading
+                    && self.own_scope(&s.manifest.scope)
+                    && self.permits(action.peer, &s.manifest.scope)
             }),
             Message::Data { id, .. } | Message::Have { id, .. } => {
                 self.cache.get(*id).is_ok_and(|s| {
@@ -557,7 +570,9 @@ impl Engine {
                 bytes,
             } => {
                 let state = self.cache.get(id)?;
-                if !self.permits(peer, &state.manifest.scope) {
+                if !self.own_scope(&state.manifest.scope)
+                    || !self.permits(peer, &state.manifest.scope)
+                {
                     return Err(Error::Unauthorized);
                 }
                 let length = state.manifest.cipher_len(piece)?;
@@ -664,30 +679,32 @@ impl Engine {
         self.cache.expire(now)?;
         self.verified_sources
             .retain(|id, _| self.cache.entries().contains_key(id));
-        let revoked: Vec<_> = self
+        // Membership can be restored after the cache is opened, or temporarily
+        // unavailable during reconnect. Keep the accepted download intent; only
+        // an explicit pause should require the user to resume it. Authorization
+        // still gates every request and incoming piece.
+        let waiting: BTreeSet<_> = self
             .cache
             .entries()
             .iter()
             .filter(|(_, s)| s.status == Status::Downloading && !self.own_scope(&s.manifest.scope))
             .map(|(id, _)| *id)
             .collect();
-        for id in revoked {
-            self.cache.failure(
-                id,
-                "Conversation membership unavailable; transfer paused".into(),
-            )?;
-        }
         self.sources
             .retain(|id, _| self.cache.entries().contains_key(id));
         self.pulls.retain(|(id, _), _| {
-            self.cache
-                .get(*id)
-                .is_ok_and(|s| s.status == Status::Downloading)
+            !waiting.contains(id)
+                && self
+                    .cache
+                    .get(*id)
+                    .is_ok_and(|s| s.status == Status::Downloading)
         });
         self.inventories.retain(|(id, _), _| {
-            self.cache
-                .get(*id)
-                .is_ok_and(|s| s.status == Status::Downloading)
+            !waiting.contains(id)
+                && self
+                    .cache
+                    .get(*id)
+                    .is_ok_and(|s| s.status == Status::Downloading)
         });
         let mut out = Vec::new();
         for (channel, (own, members)) in &self.members {
@@ -719,7 +736,7 @@ impl Engine {
                 .iter()
                 .filter_map(|entry| self.sources.get(entry.0).map(|s| (entry, s)))
             {
-                if state.status == Status::Downloading {
+                if state.status == Status::Downloading && !waiting.contains(id) {
                     // Rotate candidate discovery so unavailable early advertisers
                     // cannot prevent a later healthy cache from being selected.
                     let peers: Vec<_> = sources
@@ -802,7 +819,7 @@ impl Engine {
             .cache
             .entries()
             .iter()
-            .filter(|(_, s)| s.status == Status::Downloading)
+            .filter(|(id, s)| s.status == Status::Downloading && !waiting.contains(*id))
             .take(ACTIVE_DOWNLOADS)
         {
             while self.pulls.keys().filter(|(share, _)| share == id).count() < PIPELINE {

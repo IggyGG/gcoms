@@ -41,6 +41,7 @@ pub enum Status {
     Failed,
     Cancelled,
 }
+const LEGACY_MEMBERSHIP_PAUSE: &str = "Conversation membership unavailable; transfer paused";
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct State {
     pub manifest: Manifest,
@@ -205,6 +206,15 @@ impl Cache {
                     std::fs::remove_file(artifact.path())?;
                 }
             }
+            // Older engines persisted temporary roster unavailability as a user
+            // pause. Recover only that specific automatic pause; all other pauses
+            // and failures retain their existing meaning.
+            let membership_wait = state.status == Status::Paused
+                && state.error.as_deref() == Some(LEGACY_MEMBERSHIP_PAUSE);
+            if membership_wait {
+                state.status = Status::Downloading;
+                state.error = None;
+            }
             // A single linear recovery scan. Never trust a journal bit without its bytes.
             let mut repaired = false;
             for i in 0..state.have.len() {
@@ -233,6 +243,8 @@ impl Cache {
                 state.completed = None;
                 state.error =
                     Some("Retained pieces failed verification; resume to repair them".into());
+            }
+            if repaired || membership_wait {
                 cache.save(&state)?;
             }
             cache.entries.insert(id, state);
@@ -395,8 +407,12 @@ impl Cache {
     }
     pub fn pause(&mut self, id: ShareId) -> Result<()> {
         let mut state = self.get(id)?.clone();
-        if state.status == Status::Downloading {
+        if state.status == Status::Downloading
+            || (state.status == Status::Paused
+                && state.error.as_deref() == Some(LEGACY_MEMBERSHIP_PAUSE))
+        {
             state.status = Status::Paused;
+            state.error = None;
             self.replace(state)?;
         }
         Ok(())
