@@ -1,3 +1,14 @@
+# Inbox installation with a stalled peer
+
+`installed_inbox_does_not_wait_for_peer_update_delivery` accepts both queue
+creations over pinned TLS, checks the replacement and encrypted peer updates in
+the committed snapshot, then holds a peer-update response open. Installation must
+complete independently. The ordinary maintenance owner must retry the retained
+wire when due; cancellation must retain it and never emit application delivery.
+Run the node library and strict node all-target/all-feature Clippy in the cluster.
+Keep the original failing implementation as the negative control. Physical
+Android recovery, bidirectional ACKs, file resume and notifications remain separate.
+
 # Concurrent manual admissions and delayed Welcome
 
 Keep the eight-task fixture's channel/direct load, <500ms current-info bound and

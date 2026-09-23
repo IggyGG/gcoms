@@ -1,3 +1,12 @@
+# Inbox installation recovery, 2026-09-23
+
+Fleet-files owns the Android recovery follow-up. A targeted authenticated fixture
+reproduced installation waiting on peer notification after both queues and the
+replacement checkpoint committed. The candidate leaves exact peer updates to the
+existing bounded durable retry owner. Cluster validation and physical Android
+verification are in progress; no phone-delivery or full-rollout pass is claimed.
+Evidence: GChat `target/channel-reconnect-20260923/inbox-install-01`.
+
 # Windows concurrent membership fixture
 
 Windows17 again passed GChat native CI, then failed the GComs command-loop load

@@ -5773,6 +5773,196 @@ pub(in crate::node) mod tests {
     }
 
     #[tokio::test]
+    async fn installed_inbox_does_not_wait_for_peer_update_delivery() {
+        use std::time::Duration;
+        use tokio::time::timeout;
+        let identity = TlsIdentity::generate().unwrap();
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let target = RelayTarget {
+            address: listener.local_addr().unwrap(),
+            relay_service_id: identity.service_id(),
+        };
+        let acceptor = tokio_rustls::TlsAcceptor::from(Arc::new(identity.server_config().unwrap()));
+        let (observed, mut requests) = tokio::sync::mpsc::channel(16);
+        let server = tokio::spawn(async move {
+            let mut connections = tokio::task::JoinSet::new();
+            loop {
+                let (tcp, _) = listener.accept().await.unwrap();
+                let acceptor = acceptor.clone();
+                let observed = observed.clone();
+                connections.spawn(async move {
+                    let tls = acceptor.accept(tcp).await.unwrap();
+                    let mut h2 = h2::server::handshake(tls).await.unwrap();
+                    let mut jobs = tokio::task::JoinSet::new();
+                    while let Some(Ok((request, mut reply))) = h2.accept().await {
+                        let observed = observed.clone();
+                        jobs.spawn(async move {
+                            let mut body = request.into_body();
+                            let mut wire = Vec::new();
+                            while let Some(Ok(bytes)) = body.data().await {
+                                body.flow_control().release_capacity(bytes.len()).unwrap();
+                                wire.extend_from_slice(&bytes);
+                            }
+                            let cell = gcoms_core::decode(&wire).unwrap();
+                            let mut response =
+                                reply.send_response(http::Response::new(()), false).unwrap();
+                            observed.send(cell.cell_type().unwrap()).await.unwrap();
+                            if cell.cell_type() == Some(CellType::RelaySub) {
+                                response
+                                    .send_data(
+                                        bytes::Bytes::from(
+                                            gcoms_transport::HopReply::Accepted
+                                                .cell()
+                                                .encode_wire()
+                                                .unwrap(),
+                                        ),
+                                        true,
+                                    )
+                                    .unwrap();
+                            } else {
+                                // Keep a live authenticated response outstanding. An
+                                // unrelated peer's progress cannot gate installation.
+                                let _held = response;
+                                std::future::pending::<()>().await;
+                            }
+                        });
+                    }
+                });
+            }
+        });
+        let (mut node, _, _) = direct_fixture();
+        for peer in node.peer_routes.values_mut() {
+            for alias in &mut peer.aliases {
+                alias.expiry = now_unix() + 3600;
+            }
+        }
+        node.scheduler.shutdown();
+        let saved = Arc::new(Mutex::new(Vec::new()));
+        let sink = saved.clone();
+        node.durable_state_sink = Some(Arc::new(move |bytes| {
+            *sink.lock().unwrap() = bytes;
+            Ok(())
+        }));
+        let scheduler = RelayScheduler::with_profile(
+            Arc::new(Tp1Client::new().unwrap()),
+            SchedulerProfile::compressed_production(93),
+        );
+        node.scheduler = scheduler.clone();
+        node.frwd_target_policy = FrwdTargetPolicy::new(true);
+        let mut provision = owner_relay();
+        for (index, alias) in provision.aliases.iter_mut().enumerate() {
+            let mut contact = contact(100 + 20 * index as u8);
+            contact.expiry = now_unix() + 3600;
+            contact.target = target.clone();
+            *alias = valid_alias(contact, 100 + 20 * index as u8);
+        }
+        let mut card = peer(40);
+        card.aliases = provision
+            .aliases
+            .iter()
+            .map(|a| a.contact.clone())
+            .collect();
+        card.provisioning = Some(provision.clone());
+        let state = Arc::new(Mutex::new(node));
+        let (events, mut event_rx) = broadcast::channel(8);
+        let mut installation = tokio::spawn({
+            let state = state.clone();
+            let scheduler = scheduler.clone();
+            let events = events.clone();
+            async move {
+                super::super::aliases::install_inbox_relay(&state, &scheduler, &events, &card).await
+            }
+        });
+        for _ in 0..2 {
+            assert_eq!(
+                timeout(Duration::from_secs(5), requests.recv())
+                    .await
+                    .unwrap(),
+                Some(CellType::RelaySub)
+            );
+        }
+        tokio::select! {
+            biased;
+            event = timeout(Duration::from_secs(5), event_rx.recv()) => assert!(matches!(event.unwrap().unwrap(), Ev::IdentityUpdated { .. })),
+            result = &mut installation => panic!("installation ended before identity event: {result:?}"),
+        }
+        let completed = timeout(Duration::from_secs(2), &mut installation).await;
+        let archive = {
+            let st = state.lock().unwrap();
+            assert_eq!(st.client_relay, provision);
+            assert!(!st.pending_1to1.is_empty());
+            assert!(st
+                .pending_1to1
+                .values()
+                .all(|pending| !pending.application_event));
+            encode_state(&st).unwrap()
+        };
+        let restored = decode_v2(&saved.lock().unwrap(), &TEST_SEED).unwrap();
+        let in_memory = decode_v2(&archive, &TEST_SEED).unwrap();
+        assert_eq!(
+            restored.pending_direct.len(),
+            in_memory.pending_direct.len()
+        );
+        assert!(
+            !restored.pending_direct.is_empty(),
+            "peer updates must remain durable"
+        );
+        if matches!(&completed, Ok(Ok(Ok(())))) {
+            let retained: Vec<_> = state
+                .lock()
+                .unwrap()
+                .pending_1to1
+                .iter()
+                .map(|(id, pending)| {
+                    (
+                        *id,
+                        pending.delivery.cells.clone(),
+                        pending.application_event,
+                    )
+                })
+                .collect();
+            // Make the existing retry due; do not alter production retry clocks.
+            for pending in state.lock().unwrap().pending_1to1.values_mut() {
+                pending.next_attempt = std::time::Instant::now();
+            }
+            let mut maintenance = super::super::direct::DirectMaintenance::default();
+            maintenance.tick(&state, &scheduler, &events);
+            tokio::select! {
+                observed = timeout(Duration::from_secs(5), requests.recv()) => assert_eq!(observed.unwrap(), Some(CellType::Frwd)),
+                _ = maintenance.complete_next(&state) => panic!("stalled peer unexpectedly completed"),
+            }
+            drop(maintenance);
+            let st = state.lock().unwrap();
+            for (id, cells, application_event) in retained {
+                assert_eq!(st.pending_1to1[&id].delivery.cells, cells);
+                assert_eq!(st.pending_1to1[&id].application_event, application_event);
+            }
+            assert!(
+                event_rx.try_recv().is_err(),
+                "hop work cannot claim application delivery"
+            );
+        }
+        if completed.is_err() {
+            assert_eq!(
+                timeout(Duration::from_secs(2), requests.recv())
+                    .await
+                    .unwrap(),
+                Some(CellType::Frwd),
+                "the stalled peer request must actually reach the authenticated fixture"
+            );
+            installation.abort();
+            let _ = installation.await;
+        }
+        server.abort();
+        let _ = server.await;
+        scheduler.shutdown();
+        assert!(
+            matches!(completed, Ok(Ok(Ok(())))),
+            "durably installed inbox waited for peer notification"
+        );
+    }
+
+    #[tokio::test]
     async fn inbox_replacement_capacity_refusal_keeps_the_owner_available() {
         let mut node = state();
         node.routing = Some(

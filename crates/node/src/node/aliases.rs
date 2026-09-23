@@ -1121,7 +1121,7 @@ pub(crate) async fn install_inbox_relay(
         return Err("relay requires normal and control aliases".into());
     }
     let provision = consume_provision(scheduler, card).await?;
-    let (info, generation, deliveries, policy, natural) = {
+    let (info, generation) = {
         let mut st = state.lock().unwrap_or_else(|p| p.into_inner());
         // Provisioning awaits the network; recheck capacity before mutating the
         // owner record. A routine capacity refusal must not pause the owner.
@@ -1168,25 +1168,13 @@ pub(crate) async fn install_inbox_relay(
             st.unannounced_contact_deadlines = Some((timing.receive_until, timing.abandon_at));
             Ok(())
         })?;
-        let deliveries = queue_contact_updates(&mut st)?;
-        (
-            st.info.clone(),
-            st.local_contact_generation,
-            deliveries,
-            st.frwd_target_policy.clone(),
-            natural_client(&st),
-        )
+        // Installation is complete after the owned queues and their exact
+        // peer updates are durable. The bounded direct maintenance owner will
+        // send those updates on their retained retry schedule. Waiting for a
+        // peer here can exhaust recovery after the replacement already committed.
+        queue_contact_updates(&mut st)?;
+        (st.info.clone(), st.local_contact_generation)
     };
     let _ = events.send(Ev::IdentityUpdated { info, generation });
-    for delivery in deliveries {
-        let _ = deliver_direct(
-            scheduler,
-            &delivery,
-            &policy,
-            gcoms_core::TrafficClass::Interactive,
-            natural.as_ref(),
-        )
-        .await;
-    }
     Ok(())
 }

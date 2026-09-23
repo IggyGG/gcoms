@@ -116,3 +116,8 @@ a purpose-specific host cache key. TLS fixture dependencies (`rcgen`, `rustls`,
 All three Rust variants are tested natively on Linux x86_64, macOS arm64/x86_64
 and Windows x64 MSVC.
 Measured sizes and exact validation inputs are in [the Rust integration report](docs/RUST_INTEGRATIONS.md).
+
+Inbox replacement completes after both new queues and peer updates are committed.
+Peer notifications remain in the encrypted outbox and use the bounded direct
+maintenance retry schedule; an unavailable peer cannot hold inbox installation
+open. Relay acceptance still does not imply peer delivery.
