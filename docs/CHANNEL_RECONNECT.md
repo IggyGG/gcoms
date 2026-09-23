@@ -21,3 +21,17 @@ without changing previous request ordinals. Earlier hosts do not offer it.
 This explicit exchange is a recovery fallback, not automatic rendezvous after
 all peer contacts expire. Use another communication path to exchange it, like
 an invitation. No global identity directory or relay-authority exception is added.
+
+## Stalled retained inboxes
+
+Background recovery first tries the retained inbox authority. After two failed
+rounds, the next round attempts authenticated replacement without first repeating
+the stalled restore. Otherwise a hung restore can consume every recovery deadline
+and prevent failover forever. The existing round deadline, retry cadence, queued
+work bounds, durable owner transition and old-alias cleanup deadlines are unchanged.
+No application request dials an entry or extends an inbox lease.
+
+The regression uses real protected loopback routes, a terminal that completes pinned TLS
+but stalls its administrative response, and healthy provisioning/queue services. It checks replacement
+progress and preservation of the old aliases after the retained rounds are
+exhausted. This does not establish automatic rendezvous for expired peer addresses.

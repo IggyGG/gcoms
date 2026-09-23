@@ -626,10 +626,17 @@ pub(crate) fn spawn(
                 .await;
                 let failure = match &result {
                     Ok(Ok(())) => None,
-                    Ok(Err(error)) => Some(error.as_str()),
-                    Err(_) => Some("inbox restoration deadline exceeded"),
+                    Ok(Err(error)) => Some(error.clone()),
+                    Err(_) => Some(format!(
+                        "inbox recovery deadline exceeded during {}",
+                        runtime
+                            .recovery_status
+                            .lock()
+                            .unwrap_or_else(|p| p.into_inner())
+                            .phase
+                    )),
                 };
-                runtime.recovery_observed("inbox recovery completed", failure);
+                runtime.recovery_observed("inbox recovery completed", failure.as_deref());
                 if result.is_ok_and(|r| r.is_ok()) {
                     runtime.recovering_owner.store(false, Ordering::Release);
                     runtime
@@ -897,15 +904,15 @@ async fn recover_owner(
                     r.conflicts(a.contact.target.address, a.contact.target.relay_service_id)
                 })
         });
-    if live {
-        match resume_owner(state, scheduler, events, runtime, &current).await {
-            Ok(()) => return Ok(()),
-            Err(error) if !allow_replacement => {
-                return Err(format!("retained inbox recovery: {error}"));
-            }
-            Err(_) => {}
-        }
+    // The caller grants replacement only after the retained recovery rounds
+    // failed. Repeating a hung retained attempt here can consume every outer
+    // deadline forever, preventing the already-authorized failover entirely.
+    if live && !allow_replacement {
+        return resume_owner(state, scheduler, events, runtime, &current)
+            .await
+            .map_err(|error| format!("retained inbox recovery: {error}"));
     }
+    runtime.recovery_observed("provisioning replacement inbox", None);
     let excluded: Vec<_> = current
         .aliases
         .first()
@@ -920,6 +927,7 @@ async fn recover_owner(
     let (card, introduction) =
         NodeInfo::decode_private_any(&encoded).ok_or("invalid private inbox response")?;
     install_advertisement(state, introduction.as_deref());
+    runtime.recovery_observed("installing replacement inbox", None);
     install_inbox_relay(state, scheduler, events, &card).await
 }
 
@@ -983,10 +991,12 @@ async fn resume_owner(
         aliases: current.aliases.iter().map(|a| a.contact.clone()).collect(),
         provisioning: Some(current.clone()),
     };
+    runtime.recovery_observed("replaying retained inbox admission", None);
     let initial = consume_provision(scheduler, &card).await;
     let mut authority = current.clone();
     let options = gc2_provision_options(state);
     if initial.is_err() {
+        runtime.recovery_observed("refreshing retained inbox grant", None);
         let encoded = runtime
             .provision_inbox(&options, &[], Some(&target))
             .await?;
@@ -1008,6 +1018,7 @@ async fn resume_owner(
                 .clone();
             (record, clock)
         };
+        runtime.recovery_observed("restoring retained inbox queues", None);
         let restored = record
             .restore_for_constructor(scheduler, &authority, &mut clock)
             .await?;
