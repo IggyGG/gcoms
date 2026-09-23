@@ -692,7 +692,10 @@ fn revoked_downloads_release_slots_and_remain_locally_manageable() {
     }
     e.set_members(CH, [1; 32], []);
     assert!(e.tick(2).unwrap().is_empty());
-    assert!(e.views().iter().all(|v| v.state.status == Status::Paused));
+    assert!(e
+        .views()
+        .iter()
+        .all(|v| v.state.status == Status::Downloading && v.waiting_for_peers));
     e.cancel([1; 16]).unwrap();
     let next = [8; 32];
     e.set_members(next, [1; 32], [[1; 32], [2; 32]]);
