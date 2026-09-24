@@ -49,10 +49,39 @@ class ControllerTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "still running"):
             self.worker.start_client(0)
         self.assertEqual(endpoint.read_text(), "preserve")
+
         self.worker.children.clear()
         with self.assertRaisesRegex(RuntimeError, "unexpected file"):
             self.worker.start_client(0)
         self.assertEqual(endpoint.read_text(), "preserve")
+
+    def test_archive_fault_restores_owned_file_if_send_fails(self):
+        self.worker.spec['fixture_host']={'path':'/bound/turnover_daemon'}
+        (self.root/'c1').mkdir()
+        archive=self.root/'c1/archive'
+        archive.write_bytes(b'encrypted retained archive')
+        with mock.patch.object(self.worker,'request',return_value={'snapshot':{'instance':{'id':'same'}}}), \
+                mock.patch.object(self.worker,'submit',side_effect=RuntimeError('send failed')):
+            with self.assertRaisesRegex(RuntimeError,'send failed'):
+                self.worker.archive_failure('channel')
+        self.assertEqual(archive.read_bytes(),b'encrypted retained archive')
+        self.assertFalse((self.root/'c1/archive.before-failure').exists())
+
+    def test_signed_fixture_host_reopen_keeps_network_and_profile_without_reprovisioning(self):
+        self.worker.spec['host_netns']='net:[host]'
+        self.worker.spec['fixture_host']={'path':'/bound/turnover_daemon'}
+        self.worker.result['boundary']={'observer_netns':'net:[observer]','fixture_netns':'net:[fixture]'}
+        with mock.patch.object(self.worker,'spawn') as spawn:
+            self.worker.start_client(0)
+        command=spawn.call_args_list[0].args[1]
+        environment=spawn.call_args_list[0].kwargs['env']
+        self.assertEqual(command[:2],['/bound/turnover_daemon','serve'])
+        self.assertIn(self.root/'network.json',command)
+        self.assertNotIn('--create',command)
+        self.assertNotIn('--inbox-card',command)
+        self.assertNotIn('GC_ROUTING_BOOTSTRAP',environment)
+        self.assertEqual(environment['GCHAT_FIXTURE_NETNS'],'net:[observer]')
+        self.assertEqual(environment['GCHAT_FIXTURE_HOST_NETNS'],'net:[host]')
 
     def test_received_reply_cannot_substitute_for_sender_delivery_receipt(self):
         self.worker.rpc_deadline = None
@@ -113,13 +142,12 @@ class ControllerTests(unittest.TestCase):
                     return {"conversation": "fixture"}
                 if text.startswith("/invite"):
                     return {"output": {"link": "fixture", "localOnly": False}}
-                if text.startswith("/join"):
-                    # The real remote join took ~37 seconds. The inherited
-                    # default is 30 seconds unless a phase deadline is supplied.
-                    remaining = self.rpc_deadline - turnover.time.monotonic() if self.rpc_deadline else 30
-                    if remaining < 40:
-                        raise TimeoutError("controller abandoned join before setup deadline")
                 return {}
+
+            def join_invitation(self, *args):
+                remaining = self.rpc_deadline - turnover.time.monotonic() if self.rpc_deadline else 30
+                if remaining < 40:
+                    raise TimeoutError("controller abandoned join before setup deadline")
 
             def chat(self, *args, **kwargs):
                 raise SetupComplete
@@ -130,6 +158,59 @@ class ControllerTests(unittest.TestCase):
         with mock.patch.object(turnover.subprocess, "Popen"):
             with self.assertRaises(SetupComplete):
                 worker.exercise()
+
+    def test_combined_invitation_uses_typed_join_and_exact_inspected_network(self):
+        code = 'private-fixture-' + 'x' * 16000
+        preview = {'response': {'kind':'preview', 'preview': {
+            'newNetwork':False, 'network':{'id':'fixture-network'}}}}
+        result = {'response': {'kind':'result', 'network':'fixture-network',
+                              'response':{'kind':'applied','conversation':'channel'}}}
+        with mock.patch.object(self.worker, 'request', side_effect=[preview,result]) as request:
+            self.assertEqual(self.worker.join_invitation(1,code,'receiver')['conversation'],'channel')
+        self.assertEqual(request.call_args_list[0].kwargs['request'], {'kind':'inspect','code':code})
+        join=request.call_args_list[1].kwargs['request']
+        self.assertEqual(join['accepted_network'],'fixture-network')
+        self.assertEqual(join['code'],code)
+        self.assertEqual(join['nickname'],'receiver')
+        self.assertTrue(join['operation_id'])
+        self.assertNotIn(code,(self.root/'events.jsonl').read_text())
+
+    def test_fixture_never_silently_accepts_another_network(self):
+        preview={'response':{'kind':'preview','preview':{'newNetwork':True,'network':{'id':'other'}}}}
+        with mock.patch.object(self.worker,'request',return_value=preview) as request:
+            with self.assertRaisesRegex(RuntimeError,'existing network'):
+                self.worker.join_invitation(1,'fixture','receiver')
+        self.assertEqual(request.call_count,1)
+
+    def test_file_recovery_requires_retained_verified_bytes_before_export(self):
+        self.worker.spec['config']['file_bytes']=123000000
+        transfer={'id':'file','name':'fixture.bin','size':123000000,'sha256':'bound-hash'}
+        before={'state':'downloading','verified_bytes':'13000000'}
+        after={'state':'downloading','verified_bytes':'12999999'}
+        with mock.patch.object(self.worker,'start_file',return_value=transfer), \
+                mock.patch.object(self.worker,'file_info',side_effect=[before,after]), \
+                mock.patch.object(self.worker,'reopen') as reopen, \
+                mock.patch.object(self.worker,'finish_file') as finish:
+            with self.assertRaisesRegex(RuntimeError,'verified pieces regressed'):
+                self.worker.file_recovery('channel')
+        reopen.assert_called_once_with(1,abrupt=True)
+        finish.assert_not_called()
+
+    def test_file_recovery_binds_final_and_reopened_export_to_original_hash(self):
+        self.worker.spec['config']['file_bytes']=123000000
+        transfer={'id':'file','name':'fixture.bin','size':123000000,'sha256':'bound-hash'}
+        info={'state':'downloading','verified_bytes':'13000000'}
+        with mock.patch.object(self.worker,'start_file',return_value=transfer), \
+                mock.patch.object(self.worker,'file_info',return_value=info), \
+                mock.patch.object(self.worker,'reopen') as reopen, \
+                mock.patch.object(self.worker,'chat'), \
+                mock.patch.object(self.worker,'finish_file') as finish, \
+                mock.patch.object(self.worker,'probe') as probe:
+            self.worker.file_recovery('channel')
+        self.assertEqual(reopen.call_args_list,[mock.call(1,abrupt=True),mock.call(1)])
+        finish.assert_called_once_with(transfer)
+        probe.assert_called_once_with(1,{'action':'export','id':'file','name':'reopened-fixture.bin',
+                                         'size':123000000,'sha256':'bound-hash'})
 
 
 class TopologyTests(unittest.TestCase):

@@ -94,6 +94,14 @@ class Journey(base.Worker):
                 self.event('fresh_authority_window_wait', until_unix=next_window)
                 while time.time()<next_window: time.sleep(min(2,next_window-time.time()))
         super().prepare()
+        if host := self.spec.get('fixture_host'):
+            process = self.spawn('network-config', [host['path'], 'network',
+                self.root / 'bootstrap', self.root / 'network.json'],
+                env={'GCHAT_FIXTURE_NETNS': self.result['boundary']['fixture_netns'],
+                     'GCHAT_FIXTURE_HOST_NETNS': self.spec['host_netns']})
+            if process.wait(timeout=30) != 0:
+                raise RuntimeError('fixture signed network generation failed')
+            self.result['fixture_network_sha256'] = sha256(self.root / 'network.json')
 
     def lifecycle(self, i):
         path=self.root/(self.latest[f'client{i}']+'.log')
@@ -153,6 +161,8 @@ class Journey(base.Worker):
         self.event('carrier_cap_passed', **self.result['carrier_cap'])
 
     def start_client(self, i):
+        if host := self.spec.get('fixture_host'):
+            return self.start_fixture_client(i, host)
         if self.roles.get(f'client{i}', 0) == 0:
             return super().start_client(i)
         if any(role.startswith(f'probe{i}') and child.poll() is None for role, child in self.children):
@@ -174,6 +184,32 @@ class Journey(base.Worker):
             env={'GC_GC2_CARRIER': 'true', 'GCHAT_FILE_DIAGNOSTICS': '1',
                  'GCHAT_PROTOCOL_METRICS': str(folder / 'metrics.jsonl')})
         self.clients.append(p)
+        self.spawn(f'probe{i}', [Path(self.spec['build']['path']) / 'bin/fleet_probe', '--serve',
+            folder / 'protocol.chat', folder / 'fixtures', folder / 'probe.sock'])
+
+    def start_fixture_client(self, i, host):
+        fresh = self.roles.get(f'client{i}', 0) == 0
+        folder = self.root / f'c{i}'
+        if any(role.startswith(f'probe{i}') and child.poll() is None for role, child in self.children):
+            raise RuntimeError('previous owner probe is still running')
+        endpoint = folder / 'probe.sock'
+        if endpoint.exists():
+            if not endpoint.is_socket():
+                raise RuntimeError('unexpected file at private probe socket')
+            endpoint.unlink()
+        command = [host['path'], 'serve', '--home', folder,
+            '--passphrase-file', self.root / 'pass', '--network', self.root / 'network.json',
+            '--listen', f'127.0.0.1:{24600+i}']
+        environment = {
+            'GCHAT_FIXTURE_NETNS': self.result['boundary']['observer_netns' if i == 0 else 'fixture_netns'],
+            'GCHAT_FIXTURE_HOST_NETNS': self.spec['host_netns'],
+            'GCHAT_FILE_DIAGNOSTICS': '1', 'GCHAT_PROTOCOL_METRICS': str(folder / 'metrics.jsonl'),
+        }
+        if fresh:
+            command += ['--create', '--inbox-card', folder / 'card']
+            environment['GC_ROUTING_BOOTSTRAP'] = str(folder / 'bootstrap')
+        process = self.spawn(f'client{i}', command, observer=i == 0, env=environment)
+        self.clients.append(process)
         self.spawn(f'probe{i}', [Path(self.spec['build']['path']) / 'bin/fleet_probe', '--serve',
             folder / 'protocol.chat', folder / 'fixtures', folder / 'probe.sock'])
 
@@ -220,19 +256,40 @@ class Journey(base.Worker):
         rows = self.request(i, 'history', conversation=channel, before=None, limit=200)['page']['messages']
         return [m for m in rows if m['body'] == token]
 
+    def join_invitation(self, i, code, nickname):
+        # Follow the same inspect/explicit-network-acceptance path as the UI.
+        # Combined invitations are larger than ordinary chat command input.
+        preview = self.request(i, 'networks', request={'kind':'inspect', 'code':code})['response']
+        if preview.get('kind') != 'preview' or preview['preview'].get('newNetwork'):
+            raise RuntimeError('fixture invitation must target its existing network')
+        network = preview['preview']['network']['id']
+        operation = uuid.uuid4().hex
+        self.event('operation_requested', client=i, operation_id=operation, command='network_join')
+        response = self.request(i, 'networks', request={'kind':'join', 'code':code,
+            'nickname':nickname, 'accepted_network':network, 'operation_id':operation})['response']
+        if response.get('kind') != 'result' or response.get('network') != network:
+            raise RuntimeError('invitation did not return the accepted network')
+        result = response['response']
+        if result.get('kind') != 'applied' or not result.get('conversation'):
+            raise RuntimeError('invitation join did not confirm channel membership')
+        self.event('operation_response', client=i, operation_id=operation, command='network_join')
+        return result
+
     def chat(self, channel, token, seconds=120):
         started = time.monotonic()
         previous_deadline=self.rpc_deadline
         self.rpc_deadline=min(previous_deadline, started+seconds) if previous_deadline else started+seconds
         try:
             for sender, receiver, body in ((0, 1, token), (1, 0, 'reply:'+token)):
+                message_started = time.monotonic()
                 self.event('chat_attempted', token=body, sender=sender)
                 self.submit(sender, body, channel)
                 self.event('chat_locally_accepted', token=body, sender=sender)
                 receipt=until(lambda:self.delivery(sender,receiver,channel,body),
                               self.rpc_deadline,'recipient display and authenticated sender ACK')
                 self.event('chat_delivery_verified', sender=sender, message_id=receipt['id'],
-                           seconds=time.monotonic()-started)
+                           seconds=time.monotonic()-message_started,
+                           round_seconds=time.monotonic()-started)
             self.chat_count += 1
             self.event('chat_acknowledged', token=token, seconds=time.monotonic()-started)
         finally:
@@ -280,10 +337,11 @@ class Journey(base.Worker):
         self.event('file_export_verified',id=transfer['id'],**result)
         return result
 
-    def reopen(self, i):
+    def reopen(self, i, abrupt=False):
         before=self.request(i,'snapshot')['snapshot']['instance']['id']
         process=next(p for role,p in reversed(self.children) if role.startswith(f'client{i}') and p.poll() is None)
-        self.stop(process)
+        self.stop(process, signal.SIGKILL if abrupt else signal.SIGTERM)
+        self.event('client_stopped_for_reopen', client=i, abrupt=abrupt, returncode=process.returncode)
         for role, child in self.children:
             if role.startswith(f'probe{i}') and child.poll() is None: self.stop(child)
         self.start_client(i)
@@ -291,6 +349,29 @@ class Journey(base.Worker):
         if before!=after: raise RuntimeError('identity changed on reopen')
         self.event('same_identity_reopen',client=i)
         until(lambda:self.readiness(i),time.monotonic()+300,'reopened both classes')
+
+    def file_recovery(self, channel):
+        transfer=self.start_file(channel,self.spec['config']['file_bytes'],'interrupted')
+        threshold=max(1,transfer['size']//10)
+        def partial():
+            info=self.file_info(transfer)
+            if info and info['state']=='complete':
+                raise RuntimeError('file completed before the intended interruption')
+            return info if info and int(info['verified_bytes'])>=threshold else None
+        before=until(partial,time.monotonic()+300,'verified partial file before abrupt stop')
+        self.event('file_before_abrupt_stop',id=transfer['id'],verified_bytes=before['verified_bytes'])
+        self.reopen(1,abrupt=True)
+        after=self.file_info(transfer)
+        if after is None or int(after['verified_bytes'])<int(before['verified_bytes']):
+            raise RuntimeError('verified pieces regressed after abrupt process termination')
+        self.event('file_after_abrupt_reopen',id=transfer['id'],verified_bytes=after['verified_bytes'])
+        self.chat(channel,'turnover:file-resume-chat')
+        self.finish_file(transfer)
+        self.reopen(1)
+        self.probe(1,{'action':'export','id':transfer['id'],'name':'reopened-'+transfer['name'],
+                      **{k:transfer[k] for k in ('size','sha256')}})
+        self.result['file_recovery']={'file':transfer,'before_verified_bytes':before['verified_bytes'],
+            'after_verified_bytes':after['verified_bytes'],'abrupt_stop':True,'hash_verified_after_reopen':True}
 
     def admitted_sender_reopen(self, channel):
         identities=[self.request(i,'snapshot')['snapshot']['instance']['id'] for i in (0,1)]
@@ -320,6 +401,61 @@ class Journey(base.Worker):
         self.chat_count+=1
         self.rpc_deadline=None
 
+    def archive_failure(self, channel):
+        if not self.spec.get('fixture_host'):
+            raise RuntimeError('archive fault requires the explicitly isolated fixture host')
+        archive=self.root/'c1'/'archive'
+        if not archive.is_file() or archive.is_symlink():
+            raise RuntimeError('receiver fixture archive is not a regular file')
+        retained=archive.with_name('archive.before-failure')
+        if retained.exists(): raise RuntimeError('archive fault backup already exists')
+        identity=self.request(1,'snapshot')['snapshot']['instance']['id']
+        before=sha256(archive)
+        archive.rename(retained)
+        archive.mkdir(mode=0o700)  # Atomic replacement of this directory must fail.
+        token='turnover:archive-failure:'+uuid.uuid4().hex
+        try:
+            self.submit(0,token,channel)
+            admitted=self.history(0,channel,token)
+            if len(admitted)!=1: raise RuntimeError('archive-fault send was not admitted exactly once')
+            pending_id=admitted[0]['id']
+            visible=False; acked=False; storage_notice=False
+            deadline=time.monotonic()+15
+            while time.monotonic()<deadline:
+                messages=self.history(0,channel,token)
+                acked=acked or any(m.get('delivery')=='delivered' for m in messages)
+                visible=visible or bool(self.history(1,channel,token))
+                snapshot=self.request(1,'snapshot')['snapshot']
+                storage_notice=storage_notice or any(e.get('id')=='archive' and
+                    e.get('code')=='local_storage_unavailable' for e in snapshot.get('providerErrors',[]))
+                time.sleep(.2)
+            if sha256(retained)!=before: raise RuntimeError('retained archive backup changed')
+            self.event('archive_failure_observed',message_id=pending_id,
+                       visible_before_archive_commit=visible,sender_delivered=acked,
+                       storage_notice=storage_notice)
+            for role, process in reversed(self.children):
+                if (role.startswith('client1') or role.startswith('probe1')) and process.poll() is None:
+                    self.stop(process,signal.SIGKILL)
+        finally:
+            archive.rmdir()
+            retained.rename(archive)
+        self.start_client(1)
+        snapshot=until(lambda:self.request(1,'snapshot'),time.monotonic()+120,'archive-fault same-identity reopen')
+        if snapshot['snapshot']['instance']['id']!=identity: raise RuntimeError('archive fault changed identity')
+        deadline=time.monotonic()+120
+        recovered=None
+        while time.monotonic()<deadline:
+            recovered=self.delivery(0,1,channel,token,pending_id)
+            if recovered: break
+            time.sleep(.2)
+        self.result['archive_failure']={'message_id':pending_id,'sender_delivered_during_failure':acked,
+            'visible_before_archive_commit':visible,'recovered_after_abrupt_stop':bool(recovered),
+            'storage_notice':storage_notice,'same_identity':True,'original_archive_sha256':before}
+        if visible or not recovered:
+            raise RuntimeError('receiver archive failure published uncommitted history or lost an acknowledged message')
+        if not storage_notice:
+            raise RuntimeError('receiver archive failure did not expose an actionable storage notice')
+
     def exercise(self):
         # Header-only connection lifecycle evidence. This does not replace the
         # all-packet privacy observer or label encrypted flows as entry drivers.
@@ -335,22 +471,30 @@ class Journey(base.Worker):
         for i in (0,1): self.start_client(i)
         for i in (0,1):
             until(lambda i=i:self.request(i,'snapshot'),setup_deadline,'IPC startup')
-            self.files(i,'configure',quota_bytes=str(1024*1024*1024),retention_days=7)
+            quota=3*1024*1024*1024 if self.spec['config'].get('mode')=='file-recovery' else 1024*1024*1024
+            self.files(i,'configure',quota_bytes=str(quota),retention_days=7)
             until(lambda i=i:self.readiness(i),setup_deadline,'protected both-class readiness')
         channel=self.submit(0,'/create #turnover sender')['conversation']
         def invite():
             value=self.submit(0,'/invite',channel)['output']
             return value['link'] if not value.get('localOnly',True) else None
-        self.submit(1,'/join '+until(invite,setup_deadline,'remote invite')+' receiver')
+        self.join_invitation(1,until(invite,setup_deadline,'remote invite'),'receiver')
         self.expected_subscriptions=4
         for i in (0,1): until(lambda i=i:self.readiness(i),setup_deadline,'contact AND channel, both classes')
         self.rpc_deadline=None
         self.chat(channel,'turnover:warmup')
+        if self.spec['config'].get('mode') == 'archive-failure':
+            self.archive_failure(channel)
+            self.result['boundary']['after']=self.inventory();self.assert_topology(self.result['boundary']['after'])
+            self.result['completed']=True
+            return
         small=self.start_file(channel,65536,'warmup');self.finish_file(small,300)
         self.reopen(1)
         self.probe(1,{'action':'export','id':small['id'],'name':'reopened-'+small['name'],**{k:small[k] for k in ('size','sha256')}})
         self.admitted_sender_reopen(channel)
-        if self.spec['config'].get('mode') == 'smoke':
+        if self.spec['config'].get('mode') == 'file-recovery':
+            self.file_recovery(channel)
+        if self.spec['config'].get('mode') in ('smoke','file-recovery'):
             self.result['chat_acknowledged']=self.chat_count
             self.result['credential_cycles']=[]
             self.result['turnover_qualified']=False
@@ -425,11 +569,14 @@ def main():
     parser.add_argument('--build',type=Path,required=True)
     parser.add_argument('--out',type=Path,required=True)
     parser.add_argument('--expiries',type=int,default=3,choices=(1,2,3))
-    parser.add_argument('--mode',choices=('smoke','credential-expiry','carrier-cap'),default='credential-expiry')
+    parser.add_argument('--mode',choices=('smoke','file-recovery','archive-failure','credential-expiry','carrier-cap'),default='credential-expiry')
     parser.add_argument('--file-bytes',type=int,default=256*1024*1024)
+    parser.add_argument('--fixture-host',type=Path,
+                        help='source-bound turnover_daemon example with fixture-owned signed network trust')
     args=parser.parse_args()
     if os.geteuid()==0: parser.error('run controller as ordinary owner')
-    if not 64*1024*1024<=args.file_bytes<=256*1024*1024: parser.error('turnover file must be 64..256 MiB')
+    maximum=1024*1024*1024 if args.mode=='file-recovery' else 256*1024*1024
+    if not 64*1024*1024<=args.file_bytes<=maximum: parser.error('file size exceeds the selected fixture bounds')
     root=args.out.resolve();root.mkdir(mode=0o700,parents=True,exist_ok=False)
     build=base.build_binding(args.build.resolve())
     before=links();tool_hash=sha256(Path(__file__));helper_hash=sha256(HELPER)
@@ -437,10 +584,13 @@ def main():
     spec={'out':str(root),'build':build,'config':config,'workload':'turnover','seed':20260920,
           'uid':os.getuid(),'gid':os.getgid(),'run_nonce':uuid.uuid4().hex,
           'host_netns':os.readlink('/proc/self/ns/net'),'host_mountns':os.readlink('/proc/self/ns/mnt')}
+    if args.fixture_host:
+        host=args.fixture_host.resolve()
+        spec['fixture_host']={'path':str(host),'sha256':sha256(host),'size':host.stat().st_size}
     (root/'spec.json').write_text(json.dumps(spec,indent=2)+'\n')
     (root/'driver.py').write_bytes(Path(__file__).read_bytes())
     (root/'boundary-helper.py').write_bytes(HELPER.read_bytes())
-    timeout=900 if args.mode=='smoke' else 3600*(args.expiries+1)+900
+    timeout=900 if args.mode in ('smoke','archive-failure') else 2400 if args.mode=='file-recovery' else 3600*(args.expiries+1)+900
     command=['sudo','-n','timeout','--signal=TERM','--kill-after=20',str(timeout),
              'unshare','--net','--mount','--pid','--fork','--mount-proc','--kill-child','--propagation','private','--',
              sys.executable,str(Path(__file__).resolve()),'--worker',str(root/'spec.json')]
@@ -465,6 +615,11 @@ def main():
                             'smoke mode omits credential and carrier expiry and does not qualify latency ceilings',
                             'real carrier lifetime requires connection-lifecycle evidence; elapsed time alone does not qualify its cause']}
     report['passed']=not residual and result.returncode==0 and worker.get('completed') is True and worker.get('children_stopped') is True and all(report[k] for k in ('host_links_unchanged','build_unchanged','tooling_unchanged'))
+    if host := spec.get('fixture_host'):
+        report['fixture_host']=host
+        report['fixture_host_unchanged']=sha256(Path(host['path']))==host['sha256']
+        report['scope_limits'].append('real GChat core/service in a qualification host; not an installed desktop executable')
+        report['passed']=report['passed'] and report['fixture_host_unchanged']
     (root/'report.json').write_text(json.dumps(report,indent=2)+'\n')
     print(json.dumps({'passed':report['passed'],'failure':worker.get('failure'),'report':str(root/'report.json')}),flush=True)
     return 0 if report['passed'] else 1
