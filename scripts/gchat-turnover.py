@@ -2,7 +2,7 @@
 """Disconnected real-daemon turnover journey; no privacy/fleet qualification."""
 import argparse, base64, concurrent.futures, hashlib, importlib.util, json, os
 from pathlib import Path
-import select, signal, socket, subprocess, sys, time, uuid
+import select, signal, socket, subprocess, sys, threading, time, uuid
 ROOT = next(parent for parent in Path(__file__).resolve().parents if (parent / 'scripts/privacy-client-capture.py').is_file())
 HELPER = ROOT / 'scripts/privacy-client-capture.py'
 sys.path.insert(0, str(HELPER.parent))
@@ -65,7 +65,8 @@ class Journey(base.Worker):
         self.result['initial_namespace'] = {'links': initial_links, 'routes': initial_routes}
         run(['mount', '--make-rprivate', '/'])
         run(['mount', '--bind', self.original_root, '/mnt'])
-        for name in ('home', 'tmp', 'run', 'c0', 'c1', *[f'r{i}' for i in range(len(self.relay_addresses))]):
+        count = 10 if self.spec['config'].get('mode') == 'multi-party' else 2
+        for name in ('home', 'tmp', 'run', *[f'c{i}' for i in range(count)], *[f'r{i}' for i in range(len(self.relay_addresses))]):
             path = self.root / name
             path.mkdir(mode=0o700)
             os.chown(path, self.uid, self.gid)
@@ -124,6 +125,20 @@ class Journey(base.Worker):
                 self.event('fresh_authority_window_wait', until_unix=next_window)
                 while time.time()<next_window: time.sleep(min(2,next_window-time.time()))
         super().prepare()
+        if self.spec['config'].get('mode') == 'multi-party':
+            raw = (self.root / 'bootstrap').read_bytes()
+            records = [raw[6+i*155:6+(i+1)*155] for i in range(raw[5])]
+            for client in range(2, 10):
+                folder = self.root / f'c{client}'
+                (folder / 'fixtures').mkdir(mode=0o700)
+                os.chown(folder / 'fixtures', self.uid, self.gid)
+                inbox = (client + 2) % len(records)
+                card = self.control(inbox, 'provision_client_relay')['private_card_b64']
+                self.private(folder / 'card', card + '\n')
+                self.private(folder / 'bootstrap', b'GCRB\x02' + bytes([len(records)-1]) +
+                             b''.join(r for i, r in enumerate(records) if i != inbox))
+                for name in ('card', 'bootstrap'):
+                    self.result['private_inputs'][f'c{client}/{name}'] = sha256(folder / name)
         if host := self.spec.get('fixture_host'):
             process = self.spawn('network-config', [host['path'], 'network',
                 self.root / 'bootstrap', self.root / 'network.json'],
@@ -533,6 +548,76 @@ class Journey(base.Worker):
         if not storage_notice:
             raise RuntimeError('receiver archive failure did not expose an actionable storage notice')
 
+    def multi_party(self):
+        """Ten actual application clients; every message requires all nine receivers."""
+        clients = list(range(10))
+        deadline = time.monotonic() + 1200
+        self.rpc_deadline = deadline
+        self.event('multi_party_setup', clients=10, seconds=1200)
+        for i in clients:
+            self.start_client(i)
+        for i in clients:
+            until(lambda i=i: self.request(i, 'snapshot'), deadline, 'ten-client IPC startup')
+            until(lambda i=i: self.readiness(i), deadline, 'ten-client protected readiness')
+        channel = self.submit(0, '/create #participants participant0')['conversation']
+        joins = []
+        for i in clients[1:]:
+            def invitation():
+                output = self.submit(0, '/invite', channel)['output']
+                return output['link'] if not output.get('localOnly', True) else None
+            code = until(invitation, deadline, 'participant remote invitation')
+            started = time.monotonic()
+            result = self.join_invitation(i, code, f'participant{i}')
+            if result['conversation'] != channel:
+                raise RuntimeError('participant joined another channel')
+            seconds = time.monotonic() - started
+            joins.append({'client': i, 'seconds': seconds, 'r04_30s_passed': seconds <= 30})
+            self.event('participant_joined', **joins[-1])
+        self.expected_subscriptions = 4
+        for i in clients:
+            until(lambda i=i: self.readiness(i), deadline, 'all participants subscribed in both classes')
+        self.result['multi_party'] = {'clients': 10, 'joins': joins, 'rounds': [],
+            'scope': 'ten actual GChat clients through six protected relays; clients are not qualified relay forwarders'}
+        for round_number in range(2):
+            # One fixed correctness budget, with the five-second latency ceiling
+            # measured independently from each simultaneous user action.
+            self.rpc_deadline = time.monotonic() + 180
+            barrier = threading.Barrier(len(clients), timeout=10)
+            def send(i):
+                token = f'participants:{round_number}:{i}:{uuid.uuid4().hex}'
+                barrier.wait()
+                started = time.monotonic()
+                self.submit(i, token, channel)
+                return {'sender': i, 'token': token, 'started': started,
+                        'acceptance_seconds': time.monotonic()-started}
+            with concurrent.futures.ThreadPoolExecutor(max_workers=len(clients)) as pool:
+                pending = list(pool.map(send, clients))
+            completed = []
+            self.result['multi_party']['rounds'].append(completed)
+            while pending:
+                if time.monotonic() >= self.rpc_deadline:
+                    raise TimeoutError('ten-client delivery correctness deadline elapsed')
+                for item in list(pending):
+                    rows = [self.history(i, channel, item['token']) for i in clients]
+                    message = validated_group_delivery(rows, item['sender'])
+                    observed = time.monotonic()
+                    if observed >= self.rpc_deadline:
+                        raise TimeoutError('ten-client delivery observed after correctness deadline')
+                    if message:
+                        seconds = observed-item['started']
+                        record = dict(sender=item['sender'], message_id=message['id'],
+                            recipients=9, acceptance_seconds=item['acceptance_seconds'],
+                            seconds=seconds, r02_5s_passed=seconds <= 5)
+                        completed.append(record)
+                        self.event('group_delivery_verified', round=round_number, **record)
+                        pending.remove(item)
+                if pending:
+                    time.sleep(.2)
+        self.rpc_deadline = None
+        self.result['boundary']['after'] = self.inventory()
+        self.assert_topology(self.result['boundary']['after'])
+        self.result['completed'] = True
+
     def exercise(self):
         # Header-only connection lifecycle evidence. This does not replace the
         # all-packet privacy observer or label encrypted flows as entry drivers.
@@ -542,6 +627,8 @@ class Journey(base.Worker):
             'tcp[tcpflags] & (tcp-syn|tcp-fin|tcp-rst) != 0'],stdout=capture_log,stderr=subprocess.STDOUT,env=self.env)
         capture_log.close();self.children.append(('connection_capture',self.capture))
         self.result['application_started_epoch']=time.time()
+        if self.spec['config'].get('mode') == 'multi-party':
+            return self.multi_party()
         setup_deadline=time.monotonic()+300
         self.rpc_deadline=setup_deadline
         self.event('setup_deadline', seconds=300)
@@ -660,6 +747,21 @@ def validated_replacements(old_ready, rows, reset_ms):
     return {'ended':ends,'ready':fresh}
 
 
+def validated_group_delivery(histories, sender):
+    """A local receipt or any proper subset of recipients is insufficient."""
+    if len(histories) != 10 or not 0 <= sender < 10:
+        raise ValueError('ten participants and one valid sender required')
+    if any(len(rows) > 1 for rows in histories):
+        raise RuntimeError('duplicate group message')
+    if not all(histories):
+        return None
+    sent = histories[sender][0]
+    if not sent.get('id') or any(rows[0].get('id') != sent['id'] or
+            rows[0].get('mine') is not (i == sender) for i, rows in enumerate(histories)):
+        raise RuntimeError('group message identity or authorship changed')
+    return sent if sent.get('delivery') == 'delivered' else None
+
+
 def main():
     if sys.argv[1:2]==['--worker']:
         return Journey(json.loads(Path(sys.argv[2]).read_text())).execute()
@@ -667,7 +769,7 @@ def main():
     parser.add_argument('--build',type=Path,required=True)
     parser.add_argument('--out',type=Path,required=True)
     parser.add_argument('--expiries',type=int,default=3,choices=(1,2,3))
-    parser.add_argument('--mode',choices=('smoke','file-recovery','archive-failure','credential-expiry','carrier-cap','entry-loss'),default='credential-expiry')
+    parser.add_argument('--mode',choices=('smoke','file-recovery','archive-failure','credential-expiry','carrier-cap','entry-loss','multi-party'),default='credential-expiry')
     parser.add_argument('--file-bytes',type=int,default=256*1024*1024)
     parser.add_argument('--file-completion-seconds',type=int,default=1200,
                         help='predeclared file-recovery completion budget, 60..3600 seconds; no latency qualification')
@@ -692,7 +794,7 @@ def main():
     (root/'spec.json').write_text(json.dumps(spec,indent=2)+'\n')
     (root/'driver.py').write_bytes(Path(__file__).read_bytes())
     (root/'boundary-helper.py').write_bytes(HELPER.read_bytes())
-    timeout=1800 if args.mode=='entry-loss' else 900 if args.mode in ('smoke','archive-failure') else 1200+args.file_completion_seconds if args.mode=='file-recovery' else 3600*(args.expiries+1)+900
+    timeout=1800 if args.mode in ('entry-loss','multi-party') else 900 if args.mode in ('smoke','archive-failure') else 1200+args.file_completion_seconds if args.mode=='file-recovery' else 3600*(args.expiries+1)+900
     command=['sudo','-n','timeout','--signal=TERM','--kill-after=20',str(timeout),
              'unshare','--net','--mount','--pid','--fork','--mount-proc','--kill-child','--propagation','private','--',
              sys.executable,str(Path(__file__).resolve()),'--worker',str(root/'spec.json')]

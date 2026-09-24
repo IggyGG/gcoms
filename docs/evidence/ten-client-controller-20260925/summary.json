@@ -1,0 +1,21 @@
+{
+  "scope": "ten-client actual-application controller only; application run separate",
+  "passed": true,
+  "controller_tests": 21,
+  "log_sha256": "c56d4e8f15061396c18deffb2549c472e6ba9e6a0d148e9c8427653c4adcde81",
+  "source_hashes": {
+    "scripts/gchat-turnover.py": "f4b6c4bc0c69a743058723716c9db5e680928f3a05afb9cddfd81b5f9db74f94",
+    "scripts/tests/gchat_turnover_test.py": "f93578010f09949e7639c7144deb2f2104b95d3b16453d5a32f480ff8b44a793",
+    "scripts/privacy-client-capture.py": "d881de0b73fefe45dcaab43500b5a9473f6eb87b485349a38e3268a4a63feb03"
+  },
+  "source_check_paths": 728,
+  "research_imports_checked": 7,
+  "diff_check": true,
+  "codematch": "unreachable",
+  "candidate_binaries": "unchanged candidate16, bound separately by reliability-entry-loss-20260925/build.json",
+  "limits": [
+    "six protected relay fixtures; ten clients are not ten forwarding relays",
+    "two 180-second correctness rounds; all individual five-second ACK and30-second join ceilings remain explicit",
+    "no physical devices or installed mobile qualification"
+  ]
+}

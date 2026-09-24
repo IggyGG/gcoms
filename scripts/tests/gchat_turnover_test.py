@@ -17,6 +17,24 @@ SPEC.loader.exec_module(turnover)
 
 @unittest.skipUnless(os.name == "posix", "Linux namespace controller")
 class ControllerTests(unittest.TestCase):
+    def test_group_delivery_requires_every_recipient_exact_identity_and_sender_ack(self):
+        rows = [[dict(id='original', mine=i == 3, delivery='delivered')] for i in range(10)]
+        self.assertEqual(turnover.validated_group_delivery(rows, 3)['id'], 'original')
+        for i in range(10):
+            changed = copy.deepcopy(rows); changed[i] = []
+            self.assertIsNone(turnover.validated_group_delivery(changed, 3))
+            for mutation in [dict(id='other'), dict(mine=i != 3)]:
+                changed = copy.deepcopy(rows); changed[i][0].update(mutation)
+                with self.assertRaisesRegex(RuntimeError, 'identity or authorship'):
+                    turnover.validated_group_delivery(changed, 3)
+            changed = copy.deepcopy(rows); changed[i].append(changed[i][0].copy())
+            with self.assertRaisesRegex(RuntimeError, 'duplicate'):
+                turnover.validated_group_delivery(changed, 3)
+        rows[3][0]['delivery'] = 'accepted'
+        self.assertIsNone(turnover.validated_group_delivery(rows, 3))
+        with self.assertRaises(ValueError):
+            turnover.validated_group_delivery(rows[:9], 3)
+
     def test_entry_replacement_requires_both_actual_transport_ends_and_new_ready_drivers(self):
         old=[{'id':1},{'id':2}]
         ends=[dict(id=i,phase='transport_ended',unix_ms=101) for i in (1,2)]

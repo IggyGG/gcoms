@@ -1,3 +1,20 @@
+# Ten simultaneous application senders
+
+Run `gchat-turnover.py --mode multi-party` with the source-bound production
+application host and six protected relay fixtures in disconnected namespaces.
+Ten real GChat clients join one channel, then each submits one unique message
+simultaneously in each of two rounds. Require all nine other clients to retain
+exactly one matching message ID and the sender to report authenticated delivery.
+Missing recipients, duplicate IDs, changed authorship and local-only acceptance
+must fail the checker. Record individual action-to-observation latency; the
+180-second round correctness budget does not waive the five-second requirement.
+Setup has one 1200-second deadline and the worker has an 1800-second outer bound.
+
+[Controller checks](docs/evidence/ten-client-controller-20260925/summary.json)
+passed 21 tests. The actual application result is separate. This covers ten app
+senders; it does not replace the separate ten-forwarding-participant requirement.
+No current production profile, cover policy or device state changes.
+
 # Published carrier completion without retry-tick delay
 
 Run `gc2::owner::completion_tests` plus the full routing package and Node GC/2
