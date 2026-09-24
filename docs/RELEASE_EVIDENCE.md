@@ -33,11 +33,11 @@ For a GC/2 file-profile candidate, explicitly freeze its traffic configuration:
 ```sh
 python3 scripts/release-candidate.py init \
   --gcoms /path/to/gcoms --gchat /path/to/gchat \
-  --wire-profile GC/2 --traffic-config /path/to/profile-22.json \
+  --wire-profile GC/2 --traffic-config /path/to/profile-46.json \
   --output /path/to/evidence/gc2-rc-01
 ```
 
-This creates schema 2, with the profile-22 file privacy contract, new-profile GC/2
+This creates schema 2, with the selected profile contract (22: historical fixed interactive cover; 46: responsive randomized cover), new-profile GC/2
 selection and explicit existing-profile migration. It records intended behavior;
 it does not select an unqualified production profile or authorize deployment.
 GC/1 schema 1 remains supported separately. Source/configuration identities are

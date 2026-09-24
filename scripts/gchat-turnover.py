@@ -319,7 +319,7 @@ class Journey(base.Worker):
 
     def readiness(self, i):
         status = self.status(i)
-        return status if status and status.get('profile_id') == 22 and status.get('bootstrap_version') == 2 and status.get('usable_terminal_routes', 0) > 0 and status.get('interactive_subscriptions', 0) >= getattr(self, 'expected_subscriptions', 2) and status.get('bulk_subscriptions', 0) >= getattr(self, 'expected_subscriptions', 2) else None
+        return status if status and status.get('profile_id') == 46 and status.get('bootstrap_version') == 2 and status.get('usable_terminal_routes', 0) > 0 and status.get('interactive_subscriptions', 0) >= getattr(self, 'expected_subscriptions', 2) and status.get('bulk_subscriptions', 0) >= getattr(self, 'expected_subscriptions', 2) else None
 
     def sample(self):
         self.event('transport_sample', clients=[self.status(i) for i in (0,1)])

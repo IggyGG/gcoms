@@ -87,6 +87,33 @@ class CurrentEvidenceTests(unittest.TestCase):
     def errors(self):
         return self.fixture.errors()
 
+    def test_responsive_profile_requires_matching_contract_configuration_and_measurement(self):
+        f = self.fixture
+        candidate = copy.deepcopy(f.candidate)
+        candidate["gc2"].update(profile_id=46, privacy_contract="gchat-responsive-profile-46",
+            traffic_config=f.file("responsive.json", b'{"profile_id":46}'))
+        report = copy.deepcopy(f.reports["integration.gc2-bootstrap"])
+        report["gc2"] = candidate["gc2"]
+        report["measurements"]["observed_profile_id"] = 46
+        def require(ok, message):
+            if not ok:
+                raise ValueError(message)
+        def file_reference(base, reference):
+            return base / reference["path"]
+        def read_json(path):
+            return json.loads(path.read_text())
+        base = Path(f.temporary.name)
+        gc2.contract(candidate, base, require, file_reference, read_json)
+        gc2.validate("integration.gc2-bootstrap", report, candidate, base,
+                     candidate["artifacts"], require, file_reference, read_json)
+        report["measurements"]["observed_profile_id"] = 22
+        with self.assertRaisesRegex(ValueError, "selected profile"):
+            gc2.validate("integration.gc2-bootstrap", report, candidate, base,
+                         candidate["artifacts"], require, file_reference, read_json)
+        candidate["gc2"]["privacy_contract"] = "gchat-file-profile-22"
+        with self.assertRaisesRegex(ValueError, "privacy contract"):
+            gc2.contract(candidate, base, require, file_reference, read_json)
+
     def test_complete_fixture_is_accepted_and_every_extra_gate_is_required(self):
         self.assertEqual(self.errors(), [])
         for check in gc2.CHECKS:

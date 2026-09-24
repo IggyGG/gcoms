@@ -1,7 +1,48 @@
-# Experimental carrier comparisons
+# Responsive production policy (2026-09-25)
 
-These profiles are comparison candidates. The existing full-cover profile and
-production defaults are unchanged. A profile choice must be explicit and bound
+The owner selected immediate real traffic with independently randomized cover.
+GChat's production preset now selects authenticated profile **46**. Interactive
+records remain padded to 4096 bytes; real data and clean EOF no longer wait for
+cover slots. Bulk remains bounded and unpaced, without idle bulk cover. Existing
+IDs 0–35 retain their meanings. IDs 36–47 select responsive mode with the existing
+size index; their legacy period index does not set data pacing or cover timing.
+
+Each interactive writer samples its next cover gap uniformly from integer
+milliseconds 10 through 10,000, independently of payload arrivals. Real data does
+not restart that timer. A blocked write reschedules overdue cover from completion
+instead of accumulating catch-up work. There is one bounded writer and no new
+queue or detached task. Backpressure, class credit, connection ownership, pinned
+TLS, authority deadlines and authenticated application ACKs remain unchanged.
+Extra cover bursts are deferred: they add cost without an established privacy
+benefit. Short gaps already occur in the randomized schedule.
+
+This is **not privacy-qualified** and is not claimed equivalent to constant-rate
+cover. An observer can infer activity from increased traffic and correlate timing;
+random cover does not hide those changes. Encryption and authentication still
+protect contents and peer authorization. The expected idle interval is 5005 ms:
+with two entries and both directions, about 3274 record bytes/second or 0.283 GB
+per continuously connected day, excluding TLS/H2/TCP, retries, setup and real data.
+This is an expectation, not a bandwidth cap or a measured all-egress result.
+
+## Upgrade and evidence boundary
+
+Relays must understand profile 46 before clients select it. Older relays reject
+unknown profiles; there is no fallback to direct or legacy routing. New versions
+still read profile 22 and the encrypted carrier-policy selection can change while
+preserving directory, identity and cached data. An old binary cannot necessarily
+read a policy cache last written with 46; arbitrary binary rollback is not yet
+qualified. Release rollback must use a compatible build or an explicitly tested
+state-preserving migration, never clear a profile.
+
+The actual-application controller now requires observed profile 46. Release tools
+accept 22 or 46 with distinct matching contracts and require each workload to
+observe its selected profile. Historical profile-22 receipts remain profile-22
+receipts. Current source checks and subsequent exact app timings are separate.
+
+# Historical experimental carrier comparisons
+
+These profiles are comparison candidates. The historical full-cover profiles remain available; current GChat defaults
+are described above. A profile choice must be explicit and bound
 into the authenticated carrier Open record; older peers reject unfamiliar IDs.
 
 | IDs | Interactive channel | Bulk channel |
@@ -48,7 +89,7 @@ deferred.
 
 ## Evidence boundaries
 
-The file candidate's `app_performance` instrument selects ID 22 with
+The current `app_performance` instrument selects ID 46 with
 `--profile gchat-files --protected --cadence production`. Its
 `--measurement-ms` option keeps the connected observation interval fixed across
 idle, chat, bulk and mixed workloads; a workload overrun fails. This is local

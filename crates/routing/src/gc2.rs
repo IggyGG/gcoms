@@ -25,6 +25,9 @@ const PERIODS_MS: [u16; 4] = [250, 500, 1000, 1500];
 const PROFILES_PER_MODE: u8 = 12;
 /// Fixed 4096-byte/1000-ms interactive cover with natural unpaced bulk.
 pub const FILE_TRANSFER_PROFILE: u8 = 22;
+/// Immediate data, padded interactive records and independent random cover.
+/// This does not hide activity-dependent traffic volume or timing.
+pub const RESPONSIVE_PROFILE: u8 = 46;
 
 /// Explicit experimental traffic policies. Existing IDs 0..12 retain their
 /// full-cover semantics; new modes have distinct authenticated profile IDs.
@@ -35,6 +38,7 @@ pub enum CoverMode {
     Full = 0,
     Interactive = 1,
     InteractiveJitter = 2,
+    Responsive = 3,
 }
 
 /// Preserve the fractional second at an absolute credential deadline. Invalid
@@ -79,7 +83,7 @@ impl CandidateProfile {
     }
 
     pub fn from_id(id: u8) -> Result<Self, RecordError> {
-        if id < PROFILES_PER_MODE * 3 {
+        if id < PROFILES_PER_MODE * 4 {
             Ok(Self { id })
         } else {
             Err(RecordError::Profile)
@@ -94,6 +98,11 @@ impl CandidateProfile {
             id: FILE_TRANSFER_PROFILE,
         }
     }
+    pub fn responsive() -> Self {
+        Self {
+            id: RESPONSIVE_PROFILE,
+        }
+    }
     pub fn with_mode(self, mode: CoverMode) -> Self {
         Self {
             id: self.id % PROFILES_PER_MODE + mode as u8 * PROFILES_PER_MODE,
@@ -103,7 +112,8 @@ impl CandidateProfile {
         match self.id / PROFILES_PER_MODE {
             0 => CoverMode::Full,
             1 => CoverMode::Interactive,
-            _ => CoverMode::InteractiveJitter,
+            2 => CoverMode::InteractiveJitter,
+            _ => CoverMode::Responsive,
         }
     }
     pub fn record_len(self) -> usize {
@@ -113,11 +123,17 @@ impl CandidateProfile {
         Duration::from_millis(u64::from(PERIODS_MS[usize::from(self.id) % 4]))
     }
 
-    /// Two directions of one continuously covered class channel for 30 days.
+    /// Two directions of one covered class channel for 30 days.
+    /// Responsive mode reports expected idle cover at a 5005-ms mean interval,
+    /// not a traffic budget or a bound; real data adds traffic.
     /// Excludes TLS/HTTP2/TCP overhead, retransmission and additional bulk bytes.
     pub fn duplex_record_bytes_30_days(self) -> u64 {
-        self.record_len() as u64 * 2 * 30 * 24 * 60 * 60 * 1000
-            / u64::from(PERIODS_MS[usize::from(self.id) % 4])
+        let mean_ms = if self.mode() == CoverMode::Responsive {
+            5005
+        } else {
+            u64::from(PERIODS_MS[usize::from(self.id) % 4])
+        };
+        self.record_len() as u64 * 2 * 30 * 24 * 60 * 60 * 1000 / mean_ms
     }
 
     /// Record-layer idle cost across every selected entry and covered class.
@@ -360,6 +376,39 @@ mod tests {
     }
 
     #[test]
+    fn responsive_profile_is_distinct_and_reports_expected_idle_cost() {
+        let profile = CandidateProfile::responsive();
+        assert_eq!(profile.id(), 46);
+        assert_eq!(CandidateProfile::from_id(46).unwrap(), profile);
+        assert_eq!(profile.mode(), CoverMode::Responsive);
+        assert_eq!(
+            CandidateProfile::from_id(22).unwrap().mode(),
+            CoverMode::Interactive
+        );
+        assert!(CandidateProfile::from_id(48).is_err());
+        let codec = RecordCodec::new(TrafficClass::Interactive, profile);
+        let wire = codec.encode(RecordKind::Data, &[1, 2, 3]).unwrap();
+        assert_eq!(wire.len(), 4096);
+        assert_eq!(
+            RecordCodec::from_open_header(
+                &codec.encode(RecordKind::Open, &[]).unwrap()[..HEADER_LEN]
+            )
+            .unwrap()
+            .profile(),
+            profile
+        );
+        assert!(
+            RecordCodec::new(TrafficClass::Interactive, CandidateProfile::file_transfer())
+                .decode(&wire)
+                .is_err()
+        );
+        assert_eq!(
+            profile.duplex_idle_bytes_30_days(2),
+            (4096_u64 * 2 * 30 * 24 * 60 * 60 * 1000 / 5005) * 2
+        );
+    }
+
+    #[test]
     fn file_profile_is_explicit_and_does_not_reinterpret_old_ids() {
         let profile = CandidateProfile::file_transfer();
         assert_eq!(CandidateProfile::from_id(22).unwrap(), profile);
@@ -471,7 +520,7 @@ mod tests {
                 .encode(RecordKind::Data, &vec![0; bulk.payload_limit() + 1])
                 .is_err());
         }
-        assert_eq!(CandidateProfile::from_id(36), Err(RecordError::Profile));
+        assert_eq!(CandidateProfile::from_id(48), Err(RecordError::Profile));
         assert_eq!(CandidateProfile::new(4096, 0), Err(RecordError::Profile));
         assert_eq!(
             CandidateProfile::new(16384, 1000),

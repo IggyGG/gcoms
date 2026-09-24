@@ -1,3 +1,17 @@
+## Immediate sending and randomized cover, 2026-09-25
+
+Owner-approved policy: real traffic sends when transport capacity is available;
+interactive cover gaps are independently uniform 10–10,000 ms. GChat selects
+new authenticated profile 46, preserving old profile meanings. This removes
+intentional cover-slot waiting, not congestion or route setup. Timing/activity
+privacy is reduced and unqualified. Extra bursts remain deferred. See
+[traffic policy](docs/GC2_TRAFFIC_PROFILES.md) for costs, migration and limitations.
+Current validation must prove immediate data/EOF, bounded cover and no catch-up
+burst, continued cover under data, old-profile compatibility, durable profile
+selection, class isolation and real application delivery/recovery. R02/R03/R04
+remain open until source-bound application measurements pass; prior slow/failed
+runs remain failures. No deployed or installed behavior is claimed by source edits.
+
 > Established GC/2 carriers now replace themselves on completion after at least
 > 30 seconds of published readiness, without waiting for another maintenance tick.
 > Failed/short-lived attempts retain retry pacing. This removes a reproduced

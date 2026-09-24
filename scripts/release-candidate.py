@@ -106,7 +106,7 @@ def init(args):
     if args.traffic_config:
         traffic_config = read_json(args.traffic_config)
         require(isinstance(traffic_config, dict) and type(traffic_config.get("profile_id")) is int and
-                traffic_config["profile_id"] == 22, "traffic configuration must select profile 22")
+                traffic_config["profile_id"] in (22, 46), "traffic configuration must select profile 22 or 46")
     traffic_bytes = args.traffic_config.read_bytes() if args.traffic_config else None
     require(traffic_bytes is None or bool(traffic_bytes), "empty traffic configuration")
     base = args.output.resolve()
@@ -127,7 +127,8 @@ def init(args):
         traffic = base / "sources" / "traffic-config.json"
         traffic.write_bytes(traffic_bytes)
         candidate.update(schema_version=2, wire_profile="GC/2", gc2={
-            "profile_id": 22, "privacy_contract": "gchat-file-profile-22",
+            "profile_id": traffic_config["profile_id"],
+            "privacy_contract": {22: "gchat-file-profile-22", 46: "gchat-responsive-profile-46"}[traffic_config["profile_id"]],
             "new_profile_protocol": "gc2", "existing_profile_migration": "explicit",
             "traffic_config": reference(base, traffic)})
     write_json(base / "candidate.json", candidate)
@@ -267,7 +268,7 @@ def main():
     create.add_argument("--output", type=Path, required=True)
     create.add_argument("--target", choices=TARGETS, action="append", help="production qualification target; repeat for several platforms")
     create.add_argument("--wire-profile", choices=("GC/1", "GC/2"), default="GC/1")
-    create.add_argument("--traffic-config", type=Path, help="frozen profile-22 traffic configuration (GC/2 only)")
+    create.add_argument("--traffic-config", type=Path, help="frozen profile-22 or profile-46 traffic configuration (GC/2 only)")
     for project in PROJECTS:
         create.add_argument("--" + project, type=Path, required=True)
     create.set_defaults(run=init)

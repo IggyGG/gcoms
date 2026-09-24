@@ -365,6 +365,16 @@ mod tests {
             std::fs::read(dir.path().join("routing-gc2.cache")).unwrap(),
             latest
         );
+        cache
+            .select_gc2_profile(CandidateProfile::responsive())
+            .unwrap();
+        assert_eq!(
+            std::fs::read(dir.path().join("routing-gc2.cache")).unwrap(),
+            latest
+        );
+        cache
+            .select_gc2_profile(CandidateProfile::file_transfer())
+            .unwrap();
         let policy = dir.path().join("carrier-policy.cache");
         let mut bytes = std::fs::read(&policy).unwrap();
         bytes[17] ^= 1;

@@ -16,16 +16,16 @@ PRIVACY_GATES = {comparison + "_" + observation
 def contract(candidate, base, require, file_reference, read_json):
     value = candidate.get("gc2")
     require(isinstance(value, dict), "missing GC/2 contract")
-    require(value.get("profile_id") == 22 and type(value.get("profile_id")) is int,
-            "GC/2 file qualification requires explicit profile 22")
+    require(value.get("profile_id") in (22, 46) and type(value.get("profile_id")) is int,
+            "GC/2 qualification requires explicit profile 22 or 46")
     require(value.get("new_profile_protocol") == "gc2" and
             value.get("existing_profile_migration") == "explicit",
             "GC/2 default/migration contract is missing")
-    require(value.get("privacy_contract") == "gchat-file-profile-22",
+    require(value.get("privacy_contract") == ({22: "gchat-file-profile-22", 46: "gchat-responsive-profile-46"}.get(value.get("profile_id"))),
             "accepted file privacy contract is missing")
     config = read_json(file_reference(base, value.get("traffic_config")))
-    require(isinstance(config, dict) and type(config.get("profile_id")) is int and config["profile_id"] == 22,
-            "traffic configuration does not select profile 22")
+    require(isinstance(config, dict) and type(config.get("profile_id")) is int and config["profile_id"] == value["profile_id"],
+            "traffic configuration differs from the selected profile")
     return value
 
 
@@ -37,8 +37,8 @@ def validate(check, report, candidate, base, artifacts, require, file_reference,
     require(isinstance(measurements, dict), "missing GC/2 measurements")
     require(bool(report.get("evidence")), "GC/2 gate needs retained workload evidence")
     inputs = report.get("artifacts", {})
-    require(type(measurements.get("observed_profile_id")) is int and measurements["observed_profile_id"] == 22,
-            "workload did not observe profile 22")
+    require(type(measurements.get("observed_profile_id")) is int and measurements["observed_profile_id"] == candidate["gc2"]["profile_id"],
+            "workload did not observe the selected profile")
 
     def flags(*names):
         for name in names:

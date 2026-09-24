@@ -330,14 +330,14 @@ impl NodeProfile {
         })
     }
 
-    /// Explicit GChat file policy: fixed chat cover and observable unpaced bulk.
+    /// GChat policy: immediate data, random interactive cover, unpaced bulk.
     #[cfg(feature = "experimental-gc2")]
     pub fn gchat_file_transfer_production(
         directory: Option<std::path::PathBuf>,
         entries: usize,
     ) -> Self {
         Self::gc2_carrier_production(directory, entries)
-            .with_gc2_traffic_profile(gcoms_routing::gc2::CandidateProfile::file_transfer())
+            .with_gc2_traffic_profile(gcoms_routing::gc2::CandidateProfile::responsive())
             .expect("carrier profile is selected")
     }
 

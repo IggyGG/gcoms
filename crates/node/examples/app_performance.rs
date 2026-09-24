@@ -135,6 +135,7 @@ fn parse_args() -> Result<Args, String> {
                     "full" => CoverMode::Full,
                     "interactive" => CoverMode::Interactive,
                     "jitter" => CoverMode::InteractiveJitter,
+                    "responsive" => CoverMode::Responsive,
                     _ => return Err("unknown traffic profile mode".into()),
                 };
                 args.traffic_profile = Some(
@@ -182,7 +183,7 @@ fn parse_args() -> Result<Args, String> {
     if args.profile == "gchat-files"
         && args
             .traffic_profile
-            .is_some_and(|p| p != CandidateProfile::file_transfer())
+            .is_some_and(|p| p != CandidateProfile::responsive())
     {
         return Err("gchat-files requires its fixed authenticated traffic profile".into());
     }
@@ -217,7 +218,7 @@ fn profile(
             else {
                 unreachable!()
             };
-            fixture.gc2_cover_mode = gcoms_routing::gc2::CoverMode::Interactive;
+            fixture.gc2_cover_mode = gcoms_routing::gc2::CoverMode::Responsive;
             NodeProfile::Fixture(fixture)
         }
         "gc2" if !introductions.is_empty() && production => {

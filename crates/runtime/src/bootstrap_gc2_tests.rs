@@ -179,7 +179,10 @@ async fn production_bootstrap_fresh_reopen_and_recovery() {
 #[cfg(target_os = "linux")]
 fn assert_current_ready(node: &gcoms_node::node::NodeHandle) {
     let status = node.transport_status();
-    assert_eq!(status.profile_id, Some(22));
+    assert_eq!(
+        status.profile_id,
+        Some(gcoms_routing::gc2::RESPONSIVE_PROFILE)
+    );
     assert_eq!(status.bootstrap_version, Some(2));
     // This bootstrap journey has inboxes but no joined channels. Require both
     // traffic classes for every owned alias, rather than counting channel routes.
