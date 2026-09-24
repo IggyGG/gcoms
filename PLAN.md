@@ -7,7 +7,11 @@ number, middle TLS/admission/target acknowledgment, and terminal TLS. Never log
 addresses, pins, tokens or payloads. No routing selection, retry, deadline, admission
 or authentication changes. Validate routing/transport in the cluster, then pair
 Android 1019 with those exact sources for the existing-profile observation.
-codematch=unreachable.
+Cluster routing/transport passed 148 tests (four existing exclusions), strict
+all-target/all-feature Clippy and changed-file formatting on 712 unchanged source
+bindings. Whole-workspace formatting found unrelated existing node formatting
+differences, retained in the receipt. Android 1019 is still building.
+[Receipt](docs/evidence/route-stage-20260924/summary.json). codematch=unreachable.
 
 # Retained Android delivery: bounded relay admission diagnostics, 2026-09-24
 
