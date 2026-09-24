@@ -34,6 +34,8 @@ trigger additional entry dials.
 Routed profile reopening retains expired inbox authority privately for background
 recovery. Public addresses respect the sealed owner lifetime even when a renewed
 lease carries a later timestamp; this never extends the original saved budget.
+Recovery replaces the complete saved owner-role collections rather than appending
+them to live state, so retained draining queues remain unique across reconnects.
 
 When a protocol checkpoint fails, bounded local diagnostics distinguish encoding,
 store failure and the first owner-lifecycle pause site. Uncertain persistence still

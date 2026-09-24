@@ -5449,6 +5449,59 @@ pub(in crate::node) mod tests {
     }
 
     #[tokio::test]
+    async fn owner_recovery_replaces_retained_roles_without_duplicate_queues() {
+        let mut node = state();
+        let now = std::time::Instant::now();
+        let aliases = staged_pair(&node);
+        node.draining_contact_aliases.push(DrainingContactAliases {
+            aliases: aliases.clone(),
+            receive_until: now + std::time::Duration::from_secs(30),
+            next_revoke: now + std::time::Duration::from_secs(30),
+            abandon_at: now + std::time::Duration::from_secs(60),
+        });
+        let original =
+            owner_aliases::open_unbound(&owner_aliases::seal_current(&node).unwrap(), &TEST_SEED)
+                .unwrap();
+        let records = Arc::new(Mutex::new(Vec::new()));
+        let capture = records.clone();
+        node.durable_state_sink = Some(Arc::new(move |bytes| {
+            capture.lock().unwrap().push(decode_v2(&bytes, &TEST_SEED)?);
+            Ok(())
+        }));
+        // Routed recovery re-applies a complete retained record to a live
+        // state, unlike startup's initially empty role collections.
+        for _ in 0..2 {
+            let record = owner_aliases::open_unbound(
+                &owner_aliases::seal_current(&node).unwrap(),
+                &TEST_SEED,
+            )
+            .unwrap();
+            let clock = node.owner_clock.lock().unwrap().clone();
+            super::super::aliases::owner_transition(&mut node, |st| {
+                record.apply_retained(st, clock, false)
+            })
+            .expect("recovery must checkpoint each retained queue exactly once");
+            assert!(!node.owner_transition_failed);
+            assert_eq!(node.draining_contact_aliases.len(), 1);
+            assert_eq!(node.draining_contact_aliases[0].aliases, aliases);
+        }
+        let saved = records.lock().unwrap();
+        assert_eq!(saved.len(), 2);
+        for archive in saved.iter() {
+            let record = archive.owner_aliases.as_ref().unwrap();
+            assert_eq!(record.groups.len(), original.groups.len());
+            for (before, after) in original.groups.iter().zip(&record.groups) {
+                assert_eq!(before.role, after.role);
+                assert_eq!(before.provision, after.provision);
+                assert_eq!(before.origins, after.origins);
+                assert!(after.deadline_ms <= before.deadline_ms);
+                assert!(after.receive_until_ms <= before.receive_until_ms);
+            }
+        }
+        node.scheduler.shutdown();
+    }
+
+    #[tokio::test]
     async fn owner_accepted_renewal_is_durable_and_failure_rolls_back() {
         for fail in [false, true] {
             let mut node = state();

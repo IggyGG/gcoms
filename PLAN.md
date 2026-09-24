@@ -165,3 +165,12 @@ listener regression is fixed and covered on every target.
 The subsequent concurrent crypto merge was preserved and validated with 157
 combined Linux tests and strict Clippy; the native size record retains its exact
 measured revision.
+# Retained owner roles during live recovery, 2026-09-24
+
+Android 1017 captured the first checkpoint error: invalid owner alias binding or
+duplicate queue. Live recovery reapplied a complete saved record by appending
+draining roles already present in memory. The new regression reproduces that exact
+failure. Replace the nonactive role collections from the complete retained record;
+keep the original authority, deadlines, duplicate rejection and failure rollback.
+Cluster node/Clippy validation is running. Device recovery remains open.
+`codematch=unreachable`.

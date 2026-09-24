@@ -174,3 +174,11 @@ optimization levels; downloaded binary and source hashes were independently veri
 After the concurrent crypto merge, the combined application/runtime/SDK/swarm/crypto
 suites passed 157 Linux tests (two explicit ignores) and strict Clippy. Native results remain bound
 to their recorded source revision.
+# Reapplying retained owner roles
+
+`owner_recovery_replaces_retained_roles_without_duplicate_queues` restores a
+complete owner record twice into populated state through the durable lifecycle
+transaction. Require one copy of every retained queue, unchanged authority and
+origins, no deadline extension, successful archive decoding and no owner pause.
+Preserve the original duplicate-queue failure, run the full node library and
+strict node Clippy, then verify the retained Android profile and partial download.
