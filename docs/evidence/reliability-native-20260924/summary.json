@@ -1,0 +1,32 @@
+{
+  "source_revision": "580ce8abc7af51723c1857a3af528b45c78a222e",
+  "source_manifest_sha256": "b52a6727f46d20820939bd5590cbf3e37c75cb5ef57e3c6cc1377b70e208bccb",
+  "command": [
+    "/work/native-15-venv/bin/python",
+    "scripts/ci.py"
+  ],
+  "passed": true,
+  "started_unix": 1790283860.993924,
+  "scope": "official GComs Linux native entrypoint; not paired GChat or installed/platform release",
+  "exit_code": 0,
+  "finished_unix": 1790286122.912302,
+  "source_unchanged": true,
+  "log_sha256": "469c8977fa774ae3ba9ac93bbbdb589fee4dd3410f3e27499e5f2156fcb9b814",
+  "rust_counts": {
+    "passed": 990,
+    "failed": 0,
+    "ignored": 9
+  },
+  "evidence_files_verified": 32,
+  "package_archives_verified": 21,
+  "evidence_archive_sha256": "38adc794d4878065d7626002f68f611cd842acc3fb327bc41144c20af206792f",
+  "not_qualified": [
+    "later owner-completion candidate",
+    "paired GChat native",
+    "installed or mobile release",
+    "latency",
+    "privacy"
+  ],
+  "retained_evidence": "paired GChat target/channel-reconnect-20260923/reliability-20260924-01/native-15-evidence.tgz",
+  "python_tests": 190
+}

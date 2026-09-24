@@ -1,3 +1,15 @@
+# Official GComs native gate, 2026-09-24
+
+Frozen `580ce8a` passed the official Linux `scripts/ci.py`: 990 Rust passes,
+zero failures, nine explicit exclusions; 190 Python tests; docs, strict workspace
+Clippy, frontend, generated contracts/vectors, minimal checks, 21 package archives
+and consumers, and dependency policy. All 722 source bindings were unchanged.
+The original missing-NumPy environment failure is retained; the successful retry
+uses a private versioned virtual environment, without changing candidate source.
+[Receipt](docs/evidence/reliability-native-20260924/summary.json).
+This does not qualify later owner-completion work, paired GChat native, installed
+release, mobile networking, or the still-failed latency targets.
+
 # One GiB interrupted application transfer, 2026-09-24
 
 Candidate14 completed the actual GChat core/service five-hop file recovery case.

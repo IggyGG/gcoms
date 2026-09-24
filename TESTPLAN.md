@@ -1,3 +1,10 @@
+# Official frozen native baseline
+
+Use the unchanged `scripts/ci.py` entrypoint, with its pinned toolchain and isolated
+Python dependencies. The `580ce8a` pass and original environment failure are bound
+in [the native receipt](docs/evidence/reliability-native-20260924/summary.json).
+Later runtime changes need their own source-bound validation.
+
 # Interrupted full-size file correctness
 
 `gchat-turnover.py --mode file-recovery --file-bytes 1073741824
