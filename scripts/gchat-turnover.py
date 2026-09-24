@@ -9,14 +9,18 @@ sys.path.insert(0, str(HELPER.parent))
 spec = importlib.util.spec_from_file_location('capture_boundary', HELPER)
 base = importlib.util.module_from_spec(spec); spec.loader.exec_module(base)
 run, links, until, sha256 = base.run, base.links, base.until, base.sha256
-FIXTURE, RELAYS, FIXTURE6 = base.FIXTURE, base.RELAYS, base.FIXTURE6
+FIXTURE, FIXTURE6 = base.FIXTURE, base.FIXTURE6
+RELAYS = tuple(f'11.231.97.{n}' for n in range(10, 16))
 CLIENT, CLIENT6 = base.CLIENT, base.CLIENT6
-SCOPE = 'actual_gchat_disconnected_real_deadline_turnover_v1'
+SCOPE = 'actual_gchat_disconnected_fivehop_turnover_v2'
 
 class Journey(base.Worker):
+    relay_addresses = RELAYS
+
     def __init__(self, spec):
         super().__init__(spec)
-        self.result.update(scope=SCOPE, privacy_qualified=False, release_qualified=False)
+        self.result.update(scope=SCOPE, privacy_qualified=False, release_qualified=False,
+                           relay_count=len(self.relay_addresses), route_relay_hops=5)
         self.origin = time.monotonic(); self.roles = {}; self.latest = {}; self.chat_count = 0
         if self.spec['config'].get('mode') == 'carrier-cap':
             self.env['GCOMS_GC2_LIFECYCLE'] = '1'
@@ -37,7 +41,7 @@ class Journey(base.Worker):
             raise RuntimeError('fixture namespace was not empty')
         run(['mount', '--make-rprivate', '/'])
         run(['mount', '--bind', self.original_root, '/mnt'])
-        for name in ('home', 'tmp', 'run', 'c0', 'c1', *[f'r{i}' for i in range(4)]):
+        for name in ('home', 'tmp', 'run', 'c0', 'c1', *[f'r{i}' for i in range(len(self.relay_addresses))]):
             path = self.root / name
             path.mkdir(mode=0o700)
             os.chown(path, self.uid, self.gid)
@@ -197,7 +201,7 @@ class Journey(base.Worker):
         if int(time.time()) // 30 != getattr(self, 'directory_sample', None):
             self.directory_sample = int(time.time()) // 30
             redacted = []
-            for i in range(4):
+            for i in range(len(self.relay_addresses)):
                 encoded = self.control(i, 'routing_bootstrap')['routing_bundle_b64']
                 raw = base64.urlsafe_b64decode(encoded + '=' * (-len(encoded) % 4))
                 if raw[:5] != b'GCRB\x02' or len(raw) != 6 + 155 * raw[5]: raise RuntimeError('unexpected current bundle')
@@ -220,16 +224,31 @@ class Journey(base.Worker):
         started = time.monotonic()
         previous_deadline=self.rpc_deadline
         self.rpc_deadline=min(previous_deadline, started+seconds) if previous_deadline else started+seconds
-        self.event('chat_attempted', token=token)
-        self.submit(0, token, channel)
-        self.event('chat_locally_accepted', token=token)
-        until(lambda: self.history(1, channel, token), started+seconds, 'authenticated received chat')
-        self.submit(1, 'ack:'+token, channel)
-        until(lambda: self.history(0, channel, 'ack:'+token), started+seconds, 'authenticated returned acknowledgment')
-        if len(self.history(1, channel, token)) != 1: raise RuntimeError('duplicate received chat')
-        self.chat_count += 1
-        self.event('chat_acknowledged', token=token, seconds=time.monotonic()-started)
-        self.rpc_deadline=previous_deadline
+        try:
+            for sender, receiver, body in ((0, 1, token), (1, 0, 'reply:'+token)):
+                self.event('chat_attempted', token=body, sender=sender)
+                self.submit(sender, body, channel)
+                self.event('chat_locally_accepted', token=body, sender=sender)
+                receipt=until(lambda:self.delivery(sender,receiver,channel,body),
+                              self.rpc_deadline,'recipient display and authenticated sender ACK')
+                self.event('chat_delivery_verified', sender=sender, message_id=receipt['id'],
+                           seconds=time.monotonic()-started)
+            self.chat_count += 1
+            self.event('chat_acknowledged', token=token, seconds=time.monotonic()-started)
+        finally:
+            self.rpc_deadline=previous_deadline
+
+    def delivery(self, sender, receiver, channel, token, expected_id=None):
+        sent=self.history(sender,channel,token)
+        received=self.history(receiver,channel,token)
+        if len(sent)>1 or len(received)>1:
+            raise RuntimeError('duplicate application message')
+        if not sent or not received: return None
+        if (not sent[0]['mine'] or received[0]['mine'] or not sent[0]['id'] or
+                sent[0]['id']!=received[0]['id'] or
+                (expected_id is not None and sent[0]['id']!=expected_id)):
+            raise RuntimeError('application message identity changed')
+        return sent[0] if sent[0].get('delivery')=='delivered' else None
 
     def start_file(self, channel, size, label):
         ident = uuid.uuid4().hex; name = label+'.bin'
@@ -284,17 +303,20 @@ class Journey(base.Worker):
         self.rpc_deadline=time.monotonic()+180
         self.submit(0,token,channel)
         self.event('chat_accepted_receiver_offline',token=token)
+        admitted=self.history(0,channel,token)
+        if len(admitted)!=1 or admitted[0].get('delivery')!='local_accepted':
+            raise RuntimeError('offline admission must remain pending')
+        pending_id=admitted[0]['id']
         stop_client(0)
         for i in (0,1):
             self.start_client(i)
             value=until(lambda i=i:self.request(i,'snapshot'),time.monotonic()+120,'admitted profile reopen')
             if value['snapshot']['instance']['id']!=identities[i]: raise RuntimeError('admitted reopen changed identity')
         self.rpc_deadline=time.monotonic()+300
-        until(lambda:self.history(1,channel,token),self.rpc_deadline,'admitted chat delivered without resubmission')
-        if len(self.history(1,channel,token))!=1: raise RuntimeError('admitted text replayed twice')
-        self.submit(1,'ack:'+token,channel)
-        until(lambda:self.history(0,channel,'ack:'+token),self.rpc_deadline,'returned admitted-reopen acknowledgment')
-        self.event('admitted_chat_reopen_passed',token=token,no_resubmission=True,same_identities=True)
+        until(lambda:self.delivery(0,1,channel,token,pending_id),self.rpc_deadline,
+              'retained admitted ID displayed and authenticated ACK without resubmission')
+        self.event('admitted_chat_reopen_passed',token=token,message_id=pending_id,
+                   no_resubmission=True,same_identities=True)
         self.chat_count+=1
         self.rpc_deadline=None
 
@@ -328,6 +350,13 @@ class Journey(base.Worker):
         self.reopen(1)
         self.probe(1,{'action':'export','id':small['id'],'name':'reopened-'+small['name'],**{k:small[k] for k in ('size','sha256')}})
         self.admitted_sender_reopen(channel)
+        if self.spec['config'].get('mode') == 'smoke':
+            self.result['chat_acknowledged']=self.chat_count
+            self.result['credential_cycles']=[]
+            self.result['turnover_qualified']=False
+            self.result['boundary']['after']=self.inventory();self.assert_topology(self.result['boundary']['after'])
+            self.result['completed']=True
+            return
         if self.spec['config'].get('mode') == 'carrier-cap':
             self.carrier_cap(channel)
             self.result['chat_acknowledged']=self.chat_count
@@ -396,7 +425,7 @@ def main():
     parser.add_argument('--build',type=Path,required=True)
     parser.add_argument('--out',type=Path,required=True)
     parser.add_argument('--expiries',type=int,default=3,choices=(1,2,3))
-    parser.add_argument('--mode',choices=('credential-expiry','carrier-cap'),default='credential-expiry')
+    parser.add_argument('--mode',choices=('smoke','credential-expiry','carrier-cap'),default='credential-expiry')
     parser.add_argument('--file-bytes',type=int,default=256*1024*1024)
     args=parser.parse_args()
     if os.geteuid()==0: parser.error('run controller as ordinary owner')
@@ -411,7 +440,7 @@ def main():
     (root/'spec.json').write_text(json.dumps(spec,indent=2)+'\n')
     (root/'driver.py').write_bytes(Path(__file__).read_bytes())
     (root/'boundary-helper.py').write_bytes(HELPER.read_bytes())
-    timeout=3600*(args.expiries+1)+900
+    timeout=900 if args.mode=='smoke' else 3600*(args.expiries+1)+900
     command=['sudo','-n','timeout','--signal=TERM','--kill-after=20',str(timeout),
              'unshare','--net','--mount','--pid','--fork','--mount-proc','--kill-child','--propagation','private','--',
              sys.executable,str(Path(__file__).resolve()),'--worker',str(root/'spec.json')]
@@ -432,7 +461,8 @@ def main():
             'driver_sha256':tool_hash,'helper_sha256':helper_hash,'worker':worker,
             'privacy_qualified':False,'release_qualified':False,
             'scope_limits':['explicit private bootstrap, not installed signed-network onboarding',
-                            'UI local acceptance and returned authenticated chat acknowledgments; native exact-wire regression remains separate',
+                            'same-ID recipient history and sender delivery ACK; native exact-wire regression remains separate',
+                            'smoke mode omits credential and carrier expiry and does not qualify latency ceilings',
                             'real carrier lifetime requires connection-lifecycle evidence; elapsed time alone does not qualify its cause']}
     report['passed']=not residual and result.returncode==0 and worker.get('completed') is True and worker.get('children_stopped') is True and all(report[k] for k in ('host_links_unchanged','build_unchanged','tooling_unchanged'))
     (root/'report.json').write_text(json.dumps(report,indent=2)+'\n')

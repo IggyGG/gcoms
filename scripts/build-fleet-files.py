@@ -17,6 +17,18 @@ def digest(path):
     with path.open('rb') as stream:
         return hashlib.file_digest(stream, 'sha256').hexdigest()
 
+def source_patches(gcoms):
+    patches = ['[patch.crates-io]']
+    members = tomllib.loads((gcoms / 'Cargo.toml').read_text())['workspace']['members']
+    for member in members:
+        for folder in sorted(gcoms.glob(member)):
+            if not folder.resolve().is_relative_to(gcoms.resolve()):
+                raise ValueError('workspace member escapes paired source')
+            name = tomllib.loads((folder / 'Cargo.toml').read_text())['package']['name']
+            if name == 'gcoms' or name.startswith('gcoms-'):
+                patches.append(f'{json.dumps(name)} = {{ path = {json.dumps(str(folder))} }}')
+    return '\n'.join(patches) + '\n'
+
 def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument('--gchat', type=Path, required=True)
@@ -33,16 +45,9 @@ def main():
             files = snapshot(root, output / name)
             report['sources'][name] = {'revision': subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=root, text=True).strip(),
                 'files': files, 'snapshot_sha256': hashlib.sha256(json.dumps(files, sort_keys=True).encode()).hexdigest()}
-        patches = ['[patch.crates-io]']
         gcoms = output / 'gcoms'
-        members = tomllib.loads((gcoms / 'Cargo.toml').read_text())['workspace']['members']
-        for member in members:
-            for folder in sorted(gcoms.glob(member)):
-                name = tomllib.loads((folder / 'Cargo.toml').read_text())['package']['name']
-                if name.startswith('gcoms-'):
-                    patches.append(f'{json.dumps(name)} = {{ path = {json.dumps(str(folder))} }}')
         patch = output / 'source.toml'
-        patch.write_text('\n'.join(patches) + '\n')
+        patch.write_text(source_patches(gcoms))
         env = dict(os.environ, CARGO_TARGET_DIR=str(args.target_dir.resolve()))
         env.setdefault('CARGO_BUILD_JOBS', '4')
         commands = [

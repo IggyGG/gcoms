@@ -1,3 +1,7 @@
+The current [reliability release requirements](docs/RELIABILITY_RELEASE.md)
+define delivery/recovery deadlines, cluster validation and the subsequent graph
+routing milestone. Historical qualification counts below retain their own scope.
+
 ## Protected-route error context
 
 Recovery errors identify the failing middle number and handshake/admission stage,

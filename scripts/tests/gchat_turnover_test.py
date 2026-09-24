@@ -1,5 +1,6 @@
 """Controller regressions from the real-daemon startup/reopen attempts."""
 import importlib.util
+import base64
 import os
 from pathlib import Path
 import socket
@@ -53,6 +54,43 @@ class ControllerTests(unittest.TestCase):
             self.worker.start_client(0)
         self.assertEqual(endpoint.read_text(), "preserve")
 
+    def test_received_reply_cannot_substitute_for_sender_delivery_receipt(self):
+        self.worker.rpc_deadline = None
+        def history(i, channel, token):
+            return [dict(id='message-id', body=token, mine=i == 0,
+                         delivery='local_accepted')]
+        with mock.patch.object(self.worker, 'submit'), \
+                mock.patch.object(self.worker, 'history', side_effect=history):
+            with self.assertRaisesRegex(RuntimeError, 'deadline'):
+                self.worker.chat('channel', 'pending', seconds=.02)
+        self.assertEqual(self.worker.chat_count, 0)
+        self.assertIsNone(self.worker.rpc_deadline)
+
+    def test_delivery_receipt_requires_matching_received_id(self):
+        self.worker.rpc_deadline = None
+        def history(i, channel, token):
+            return [dict(id=f'wrong-{i}', body=token, mine=i == 0,
+                         delivery='delivered')]
+        with mock.patch.object(self.worker, 'submit'), \
+                mock.patch.object(self.worker, 'history', side_effect=history):
+            with self.assertRaisesRegex(RuntimeError, 'deadline|identity'):
+                self.worker.chat('channel', 'mismatch', seconds=.02)
+        self.assertEqual(self.worker.chat_count, 0)
+        self.assertIsNone(self.worker.rpc_deadline)
+
+    def test_both_directions_require_matching_id_and_delivered_receipt(self):
+        self.worker.rpc_deadline = None
+        def history(i, channel, token):
+            sender = 1 if token.startswith('reply:') else 0
+            return [dict(id='id:'+token, body=token, mine=i == sender,
+                         delivery='delivered' if i == sender else None)]
+        with mock.patch.object(self.worker, 'submit') as submit, \
+                mock.patch.object(self.worker, 'history', side_effect=history):
+            self.worker.chat('channel', 'success', seconds=1)
+        self.assertEqual(submit.call_count, 2)
+        self.assertEqual(self.worker.chat_count, 1)
+        self.assertIsNone(self.worker.rpc_deadline)
+
     def test_remote_join_uses_remaining_setup_budget_not_default_rpc_timeout(self):
         class SetupComplete(Exception):
             pass
@@ -92,6 +130,38 @@ class ControllerTests(unittest.TestCase):
         with mock.patch.object(turnover.subprocess, "Popen"):
             with self.assertRaises(SetupComplete):
                 worker.exercise()
+
+
+class TopologyTests(unittest.TestCase):
+    def test_bootstrap_can_supply_five_distinct_hops_for_either_inbox(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for i in (0, 1):
+                (root / f'c{i}').mkdir()
+            worker = turnover.Journey(dict(out=str(root), uid=os.getuid(), gid=os.getgid(),
+                workload='turnover', seed=1, config={}, build={'path': str(root / 'build')}))
+            worker.root = root
+            (root / 'resolver').write_text('fixture')
+            (root / 'nsswitch').write_text('fixture')
+            def control(i, command):
+                if command == 'routing_bootstrap':
+                    return {'routing_bundle_b64': base64.urlsafe_b64encode(
+                        b'GCRB\x02\x01' + bytes([i + 1]) * 155).decode()}
+                if command == 'provision_client_relay':
+                    return {'private_card_b64': 'private-fixture'}
+                return {'ready': True}
+            with mock.patch.object(worker, 'relay'), mock.patch.object(worker, 'stop'), \
+                    mock.patch.object(worker, 'control', side_effect=control):
+                worker.prepare()
+            for client, inbox in ((0, 2), (1, 3)):
+                bundle = (root / f'c{client}/bootstrap').read_bytes()
+                self.assertEqual(len(bundle), 6 + bundle[5] * 155)
+                candidates = {bundle[offset] for offset in range(6, len(bundle), 155)}
+                self.assertNotIn(inbox + 1, candidates)
+                for entry in candidates:
+                    self.assertGreaterEqual(len(candidates - {entry}), 3,
+                        'five-hop route needs three independent middles after entry and terminal exclusion')
+            self.assertEqual(len(set(worker.relay_addresses)), 6)
 
 
 class CapEvidenceTests(unittest.TestCase):

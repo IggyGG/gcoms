@@ -1,3 +1,10 @@
+# Current completion plan, 2026-09-24
+
+Implement the [reliability release requirements](docs/RELIABILITY_RELEASE.md):
+batch independent failures in the cluster, repair the shared runtime, qualify
+actual GChat/device journeys, then release. Neighbour-graph design follows that
+release. Older entries below retain their historical input/result scope.
+
 # Android resume: identify the failing protected-route stage, 2026-09-24
 
 The original file completed with an exact export hash, but after the native Save
