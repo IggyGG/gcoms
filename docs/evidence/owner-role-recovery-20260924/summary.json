@@ -1,13 +1,49 @@
 {
-  "at": "2026-09-24T02:30:55.860507+00:00",
+  "at": "2026-09-24T02:35:35.589995+00:00",
+  "source_commit": "b9a87022f2581db1437ec09cb7e5f581f2e5bfa7",
+  "source_files": 697,
+  "committed_sources_match": true,
   "checks": {
-    "red": {
-      "exit_code": 101,
+    "focus-02": {
+      "exit_code": 0,
       "source_unchanged": true
     },
-    "node": {
-      "exit_code": 101,
+    "node-02": {
+      "exit_code": 0,
+      "source_unchanged": true
+    },
+    "clippy-02": {
+      "exit_code": 0,
+      "source_unchanged": true
+    },
+    "fmt-02": {
+      "exit_code": 0,
       "source_unchanged": true
     }
-  }
+  },
+  "node": {
+    "passed": 335,
+    "failed": 0,
+    "ignored": 2
+  },
+  "red": {
+    "exit_code": 101,
+    "exact_checkpoint_error": true
+  },
+  "initial_comparison": "Retained failed full-suite run reused the prior test binary without recompilation; not qualification. Re-extracted candidate with fresh timestamps, forced compilation, then passed focused and full tests. Bytes unchanged apart from the documented formatting correction and docs.",
+  "evidence": {
+    "red.log": "cef623d660e24343a944f828d552cdb6d714c573e53aadc233d4d93c00f1ccb4",
+    "red-before.json": "3b524e2505f951f5c63d4932063b146aacdd855fc49cc4d0e6725a18f9a16266",
+    "red-after.json": "3b524e2505f951f5c63d4932063b146aacdd855fc49cc4d0e6725a18f9a16266",
+    "node.log": "4635e6b0304cb63067ce971b136fb168e6831aed7ed23efbda78ce1c23e0b30f",
+    "focus-02.log": "40e08e9f710469674c22cb7d4ec0d223049482602477bc02f6de3a9792b63c17",
+    "node-02.log": "995a02ebbab570e80963163219b2cc448c7acbc31563ba20bae84800f8db9e60",
+    "clippy-02.log": "f961bd0a468149db41c520c3a05d665d8ad522f4b709d0da133c52655178a5be",
+    "fmt-02.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "node-02-before.json": "57c8501a7ea12bcf0592e0fc854898cd79400b721b988c291214ab41ca2a9ce7",
+    "node-02-after.json": "57c8501a7ea12bcf0592e0fc854898cd79400b721b988c291214ab41ca2a9ce7",
+    "summary-02.json": "07c33d4cbf35693d7cdca5a6694a7198194bd4324bf062db2c75c5eba61100ee",
+    "initial-comparison-summary.json": "f1c4dc9626cd3238794f17e23e6c34b7b3cc6d66faa40151721dd2f1e953a81d"
+  },
+  "scope": "Node checkpoint recovery; physical Android/file and paired application checks pending."
 }
