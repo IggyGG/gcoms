@@ -5,7 +5,7 @@ but the original file remains at 92,274,688 bytes and sender attempts receive
 GC/2 overload replies. Distinguish queue fullness, aggregate storage and replay
 capacity in the existing optional local metrics sink. Preserve every wire reply,
 authentication check, limit and replay deadline; record no routing identifiers.
-Cluster node checks and one diagnostic relay candidate are next. Device delivery
+Cluster validation passed: 335 node library tests, real queue/service tests, strict Clippy and the production relay build on unchanged source. The diagnostics candidate remains **not deployed**; the original Android file completed without a relay update. [Receipt](docs/evidence/queue-admission-20260924/summary.json). Device delivery
 and the remaining file bytes are still unqualified. codematch=unreachable.
 
 # Reopen after an owner-role deadline, 2026-09-24

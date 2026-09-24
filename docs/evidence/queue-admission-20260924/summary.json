@@ -1,0 +1,75 @@
+{
+  "sources": {
+    "gcoms": {
+      "commit": "b5aeab2dadd7093e201e4780d4fff7d9345ebafb",
+      "tree": "0e42dc6ebb2e39094be3e18cf97a2d50e34ec1c5"
+    }
+  },
+  "checks": {
+    "fmt": {
+      "exit_code": 0,
+      "source_unchanged": true
+    },
+    "queues": {
+      "exit_code": 0,
+      "source_unchanged": true
+    },
+    "node": {
+      "exit_code": 0,
+      "source_unchanged": true
+    },
+    "clippy": {
+      "exit_code": 0,
+      "source_unchanged": true
+    },
+    "release": {
+      "exit_code": 0,
+      "source_unchanged": true
+    }
+  },
+  "source_unchanged": true,
+  "passed": true,
+  "artifact": {
+    "file": "gcnode",
+    "sha256": "631e356f0087139f707e61621f4d987b58295b5dbb0401a46c251b98402f9d7d",
+    "bytes": 18848288
+  },
+  "finished": "2026-09-24T03:41:49.236995+00:00",
+  "scope": "Affected node package and production diagnostics binary; not installed on relays. Original Android file completed before deployment; unrelated device receipts bind their own installed inputs.",
+  "source_file_count": 711,
+  "codematch": "unreachable",
+  "deployed": false,
+  "evidence": {
+    "retained/summary.json": "e907b0ed7d8b33500cee2d462d0c9aa71f618a6e28b65f71c186a8b001b1172a",
+    "retained/queues.log": "a37235dbe4dc6aea73c309e33d1a8e125fcc96daacca10479f1b57d644197747",
+    "retained/toolchain-setup.log": "4ae2551ea6202e5136e5d7344c5cd841fb1b981ec6798b8e0c525a228d335c72",
+    "retained/runner.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "retained/release.log": "1604374226ad2beeb68ece6e502d84d5105e7d46f6cebb2db5154133d7864849",
+    "retained/source.json": "722f2f316bb324f128b0488b9b5608e349bbeca751ed3e242f94983d68ae4118",
+    "retained/fmt.exit": "5feceb66ffc86f38d952786c6d696c79c2dbc239dd4e91b46729d73a27fb57e9",
+    "retained/queues.exit": "5feceb66ffc86f38d952786c6d696c79c2dbc239dd4e91b46729d73a27fb57e9",
+    "retained/node.exit": "5feceb66ffc86f38d952786c6d696c79c2dbc239dd4e91b46729d73a27fb57e9",
+    "retained/clippy.log": "49eafa31b1a747ddc9847adf69eb44db037633e06fdc44abad9f5a9c4d4fbe3a",
+    "retained/clippy.exit": "5feceb66ffc86f38d952786c6d696c79c2dbc239dd4e91b46729d73a27fb57e9",
+    "retained/node.log": "7d28d01f77cbcea67d95ad21bdb4f3c3ffd2e56bbec9e44f990ee2ce6c7b7a0b",
+    "retained/progress.json": "e5da2615065be7b38f9424df0f35cbcc1e867855a3b8b5f0dc89175f2b1b28fd",
+    "retained/check.py": "1783f8811910e51c4fe13686ea2edc7af50015a41ac3411065626fc1e8a4f53d",
+    "retained/release.exit": "5feceb66ffc86f38d952786c6d696c79c2dbc239dd4e91b46729d73a27fb57e9",
+    "retained/fmt.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "retained/environment-first/summary.json": "ce11a148ec56f07888b74ed3c275e8a7deeb15415ba61df42729bbc9ad1f2e53",
+    "retained/environment-first/runner.log": "559b23b93361501151c2f97cb7fe36f33d32cbd8c0f24df50d22da3c405af6c9",
+    "retained/environment-first/fmt.exit": "6b86b273ff34fce19d6b804eff5a3f5747ada4eaa22f1d49c01e52ddb7875b4b",
+    "retained/environment-first/progress.json": "1f08bae7f5e1297e9650f0423e245fa3861319d0622d6545a37f8143ce29327e",
+    "retained/environment-first/fmt.log": "f721335f75da9ac5af07439b36db4ed18e701519042b65c632c8731098caccee"
+  },
+  "retained_evidence_root": "/run/media/user/SSD-2/git/ghost/coms/.worktrees/gcoms-public/gcoms/.worktrees/fleet-files/gchat/target/channel-reconnect-20260923/queue-admission-01",
+  "counts": {
+    "queues": [
+      "test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 53.57s",
+      "test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s"
+    ],
+    "node": [
+      "test result: ok. 335 passed; 0 failed; 2 ignored; 0 measured; 0 filtered out; finished in 109.64s"
+    ]
+  }
+}
