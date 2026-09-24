@@ -8,8 +8,11 @@ successful refresh deferred available middle referrals for five minutes. Its
 60/120/240/300-second failure backoff until five independent fresh relay addresses
 are available. Application traffic cannot trigger it; guard selection, entry retry
 pacing, authority deadlines, route length and circuit limits are unchanged.
-Cluster red/green and affected-package qualification are in progress. This does
-not claim that the missing historical reply contents or Android's separate
+Exact candidate 7cb83b4 passed all 82 routing package tests (zero failures or
+ignores), strict all-target/all-feature routing Clippy and 694 unchanged source
+bindings. The original implementation failed the new assertion after 75.05s.
+[Receipt](docs/evidence/referral-recovery-20260924/summary.json). Actual application
+validation is next. This does not claim that the missing historical reply contents or Android's separate
 uncertain-checkpoint cause have been established. `codematch=unreachable`.
 
 # Android first checkpoint failure, 2026-09-24
