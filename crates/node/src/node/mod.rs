@@ -390,7 +390,7 @@ impl NodeProfile {
             unreachable!()
         };
         fixture.gc2_carrier_period_ms = 1000;
-        fixture.gc2_cover_mode = gcoms_routing::gc2::CoverMode::Interactive;
+        fixture.gc2_cover_mode = gcoms_routing::gc2::CoverMode::Responsive;
         Self::Fixture(fixture)
     }
 
