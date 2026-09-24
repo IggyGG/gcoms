@@ -37,9 +37,8 @@ pub(crate) async fn channel_tick(
 
 /// Control recovery keeps its independent maintenance clock. Data admission
 /// and held hop receipts never own the clock that retransmits ACKs and commits.
-pub(crate) async fn channel_control_tick(
+pub(crate) fn prepare_channel_control(
     state: &Arc<Mutex<NodeState>>,
-    scheduler: &RelayScheduler,
     events: &broadcast::Sender<Ev>,
 ) {
     let leaving = {
@@ -73,14 +72,13 @@ pub(crate) async fn channel_control_tick(
             }
         }
     }
-    let control_actions = {
+    {
         let mut st = state.lock().unwrap_or_else(|p| p.into_inner());
         if st.owner_transition_failed {
             return;
         }
         expire_channel_presence(&mut st, std::time::Instant::now(), events);
-        let mut control_actions = Vec::new();
-        for (chan, cs) in st.channels.iter_mut() {
+        for cs in st.channels.values_mut() {
             if cs.own_route.aliases.len() != 2 {
                 continue;
             }
@@ -90,75 +88,8 @@ pub(crate) async fn channel_control_tick(
                     wire.fill(0);
                 }
             }
-            control_actions.extend(
-                cs.pending_control
-                    .iter()
-                    .cloned()
-                    .map(|(peer, wire)| (chan.clone(), peer, wire)),
-            );
-            if let Some(outbox) = &cs.membership_outbox {
-                control_actions.extend(
-                    outbox
-                        .expected
-                        .iter()
-                        .filter(|(identity, _)| !outbox.acknowledged.contains(*identity))
-                        .map(|(_, peer)| (chan.clone(), peer.clone(), outbox.commit.clone())),
-                );
-            }
         }
-        control_actions
-    };
-
-    futures_join_all(control_actions.into_iter().map(|(chan, peer, wire)| {
-        let state = state.clone();
-        let scheduler = scheduler.clone();
-        async move {
-            let cells = crate::proto::encode_chan_cells(&chan, &wire).unwrap_or_default();
-            let mut sent = !cells.is_empty();
-            let receipts = cells
-                .iter()
-                .map(|cell| {
-                    scheduler.push(
-                        ProducerClass::ChannelControl,
-                        peer.control.clone(),
-                        cell.clone(),
-                    )
-                })
-                .collect::<Vec<_>>();
-            // Every peer's jobs are queued before waiting for another peer. A
-            // failed/slow lane must not serialise all membership ACK retransmits.
-            sent &= tokio::time::timeout(std::time::Duration::from_secs(120), async {
-                let outcomes = futures_join_all(receipts.into_iter().map(|receipt| async move {
-                    match receipt {
-                        Ok(receipt) => receipt.completion().await.accepted().is_ok(),
-                        Err(_) => false,
-                    }
-                }))
-                .await;
-                outcomes.into_iter().all(|accepted| accepted)
-            })
-            .await
-            .unwrap_or(false);
-            if sent {
-                let mut st = state.lock().unwrap_or_else(|p| p.into_inner());
-                if let Some(cs) = st.channels.get_mut(&chan) {
-                    let mut index = 0;
-                    while index < cs.pending_control.len() {
-                        let remove = cs.pending_control[index].0 == peer
-                            && cs.pending_control[index].1 == wire;
-                        if remove {
-                            if let Some((_, mut pending_wire)) = cs.pending_control.remove(index) {
-                                pending_wire.fill(0);
-                            }
-                        } else {
-                            index += 1;
-                        }
-                    }
-                }
-            }
-        }
-    }))
-    .await;
+    }
 }
 
 /// Pairwise channel encryption keeps targeted maintenance off the shared MLS

@@ -77,6 +77,7 @@ pub(crate) struct DirectPresenceObservation {
 /// Await a set of independent futures concurrently and collect their
 /// outputs in order. Poll in the owning task so cancellation drops all child
 /// futures before releasing the node's persistent state.
+#[cfg(test)]
 pub(crate) async fn futures_join_all<F, T>(futures: impl IntoIterator<Item = F>) -> Vec<T>
 where
     F: std::future::Future<Output = T> + Send + 'static,
