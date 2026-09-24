@@ -245,6 +245,7 @@ pub struct NodeState {
     pub(crate) local_contact_generation: u64,
     pub(crate) pending_1to1: HashMap<[u8; 16], PendingDirect>,
     pub(crate) next_direct_sequence: u64,
+    pub(crate) channel_inbox: channel_inbox::Inbox,
     pub(crate) durable_applications_enabled: bool,
     pub(crate) application_inbox: application_inbox::ApplicationInbox,
     pub(crate) direct_ack_outbox: VecDeque<DirectDelivery>,

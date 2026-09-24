@@ -59,6 +59,15 @@ When a protocol checkpoint fails, bounded local diagnostics distinguish encoding
 store failure and the first owner-lifecycle pause site. Uncertain persistence still
 pauses the owner; these diagnostics do not authorize retry or confirm delivery.
 
+An in-process application can opt into `durable_channel_inbox(true)` before
+receiving starts. Channel and channel-private plaintext is sealed with the
+receive checkpoint before acknowledgment; the archive owner explicitly consumes
+each saved record. The inbox is bounded to 256 messages and 4 MiB and rejects new
+receives at capacity without advancing their ratchets. File pieces retain their
+separate journal. Shared/attached IPC clients cannot silently opt into ownership.
+Enabled profiles use the `GCNSTM` checkpoint wrapper, which requires a compatible
+reader and rollback binary; older binaries cannot read it.
+
 **GComs** is a Rust communication protocol for secure connections, with typed
 service APIs for addon and client integration. **GChat** is its separate reference
 application, with a desktop UI, terminal UI and local service.

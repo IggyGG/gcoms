@@ -1,5 +1,160 @@
 // Native MLS/ratchet and archive boundaries, with no OS/network mocks.
 #[tokio::test]
+async fn received_channel_text_cannot_schedule_ack_before_failed_checkpoint() {
+    let (mut node, mut owner, mut owner_route) = channel_member_fixture("receive-checkpoint");
+    node.channel_inbox = channel_inbox::Inbox::new(true);
+    owner_route.control.expiry = now_unix() + 3600;
+    owner_route.data.expiry = now_unix() + 3600;
+    node.channels
+        .get_mut("receive-checkpoint")
+        .unwrap()
+        .directory
+        .insert("owner".into(), owner_route);
+    let scheduler = node.scheduler.clone();
+    let observed = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let jobs = observed.clone();
+    node.durable_state_sink = Some(Arc::new(move |_| {
+        jobs.store(
+            scheduler.resource_snapshot().peak_jobs,
+            std::sync::atomic::Ordering::SeqCst,
+        );
+        Err("injected incoming checkpoint failure".into())
+    }));
+    let wire = owner
+        .send(&crate::channel::encode_text(b"retain before ACK", false))
+        .unwrap();
+    let (events, mut seen) = broadcast::channel(8);
+    assert!(!deliver_mls(
+        &mut node,
+        "receive-checkpoint",
+        &wire,
+        std::time::Instant::now(),
+        &events
+    ));
+    assert!(seen.try_recv().is_err());
+    assert!(node.channel_inbox.page(0, 1).unwrap().is_empty());
+    assert_eq!(
+        observed.load(std::sync::atomic::Ordering::SeqCst),
+        0,
+        "an uncommitted receive must not submit an ACK to the scheduler"
+    );
+    assert!(node.channels["receive-checkpoint"]
+        .pending_control
+        .is_empty());
+    node.durable_state_sink = Some(Arc::new(|_| Ok(())));
+    assert!(deliver_mls(
+        &mut node,
+        "receive-checkpoint",
+        &wire,
+        std::time::Instant::now(),
+        &events
+    ));
+    assert!(matches!(seen.try_recv(), Ok(Ev::ChannelMessage { .. })));
+}
+
+#[tokio::test]
+async fn channel_delivery_is_sealed_with_ratchet_and_exact_ack_before_publication() {
+    let (mut node, mut owner, owner_route) = channel_member_fixture("archive-handoff");
+    node.channel_inbox = channel_inbox::Inbox::new(true);
+    node.channels
+        .get_mut("archive-handoff")
+        .unwrap()
+        .directory
+        .insert("owner".into(), owner_route);
+    let captures = Arc::new(Mutex::new(Vec::new()));
+    let sink = captures.clone();
+    node.durable_state_sink = Some(Arc::new(move |bytes| {
+        sink.lock().unwrap().push(bytes);
+        Ok(())
+    }));
+    let wire = owner
+        .send(&crate::channel::encode_text(
+            b"durable channel plaintext",
+            false,
+        ))
+        .unwrap();
+    let id = crate::channel::msg_id("archive-handoff", &wire);
+    let (events, mut seen) = broadcast::channel(8);
+    assert!(deliver_mls(
+        &mut node,
+        "archive-handoff",
+        &wire,
+        std::time::Instant::now(),
+        &events
+    ));
+    assert!(matches!(seen.try_recv(),Ok(Ev::ChannelMessage {msg_id,..}) if msg_id==id));
+    let bytes = captures.lock().unwrap().last().unwrap().clone();
+    assert!(!bytes
+        .windows(b"durable channel plaintext".len())
+        .any(|w| w == b"durable channel plaintext"));
+    let archive = decode_v2(&bytes, &TEST_SEED).unwrap();
+    let delivery = archive.channel_inbox.page(0, 1).unwrap().remove(0);
+    assert!(
+        matches!(delivery.message.event(),Ev::ChannelMessage {msg_id,text,..} if msg_id==id && text==b"durable channel plaintext")
+    );
+    assert_eq!(archive.channels[0].commit_acks.len(), 1);
+    assert!(decode_v2(&bytes, &[4; 32]).is_err());
+    let mut corrupt = bytes.clone();
+    *corrupt.last_mut().unwrap() ^= 1;
+    assert!(decode_v2(&corrupt, &TEST_SEED).is_err());
+    // Consuming the application receipt must leave MLS and authenticated ACK state intact.
+    node.channel_inbox
+        .consume(delivery.sequence, delivery.digest())
+        .unwrap();
+    let after = decode_v2(&encode_state(&node).unwrap(), &TEST_SEED).unwrap();
+    assert!(after.channel_inbox.page(0, 1).unwrap().is_empty());
+    assert_eq!(after.channels[0].commit_acks.len(), 1);
+}
+
+#[tokio::test]
+async fn received_channel_commit_cannot_publish_roster_before_failed_checkpoint() {
+    let (mut node, mut owner, owner_route) = channel_member_fixture("commit-checkpoint");
+    node.channels
+        .get_mut("commit-checkpoint")
+        .unwrap()
+        .directory
+        .insert("owner".into(), owner_route);
+    let prepared = gcoms_mls::ChannelMember::prepare("new-member").unwrap();
+    let package = gcoms_mls::ChannelMember::key_package_bytes(&prepared).unwrap();
+    let invite =
+        owner.sign_invite_key_package(&package, "new-member", gcoms_mls::Caps::member(), 3600);
+    let admission = owner.admit(&invite, &package).unwrap();
+    let epoch = node.channels["commit-checkpoint"].role.epoch();
+    node.durable_state_sink = Some(Arc::new(|_| {
+        Err("injected commit checkpoint failure".into())
+    }));
+    let (events, mut seen) = broadcast::channel(8);
+    deliver_mls(
+        &mut node,
+        "commit-checkpoint",
+        &admission.commit,
+        std::time::Instant::now(),
+        &events,
+    );
+    assert!(
+        seen.try_recv().is_err(),
+        "uncommitted membership must not be published"
+    );
+    assert_eq!(node.channels["commit-checkpoint"].role.epoch(), epoch);
+    assert!(node.channels["commit-checkpoint"]
+        .pending_control
+        .is_empty());
+    node.durable_state_sink = Some(Arc::new(|_| Ok(())));
+    deliver_mls(
+        &mut node,
+        "commit-checkpoint",
+        &admission.commit,
+        std::time::Instant::now(),
+        &events,
+    );
+    assert!(matches!(
+        seen.try_recv(),
+        Ok(Ev::ChannelRosterChanged { .. })
+    ));
+    assert!(node.channels["commit-checkpoint"].role.epoch() > epoch);
+}
+
+#[tokio::test]
 async fn channel_metadata_successor_retains_authority_for_offline_members() {
     let (mut node, mut owner, owner_route) = channel_member_fixture("offline-handoff");
     let prepared = gcoms_mls::ChannelMember::prepare("offline").unwrap();

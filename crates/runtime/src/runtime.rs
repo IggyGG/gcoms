@@ -214,6 +214,7 @@ impl ProtocolRuntime {
             profile,
             options.network,
             host_relay,
+            options.durable_channel_inbox,
         )
         .await
     }
@@ -553,6 +554,7 @@ impl ProtocolRuntime {
             profile,
             installed,
             true,
+            false,
         )
         .await
     }
@@ -567,6 +569,7 @@ impl ProtocolRuntime {
         profile: gcoms_node::node::NodeProfile,
         installed: Option<gcoms_network_client::InstalledNetwork>,
         host_relay: bool,
+        durable_channel_inbox: bool,
     ) -> Result<Self, String> {
         let identity_seed = data.identity_seed;
         let node_state = data.node_state;
@@ -607,7 +610,24 @@ impl ProtocolRuntime {
             alias_lifecycle: Default::default(),
         };
         let policy = build_frwd_policy(allow_frwd_private_cidrs, listen.port())?;
-        let node = if !host_relay {
+        let node = if durable_channel_inbox {
+            let routing = if node_config.profile.is_production() {
+                let mut routing = gcoms_node::node::RoutingConfig::from_environment()?;
+                routing.connectivity = connectivity;
+                Some(routing)
+            } else {
+                None
+            };
+            gcoms_node::node::start_with_channel_inbox(
+                node_config,
+                policy,
+                durable_state_sink,
+                node_state.as_deref(),
+                routing,
+                host_relay,
+            )
+            .await?
+        } else if !host_relay {
             let routing = if node_config.profile.is_production() {
                 Some(gcoms_node::node::RoutingConfig::from_environment()?)
             } else {

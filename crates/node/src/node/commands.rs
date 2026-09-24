@@ -1045,6 +1045,40 @@ pub(crate) fn spawn_command_loop(ctx: CommandLoopContext) -> tokio::task::JoinHa
                     body.fill(0);
                     let _ = done.send(result);
                 }
+                Cmd::ChannelInboxPage { after, limit, done } => {
+                    let st = state.lock().unwrap_or_else(|p| p.into_inner());
+                    let result = if st.durable_state_sink.is_none() {
+                        Err("channel inbox requires persistent state".into())
+                    } else {
+                        st.channel_inbox.page(after, limit)
+                    };
+                    let _ = done.send(result);
+                }
+                Cmd::ChannelInboxReceipt {
+                    sequence,
+                    digest,
+                    done,
+                } => {
+                    let mut st = state.lock().unwrap_or_else(|p| p.into_inner());
+                    let prior = st.channel_inbox.clone();
+                    let result = if st.durable_state_sink.is_none() || !st.channel_inbox.enabled {
+                        Err("channel inbox requires persistent state".into())
+                    } else {
+                        st.channel_inbox
+                            .consume(sequence, digest)
+                            .and_then(|changed| {
+                                if changed {
+                                    persist_current_direct_state(&st)
+                                } else {
+                                    Ok(())
+                                }
+                            })
+                    };
+                    if result.is_err() {
+                        st.channel_inbox = prior;
+                    }
+                    let _ = done.send(result);
+                }
                 Cmd::ApplicationInboxPage { after, limit, done } => {
                     let st = state.lock().unwrap_or_else(|p| p.into_inner());
                     let result = if !cfg!(feature = "client-persist")

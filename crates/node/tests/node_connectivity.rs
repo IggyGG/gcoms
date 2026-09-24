@@ -5,6 +5,10 @@ use gcoms_node::{
 };
 use std::sync::{Arc, Mutex};
 
+// Wildcard listeners cover the other loopback fixtures too. Keep these
+// OS-port ownership journeys isolated while preserving real collision checks.
+static LISTENER_FIXTURE: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
 fn config() -> NodeConfig {
     NodeConfig {
         seed: [103; 32],
@@ -20,6 +24,7 @@ fn config() -> NodeConfig {
 #[cfg(feature = "experimental-gc2")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn protected_automatic_wildcard_starts_and_reopens_without_publication() {
+    let _fixture = LISTENER_FIXTURE.lock().await;
     let make_config = || NodeConfig {
         listen: "0.0.0.0:0".parse().unwrap(),
         profile: NodeProfile::gchat_file_transfer_production(None, 2),
@@ -65,6 +70,7 @@ async fn protected_automatic_wildcard_starts_and_reopens_without_publication() {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn auto_restart_reuses_port_then_survives_collision_without_identity_reset() {
+    let _fixture = LISTENER_FIXTURE.lock().await;
     let path = std::env::temp_dir().join(format!("gc-auto-restart-{:016x}", rand::random::<u64>()));
     let archive = Arc::new(Mutex::new(Vec::new()));
     let sink = archive.clone();
@@ -137,6 +143,7 @@ async fn auto_restart_reuses_port_then_survives_collision_without_identity_reset
 
 #[tokio::test]
 async fn fixed_mode_reports_collision_without_selecting_another_port() {
+    let _fixture = LISTENER_FIXTURE.lock().await;
     let occupied = tokio::net::TcpListener::bind("127.239.27.32:0")
         .await
         .unwrap();
@@ -153,6 +160,7 @@ async fn fixed_mode_reports_collision_without_selecting_another_port() {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn automatic_listener_is_admitted_only_after_an_independent_pinned_probe() {
+    let _fixture = LISTENER_FIXTURE.lock().await;
     use gcoms_routing::bootstrap::BootstrapBundle;
     use std::time::Duration;
     let mut relays = Vec::new();

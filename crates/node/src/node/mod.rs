@@ -42,6 +42,7 @@ use tokio::sync::{broadcast, mpsc};
 mod aliases;
 mod api;
 mod application_inbox;
+pub mod channel_inbox;
 
 mod channel_direct;
 mod channel_recovery;
@@ -927,6 +928,7 @@ async fn start_with_tls_policy_control_sink_and_bootstrap(
         routing_config,
         bootstrap_directory,
         true,
+        false,
     )
     .await
 }
@@ -956,6 +958,38 @@ pub async fn start_client_persistent_restored(
         routing,
         None,
         false,
+        false,
+    )
+    .await
+}
+
+/// Start a profile with a durable channel archive handoff enabled before ingress.
+#[cfg(feature = "client-persist")]
+pub async fn start_with_channel_inbox(
+    cfg: NodeConfig,
+    policy: Option<FrwdTargetPolicy>,
+    sink: DurableStateSink,
+    initial: Option<&[u8]>,
+    routing: Option<RoutingConfig>,
+    host_relay: bool,
+) -> Result<NodeHandle, String> {
+    let tls = match initial {
+        Some(bytes) => persist::restore_tls_identity(bytes, &cfg.seed)?,
+        None => None,
+    }
+    .map(Ok)
+    .unwrap_or_else(|| TlsIdentity::generate().map_err(|e| e.to_string()))?;
+    start_role(
+        cfg,
+        tls,
+        policy,
+        None,
+        Some(sink),
+        initial,
+        routing,
+        None,
+        host_relay,
+        true,
     )
     .await
 }
@@ -971,6 +1005,7 @@ async fn start_role(
     routing_config: Option<RoutingConfig>,
     bootstrap_directory: Option<std::path::PathBuf>,
     host_relay: bool,
+    durable_channels: bool,
 ) -> Result<NodeHandle, String> {
     if host_relay && !cfg!(feature = "relay-host") {
         return Err("relay hosting is not compiled in; use the outbound client constructor".into());
@@ -1312,6 +1347,7 @@ async fn start_role(
             local_contact_generation: 1,
             pending_1to1: HashMap::new(),
             next_direct_sequence: 1,
+            channel_inbox: channel_inbox::Inbox::new(durable_channels),
             durable_applications_enabled: false,
             application_inbox: application_inbox::ApplicationInbox::default(),
             direct_ack_outbox: VecDeque::new(),
@@ -1480,6 +1516,23 @@ async fn start_role(
                 scheduler.clone(),
                 events_tx.clone(),
             ));
+        }
+
+        #[cfg(all(feature = "relay-host", feature = "experimental-gc2"))]
+        if let Some(service) = routing.as_ref().and_then(|runtime| {
+            runtime
+                .service
+                .lock()
+                .unwrap_or_else(|p| p.into_inner())
+                .clone()
+        }) {
+            // Separate relay advertisement state; never expose client guards.
+            // The node owns cancellation alongside its other background tasks.
+            tasks.push(tokio::spawn(async move {
+                if let Err(error) = service.run_gc2_referral_refresh().await {
+                    metrics::log_event("gc2_referral_owner_error", &[("e", error.to_string())]);
+                }
+            }));
         }
 
         let workers = vec![

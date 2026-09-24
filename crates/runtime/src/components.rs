@@ -78,6 +78,7 @@ mod tests {
             Arc::new(store),
             data,
             RuntimeOptions {
+                durable_channel_inbox: false,
                 listen: "127.0.0.1:0".parse().unwrap(),
                 advertise: None,
                 relay: None,

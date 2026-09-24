@@ -415,6 +415,7 @@ async fn protected(
         "bootstrap-test",
         create,
         crate::RuntimeOptions {
+            durable_channel_inbox: false,
             listen,
             advertise: None,
             relay: None,

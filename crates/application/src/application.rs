@@ -59,6 +59,7 @@ pub struct ApplicationBuilder {
     central: Option<(sdk::component::RoutingPolicy, Vec<[u8; 16]>, String)>,
     invitation: Option<Zeroizing<String>>,
     receive: bool,
+    durable_channel_inbox: bool,
     peers: Vec<Peer>,
     #[cfg(feature = "rpc")]
     contracts: Vec<(String, u16)>,
@@ -135,6 +136,13 @@ impl ApplicationBuilder {
     }
     pub fn invitation(mut self, invitation: impl Into<String>) -> Self {
         self.invitation = Some(Zeroizing::new(invitation.into()));
+        self
+    }
+    /// Retain incoming channel text until the embedded archive owner commits it.
+    /// Must be selected before opening a restored profile; observers cannot consume it.
+    /// Shared/attached hosts do not expose this archive-owner API.
+    pub fn durable_channel_inbox(mut self, enabled: bool) -> Self {
+        self.durable_channel_inbox = enabled;
         self
     }
     /// Read-only/event-only attachments do not claim the durable application inbox.
@@ -216,6 +224,15 @@ impl ApplicationBuilder {
         {
             return Err("legacy storage adapters require an embedded runtime".into());
         }
+        if self.durable_channel_inbox {
+            #[cfg(any(feature = "embedded", feature = "network-client"))]
+            let local_owner = matches!(self.backend, Backend::Embedded | Backend::NetworkClient);
+            #[cfg(not(any(feature = "embedded", feature = "network-client")))]
+            let local_owner = false;
+            if !local_owner {
+                return Err("durable channel archives require an in-process owner".into());
+            }
+        }
         let token = control::registration(&profile, &self.application)?;
         #[cfg(not(any(feature = "ipc", feature = "rpc")))]
         let _ = token;
@@ -242,6 +259,7 @@ impl ApplicationBuilder {
                     .map(|n| gcoms_runtime::network::from_json(n))
                     .transpose()?;
                 let options = gcoms_runtime::RuntimeOptions {
+                    durable_channel_inbox: self.durable_channel_inbox,
                     listen: self.listen,
                     advertise: self.advertise,
                     relay: self.relay.clone(),
@@ -600,6 +618,7 @@ impl Application {
             providers: Vec::new(),
             invitation: None,
             receive: true,
+            durable_channel_inbox: false,
             peers: Vec::new(),
             #[cfg(feature = "rpc")]
             contracts: Vec::new(),

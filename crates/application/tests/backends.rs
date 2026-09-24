@@ -20,6 +20,28 @@ fn startup_future_keeps_caller_stack_bounded() {
     assert!(bytes <= 16 * 1024, "startup future occupies {bytes} bytes");
 }
 
+#[tokio::test]
+async fn attached_backend_cannot_silently_ignore_durable_channel_ownership() {
+    let dir = tempfile::tempdir().unwrap();
+    let profile = dir.path().join("profile");
+    let error = Application::builder("archive-owner-fixture")
+        .profile(&profile)
+        .unlock_secret("fixture-passphrase")
+        .backend(Backend::Attach {
+            endpoint: dir.path().join("absent.sock"),
+        })
+        .durable_channel_inbox(true)
+        .open()
+        .await
+        .err()
+        .expect("attachment cannot acquire archive ownership");
+    assert_eq!(
+        error,
+        "durable channel archives require an in-process owner"
+    );
+    assert!(!profile.exists());
+}
+
 #[gcoms::service(name = "example.echo", version = 1)]
 trait Echo {
     #[rpc(id = "echo", kind = "query")]

@@ -381,7 +381,6 @@ pub(crate) fn deliver_mls(
     events: &broadcast::Sender<Ev>,
 ) -> bool {
     let node_tag = short_addr_tag(&info_addr(&st.info));
-    let scheduler = st.scheduler.clone();
     let id = crate::channel::msg_id(chan, wire);
     let mut was_text = false;
     let archive_key = channel_archive_key(&st.identity_seed);
@@ -516,25 +515,15 @@ pub(crate) fn deliver_mls(
                         .channels
                         .get(chan)
                         .and_then(|channel| channel.role.pseudonym_for_name(&sender));
-                    if let Some(sender_pseudonym) = sender_pseudonym {
-                        if let Some(cs) = st.channels.get_mut(chan) {
-                            queue_authenticated_channel_ack(
-                                cs,
-                                &scheduler,
-                                chan,
+                    let ack = sender_pseudonym.map(|sender| {
+                        (
+                            sender,
+                            crate::channel::encode_text_ack(
                                 id,
-                                sender_pseudonym,
-                                crate::channel::encode_text_ack(
-                                    id,
-                                    st.channel_presence_opt_in.contains(chan),
-                                ),
-                            );
-                        }
-                    }
-                    if let Err(error) = persist_current_direct_state(st) {
-                        metrics::log_event("channel_message_persist_error", &[("e", error)]);
-                        return false;
-                    }
+                                st.channel_presence_opt_in.contains(chan),
+                            ),
+                        )
+                    });
                     let display_sender = sender_pseudonym
                         .and_then(|member| {
                             st.channels
@@ -545,16 +534,28 @@ pub(crate) fn deliver_mls(
                                 .and_then(|metadata| metadata.nickname(member).map(str::to_owned))
                         })
                         .unwrap_or_else(|| sender.clone());
-                    let sent_ok = events.send(Ev::ChannelMessage {
+                    let message = channel_inbox::Message::Channel {
                         channel: chan.to_string(),
-                        msg_id: id,
-                        ts_unix: now_unix(),
+                        id,
+                        timestamp: now_unix(),
                         sender: display_sender,
-                        channel_epoch,
-                        sender_index: sender_idx,
-                        text: body,
-                        latency_hint_ms: latency,
-                    });
+                        epoch: channel_epoch,
+                        index: sender_idx,
+                        body,
+                        latency,
+                    };
+                    if !commit_channel_receive(
+                        st,
+                        chan,
+                        id,
+                        ack,
+                        &role_checkpoint,
+                        false,
+                        Some(message.clone()),
+                    ) {
+                        return false;
+                    }
+                    let sent_ok = events.send(message.event());
                     if let Some(sender_pseudonym) = sender_pseudonym.filter(|member_id| {
                         share_presence
                             && st.channel_presence_opt_in.contains(chan)
@@ -838,38 +839,31 @@ pub(crate) fn deliver_mls(
         Ok(gcoms_mls::ReceiveOutcome::CommitMerged {
             sender_index: sender_idx,
         }) => {
-            if let Some(cs) = st.channels.get_mut(chan) {
-                // The authenticated commit is the membership authority. Remove
-                // obsolete public routing before an ACK or any later state save;
-                // a re-added name must learn its new route from a fresh MLS Dir.
-                cs.directory.retain(|name, route| {
-                    cs.role.pseudonym_for_name(name) == Some(route.pseudonym)
-                });
+            let ack = st.channels.get(chan).and_then(|cs| {
+                cs.role
+                    .roster()
+                    .into_iter()
+                    .find(|(idx, _)| *idx == sender_idx)
+                    .and_then(|(_, name)| cs.role.pseudonym_for_name(&name))
+                    .map(|sender| {
+                        (
+                            sender,
+                            crate::channel::encode_commit_ack(
+                                id,
+                                cs.role.epoch(),
+                                st.channel_presence_opt_in.contains(chan),
+                            ),
+                        )
+                    })
+            });
+            if !commit_channel_receive(st, chan, id, ack, &role_checkpoint, true, None) {
+                return false;
+            }
+            if let Some(cs) = st.channels.get(chan) {
                 let _ = events.send(Ev::ChannelRosterChanged {
                     channel: chan.to_string(),
                     channel_id: cs.id,
                 });
-                let sender_pseudonym = cs
-                    .role
-                    .roster()
-                    .into_iter()
-                    .find(|(idx, _)| *idx == sender_idx)
-                    .and_then(|(_, name)| cs.role.pseudonym_for_name(&name));
-                if let Some(sender_pseudonym) = sender_pseudonym {
-                    let epoch = cs.role.epoch();
-                    queue_authenticated_channel_ack(
-                        cs,
-                        &scheduler,
-                        chan,
-                        id,
-                        sender_pseudonym,
-                        crate::channel::encode_commit_ack(
-                            id,
-                            epoch,
-                            st.channel_presence_opt_in.contains(chan),
-                        ),
-                    );
-                }
             }
             metrics::log_event(
                 "chan_commit_merged",
@@ -1094,18 +1088,83 @@ pub(crate) fn commit_authenticated_directory(
     true
 }
 
-pub(crate) fn queue_authenticated_channel_ack(
+/// Persist the received MLS state and its exact ACK before either can escape.
+/// Rollback keeps the original incoming wire retryable on storage/admission failure.
+#[allow(clippy::too_many_arguments)]
+fn commit_channel_receive(
+    st: &mut NodeState,
+    chan: &str,
+    id: [u8; 16],
+    ack: Option<([u8; 32], Vec<u8>)>,
+    checkpoint: &[u8],
+    prune_directory: bool,
+    message: Option<channel_inbox::Message>,
+) -> bool {
+    let prior_inbox = st.channel_inbox.clone();
+    let journal_result = message.map_or(Ok(()), |message| st.channel_inbox.stage(message));
+    let Some(cs) = st.channels.get_mut(chan) else {
+        st.channel_inbox = prior_inbox;
+        return false;
+    };
+    let previous = (
+        cs.pending_control.clone(),
+        cs.commit_ack_cache.clone(),
+        cs.commit_ack_order.clone(),
+        cs.unrouted_ack_journal.clone(),
+        cs.unrouted_ack_order.clone(),
+    );
+    let directory = prune_directory.then(|| cs.directory.clone());
+    if prune_directory {
+        // A re-added name must learn its new route from a fresh authenticated Dir.
+        cs.directory
+            .retain(|name, route| cs.role.pseudonym_for_name(name) == Some(route.pseudonym));
+    }
+    let staged = match ack {
+        Some((sender, body)) => stage_authenticated_channel_ack(cs, id, sender, body),
+        None => Ok(()),
+    };
+    if let Err(error) = journal_result
+        .and(staged)
+        .and_then(|_| persist_current_direct_state(st))
+    {
+        st.channel_inbox = prior_inbox;
+        if let Some(cs) = st.channels.get_mut(chan) {
+            (
+                cs.pending_control,
+                cs.commit_ack_cache,
+                cs.commit_ack_order,
+                cs.unrouted_ack_journal,
+                cs.unrouted_ack_order,
+            ) = previous;
+            if let Some(directory) = directory {
+                cs.directory = directory;
+            }
+            cs.overlay.forget_sighting(id);
+        }
+        restore_directory_receive(st, chan, checkpoint);
+        metrics::log_event("channel_receive_persist_error", &[("e", error)]);
+        return false;
+    }
+    if let Some((route, wire)) = st
+        .channels
+        .get(chan)
+        .and_then(|cs| cs.commit_ack_cache.get(&id))
+    {
+        enqueue_channel_control(&st.scheduler, chan, route, wire);
+    }
+    true
+}
+
+fn stage_authenticated_channel_ack(
     channel: &mut crate::channel::ChannelState,
-    scheduler: &RelayScheduler,
-    channel_name: &str,
     original_id: [u8; 16],
     sender_pseudonym: [u8; 32],
     ack: Vec<u8>,
-) {
+) -> Result<(), String> {
     if sender_pseudonym == channel.role.own_pseudonym()
         || channel.commit_ack_cache.contains_key(&original_id)
     {
-        return;
+        return Ok(());
     }
     let key = crate::channel::UnroutedAckKey {
         original_id,
@@ -1117,24 +1176,22 @@ pub(crate) fn queue_authenticated_channel_ack(
         .find(|route| route.pseudonym == sender_pseudonym)
         .cloned();
     if route.is_some() && channel.pending_control.len() >= crate::channel::CHANNEL_ACK_LIMIT {
-        return;
+        return Err("channel ACK queue is full".into());
     }
     if route.is_none() && !channel.can_journal_unrouted_ack(&key) {
-        return;
+        return Err("channel unrouted ACK journal is full".into());
     }
-    let Ok(mut wire) = channel.role.send(&ack) else {
-        return;
-    };
+    let mut wire = channel.role.send(&ack).map_err(|e| e.to_string())?;
     if let Some(route) = route {
         channel
             .pending_control
             .push_back((route.clone(), wire.clone()));
         channel.cache_ack(original_id, route.clone(), wire.clone());
-        enqueue_channel_control(scheduler, channel_name, &route, &wire);
         wire.fill(0);
     } else {
         channel.journal_unrouted_ack(key, wire);
     }
+    Ok(())
 }
 
 pub(crate) fn enqueue_channel_control(

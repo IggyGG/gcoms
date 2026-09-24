@@ -298,6 +298,16 @@ pub enum Cmd {
         body: Vec<u8>,
         done: tokio::sync::oneshot::Sender<Result<(), String>>,
     },
+    ChannelInboxPage {
+        after: u64,
+        limit: usize,
+        done: tokio::sync::oneshot::Sender<Result<Vec<channel_inbox::Delivery>, String>>,
+    },
+    ChannelInboxReceipt {
+        sequence: u64,
+        digest: [u8; 32],
+        done: tokio::sync::oneshot::Sender<Result<(), String>>,
+    },
     ApplicationInboxPage {
         after: u64,
         limit: usize,
@@ -1727,6 +1737,35 @@ impl NodeHandle {
         receive.await.map_err(|error| error.to_string())?
     }
 
+    /// Local archive-owner API; observing broadcast events never consumes these records.
+    pub async fn channel_inbox(
+        &self,
+        after: u64,
+        limit: usize,
+    ) -> Result<Vec<channel_inbox::Delivery>, String> {
+        let (done, receive) = tokio::sync::oneshot::channel();
+        self.cmd_tx
+            .send(Cmd::ChannelInboxPage { after, limit, done })
+            .await
+            .map_err(|_| "node stopped".to_string())?;
+        receive.await.map_err(|_| "node stopped".to_string())?
+    }
+    pub async fn commit_channel_delivery(
+        &self,
+        sequence: u64,
+        digest: [u8; 32],
+    ) -> Result<(), String> {
+        let (done, receive) = tokio::sync::oneshot::channel();
+        self.cmd_tx
+            .send(Cmd::ChannelInboxReceipt {
+                sequence,
+                digest,
+                done,
+            })
+            .await
+            .map_err(|_| "node stopped".to_string())?;
+        receive.await.map_err(|_| "node stopped".to_string())?
+    }
     pub async fn application_inbox(
         &self,
         after: u64,

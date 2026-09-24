@@ -288,6 +288,7 @@ pub(crate) fn handle_channel_direct(
                 return;
             }
             let sent_ms = u64::from_be_bytes(plaintext[1..9].try_into().expect("checked length"));
+            let previous_seen = channel.seen_direct.clone();
             let first_sighting = !channel.seen_direct.contains(&envelope.message_id);
             if first_sighting {
                 channel.seen_direct.push_back(envelope.message_id);
@@ -302,6 +303,29 @@ pub(crate) fn handle_channel_direct(
                 envelope.message_id,
                 &[2],
             );
+            let message = channel_inbox::Message::Private {
+                channel: envelope.channel.clone(),
+                sender: envelope.sender,
+                recipient: envelope.recipient,
+                id: envelope.message_id,
+                timestamp: sent_ms / 1000,
+                body: plaintext[9..].to_vec(),
+            };
+            let previous_inbox = state.channel_inbox.clone();
+            let staged = if first_sighting {
+                state.channel_inbox.stage(message.clone())
+            } else {
+                Ok(())
+            };
+            if let Err(error) = staged.and_then(|_| persist_current_direct_state(&state)) {
+                state.channel_inbox = previous_inbox;
+                if let Some(channel) = state.channels.get_mut(&envelope.channel) {
+                    channel.seen_direct = previous_seen;
+                }
+                plaintext.fill(0);
+                metrics::log_event("channel_private_receive_persist_error", &[("e", error)]);
+                return;
+            }
             if let Ok((route, ack)) = ack {
                 if let Some(payload) = ack.encode() {
                     let _ = state.scheduler.push(
@@ -312,14 +336,7 @@ pub(crate) fn handle_channel_direct(
                 }
             }
             if first_sighting {
-                let _ = events.send(Ev::ChannelDirectMessage {
-                    channel: envelope.channel,
-                    sender_member_id: envelope.sender,
-                    recipient_member_id: envelope.recipient,
-                    msg_id: envelope.message_id,
-                    ts_unix: sent_ms / 1000,
-                    text: plaintext[9..].to_vec(),
-                });
+                let _ = events.send(message.event());
             }
         }
         Some(3)

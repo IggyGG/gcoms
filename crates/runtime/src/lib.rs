@@ -11,6 +11,7 @@ pub use runtime::{ErrorSink, ProtocolClient, ProtocolRuntime};
 
 pub mod contacts;
 pub struct RuntimeOptions {
+    pub durable_channel_inbox: bool,
     pub listen: std::net::SocketAddr,
     pub advertise: Option<std::net::SocketAddr>,
     pub relay: Option<gcoms_sdk::RelayCard>,

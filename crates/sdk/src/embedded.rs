@@ -47,6 +47,8 @@ mod forwarding_cleanup_tests {
     }
 }
 
+pub type ChannelArchiveDelivery = (u64, [u8; 32], ClientEvent);
+
 #[derive(Clone)]
 pub struct EmbeddedClient {
     node: NodeHandle,
@@ -61,6 +63,29 @@ impl EmbeddedClient {
         &self.node
     }
 
+    /// Host-owned archive handoff. Broadcast observers never consume deliveries.
+    pub async fn channel_inbox(&self) -> Result<Vec<ChannelArchiveDelivery>, SdkError> {
+        self.node
+            .channel_inbox(0, 32)
+            .await
+            .map(|items| {
+                items
+                    .into_iter()
+                    .map(|item| (item.sequence, item.digest(), item.message.event().into()))
+                    .collect()
+            })
+            .map_err(SdkError::Runtime)
+    }
+    pub async fn commit_channel_delivery(
+        &self,
+        sequence: u64,
+        digest: [u8; 32],
+    ) -> Result<(), SdkError> {
+        self.node
+            .commit_channel_delivery(sequence, digest)
+            .await
+            .map_err(SdkError::Runtime)
+    }
     fn parse_card(card: &ContactCard) -> Result<gcoms_node::proto::NodeInfo, SdkError> {
         let encoded = std::str::from_utf8(&card.0).map_err(|_| SdkError::InvalidContactCard)?;
         info_from_b64(encoded).ok_or(SdkError::InvalidContactCard)
