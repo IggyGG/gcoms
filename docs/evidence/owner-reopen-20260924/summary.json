@@ -1,0 +1,38 @@
+{
+  "checks": {
+    "node": 0,
+    "clippy": 0
+  },
+  "passed": true,
+  "source_unchanged": true,
+  "source": "296d3b64c862f8ca6662fe402de9a7af3d4ec1bc",
+  "source_bindings": 696,
+  "tests": {
+    "passed": 334,
+    "failed": 0,
+    "ignored": 2
+  },
+  "red": {
+    "exit_code": 101,
+    "error": "active owner alias expired before publication",
+    "fresh_budget_control_passed": true
+  },
+  "evidence": {
+    "green-summary.json": "80d24f3f2c79b43867ea50c6129cb0f636934b50c6bdc8a6198abe8a5e7309ab",
+    "compile-error-red.exit": "097d68f4988a2989d5c9f99b0ba328dfde1067a3f9fa8c78c2583e828806dd96",
+    "compile-error-red.log": "9e3fea13a5aba03a009d4470e722e41a4374008b0265e5a9b651e6d78b803836",
+    "green-before.json": "3357baf48cdb7ee8866041425d36c71b439e1cdb455eff07fa001830f6347d76",
+    "red.log": "86e26628cc63357db6df53cc1629549767819953ca2bf0cae1bd9d30a6aba83d",
+    "red-summary.json": "35befff9066149ee5b902ad0e1dbd29ca325630e770cc01f337af1b19efe12f1",
+    "green-after.json": "3357baf48cdb7ee8866041425d36c71b439e1cdb455eff07fa001830f6347d76",
+    "green-check.py": "477f98c66cce9c3dc09b4c53f775572cc9bb5fdcb86f0e7fbafe34b0254caea6",
+    "node.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "clippy.log": "62818f91156937c6bf53d31be2f99180e7344881f09f7da85c5a74e3d61fe2e6",
+    "clippy.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "red-before.json": "506410203fb0d9f4575fa0ce84bd5fc0c548d0be346f4077c469741aa65af005",
+    "node.log": "713ff63dabaf4f6c8539e0e343031ba695c9218ae05f00d134571cde6e94a2cd",
+    "red.exit": "39b8dc3fc8b44765c8e6f1adee04c5b465e555ab791cc42d0d9e810d5b64297c"
+  },
+  "scope": "Node library and strict all-target/all-feature Clippy; physical profile recovery pending",
+  "codematch": "unreachable"
+}

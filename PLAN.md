@@ -7,8 +7,11 @@ Filter public owner addresses by the effective sealed deadline, keeping the exac
 private record and membership available for normal background recovery. Do not
 extend leases, discard identity, bypass durable writes or weaken legacy startup.
 The fresh-budget control still publishes its addresses; expired routed startup
-must retain its archive without publishing those addresses. Cluster qualification
-is in progress. codematch=unreachable.
+must retain its archive without publishing those addresses. Exact candidate
+296d3b6 passed 334 node tests (two existing exclusions), strict all-target/all-feature
+Clippy and 696 unchanged source bindings. The original constructor failed with
+the reported error. [Receipt](docs/evidence/owner-reopen-20260924/summary.json).
+Actual laptop recovery and Android 1017 remain pending. codematch=unreachable.
 
 # Incomplete referral recovery, 2026-09-24
 
