@@ -10,7 +10,9 @@ Android 1019 with those exact sources for the existing-profile observation.
 Cluster routing/transport passed 148 tests (four existing exclusions), strict
 all-target/all-feature Clippy and changed-file formatting on 712 unchanged source
 bindings. Whole-workspace formatting found unrelated existing node formatting
-differences, retained in the receipt. Android 1019 is still building.
+differences, retained in the receipt. Formatting-only a7dc754 resolves those two
+files and passes full workspace formatting separately; Android 1019 remains
+frozen on 3c7b628 and is still building.
 [Receipt](docs/evidence/route-stage-20260924/summary.json). codematch=unreachable.
 
 # Retained Android delivery: bounded relay admission diagnostics, 2026-09-24
