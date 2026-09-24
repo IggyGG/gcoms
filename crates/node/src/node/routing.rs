@@ -601,6 +601,26 @@ pub(crate) fn spawn(
         let mut last_candidate = None;
         loop {
             let current_protocol = scheduler.is_gc2();
+            #[cfg(feature = "experimental-gc2")]
+            let unavailable_owner_route = runtime
+                .gc2
+                .get()
+                .filter(|_| runtime.recovering_owner.load(Ordering::Acquire))
+                .and_then(|current| {
+                    let target = state
+                        .lock()
+                        .unwrap_or_else(|p| p.into_inner())
+                        .client_relay
+                        .aliases
+                        .first()?
+                        .contact
+                        .target
+                        .clone();
+                    (!current
+                        .ready
+                        .can_route((target.address, target.relay_service_id)))
+                    .then_some(target)
+                });
             if !current_protocol {
                 let _ = runtime.discovery.refresh().await;
             }
@@ -715,15 +735,48 @@ pub(crate) fn spawn(
                     }
                 }
             }
-            tokio::time::sleep(if runtime.fixture {
+            let delay = if runtime.fixture {
                 std::time::Duration::from_millis(200)
             } else {
                 std::time::Duration::from_secs(25 + rand::random::<u64>() % 11)
-            })
-            .await;
+            };
+            #[cfg(feature = "experimental-gc2")]
+            if let (Some(current), Some(target)) = (
+                runtime.gc2.get(),
+                unavailable_owner_route
+                    .filter(|_| runtime.recovering_owner.load(Ordering::Acquire)),
+            ) {
+                // Only a previously unavailable retained route can wake this
+                // retry. Unrelated publication churn and terminal refusals on
+                // an already usable route keep the ordinary retry deadline.
+                wait_for_retained_route(delay, || {
+                    current
+                        .ready
+                        .can_route((target.address, target.relay_service_id))
+                })
+                .await;
+                continue;
+            }
+            tokio::time::sleep(delay).await;
         }
     })
 }
+
+#[cfg(feature = "experimental-gc2")]
+async fn wait_for_retained_route(delay: std::time::Duration, ready: impl Fn() -> bool) {
+    let deadline = tokio::time::Instant::now() + delay;
+    while !ready() {
+        let now = tokio::time::Instant::now();
+        if now >= deadline {
+            break;
+        }
+        tokio::time::sleep_until(deadline.min(now + std::time::Duration::from_millis(200))).await;
+    }
+}
+
+#[cfg(all(test, feature = "experimental-gc2"))]
+#[path = "routing_recovery_wait_tests.rs"]
+mod recovery_wait_tests;
 
 async fn recover_aliases(
     scheduler: &RelayScheduler,
