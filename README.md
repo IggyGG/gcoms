@@ -1,3 +1,9 @@
+> Established GC/2 carriers now replace themselves on completion after at least
+> 30 seconds of published readiness, without waiting for another maintenance tick.
+> Failed/short-lived attempts retain retry pacing. This removes a reproduced
+> owner delay; it does not yet qualify the application recovery latency target.
+> See [background ownership](docs/GC2_DISCOVERY.md).
+
 The current [reliability release requirements](docs/RELIABILITY_RELEASE.md)
 define delivery/recovery deadlines, cluster validation and the subsequent graph
 routing milestone. Historical qualification counts below retain their own scope.

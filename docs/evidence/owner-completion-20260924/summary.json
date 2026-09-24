@@ -1,0 +1,125 @@
+{
+  "source_manifest_sha256": "fc924a876c5c2906edcaf6a1d6fb56bd3cf4aafac6e507e7337761e435fd48e0",
+  "started_unix": 1790286331.2585015,
+  "checks": [
+    {
+      "name": "focused",
+      "command": [
+        "cargo",
+        "test",
+        "--locked",
+        "--offline",
+        "-p",
+        "gcoms-routing",
+        "--all-features",
+        "--lib",
+        "gc2::owner::completion_tests",
+        "--",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "exit_code": 0,
+      "seconds": 5.192421088926494,
+      "source_unchanged": true,
+      "log_sha256": "b2bcbd2399bbc929a317153813eec72289cdb917ad9ae762b50557aab303bfa3"
+    },
+    {
+      "name": "routing",
+      "command": [
+        "cargo",
+        "test",
+        "--locked",
+        "--offline",
+        "-p",
+        "gcoms-routing",
+        "--all-features",
+        "--",
+        "--test-threads=4"
+      ],
+      "exit_code": 0,
+      "seconds": 251.3723439546302,
+      "source_unchanged": true,
+      "log_sha256": "92542a12e24a7f80f4f841fb08283b2ba4d91e58620751e1a4852ed3becb1087"
+    },
+    {
+      "name": "node-gc2",
+      "command": [
+        "cargo",
+        "test",
+        "--locked",
+        "--offline",
+        "-p",
+        "gcoms-node",
+        "--all-features",
+        "gc2_",
+        "--",
+        "--test-threads=4"
+      ],
+      "exit_code": 0,
+      "seconds": 86.46615439374,
+      "source_unchanged": true,
+      "log_sha256": "db54706580b7e48d720ddb5be8129e9a38cf7140969bdffbeb85ee0ded6c839c"
+    },
+    {
+      "name": "clippy",
+      "command": [
+        "cargo",
+        "clippy",
+        "--locked",
+        "--offline",
+        "-p",
+        "gcoms-routing",
+        "-p",
+        "gcoms-node",
+        "--all-features",
+        "--all-targets",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "exit_code": 0,
+      "seconds": 10.402693127281964,
+      "source_unchanged": true,
+      "log_sha256": "85daf5e3a1dd48fc87800e97d1607a71d319041329fcd8236d9497bab04b4e2e"
+    },
+    {
+      "name": "fmt",
+      "command": [
+        "cargo",
+        "fmt",
+        "--all",
+        "--check"
+      ],
+      "exit_code": 0,
+      "seconds": 1.7865691827610135,
+      "source_unchanged": true,
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ],
+  "finished_unix": 1790286686.480008,
+  "source_unchanged": true,
+  "passed": true,
+  "scope": "owner completion and affected-package validation; no whole-application latency claim",
+  "counts": {
+    "routing": {
+      "passed": 86,
+      "failed": 0,
+      "ignored": 0
+    },
+    "node-gc2": {
+      "passed": 49,
+      "failed": 0,
+      "ignored": 1
+    }
+  },
+  "original_failure": {
+    "exit_code": 101,
+    "log_sha256": "78aef501a0a4ae221ebc109a748b05071fee3753db0319290423822ee3767d50"
+  },
+  "evidence_archive_sha256": "80cabde6db651b7530d75f1eca4bec9b95ff7187a8618a252dc98d1b649aa501",
+  "controller_tests": 20,
+  "controller_scope": "isolated actual-app transport reset controller; application run pending",
+  "evidence_files_verified": 16,
+  "codematch": "unreachable",
+  "retained_evidence": "paired GChat target/channel-reconnect-20260923/reliability-20260924-01/owner-completion-evidence.tgz"
+}

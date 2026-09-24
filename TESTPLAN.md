@@ -1,3 +1,19 @@
+# Published carrier completion without retry-tick delay
+
+Run `gc2::owner::completion_tests` plus the full routing package and Node GC/2
+regressions. The real TLS/mux fixture holds Tokio time at completion: a long-lived
+publication must immediately replace only itself; short-lived and unpublished
+failures remain paced, unrelated failed guards stay on their original clock, and
+readiness revision changes only with actual publication/removal.
+[Source-bound affected-package pass](docs/evidence/owner-completion-20260924/summary.json)
+retains the original failing implementation and unchanged candidate hashes.
+
+Then run `scripts/gchat-turnover.py --mode entry-loss --file-bytes 67108864` in the
+isolated cluster with the exact built app/host. Require both old drivers to end
+from the recorded reset, two new ready drivers, unchanged identity, ACKs, continuing
+verified file bytes, export hash and reopen. Record the complete recovery duration
+against R03's 10-second target; a correctness pass does not waive that ceiling.
+
 # Official frozen native baseline
 
 Use the unchanged `scripts/ci.py` entrypoint, with its pinned toolchain and isolated

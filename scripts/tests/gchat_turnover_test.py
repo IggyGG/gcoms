@@ -17,6 +17,25 @@ SPEC.loader.exec_module(turnover)
 
 @unittest.skipUnless(os.name == "posix", "Linux namespace controller")
 class ControllerTests(unittest.TestCase):
+    def test_entry_replacement_requires_both_actual_transport_ends_and_new_ready_drivers(self):
+        old=[{'id':1},{'id':2}]
+        ends=[dict(id=i,phase='transport_ended',unix_ms=101) for i in (1,2)]
+        fresh=[dict(id=i,phase='class_muxes_ready',unix_ms=102) for i in (3,4)]
+        self.assertIsNone(turnover.validated_replacements(old, fresh, 100))
+        self.assertIsNone(turnover.validated_replacements(old, ends+fresh[:1], 100))
+        self.assertEqual(turnover.validated_replacements(old, ends+fresh, 100),
+                         {'ended':ends,'ready':fresh})
+        for change in [dict(phase='deadline_elapsed'),dict(unix_ms=99)]:
+            changed=copy.deepcopy(ends);changed[0].update(change)
+            with self.subTest(change=change), self.assertRaisesRegex(RuntimeError, 'declared transport loss'):
+                turnover.validated_replacements(old, changed+fresh, 100)
+        self.assertIsNone(turnover.validated_replacements(old, ends+fresh+
+            [dict(id=3,phase='transport_ended',unix_ms=103)],100))
+        with self.assertRaisesRegex(RuntimeError, 'two distinct'):
+            turnover.validated_replacements([{'id':1},{'id':1}],ends+fresh,100)
+        with self.assertRaisesRegex(RuntimeError, 'declared transport loss'):
+            turnover.validated_replacements(old,[ends[0],ends[0]]+fresh,100)
+
     def test_namespace_accepts_only_unaddressed_down_unrouted_kernel_fallback(self):
         tunnel = dict(ifname='tunl0', link_type='ipip', operstate='DOWN', flags=['NOARP'],
                       addr_info=[], address='0.0.0.0', broadcast='0.0.0.0', link=None)

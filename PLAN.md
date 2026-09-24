@@ -1,3 +1,19 @@
+# Established carrier replacement, 2026-09-24
+
+A real carrier-cap application log showed 29.982 seconds between driver completion
+and replacement. A paused-clock real-TLS/mux regression reproduces that owner delay
+(red: one failure, one pacing control pass). The candidate permits only the same
+retained guard to replace a carrier after at least 30 seconds of published readiness.
+It preserves authority validation, entry limits, unrelated failed dials and the
+normal timer. Both focused tests, all 86 routing package tests, 49 selected Node GC/2 tests
+(one explicit exclusion), strict routing/Node Clippy and workspace formatting pass
+on unchanged source. [Receipt](docs/evidence/owner-completion-20260924/summary.json).
+Actual application transport-loss validation is next; R03 remains unqualified.
+The test-only `entry-loss` controller keeps relays/authority alive while resetting
+only the isolated client's fixture relay sockets; it requires old driver endings,
+new publications, both-class recovery, authenticated chat, resumed file hash and
+reopen. Controller regressions pass 20/20. `codematch=unreachable`.
+
 # Official GComs native gate, 2026-09-24
 
 Frozen `580ce8a` passed the official Linux `scripts/ci.py`: 990 Rust passes,

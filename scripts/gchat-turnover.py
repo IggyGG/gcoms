@@ -42,7 +42,7 @@ class Journey(base.Worker):
         self.result.update(scope=SCOPE, privacy_qualified=False, release_qualified=False,
                            relay_count=len(self.relay_addresses), route_relay_hops=5)
         self.origin = time.monotonic(); self.roles = {}; self.latest = {}; self.chat_count = 0
-        if self.spec['config'].get('mode') == 'carrier-cap':
+        if self.spec['config'].get('mode') in ('carrier-cap', 'entry-loss'):
             self.env['GCOMS_GC2_LIFECYCLE'] = '1'
 
     def event(self, kind, **facts):
@@ -189,6 +189,50 @@ class Journey(base.Worker):
         self.probe(1,{'action':'export','id':transfer['id'],'name':'reopened-'+transfer['name'],**{k:transfer[k] for k in ('size','sha256')}})
         self.result['carrier_cap']={'client_starts':starts,'client_ends':evidence,'file':transfer,'actual_elapsed_1800_seconds':True,'authority_still_fresh':True}
         self.event('carrier_cap_passed', **self.result['carrier_cap'])
+
+    def entry_loss(self, channel):
+        # Close only fixture client0's established relay sockets. Relays keep
+        # their queues and authority; connectivity is usable throughout.
+        rows=self.lifecycle(0)
+        ended={r['id'] for r in rows if r['phase'] not in ('started','class_muxes_ready')}
+        ready=[r for r in rows if r['phase']=='class_muxes_ready' and r['id'] not in ended]
+        if len(ready)!=2: raise RuntimeError('two live entry publications required before loss')
+        self.wait(max(r['unix_ms']/1000 for r in ready)+31)
+        transfer=self.start_file(channel,self.spec['config']['file_bytes'],'entry-loss')
+        before=until(lambda:self.file_info(transfer) if int(self.file_info(transfer)['verified_bytes'])>0 else None,
+                     time.monotonic()+120,'file progress before entry loss')
+        if before['state']=='complete': raise RuntimeError('file completed before entry loss')
+        if any(r['authority_expires_at']<=time.time()+120 for r in ready):
+            raise RuntimeError('entry-loss fixture lacks fresh authority for recovery')
+        identity=self.request(0,'snapshot')['snapshot']['instance']['id']
+        started=time.monotonic(); reset_ms=int(time.time()*1000)
+        self.event('entry_loss_requested', old_entries=ready, verified_bytes=before['verified_bytes'])
+        # The observed namespace is disconnected and contains only this fixture
+        # client. The exact destination list excludes every non-fixture address.
+        command=[*self.ns,'ss','-K','dst',RELAYS[0]]
+        for address in RELAYS[1:]: command += ['or','dst',address]
+        (self.root/'entry-loss-sockets.log').write_text(run(command))
+        deadline=started+300; self.rpc_deadline=deadline
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+            chat=pool.submit(self.chat,channel,'turnover:entry-loss',max(.1,deadline-time.monotonic()))
+            def recovered():
+                evidence=validated_replacements(ready,self.lifecycle(0),reset_ms)
+                if evidence is None or not self.readiness(0): return None
+                if int(self.file_info(transfer)['verified_bytes'])<=int(before['verified_bytes']): return None
+                return evidence
+            evidence=until(recovered,deadline,'replacement entries and retained subscription/file progress')
+            chat.result(timeout=max(.1,deadline-time.monotonic()))
+        seconds=time.monotonic()-started
+        self.rpc_deadline=None
+        if self.request(0,'snapshot')['snapshot']['instance']['id']!=identity:
+            raise RuntimeError('entry loss changed retained client identity')
+        self.event('entry_loss_recovered',seconds=seconds,**evidence)
+        self.finish_file(transfer)
+        self.reopen(1)
+        self.probe(1,{'action':'export','id':transfer['id'],'name':'reopened-'+transfer['name'],**{k:transfer[k] for k in ('size','sha256')}})
+        self.result['entry_loss']={'recovery_seconds':seconds,'r03_10s_passed':seconds<=10,
+            'same_identity':True,'file':transfer,'replacements':evidence,
+            'scope':'established fixture TCP reset; not credential or carrier-cap expiry'}
 
     def start_client(self, i):
         if host := self.spec.get('fixture_host'):
@@ -534,6 +578,12 @@ class Journey(base.Worker):
             self.result['boundary']['after']=self.inventory();self.assert_topology(self.result['boundary']['after'])
             self.result['completed']=True
             return
+        if self.spec['config'].get('mode') == 'entry-loss':
+            self.entry_loss(channel)
+            self.result['chat_acknowledged']=self.chat_count
+            self.result['boundary']['after']=self.inventory(); self.assert_topology(self.result['boundary']['after'])
+            self.result['completed']=True
+            return
         if self.spec['config'].get('mode') == 'carrier-cap':
             self.carrier_cap(channel)
             self.result['chat_acknowledged']=self.chat_count
@@ -595,6 +645,21 @@ def validated_cap_ends(starts, rows):
     return ends
 
 
+def validated_replacements(old_ready, rows, reset_ms):
+    old={r['id'] for r in old_ready}
+    if len(old)!=2: raise RuntimeError('two distinct original entry publications required')
+    ends=[r for r in rows if r['id'] in old and r['phase'] not in ('started','class_muxes_ready')]
+    if len(ends)<2: return None
+    if (len(ends)!=2 or {r['id'] for r in ends}!=old or
+            any(r['phase']!='transport_ended' or r['unix_ms']<reset_ms for r in ends)):
+        raise RuntimeError('old entry did not end from the declared transport loss')
+    fresh=[r for r in rows if r['phase']=='class_muxes_ready' and r['id'] not in old and r['unix_ms']>=reset_ms]
+    dead={r['id'] for r in rows if r['phase'] not in ('started','class_muxes_ready')}
+    fresh=[r for r in fresh if r['id'] not in dead]
+    if len({r['id'] for r in fresh})<2: return None
+    return {'ended':ends,'ready':fresh}
+
+
 def main():
     if sys.argv[1:2]==['--worker']:
         return Journey(json.loads(Path(sys.argv[2]).read_text())).execute()
@@ -602,7 +667,7 @@ def main():
     parser.add_argument('--build',type=Path,required=True)
     parser.add_argument('--out',type=Path,required=True)
     parser.add_argument('--expiries',type=int,default=3,choices=(1,2,3))
-    parser.add_argument('--mode',choices=('smoke','file-recovery','archive-failure','credential-expiry','carrier-cap'),default='credential-expiry')
+    parser.add_argument('--mode',choices=('smoke','file-recovery','archive-failure','credential-expiry','carrier-cap','entry-loss'),default='credential-expiry')
     parser.add_argument('--file-bytes',type=int,default=256*1024*1024)
     parser.add_argument('--file-completion-seconds',type=int,default=1200,
                         help='predeclared file-recovery completion budget, 60..3600 seconds; no latency qualification')
@@ -617,7 +682,7 @@ def main():
     root=args.out.resolve();root.mkdir(mode=0o700,parents=True,exist_ok=False)
     build=base.build_binding(args.build.resolve())
     before=links();tool_hash=sha256(Path(__file__));helper_hash=sha256(HELPER)
-    config={'mode':args.mode,'lifecycle_diagnostics':args.mode=='carrier-cap','expiries':args.expiries,'file_bytes':args.file_bytes,'file_completion_seconds':args.file_completion_seconds,'production_credential_seconds':3600,'production_carrier_cap_seconds':1800,'recovery_seconds':300}
+    config={'mode':args.mode,'lifecycle_diagnostics':args.mode in ('carrier-cap','entry-loss'),'expiries':args.expiries,'file_bytes':args.file_bytes,'file_completion_seconds':args.file_completion_seconds,'production_credential_seconds':3600,'production_carrier_cap_seconds':1800,'recovery_seconds':300}
     spec={'out':str(root),'build':build,'config':config,'workload':'turnover','seed':20260920,
           'uid':os.getuid(),'gid':os.getgid(),'run_nonce':uuid.uuid4().hex,
           'host_netns':os.readlink('/proc/self/ns/net'),'host_mountns':os.readlink('/proc/self/ns/mnt')}
@@ -627,7 +692,7 @@ def main():
     (root/'spec.json').write_text(json.dumps(spec,indent=2)+'\n')
     (root/'driver.py').write_bytes(Path(__file__).read_bytes())
     (root/'boundary-helper.py').write_bytes(HELPER.read_bytes())
-    timeout=900 if args.mode in ('smoke','archive-failure') else 1200+args.file_completion_seconds if args.mode=='file-recovery' else 3600*(args.expiries+1)+900
+    timeout=1800 if args.mode=='entry-loss' else 900 if args.mode in ('smoke','archive-failure') else 1200+args.file_completion_seconds if args.mode=='file-recovery' else 3600*(args.expiries+1)+900
     command=['sudo','-n','timeout','--signal=TERM','--kill-after=20',str(timeout),
              'unshare','--net','--mount','--pid','--fork','--mount-proc','--kill-child','--propagation','private','--',
              sys.executable,str(Path(__file__).resolve()),'--worker',str(root/'spec.json')]

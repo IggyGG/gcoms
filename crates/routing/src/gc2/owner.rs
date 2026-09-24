@@ -30,7 +30,7 @@ use tokio::{
 const RETRY_PERIOD: Duration = Duration::from_secs(30);
 const DISCOVERY_PERIOD: Duration = Duration::from_secs(300);
 const DIAL_TIMEOUT: Duration = Duration::from_secs(20);
-type EntryTask = Pin<Box<dyn Future<Output = [u8; 32]> + Send>>;
+type EntryTask = Pin<Box<dyn Future<Output = ([u8; 32], Option<Instant>)> + Send>>;
 struct ActiveEntry {
     addr: SocketAddr,
     cancel: Option<oneshot::Sender<()>>,
@@ -55,6 +55,7 @@ fn renewal_delay(
 struct ReadyEntry {
     introduction: Introduction,
     carrier: EntryCarrier,
+    published_at: Instant,
 }
 #[derive(Default)]
 struct ReadyState {
@@ -412,53 +413,95 @@ impl EntryOwner {
         let mut active = HashMap::<[u8; 32], ActiveEntry>::new();
         let mut cursor = 0usize;
         loop {
-            tokio::select! {
-                Some(pin) = tasks.next(), if !tasks.is_empty() => { active.remove(&pin); },
+            let completed = tokio::select! {
+                Some(completed) = tasks.next(), if !tasks.is_empty() => Some(completed),
                 _ = async { tokio::select! {
                     _ = tick.tick() => (),
                     _ = self.refreshed.notified() => (),
-                }} => {
-                    self.retain_guards()?;
-                    let guards = self.directory.guards();
-                    let eligible = self.directory.eligible(&[], now_unix())?;
-                    for (pin, attempt) in &mut active {
-                        if !guards.contains(pin) || !eligible.iter().any(|relay| &relay.service_id == pin && relay.addr == attempt.addr) {
-                            attempt.cancel.take();
-                        }
+                }} => None,
+            };
+            let replacement = if let Some((pin, published_at)) = completed {
+                active.remove(&pin);
+                // Only an established, long-lived entry earns an immediate
+                // replacement. Unpublished/short-lived failures retain the
+                // existing retry clock; application traffic cannot wake it.
+                if !published_at.is_some_and(|at| at.elapsed() >= RETRY_PERIOD) {
+                    continue;
+                }
+                Some(pin)
+            } else {
+                None
+            };
+            self.retain_guards()?;
+            let guards = self.directory.guards();
+            let eligible = self.directory.eligible(&[], now_unix())?;
+            for (pin, attempt) in &mut active {
+                if !guards.contains(pin)
+                    || !eligible
+                        .iter()
+                        .any(|relay| &relay.service_id == pin && relay.addr == attempt.addr)
+                {
+                    attempt.cancel.take();
+                }
+            }
+            // A timer/refresh can coincide with driver completion. Reap those
+            // slots before filling them. A targeted completion instead leaves
+            // other completions queued, so each retains its own retry decision.
+            if replacement.is_none() {
+                while let Some(Some((pin, _))) = tasks.next().now_or_never() {
+                    active.remove(&pin);
+                }
+            }
+            let start = cursor;
+            for offset in 0..guards.len() {
+                if active.len() == self.entries {
+                    break;
+                }
+                let index = start.wrapping_add(offset) % guards.len();
+                let pin = guards[index];
+                if active.contains_key(&pin) || replacement.is_some_and(|wanted| wanted != pin) {
+                    continue;
+                }
+                let Some(introduction) = eligible
+                    .iter()
+                    .find(|relay| relay.service_id == pin)
+                    .cloned()
+                else {
+                    continue;
+                };
+                let (cancel, canceled) = oneshot::channel();
+                active.insert(
+                    pin,
+                    ActiveEntry {
+                        addr: introduction.addr,
+                        cancel: Some(cancel),
+                    },
+                );
+                cursor = (index + 1) % guards.len();
+                let dial = self.dial.clone();
+                let state = self.state.clone();
+                let profile = self.profile;
+                tasks.push(Box::pin(async move {
+                    let _slot = ReadySlot {
+                        state: state.clone(),
+                        pin,
+                    };
+                    tokio::select! {
+                        biased;
+                        _ = canceled => (),
+                        _ = maintain_entry(dial, state.clone(), introduction, profile) => (),
                     }
-                    // Canceled drivers still count until polled to completion;
-                    // a configuration change cannot transiently double entries.
-                    // Renewal and expiry may become ready in the same poll.
-                    // Reap completed/canceled drivers before consuming the
-                    // renewal wakeup, so their old slots cannot defer new
-                    // authority until another 30-second retry opportunity.
-                    while let Some(Some(pin)) = tasks.next().now_or_never() {
-                        active.remove(&pin);
-                    }
-                    let start = cursor;
-                    for offset in 0..guards.len() {
-                        if active.len() == self.entries { break; }
-                        let index = start.wrapping_add(offset) % guards.len();
-                        let pin = guards[index];
-                        if active.contains_key(&pin) { continue; }
-                        let Some(introduction) = eligible.iter().find(|relay| relay.service_id == pin).cloned() else { continue; };
-                        let (cancel, canceled) = oneshot::channel();
-                        active.insert(pin, ActiveEntry { addr: introduction.addr, cancel: Some(cancel) });
-                        cursor = (index + 1) % guards.len();
-                        let dial = self.dial.clone();
-                        let state = self.state.clone();
-                        let profile = self.profile;
-                        tasks.push(Box::pin(async move {
-                            let _slot = ReadySlot { state: state.clone(), pin };
-                            tokio::select! {
-                                biased;
-                                _ = canceled => (),
-                                _ = maintain_entry(dial, state, introduction, profile) => (),
-                            }
-                            pin
-                        }));
-                    }
-                },
+                    let published_at = state
+                        .entries
+                        .read()
+                        .unwrap_or_else(|p| p.into_inner())
+                        .iter()
+                        .find(|entry| entry.introduction.service_id == pin)
+                        .map(|entry| entry.published_at);
+                    // ReadySlot removes the old publication before the owner
+                    // observes this completion and can start a replacement.
+                    (pin, published_at)
+                }));
             }
         }
     }
@@ -506,6 +549,7 @@ async fn maintain_entry(
         entries.push(ReadyEntry {
             introduction,
             carrier,
+            published_at: Instant::now(),
         });
         state
             .revision
@@ -513,6 +557,10 @@ async fn maintain_entry(
     }
     driver.await
 }
+
+#[cfg(test)]
+#[path = "owner_completion_tests.rs"]
+mod completion_tests;
 
 #[cfg(test)]
 #[path = "owner_referral_tests.rs"]
