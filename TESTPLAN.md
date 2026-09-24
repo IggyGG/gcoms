@@ -1,3 +1,14 @@
+# Consumed owner budget on routed reopen
+
+Run routed_reopen_preserves_expired_owner_without_publishing_consumed_budget in
+the node library. Exercise the real outbound constructor on fresh and consumed
+sealed budgets while public lease timestamps remain future. Require retained
+owner authority and channel membership, no expired public aliases, a committed
+snapshot with no deadline increase, and no uncertain-persistence pause. The
+non-routed validation control must still reject expired authority. Preserve the
+original exact-error red result. Run the node library and strict Clippy before
+actual laptop/profile recovery and Android installation.
+
 # Authenticated incomplete-referral retry
 
 `renewed_guard_retries_incomplete_referrals_before_normal_discovery_period` serves

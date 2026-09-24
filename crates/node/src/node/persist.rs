@@ -2759,6 +2759,7 @@ pub(in crate::node) mod tests {
     include!("persist/gc2_control_tests.rs");
     include!("persist/channel_directory_tests.rs");
     include!("persist/channel_pex_tests.rs");
+    include!("persist/owner_reopen_tests.rs");
 
     fn contact(byte: u8) -> AliasContact {
         AliasContact {

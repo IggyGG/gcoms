@@ -506,10 +506,17 @@ pub(crate) fn refresh_public_info(st: &mut NodeState) {
         .aliases
         .iter()
         .filter(|a| {
-            a.contact.expiry > now_unix()
-                && !own.as_ref().is_some_and(|r| {
-                    r.conflicts(a.contact.target.address, a.contact.target.relay_service_id)
-                })
+            // A renewed public lease does not replenish its sealed owner-role
+            // budget. Keep expired authority privately for ordinary recovery,
+            // but do not publish it while reopening an offline routed profile.
+            #[cfg(feature = "client-persist")]
+            let live = persist::owner_aliases::alias_deadline(st, a)
+                .is_ok_and(|(effective, deadline)| effective < deadline);
+            #[cfg(not(feature = "client-persist"))]
+            let live = a.contact.expiry > now_unix();
+            live && !own.as_ref().is_some_and(|r| {
+                r.conflicts(a.contact.target.address, a.contact.target.relay_service_id)
+            })
         })
         .map(|a| a.contact.clone())
         .collect();

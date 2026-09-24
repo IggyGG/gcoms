@@ -1,3 +1,15 @@
+# Reopen after an owner-role deadline, 2026-09-24
+
+The original laptop reports "active owner alias expired before publication".
+A real outbound constructor regression reproduces that error with an authenticated
+saved owner budget already consumed while its public lease timestamp remains fresh.
+Filter public owner addresses by the effective sealed deadline, keeping the exact
+private record and membership available for normal background recovery. Do not
+extend leases, discard identity, bypass durable writes or weaken legacy startup.
+The fresh-budget control still publishes its addresses; expired routed startup
+must retain its archive without publishing those addresses. Cluster qualification
+is in progress. codematch=unreachable.
+
 # Incomplete referral recovery, 2026-09-24
 
 The actual file/reopen continuation observed a temporary loss of usable five-hop
