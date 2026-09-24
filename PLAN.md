@@ -303,3 +303,18 @@ stale-build-cache comparison that is excluded from qualification.
 [Receipt](docs/evidence/owner-role-recovery-20260924/summary.json).
 Android 1018 and paired application validation are running; device recovery remains open.
 `codematch=unreachable`.
+
+### Ten-client application follow-up, 2026-09-25
+
+Candidate `28b24ca` / `8b7b9c5` built and passed fixture-host strict Clippy.
+Eight actual GChat clients joined; clients six through eight assembled the new
+bounded Welcome records, clearing the old packet-size failure. The ninth join
+failed its unchanged 120-second application deadline while the owner still awaited
+existing-member membership ACKs; concurrent sends were not reached. All seven
+completed joins exceeded R04 (45.84–100.98 seconds). No ACK requirement, traffic
+policy, or deadline was relaxed. Offline inspection of a copied encrypted fixture
+confirmed `runtime: invite join deadline elapsed`; original state stayed unchanged
+and both namespaces were torn down. See
+`docs/evidence/ten-client-application-20260925/summary.json`. Remaining: membership
+convergence latency, ten-client delivery, final mobile network and release gates.
+Physical devices remain deferred; the traffic-pacing product choice is pending.
