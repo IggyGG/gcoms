@@ -1,0 +1,160 @@
+{
+  "passed": true,
+  "report_sha256": "a0a31d13ae25ec84337fd8d572825061ae4d054d63d71a9dd8e0be0a94b59b4d",
+  "archive_sha256": "bdef58aa69f847d815cf444531a58176b9f4e4cd0cc0587d2ae07a9b82785320",
+  "locally_verified_report_links": 10,
+  "retained_cluster_files_verified": 2187,
+  "cleanup": {
+    "empty_namespace": true,
+    "host_links_unchanged": true,
+    "children_stopped": true
+  },
+  "build": {
+    "path": "/work/application-build-04-fixture-cap",
+    "manifest_sha256": "7e59c47115b53f39a638c3141fc929398d9569ac076401a289b1df282e36c694",
+    "sources": {
+      "gcoms": {
+        "revision": "7e82e8cc107edbbc82d9781c28c90105d951cece",
+        "snapshot_sha256": "052aaaeff39970fd1afecdddd5e4ec0355620dc13e930160f6e572652ade182e"
+      },
+      "gchat": {
+        "revision": "cf4baceb432e7d4e5877ed7a2c8fffd8c0bda5a2",
+        "snapshot_sha256": "3248b7b78df0618c9e684ccbce23a0e914967e02b2f87565b16910150f18c737"
+      }
+    },
+    "artifacts": {
+      "gcnode": {
+        "sha256": "8e2e9a057dbda776b0bf05f69610a574fd47849941e9f6324c501bb9ab8f2483",
+        "size": 18916712
+      },
+      "gchat": {
+        "sha256": "5461ec248631ce5ac5e5fad00bcdd8a4ff6bf909fc667cdd720e2916094ada00",
+        "size": 34539200
+      },
+      "fleet_probe": {
+        "sha256": "b18d8b120edfcdf286dae52466176399e0266f218b0fff958e7940bddffbae5e",
+        "size": 2977136
+      }
+    }
+  },
+  "fixture_host": {
+    "path": "/work/fixture-host-05/turnover_daemon",
+    "sha256": "3e8c0a67222f0a054dca439e7be4ca909cfd57bef7740e1ab7177001dcfbd294",
+    "size": 30512528
+  },
+  "latency_qualified": false,
+  "installed_qualified": false,
+  "privacy_qualified": false,
+  "scope": "actual GChat core/service with protected five-hop routes",
+  "carrier_cap": {
+    "client_starts": {
+      "0": [
+        {
+          "id": 1,
+          "role": "client",
+          "phase": "started",
+          "unix_ms": 1790280181776,
+          "elapsed_ms": 0,
+          "authority_expires_at": 1790283600,
+          "deadline_after_start_ms": 1799999,
+          "max_lifetime_ms": 1800000
+        },
+        {
+          "id": 2,
+          "role": "client",
+          "phase": "started",
+          "unix_ms": 1790280181776,
+          "elapsed_ms": 0,
+          "authority_expires_at": 1790283600,
+          "deadline_after_start_ms": 1799999,
+          "max_lifetime_ms": 1800000
+        }
+      ],
+      "1": [
+        {
+          "id": 1,
+          "role": "client",
+          "phase": "started",
+          "unix_ms": 1790280205070,
+          "elapsed_ms": 0,
+          "authority_expires_at": 1790283600,
+          "deadline_after_start_ms": 1799999,
+          "max_lifetime_ms": 1800000
+        },
+        {
+          "id": 2,
+          "role": "client",
+          "phase": "started",
+          "unix_ms": 1790280205070,
+          "elapsed_ms": 0,
+          "authority_expires_at": 1790283600,
+          "deadline_after_start_ms": 1799999,
+          "max_lifetime_ms": 1800000
+        }
+      ]
+    },
+    "client_ends": {
+      "0": [
+        {
+          "id": 1,
+          "role": "client",
+          "phase": "deadline_elapsed",
+          "unix_ms": 1790281981776,
+          "elapsed_ms": 1800000,
+          "authority_expires_at": 1790283600,
+          "deadline_after_start_ms": 1799999,
+          "max_lifetime_ms": 1800000
+        },
+        {
+          "id": 2,
+          "role": "client",
+          "phase": "deadline_elapsed",
+          "unix_ms": 1790281981777,
+          "elapsed_ms": 1800000,
+          "authority_expires_at": 1790283600,
+          "deadline_after_start_ms": 1799999,
+          "max_lifetime_ms": 1800000
+        }
+      ],
+      "1": [
+        {
+          "id": 1,
+          "role": "client",
+          "phase": "deadline_elapsed",
+          "unix_ms": 1790282005071,
+          "elapsed_ms": 1800001,
+          "authority_expires_at": 1790283600,
+          "deadline_after_start_ms": 1799999,
+          "max_lifetime_ms": 1800000
+        },
+        {
+          "id": 2,
+          "role": "client",
+          "phase": "deadline_elapsed",
+          "unix_ms": 1790282005071,
+          "elapsed_ms": 1800001,
+          "authority_expires_at": 1790283600,
+          "deadline_after_start_ms": 1799999,
+          "max_lifetime_ms": 1800000
+        }
+      ]
+    },
+    "file": {
+      "id": "401f2f95d656453ea3e804b353232f14",
+      "name": "carrier-cap.bin",
+      "sha256": "6e963bae2cd42292da50349f0d64eac8eab718d2133084ad55da5fca74cba262",
+      "size": 268435456
+    },
+    "actual_elapsed_1800_seconds": true,
+    "authority_still_fresh": true
+  },
+  "observed_recovery_seconds": 56.44930124282837,
+  "source_binding_note": "Frozen candidate12 complete source maps, not current HEAD; GComs9a3308b runtime with GChat0ef7241. Later channel-control fairness is separate candidate14.",
+  "retained_evidence": "paired GChat target/channel-reconnect-20260923/reliability-20260924-01/carrier-cap-05-receipts.tgz; complete cluster profiles under reliability-journey2-20260924 /work/journeys/carrier-cap-05",
+  "requirements": {
+    "R03": "not passed: recovery56.449301s exceeds10s",
+    "R06": "256MiB exact export plus same identity/reopen passed in this fixture",
+    "R11": "real1800s carrier cap with fresh authenticated credentials passed; no authority extension",
+    "R12": "not installed qualification"
+  }
+}

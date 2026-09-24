@@ -1,3 +1,13 @@
+# Real carrier-cap application evidence
+
+Use `scripts/gchat-turnover.py --mode carrier-cap` with source-bound application
+and qualification-host binaries in disconnected cluster namespaces. Require two
+actual elapsed 1800-second driver completions per client, authenticated authority
+fresh beyond each cap, both-class recovery, admitted chat ACKs, a file spanning
+the cap, exact export and same-identity reopen. Retain recovery timing separately:
+the candidate12 correctness pass took 56.449 s and does not meet the 10 s target.
+[Receipt](docs/evidence/reliability-carrier-cap-20260924/summary.json).
+
 # Protected-route failure context
 
 Run the routing and transport packages and strict all-target/all-feature Clippy

@@ -1,3 +1,14 @@
+# Real carrier lifetime application gate, 2026-09-24
+
+The disconnected actual GChat core/service run reached the unchanged 1800-second
+carrier cap with introductions still fresh. Both clients regained both classes,
+a 256 MiB in-flight file exported with its exact hash, and reopening retained
+identity and verified bytes. All child processes and namespaces were removed.
+Recovery took 56.449 seconds, so R03 remains failed; this is no latency, installed,
+privacy or consecutive credential-expiry qualification. Frozen candidate12
+receipts remain separate from the later bounded-control runtime.
+[Receipt](docs/evidence/reliability-carrier-cap-20260924/summary.json).
+
 # Current completion plan, 2026-09-24
 
 Implement the [reliability release requirements](docs/RELIABILITY_RELEASE.md):
