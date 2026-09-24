@@ -172,5 +172,10 @@ duplicate queue. Live recovery reapplied a complete saved record by appending
 draining roles already present in memory. The new regression reproduces that exact
 failure. Replace the nonactive role collections from the complete retained record;
 keep the original authority, deadlines, duplicate rejection and failure rollback.
-Cluster node/Clippy validation is running. Device recovery remains open.
+Exact b9a8702 passed 335 node tests (two existing exclusions), strict all-target/
+all-feature Clippy and formatting; all 697 committed source files match the
+tested snapshot. The original exact-error regression is retained, as is an initial
+stale-build-cache comparison that is excluded from qualification.
+[Receipt](docs/evidence/owner-role-recovery-20260924/summary.json).
+Android 1018 and paired application validation are running; device recovery remains open.
 `codematch=unreachable`.

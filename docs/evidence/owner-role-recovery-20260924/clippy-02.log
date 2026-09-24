@@ -1,0 +1,12 @@
+    Checking gcoms-crypto v0.1.0 (/gchat-work/owner-role-recovery-01/green-02/gcoms/crates/crypto)
+    Checking gcoms-core v0.1.0 (/gchat-work/owner-role-recovery-01/green-02/gcoms/crates/core)
+    Checking gcoms-private-fs v0.1.0 (/gchat-work/owner-role-recovery-01/green-02/gcoms/crates/private-fs)
+    Checking gcoms-gossip v0.1.0 (/gchat-work/owner-role-recovery-01/green-02/gcoms/crates/gossip)
+    Checking gcoms-transport v0.1.0 (/gchat-work/owner-role-recovery-01/green-02/gcoms/crates/transport)
+    Checking gcoms-network v0.1.0 (/gchat-work/owner-role-recovery-01/green-02/gcoms/crates/network)
+    Checking gcoms-mls v0.1.0 (/gchat-work/owner-role-recovery-01/green-02/gcoms/crates/mls)
+    Checking gcoms-protocol v0.1.0 (/gchat-work/owner-role-recovery-01/green-02/gcoms/crates/protocol)
+    Checking gcoms-routing v0.1.0 (/gchat-work/owner-role-recovery-01/green-02/gcoms/crates/routing)
+    Checking gcoms-network-client v0.1.0 (/gchat-work/owner-role-recovery-01/green-02/gcoms/crates/network-client)
+    Checking gcoms-node v0.1.0 (/gchat-work/owner-role-recovery-01/green-02/gcoms/crates/node)
+    Finished `dev` profile [unoptimized] target(s) in 13.60s
