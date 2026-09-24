@@ -353,8 +353,11 @@ class Journey(base.Worker):
 
     def finish_file(self, transfer, seconds=1200):
         deadline=time.monotonic()+seconds; last=None
+        self.event('file_completion_deadline', id=transfer['id'], seconds=seconds, scope='correctness, not latency qualification')
         while time.monotonic()<deadline:
             info=self.file_info(transfer)
+            if time.monotonic()>=deadline:
+                raise RuntimeError('independent file completion deadline')
             if info is not None:
                 current=(info['state'], info['verified_bytes'])
                 if current!=last:
@@ -396,7 +399,7 @@ class Journey(base.Worker):
             raise RuntimeError('verified pieces regressed after abrupt process termination')
         self.event('file_after_abrupt_reopen',id=transfer['id'],verified_bytes=after['verified_bytes'])
         self.chat(channel,'turnover:file-resume-chat')
-        self.finish_file(transfer)
+        self.finish_file(transfer, self.spec['config'].get('file_completion_seconds', 1200))
         self.reopen(1)
         self.probe(1,{'action':'export','id':transfer['id'],'name':'reopened-'+transfer['name'],
                       **{k:transfer[k] for k in ('size','sha256')}})
@@ -601,16 +604,20 @@ def main():
     parser.add_argument('--expiries',type=int,default=3,choices=(1,2,3))
     parser.add_argument('--mode',choices=('smoke','file-recovery','archive-failure','credential-expiry','carrier-cap'),default='credential-expiry')
     parser.add_argument('--file-bytes',type=int,default=256*1024*1024)
+    parser.add_argument('--file-completion-seconds',type=int,default=1200,
+                        help='predeclared file-recovery completion budget, 60..3600 seconds; no latency qualification')
     parser.add_argument('--fixture-host',type=Path,
                         help='source-bound turnover_daemon example with fixture-owned signed network trust')
     args=parser.parse_args()
     if os.geteuid()==0: parser.error('run controller as ordinary owner')
     maximum=1024*1024*1024 if args.mode=='file-recovery' else 256*1024*1024
     if not 64*1024*1024<=args.file_bytes<=maximum: parser.error('file size exceeds the selected fixture bounds')
+    if not 60<=args.file_completion_seconds<=3600: parser.error('file completion budget must be between 60 and 3600 seconds')
+    if args.mode!='file-recovery' and args.file_completion_seconds!=1200: parser.error('custom file completion budget is only for file-recovery')
     root=args.out.resolve();root.mkdir(mode=0o700,parents=True,exist_ok=False)
     build=base.build_binding(args.build.resolve())
     before=links();tool_hash=sha256(Path(__file__));helper_hash=sha256(HELPER)
-    config={'mode':args.mode,'lifecycle_diagnostics':args.mode=='carrier-cap','expiries':args.expiries,'file_bytes':args.file_bytes,'production_credential_seconds':3600,'production_carrier_cap_seconds':1800,'recovery_seconds':300}
+    config={'mode':args.mode,'lifecycle_diagnostics':args.mode=='carrier-cap','expiries':args.expiries,'file_bytes':args.file_bytes,'file_completion_seconds':args.file_completion_seconds,'production_credential_seconds':3600,'production_carrier_cap_seconds':1800,'recovery_seconds':300}
     spec={'out':str(root),'build':build,'config':config,'workload':'turnover','seed':20260920,
           'uid':os.getuid(),'gid':os.getgid(),'run_nonce':uuid.uuid4().hex,
           'host_netns':os.readlink('/proc/self/ns/net'),'host_mountns':os.readlink('/proc/self/ns/mnt')}
@@ -620,7 +627,7 @@ def main():
     (root/'spec.json').write_text(json.dumps(spec,indent=2)+'\n')
     (root/'driver.py').write_bytes(Path(__file__).read_bytes())
     (root/'boundary-helper.py').write_bytes(HELPER.read_bytes())
-    timeout=900 if args.mode in ('smoke','archive-failure') else 2400 if args.mode=='file-recovery' else 3600*(args.expiries+1)+900
+    timeout=900 if args.mode in ('smoke','archive-failure') else 1200+args.file_completion_seconds if args.mode=='file-recovery' else 3600*(args.expiries+1)+900
     command=['sudo','-n','timeout','--signal=TERM','--kill-after=20',str(timeout),
              'unshare','--net','--mount','--pid','--fork','--mount-proc','--kill-child','--propagation','private','--',
              sys.executable,str(Path(__file__).resolve()),'--worker',str(root/'spec.json')]

@@ -5,6 +5,7 @@ import copy
 import os
 from pathlib import Path
 import socket
+import sys
 import tempfile
 import unittest
 from unittest import mock
@@ -53,6 +54,39 @@ class ControllerTests(unittest.TestCase):
             workload="turnover", seed=1, config={}, build={"path": str(self.root / "build")}))
         self.worker.root = self.root
         self.worker.roles["client0"] = 1
+
+    def test_custom_file_budget_rejects_unbounded_or_wrong_mode(self):
+        for mode, seconds in [('file-recovery', '59'), ('file-recovery', '3601'), ('smoke', '2400')]:
+            with self.subTest(mode=mode, seconds=seconds), \
+                    mock.patch.object(os, 'geteuid', return_value=1000), \
+                    mock.patch.object(sys, 'argv', ['gchat-turnover', '--build', '/unused', '--out', '/unused',
+                                                   '--mode', mode, '--file-completion-seconds', seconds]), \
+                    mock.patch.object(sys, 'stderr'):
+                with self.assertRaises(SystemExit) as caught:
+                    turnover.main()
+                self.assertEqual(caught.exception.code, 2)
+
+    def test_file_completion_uses_one_deadline_and_rejects_late_completion(self):
+        transfer = {'id': 'fixture', 'size': 10, 'sha256': '0'*64}
+        with mock.patch.object(self.worker, 'file_info', return_value={'state':'downloading','verified_bytes':'9'}), \
+                mock.patch.object(self.worker, 'sample'), mock.patch.object(self.worker, 'event') as event, \
+                mock.patch.object(self.worker, 'probe') as export, \
+                mock.patch.object(turnover.time, 'sleep'), \
+                mock.patch.object(turnover.time, 'monotonic', side_effect=[100, 101, 102, 159, 159.5, 160]):
+            with self.assertRaisesRegex(RuntimeError, 'independent file completion deadline'):
+                self.worker.finish_file(transfer, 60)
+            export.assert_not_called()
+            self.assertEqual(event.call_args_list[0].args[0], 'file_completion_deadline')
+            self.assertEqual(event.call_args_list[0].kwargs['seconds'], 60)
+
+    def test_file_completion_observed_after_deadline_is_not_exported(self):
+        transfer = {'id': 'fixture', 'size': 10, 'sha256': '0'*64}
+        with mock.patch.object(self.worker, 'file_info', return_value={'state':'complete','verified_bytes':'10'}), \
+                mock.patch.object(self.worker, 'event'), mock.patch.object(self.worker, 'probe') as export, \
+                mock.patch.object(turnover.time, 'monotonic', side_effect=[100, 101, 160]):
+            with self.assertRaisesRegex(RuntimeError, 'independent file completion deadline'):
+                self.worker.finish_file(transfer, 60)
+            export.assert_not_called()
 
     def test_reopen_removes_only_dead_owned_probe_socket_and_preserves_profile(self):
         endpoint = self.root / "c0/probe.sock"
@@ -227,6 +261,7 @@ class ControllerTests(unittest.TestCase):
 
     def test_file_recovery_binds_final_and_reopened_export_to_original_hash(self):
         self.worker.spec['config']['file_bytes']=123000000
+        self.worker.spec['config']['file_completion_seconds']=2400
         transfer={'id':'file','name':'fixture.bin','size':123000000,'sha256':'bound-hash'}
         info={'state':'downloading','verified_bytes':'13000000'}
         with mock.patch.object(self.worker,'start_file',return_value=transfer), \
@@ -237,7 +272,7 @@ class ControllerTests(unittest.TestCase):
                 mock.patch.object(self.worker,'probe') as probe:
             self.worker.file_recovery('channel')
         self.assertEqual(reopen.call_args_list,[mock.call(1,abrupt=True),mock.call(1)])
-        finish.assert_called_once_with(transfer)
+        finish.assert_called_once_with(transfer, 2400)
         probe.assert_called_once_with(1,{'action':'export','id':'file','name':'reopened-fixture.bin',
                                          'size':123000000,'sha256':'bound-hash'})
 

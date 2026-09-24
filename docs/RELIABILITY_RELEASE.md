@@ -40,6 +40,12 @@ Case failure, dependency-blocked, timeout and infrastructure failure are separat
 results; none counts as a pass. A late continuation cannot change the original
 deadline verdict.
 
+The file-recovery controller keeps its 1200-second default completion budget.
+A separate full-size correctness run may predeclare `--file-completion-seconds`
+(60–3600 seconds); the value and original failures stay in its receipt. This does
+not qualify latency or revise a previous timeout. A completion observed after
+that one fixed deadline is rejected before export verification.
+
 ## Work order
 
 1. Preserve current profiles/jobs/evidence; collect terminal jobs. Maintain one
