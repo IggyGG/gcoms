@@ -67,7 +67,7 @@ class ControllerTests(unittest.TestCase):
                 self.assertEqual(caught.exception.code, 2)
 
     def test_file_completion_uses_one_deadline_and_rejects_late_completion(self):
-        transfer = {'id': 'fixture', 'size': 10, 'sha256': '0'*64}
+        transfer = {'id': 'fixture', 'name': 'fixture.bin', 'size': 10, 'sha256': '0'*64}
         with mock.patch.object(self.worker, 'file_info', return_value={'state':'downloading','verified_bytes':'9'}), \
                 mock.patch.object(self.worker, 'sample'), mock.patch.object(self.worker, 'event') as event, \
                 mock.patch.object(self.worker, 'probe') as export, \
@@ -80,7 +80,7 @@ class ControllerTests(unittest.TestCase):
             self.assertEqual(event.call_args_list[0].kwargs['seconds'], 60)
 
     def test_file_completion_observed_after_deadline_is_not_exported(self):
-        transfer = {'id': 'fixture', 'size': 10, 'sha256': '0'*64}
+        transfer = {'id': 'fixture', 'name': 'fixture.bin', 'size': 10, 'sha256': '0'*64}
         with mock.patch.object(self.worker, 'file_info', return_value={'state':'complete','verified_bytes':'10'}), \
                 mock.patch.object(self.worker, 'event'), mock.patch.object(self.worker, 'probe') as export, \
                 mock.patch.object(turnover.time, 'monotonic', side_effect=[100, 101, 160]):
