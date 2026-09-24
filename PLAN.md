@@ -1,3 +1,22 @@
+# Actual application connection-loss result, 2026-09-25
+
+Candidate16 replaced both established entry connections within 0–1 ms after a
+controlled reset in the disconnected cluster. Actual GChat core/service chat
+recovered, the 64 MiB in-flight file exported with its expected SHA-256, and
+reopening retained the same identity and complete file. All child processes and
+namespaces were removed. The retained 652-file inventory and 38 exported evidence
+files were verified. [Application receipt](docs/evidence/reliability-entry-loss-20260925/summary.json)
+and [exact binary/source build receipt](docs/evidence/reliability-entry-loss-20260925/build.json).
+
+The complete recovery still took 38.638 seconds, joining took 53.872 seconds, and
+some authenticated ACKs exceeded five seconds. R02/R03/R04 remain failed. This
+closes the proven owner retry-tick delay, not all protected-route setup latency.
+Current fixed cover policy is unchanged; its performance/privacy tradeoff awaits
+the user's decision before changing that policy. Physical-device checks remain
+deferred; simulator/emulator network journeys and final release checks remain.
+No installed release, credential expiry, carrier-cap or privacy claim is made by
+this transport-reset run. Earlier receipts keep their original source bindings.
+
 # Established carrier replacement, 2026-09-24
 
 A real carrier-cap application log showed 29.982 seconds between driver completion
@@ -8,7 +27,7 @@ It preserves authority validation, entry limits, unrelated failed dials and the
 normal timer. Both focused tests, all 86 routing package tests, 49 selected Node GC/2 tests
 (one explicit exclusion), strict routing/Node Clippy and workspace formatting pass
 on unchanged source. [Receipt](docs/evidence/owner-completion-20260924/summary.json).
-Actual application transport-loss validation is next; R03 remains unqualified.
+Actual application transport-loss validation passed correctness; R03 remains failed.
 The test-only `entry-loss` controller keeps relays/authority alive while resetting
 only the isolated client's fixture relay sockets; it requires old driver endings,
 new publications, both-class recovery, authenticated chat, resumed file hash and

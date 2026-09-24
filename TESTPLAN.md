@@ -13,6 +13,9 @@ isolated cluster with the exact built app/host. Require both old drivers to end
 from the recorded reset, two new ready drivers, unchanged identity, ACKs, continuing
 verified file bytes, export hash and reopen. Record the complete recovery duration
 against R03's 10-second target; a correctness pass does not waive that ceiling.
+Candidate16 passed correctness with 0–1 ms replacement starts but 38.638 seconds
+for application recovery: R03 still fails. The [terminal receipt](docs/evidence/reliability-entry-loss-20260925/summary.json)
+also records 53.872-second joining and all four authenticated ACK timings.
 
 # Official frozen native baseline
 

@@ -1,0 +1,77 @@
+{
+  "passed": true,
+  "scope": "optimized Linux GChat/relay/probe and fixture host build; not installer or release qualification",
+  "evidence_files_verified": 17,
+  "archive_sha256": "86bcdd0f2902c11e92465bb8dc5e8b2dbc229ddea158735b94938227c05d6bf8",
+  "artifacts": {
+    "gcnode": {
+      "sha256": "3a4e453bd76c9e5c001d962846212326ac0f4adbb42a5745acdec4f6b4ec5ff3",
+      "size": 19030968
+    },
+    "gchat": {
+      "sha256": "43e497ad5ba40def2ef3eb898fca0af48e8c2b1752159ba82f3d8a454260c1df",
+      "size": 34692696
+    },
+    "fleet_probe": {
+      "sha256": "0f3942185912b8da287a58da14d56b59273e3017ef26b8136d203527d5afc3ef",
+      "size": 2977104
+    }
+  },
+  "fixture_host": {
+    "binary_sha256": "380d71226508fca2a2ada31ffd61ab7dac189501def541bc31167d69ba3572b9",
+    "canonical_example": true,
+    "source_sha256": "2c839c0146ba80b5bbdec35ff14993fb7653343e6b329cfb531c06d5628743ad",
+    "build_receipt_sha256": "b8913eac4d893ebab9768b180bb5a6d4c36213fe2371c75692927e54e131380c",
+    "candidate_manifest_sha256": "2456fe2e2830841a3eb196dd233cb5aee40e1f57408937de3c93df9cc152abab",
+    "commands": [
+      [
+        "cargo",
+        "build",
+        "--locked",
+        "--offline",
+        "--release",
+        "--config",
+        "/work/application-build-16/source.toml",
+        "-p",
+        "gchat-core",
+        "--example",
+        "turnover_daemon",
+        "--features",
+        "gc2-carrier"
+      ],
+      [
+        "cargo",
+        "clippy",
+        "--locked",
+        "--offline",
+        "--config",
+        "/work/application-build-16/source.toml",
+        "-p",
+        "gchat-core",
+        "--example",
+        "turnover_daemon",
+        "--features",
+        "gc2-carrier",
+        "--",
+        "-D",
+        "warnings"
+      ]
+    ],
+    "passed": true,
+    "installed_qualification": false
+  },
+  "sources": {
+    "gcoms": {
+      "revision": "8b60e916635b8ad1a37ec54b9afbb7698b7b2504",
+      "snapshot_sha256": "28c28d8d22b8f59a8e087a3e9128ba1d15268798e4b33b5595880f01ddf2b304",
+      "unchanged": true,
+      "resolved_lock_sha256": "7bf0e526dfea4f63b556e754d8a9b2d171815f4c3e22baad31ba006fd2f33353"
+    },
+    "gchat": {
+      "revision": "b8e6d5d5740fcad1e2ab7f4e1b3394c62a7326cd",
+      "snapshot_sha256": "14c81026d2c95567cc691af2ecad254a430bb752d5b279859d8f3d24def71ba7",
+      "unchanged": true,
+      "resolved_lock_sha256": "1e2d1c7f3d99b7f19b0016d48bd8e59d772752bf55af9b526c31f451f255edd1"
+    }
+  }
+}
