@@ -1,3 +1,11 @@
+# Protected-route failure context
+
+Run the routing and transport packages and strict all-target/all-feature Clippy
+on the frozen diagnostic candidate. Preserve pin rejection, circuit cancellation,
+capacity, lifecycle and five-hop integration checks. Error strings gain static
+stage context only; no peer identifiers or capabilities. The real Android resume
+failure must be observed separately, with the original profile and pending ID.
+
 # GC/2 admission refusal diagnostics
 
 Run node library tests and strict all-feature/all-target node Clippy on the

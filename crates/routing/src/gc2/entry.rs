@@ -169,7 +169,8 @@ impl EntryCarrier {
             });
             let (extended, driver) =
                 super::transit::open(stream, class, middle, next.as_ref().unwrap_or(target))
-                    .await?;
+                    .await
+                    .map_err(|error| format!("GC/2 middle {}: {error}", index + 1))?;
             self.nested
                 .send(driver)
                 .await

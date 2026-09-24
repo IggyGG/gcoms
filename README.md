@@ -1,3 +1,9 @@
+## Protected-route error context
+
+Recovery errors identify the failing middle number and handshake/admission stage,
+or the terminal TLS handshake. These local diagnostics contain no relay addresses
+or private capabilities and do not alter authentication or recovery policy.
+
 ## Local GC/2 admission diagnostics
 
 With the existing optional metrics sink enabled, `gchat_queue_refused` records

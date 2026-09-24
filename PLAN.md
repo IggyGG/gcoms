@@ -1,12 +1,22 @@
+# Android resume: identify the failing protected-route stage, 2026-09-24
+
+The original file completed with an exact export hash, but after the native Save
+picker resumes the app, replacement inbox recovery repeatedly reports a bare TLS
+EOF and message ACKs stall. Add stage context to existing error paths: middle
+number, middle TLS/admission/target acknowledgment, and terminal TLS. Never log
+addresses, pins, tokens or payloads. No routing selection, retry, deadline, admission
+or authentication changes. Validate routing/transport in the cluster, then pair
+Android 1019 with those exact sources for the existing-profile observation.
+codematch=unreachable.
+
 # Retained Android delivery: bounded relay admission diagnostics, 2026-09-24
 
 Android 1018 no longer reproduces the duplicate owner-role checkpoint pause,
-but the original file remains at 92,274,688 bytes and sender attempts receive
+and the original file has now completed with a matching hash. Earlier sender attempts received
 GC/2 overload replies. Distinguish queue fullness, aggregate storage and replay
 capacity in the existing optional local metrics sink. Preserve every wire reply,
 authentication check, limit and replay deadline; record no routing identifiers.
-Cluster validation passed: 335 node library tests, real queue/service tests, strict Clippy and the production relay build on unchanged source. The diagnostics candidate remains **not deployed**; the original Android file completed without a relay update. [Receipt](docs/evidence/queue-admission-20260924/summary.json). Device delivery
-and the remaining file bytes are still unqualified. codematch=unreachable.
+Cluster validation passed: 335 node library tests, real queue/service tests, strict Clippy and the production relay build on unchanged source. The diagnostics candidate remains **not deployed**; the original Android file completed without a relay update. [Receipt](docs/evidence/queue-admission-20260924/summary.json). Subsequent device ACK recovery remains unqualified. codematch=unreachable.
 
 # Reopen after an owner-role deadline, 2026-09-24
 

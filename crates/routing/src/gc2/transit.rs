@@ -67,7 +67,8 @@ pub(super) async fn open(
         .ok_or("GC/2 middle authority expired")?;
     timeout_at(deadline.min(tokio::time::Instant::now() + HANDSHAKE_TIMEOUT), async {
         let tls = TlsConnector::from(Arc::new(tls::client_config_pinned(relay.service_id)?))
-            .connect(tls::server_name_ip(relay.addr.ip()), stream).await?;
+            .connect(tls::server_name_ip(relay.addr.ip()), stream).await
+            .map_err(|error| format!("TLS handshake: {error}"))?;
         if tls.get_ref().1.alpn_protocol() != Some(tls::ALPN_H2) {
             return Err("GC/2 middle did not negotiate HTTP2".into());
         }
@@ -88,7 +89,8 @@ pub(super) async fn open(
                     .header("content-type", "application/octet-stream").body(())?;
                 let (response, send) = sender.send_request(request, false)?;
                 let mut pending = PendingSend(Some(send));
-                let response = response.await?;
+                let response = response.await
+                    .map_err(|error| format!("transit admission response: {error}"))?;
                 if response.status() != 200 { return Err("GC/2 transit capability refused".into()); }
                 let mut io = H2Stream::new(response.into_body(), pending.0.take().unwrap());
                 let target = target.encode();
@@ -100,7 +102,8 @@ pub(super) async fn open(
                 opened.extend_from_slice(&target);
                 io.write_all(&opened).await?;
                 let mut ack = [0; 6];
-                io.read_exact(&mut ack).await?;
+                io.read_exact(&mut ack).await
+                    .map_err(|error| format!("target connection acknowledgment: {error}"))?;
                 if &ack[..4] != MAGIC || ack[4] != class as u8 || ack[5] != 0 {
                     return Err("GC/2 transit acknowledgment mismatch".into());
                 }
