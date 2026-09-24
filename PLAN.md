@@ -1,3 +1,13 @@
+# Retained Android delivery: bounded relay admission diagnostics, 2026-09-24
+
+Android 1018 no longer reproduces the duplicate owner-role checkpoint pause,
+but the original file remains at 92,274,688 bytes and sender attempts receive
+GC/2 overload replies. Distinguish queue fullness, aggregate storage and replay
+capacity in the existing optional local metrics sink. Preserve every wire reply,
+authentication check, limit and replay deadline; record no routing identifiers.
+Cluster node checks and one diagnostic relay candidate are next. Device delivery
+and the remaining file bytes are still unqualified. codematch=unreachable.
+
 # Reopen after an owner-role deadline, 2026-09-24
 
 The original laptop reports "active owner alias expired before publication".

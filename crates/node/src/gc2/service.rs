@@ -118,7 +118,7 @@ impl QueueService {
                         );
                         Some(HopReply::Accepted)
                     }
-                    Err(error) => status(&error),
+                    Err(error) => status(&error, "push"),
                 };
                 reply_or_reject(&mut respond, reply).await;
             }
@@ -131,7 +131,7 @@ impl QueueService {
                 let mut handle = match result {
                     Ok(handle) => handle,
                     Err(error) => {
-                        reply_or_reject(&mut respond, status(&error)).await;
+                        reply_or_reject(&mut respond, status(&error, "subscribe")).await;
                         return;
                     }
                 };
@@ -227,7 +227,21 @@ impl Drop for Active {
     }
 }
 
-fn status(error: &StoreError) -> Option<HopReply> {
+fn status(error: &StoreError, operation: &'static str) -> Option<HopReply> {
+    // Local, bounded diagnostics distinguish admission pressure without exposing
+    // queue identities, capabilities, payloads or a different network response.
+    let reason = match error {
+        StoreError::QueueFull => "queue_full",
+        StoreError::Capacity => "store_capacity",
+        StoreError::ReplayCapacity => "replay_capacity",
+        StoreError::Replay => "replay_conflict",
+        StoreError::GrantConsumed => "grant_consumed",
+        _ => "unauthorized_or_invalid",
+    };
+    crate::metrics::log_event(
+        "gchat_queue_refused",
+        &[("operation", operation.into()), ("reason", reason.into())],
+    );
     match error {
         StoreError::QueueFull | StoreError::Capacity | StoreError::ReplayCapacity => {
             Some(HopReply::Overloaded)

@@ -1,3 +1,11 @@
+## Local GC/2 admission diagnostics
+
+With the existing optional metrics sink enabled, `gchat_queue_refused` records
+only `operation` (`push` or `subscribe`) and a static refusal reason. It separates
+queue fullness, aggregate storage and replay capacity while retaining the same
+network replies and security limits. This is local troubleshooting data, not a
+delivery receipt.
+
 # GComs
 
 Rust applications start with the [`gcoms` application API](crates/application/README.md):

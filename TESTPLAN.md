@@ -1,3 +1,11 @@
+# GC/2 admission refusal diagnostics
+
+Run node library tests and strict all-feature/all-target node Clippy on the
+frozen candidate. Existing GC/2 queue/service tests must retain admission,
+replay, shared-capacity and class behavior. Confirm local diagnostic labels are
+static and contain no queue, token, address or payload. Actual device evidence
+must distinguish relay admission from recipient acknowledgment.
+
 # Consumed owner budget on routed reopen
 
 Run routed_reopen_preserves_expired_owner_without_publishing_consumed_budget in
