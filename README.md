@@ -26,6 +26,10 @@ forwarding and NAT mapping from a client-only build. Existing embedded and IPC
 feature combinations retain their behavior. The SDK's `in-process` feature is
 the shared adapter; `embedded` additionally enables relay hosting.
 
+When a protocol checkpoint fails, bounded local diagnostics distinguish encoding,
+store failure and the first owner-lifecycle pause site. Uncertain persistence still
+pauses the owner; these diagnostics do not authorize retry or confirm delivery.
+
 **GComs** is a Rust communication protocol for secure connections, with typed
 service APIs for addon and client integration. **GChat** is its separate reference
 application, with a desktop UI, terminal UI and local service.

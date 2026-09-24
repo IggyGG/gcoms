@@ -8,6 +8,10 @@ preserves the exact failure classification, rollback, durable barriers and
 scheduler shutdown; it does not repair or waive the underlying failure. The
 last confirmed profile is reopened by restarting the app without clearing data.
 Cluster workload reproduction and focused checkpoint-failure checks are ongoing.
+Cluster validation passed on frozen `b6188f7`: 333 node library tests, two existing
+exclusions, strict all-target/all-feature node Clippy and all 692 source bindings
+unchanged. [Receipt](docs/evidence/checkpoint-diagnostics-20260924/summary.json).
+Android 1016 is building separately; no underlying repair or device pass claimed.
 `codematch=unreachable` in this environment.
 
 # Inbox installation recovery, 2026-09-23

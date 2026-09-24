@@ -1,0 +1,23 @@
+{
+  "source": "b6188f79ae5eead53d0912b0e604622f08f9483a",
+  "source_files": 692,
+  "source_unchanged": true,
+  "checks": {
+    "node": 0,
+    "clippy": 0
+  },
+  "passed": true,
+  "scope": "First-checkpoint failure logging only; does not qualify Android or fix underlying persistence failure",
+  "codematch": "unreachable",
+  "node_tests": {
+    "passed": 333,
+    "failed": 0,
+    "ignored": 2
+  },
+  "evidence": {
+    "node.log": "b2707cf8cb32015f3f281d9b7aaa9764ccbc53c25f966319c75e9f96ed2dc08a",
+    "clippy.log": "dc12b6a2fe72564b8a9f697d96573f90c256a7de39f75cf77d714319f852870f",
+    "before.json": "87330d378b79e2585baf1c7f67e85ec75a57415d214c04b21760161d6bfc6f3c",
+    "check.py": "84d366c9fd69bccdb25dcf42484fa4b18fb1b740f364bac0bc89e4ec3783b550"
+  }
+}
