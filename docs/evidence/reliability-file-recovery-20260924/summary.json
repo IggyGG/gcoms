@@ -1,0 +1,65 @@
+{
+  "passed": true,
+  "report_sha256": "3fb4da0816e7dc4f32fc9b285cb37f896a058e8503056615dbfca6428fd58e6c",
+  "archive_sha256": "6606a3d17485558ac75dcee5fffb708aa8341263bab1a4b1f2bc7ba1fbb09c85",
+  "linked_evidence_verified": 12,
+  "retained_cluster_files_verified": 8333,
+  "file_recovery": {
+    "file": {
+      "id": "dbc67379ef294043b567a6bfc83b3a24",
+      "name": "interrupted.bin",
+      "sha256": "099f687efe8f7283736134d850b0a2a9d660de0dac7041ecb8061da37bea23d2",
+      "size": 1073741824
+    },
+    "before_verified_bytes": "107741184",
+    "after_verified_bytes": "107741184",
+    "abrupt_stop": true,
+    "hash_verified_after_reopen": true
+  },
+  "cleanup": {
+    "empty_namespace": true,
+    "children_stopped": true,
+    "host_links_unchanged": true
+  },
+  "scope": "candidate14 actual GChat core/service five-hop1GiB abrupt receiver restart, exact export and same-identity reopen",
+  "build": {
+    "path": "/work/application-build-06-fixture-file06",
+    "manifest_sha256": "efeea52e402c5fedaa04262e21a9cee3a58358112c0241e16cd6978e2209e817",
+    "sources": {
+      "gcoms": {
+        "revision": "c76705939f23ad1be7410391bbc0ce1cda94ca86",
+        "snapshot_sha256": "d7ac79938cc3ae3fe775a37af9b6acf58525456751bda3d0b1e72f638b6d474d"
+      },
+      "gchat": {
+        "revision": "b520003e9d2dd69a23814f881a8ce52a2333e701",
+        "snapshot_sha256": "3248b7b78df0618c9e684ccbce23a0e914967e02b2f87565b16910150f18c737"
+      }
+    },
+    "artifacts": {
+      "gcnode": {
+        "sha256": "5c7d48cb8cbee39f9ce394ef53cde9cb63fd7c1508cea7edff7d1d8800df89bd",
+        "size": 18952128
+      },
+      "gchat": {
+        "sha256": "d6fcbf03104ab01c29ab92bf80abafe0657a01e7523e085e85347311d2e871b4",
+        "size": 34584728
+      },
+      "fleet_probe": {
+        "sha256": "37e0d6869439abc7898a48870477194728686eba7f469fd27941a03101520440",
+        "size": 2977352
+      }
+    }
+  },
+  "fixture_host": {
+    "path": "/work/fixture-host-07/turnover_daemon",
+    "sha256": "aae454c612b9996829e2a060050c9656ecacd4778818e71e14655bab43f0e942",
+    "size": 30543776
+  },
+  "latency_qualified": false,
+  "installed_qualified": false,
+  "privacy_qualified": false,
+  "predeclared_completion_seconds": 2400,
+  "historical1200s_failure": "file-recovery-04 remains failed",
+  "source_binding_note": "candidate14 complete source maps bind d432597 runtime; later3190e84/a92cd1e controller deadline changes separately verified. Native build uses its own frozen snapshot commits.",
+  "retained_evidence": "paired GChat target/channel-reconnect-20260923/reliability-20260924-01/file-recovery-07-receipts.tgz; full fixture profiles on cluster /work/journeys/file-recovery-07"
+}

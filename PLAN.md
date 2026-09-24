@@ -1,3 +1,15 @@
+# One GiB interrupted application transfer, 2026-09-24
+
+Candidate14 completed the actual GChat core/service five-hop file recovery case.
+The receiver was killed with 107,741,184 verified bytes; reopening retained the
+exact piece count and identity. Chat remained usable during resumed bulk transfer.
+The full 1,073,741,824-byte export matched its expected SHA-256, including after
+another reopen. All processes/namespaces were removed; 8,333 retained evidence
+files were verified. The predeclared 2400-second completion budget is correctness
+coverage, not a speed claim; the earlier 1200-second timeout remains failed.
+[Receipt](docs/evidence/reliability-file-recovery-20260924/summary.json).
+Native/mobile release, ten participants and latency requirements remain open.
+
 # Real carrier lifetime application gate, 2026-09-24
 
 The disconnected actual GChat core/service run reached the unchanged 1800-second

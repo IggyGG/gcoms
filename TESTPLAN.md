@@ -1,3 +1,12 @@
+# Interrupted full-size file correctness
+
+`gchat-turnover.py --mode file-recovery --file-bytes 1073741824
+--file-completion-seconds 2400` verifies retained partial bytes after SIGKILL,
+concurrent authenticated chat, complete export hash and same-identity reopening.
+The deadline is declared before the run and late completion fails. Keep historical
+1200-second failures separate; this mode does not qualify throughput or latency.
+[Candidate14 pass](docs/evidence/reliability-file-recovery-20260924/summary.json).
+
 # Real carrier-cap application evidence
 
 Use `scripts/gchat-turnover.py --mode carrier-cap` with source-bound application
