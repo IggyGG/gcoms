@@ -318,3 +318,12 @@ and both namespaces were torn down. See
 `docs/evidence/ten-client-application-20260925/summary.json`. Remaining: membership
 convergence latency, ten-client delivery, final mobile network and release gates.
 Physical devices remain deferred; the traffic-pacing product choice is pending.
+
+Offline follow-up decoded copies of all ten candidate17 fixture profiles. The
+owner retained epoch8 and six of seven required ACKs; participant3 remained at
+epoch7 and logged no arrival of the exact missing commit. Applying that retained
+wire to a decoded copy advanced it to epoch8; its resulting ACK authenticated as
+the expected member at the owner. No network retry or crypto-state reset was
+performed. Original encrypted files stayed unchanged and temporary decrypted
+copies were removed. The first diagnostic compile failure is retained separately.
+See `docs/evidence/ten-client-application-20260925/membership-inspection.json`.
