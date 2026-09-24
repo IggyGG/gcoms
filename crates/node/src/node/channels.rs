@@ -2017,10 +2017,19 @@ pub(crate) async fn redeem_invite_remote(
     let body_id = crate::node::state::fresh_msg_id();
     {
         let mut st = state.lock().unwrap_or_else(|p| p.into_inner());
+        st.pending_invite_redemptions
+            .retain(|_, pending| !pending.reply.is_closed());
         if st.pending_invite_redemptions.len() >= 64 {
             return Err("too many invite redemptions in flight".into());
         }
-        st.pending_invite_redemptions.insert(body_id, tx);
+        st.pending_invite_redemptions.insert(
+            body_id,
+            crate::node::state::PendingInviteReply {
+                owner: owner.identity_pk.clone(),
+                reply: tx,
+                chunks: Default::default(),
+            },
+        );
     }
     let channel_owned = channel.to_string();
     let member_owned = member_name.to_string();
@@ -2133,21 +2142,77 @@ pub(crate) async fn service_one_invite(
     };
     // The record echoes the id the friend registered its waiter under.
     let waited_id = request.message_id;
-    if let Err(error) = send_direct_record(
-        state,
-        scheduler,
-        &peer,
-        None,
-        false,
-        move |_generated_id, _seq| {
-            crate::proto::encode_invite_welcome(waited_id, &result)
-                .ok_or_else(|| "invite welcome too large".to_string())
-        },
-    )
-    .await
-    {
+    if let Err(error) = send_invite_reply(state, scheduler, &peer, waited_id, result).await {
         metrics::log_event("invite_reply_send_failed", &[("e", error)]);
     }
+}
+
+/// Keep small replies wire-compatible. Larger Welcomes use bounded authenticated
+/// control records, each with its own receipt ID and the original request ID.
+/// Frame/flow limits are unchanged; older peers cannot claim a partial join.
+async fn send_invite_reply(
+    state: &Arc<Mutex<NodeState>>,
+    scheduler: &RelayScheduler,
+    peer: &NodeInfo,
+    request_id: [u8; 16],
+    result: Result<Vec<u8>, String>,
+) -> Result<(), String> {
+    use futures_util::{stream, StreamExt};
+    let encoded = crate::proto::encode_invite_welcome(request_id, &result)
+        .ok_or("invite welcome too large")?;
+    let overhead = gcoms_crypto::session::MAX_FRAME_OVERHEAD
+        + 3
+        + state
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .info
+            .identity_pk
+            .len();
+    if encoded.len().saturating_add(overhead) <= gcoms_core::MAX_MESSAGE {
+        send_direct_record(state, scheduler, peer, None, false, move |_, _| Ok(encoded)).await?;
+        return Ok(());
+    }
+    let welcome = result.map_err(|_| "invite error reply too large")?;
+    let digest: [u8; 32] = Sha256::digest(&welcome).into();
+    let total = u32::try_from(welcome.len()).map_err(|_| "invite welcome too large")?;
+    let mut prepared = Vec::new();
+    for (index, bytes) in welcome
+        .chunks(crate::proto::WELCOME_CHUNK_BYTES)
+        .enumerate()
+    {
+        let chunk = crate::proto::WelcomeChunk {
+            digest,
+            total,
+            offset: (index * crate::proto::WELCOME_CHUNK_BYTES) as u32,
+            bytes: bytes.to_vec(),
+        };
+        prepared.push(prepare_direct_record(
+            state,
+            peer,
+            None,
+            false,
+            None,
+            move |id, _| {
+                crate::proto::encode_invite_welcome_chunk(id, request_id, &chunk)
+                    .ok_or_else(|| "invalid invite welcome chunk".to_string())
+            },
+        )?);
+    }
+    // Preparation retains exact bytes before fanout. At most four first-hop
+    // completions run together; normal per-peer flow credit and retries apply.
+    let mut completions = stream::iter(
+        prepared
+            .into_iter()
+            .map(|record| complete_direct_record(scheduler, record)),
+    )
+    .buffer_unordered(4);
+    let mut first_error = None;
+    while let Some(result) = completions.next().await {
+        if let Err(error) = result {
+            first_error.get_or_insert(error);
+        }
+    }
+    first_error.map_or(Ok(()), Err)
 }
 
 #[cfg(test)]

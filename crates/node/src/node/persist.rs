@@ -3295,6 +3295,177 @@ pub(in crate::node) mod tests {
     }
 
     #[test]
+    fn invitation_receipt_uses_the_retained_logical_id() {
+        for welcome in [false, true] {
+            let (node, peer_pk, mut remote) = direct_fixture();
+            let peer = node.peer_routes[&peer_pk].clone();
+            let shared = Arc::new(Mutex::new(node));
+            let correlation = [0x73; 16];
+            let prepared = prepare_direct_record(&shared, &peer, None, false, None, |_, _| {
+                if welcome {
+                    crate::proto::encode_invite_welcome(correlation, &Ok(vec![1; 256]))
+                } else {
+                    crate::proto::encode_invite_redeem(
+                        correlation,
+                        "receipt",
+                        "member",
+                        &[2; 16],
+                        &[3; 32],
+                        &[4; 128],
+                    )
+                }
+                .ok_or_else(|| "fixture encoding failed".to_string())
+            })
+            .unwrap();
+            assert_eq!(
+                prepared.message_id, correlation,
+                "ACK must address the retained outbox ID"
+            );
+            let (events, mut seen) = broadcast::channel(8);
+            let ack = remote.send(&encode_direct_ack(correlation, false)).unwrap();
+            let mut node = shared.lock().unwrap();
+            assert!(node.pending_1to1.contains_key(&correlation));
+            process_frame(&mut node, peer_pk, ack, &events);
+            assert!(
+                node.pending_1to1.is_empty(),
+                "authenticated invitation ACK must reclaim retry state"
+            );
+            assert!(
+                seen.try_recv().is_err(),
+                "control ACK is not user message delivery"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn invitation_chunk_retry_survives_reopen_and_refuses_id_collision() {
+        let (node, peer_pk, _) = direct_fixture();
+        let peer = node.peer_routes[&peer_pk].clone();
+        let shared = Arc::new(Mutex::new(node));
+        let chunk = crate::proto::WelcomeChunk {
+            digest: [7; 32],
+            total: 8193,
+            offset: 0,
+            bytes: vec![8; 8192],
+        };
+        let id = [0x45; 16];
+        let record = crate::proto::encode_invite_welcome_chunk(id, [0x46; 16], &chunk).unwrap();
+        prepare_direct_record(&shared, &peer, None, false, None, |_, _| Ok(record.clone()))
+            .unwrap();
+        let (archive, scheduler, wire, sequence) = {
+            let node = shared.lock().unwrap();
+            (
+                encode_state(&node).unwrap(),
+                node.scheduler.clone(),
+                node.pending_1to1[&id].delivery.cells[0]
+                    .encode_wire()
+                    .unwrap(),
+                node.next_direct_sequence,
+            )
+        };
+        let error =
+            prepare_direct_record(&shared, &peer, None, false, None, |_, _| Ok(record.clone()))
+                .err()
+                .expect("duplicate logical ID must not overwrite retained bytes");
+        assert!(error.contains("already pending"));
+        {
+            let node = shared.lock().unwrap();
+            assert_eq!(node.next_direct_sequence, sequence);
+            assert_eq!(node.pending_1to1.len(), 1);
+            assert_eq!(
+                node.pending_1to1[&id].delivery.cells[0]
+                    .encode_wire()
+                    .unwrap(),
+                wire
+            );
+        }
+        let mut reopened = state();
+        reopened.scheduler.shutdown();
+        reopened.scheduler = scheduler.clone();
+        let reopened = Arc::new(Mutex::new(reopened));
+        decode_state_at_startup(&reopened, &scheduler, &archive)
+            .await
+            .unwrap();
+        let node = reopened.lock().unwrap();
+        assert_eq!(
+            node.pending_1to1[&id].logical_record.as_deref(),
+            Some(record.as_slice())
+        );
+        assert_eq!(
+            node.pending_1to1[&id].delivery.cells[0]
+                .encode_wire()
+                .unwrap(),
+            wire
+        );
+        assert!(!node.pending_1to1[&id].application_event);
+    }
+
+    #[test]
+    fn invitation_chunks_require_owner_complete_hash_and_durable_receive() {
+        let (mut node, peer_pk, mut remote) = direct_fixture();
+        let request_id = [0x29; 16];
+        let (tx, mut rx) = tokio::sync::oneshot::channel();
+        node.pending_invite_redemptions.insert(
+            request_id,
+            crate::node::state::PendingInviteReply {
+                owner: vec![0; peer_pk.len()],
+                reply: tx,
+                chunks: Default::default(),
+            },
+        );
+        let welcome = vec![0xA6; crate::proto::WELCOME_CHUNK_BYTES + 7];
+        let digest: [u8; 32] = Sha256::digest(&welcome).into();
+        let first = crate::proto::WelcomeChunk {
+            digest,
+            total: welcome.len() as u32,
+            offset: 0,
+            bytes: welcome[..crate::proto::WELCOME_CHUNK_BYTES].to_vec(),
+        };
+        let final_part = crate::proto::WelcomeChunk {
+            digest,
+            total: welcome.len() as u32,
+            offset: crate::proto::WELCOME_CHUNK_BYTES as u32,
+            bytes: welcome[crate::proto::WELCOME_CHUNK_BYTES..].to_vec(),
+        };
+        let (events, mut seen) = broadcast::channel(8);
+        let wire = crate::proto::encode_invite_welcome_chunk([1; 16], request_id, &first).unwrap();
+        let frame = remote.send(&wire).unwrap();
+        process_frame(&mut node, peer_pk.clone(), frame.clone(), &events);
+        assert!(
+            node.processed_direct.is_empty(),
+            "wrong owner must not consume the request"
+        );
+        assert!(rx.try_recv().is_err());
+        node.pending_invite_redemptions
+            .get_mut(&request_id)
+            .unwrap()
+            .owner = peer_pk.clone();
+        node.durable_state_sink =
+            Some(Arc::new(|_| Err("injected receive storage failure".into())));
+        process_frame(&mut node, peer_pk.clone(), frame.clone(), &events);
+        assert!(node.processed_direct.is_empty());
+        assert!(rx.try_recv().is_err());
+        node.durable_state_sink = Some(Arc::new(|_| Ok(())));
+        // Deliver the final short fragment first. Failed receipt storage above
+        // must not have retained/published the first chunk in the assembly.
+        let last_wire =
+            crate::proto::encode_invite_welcome_chunk([2; 16], request_id, &final_part).unwrap();
+        let last_frame = remote.send(&last_wire).unwrap();
+        process_frame(&mut node, peer_pk.clone(), last_frame, &events);
+        assert!(
+            rx.try_recv().is_err(),
+            "partial or failed-persistence bytes are not a complete Welcome"
+        );
+        process_frame(&mut node, peer_pk, frame, &events);
+        assert_eq!(rx.try_recv().unwrap().unwrap(), welcome);
+        assert!(!node.pending_invite_redemptions.contains_key(&request_id));
+        assert!(
+            seen.try_recv().is_err(),
+            "invitation receipts are not user message delivery"
+        );
+    }
+
+    #[test]
     fn pending_presence_ack_requires_peer_persistence_and_fresh_frame() {
         let (mut node, alice, mut remote) = direct_fixture();
         let id = [0xA4; 16];

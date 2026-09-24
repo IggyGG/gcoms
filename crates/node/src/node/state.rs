@@ -301,10 +301,18 @@ pub struct NodeState {
     /// Friend side: redemptions this node is waiting on, keyed by the request
     /// message id. The oneshot wakes the `join_with_invite` caller when the
     /// owner's `InviteWelcome` arrives (or the wait times out).
-    pub(crate) pending_invite_redemptions:
-        HashMap<[u8; 16], tokio::sync::oneshot::Sender<Result<Vec<u8>, String>>>,
+    pub(crate) pending_invite_redemptions: HashMap<[u8; 16], PendingInviteReply>,
     #[cfg_attr(not(feature = "client-persist"), allow(dead_code))]
     pub(crate) durable_state_sink: Option<DurableStateSink>,
+}
+
+/// Request-owned transient response assembly. Reopening cancels the waiter;
+/// the persisted pending MLS join/cached owner admission supports explicit retry.
+/// A fragment receipt never confirms channel membership to the caller.
+pub(crate) struct PendingInviteReply {
+    pub(crate) owner: Vec<u8>,
+    pub(crate) reply: tokio::sync::oneshot::Sender<Result<Vec<u8>, String>>,
+    pub(crate) chunks: crate::proto::WelcomeChunks,
 }
 
 /// An invite-redeem request received from a friend, queued for async handling.

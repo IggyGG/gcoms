@@ -1,0 +1,158 @@
+{
+  "source_manifest_sha256": "3ed6a277051354a95e738a27b88560e9b388a5820114b9d8a09df31f8c311796",
+  "started_unix": 1790290048.514615,
+  "checks": [
+    {
+      "name": "protocol",
+      "command": [
+        "cargo",
+        "test",
+        "--locked",
+        "--offline",
+        "-p",
+        "gcoms-protocol",
+        "--all-features"
+      ],
+      "exit_code": 0,
+      "seconds": 6.29503861349076,
+      "source_unchanged": true,
+      "log_sha256": "27228e6239ec9171808986853805293382136048eb9be1e51bffd3bd208e4cc1"
+    },
+    {
+      "name": "protocol-minimal",
+      "command": [
+        "cargo",
+        "test",
+        "--locked",
+        "--offline",
+        "-p",
+        "gcoms-protocol",
+        "--no-default-features",
+        "--lib"
+      ],
+      "exit_code": 0,
+      "seconds": 0.9360168948769569,
+      "source_unchanged": true,
+      "log_sha256": "ce2a9065751b3553d5c80ae0590b5f81f325cbf6a64fdd305cb684844e940cd4"
+    },
+    {
+      "name": "node-invitation",
+      "command": [
+        "cargo",
+        "test",
+        "--locked",
+        "--offline",
+        "-p",
+        "gcoms-node",
+        "--all-features",
+        "--lib",
+        "invitation_",
+        "--",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "exit_code": 0,
+      "seconds": 17.546059131622314,
+      "source_unchanged": true,
+      "log_sha256": "30b740bbdad11e0a27023fd3192fa0ebc289888c5f988ce69546655634ddd0c9"
+    },
+    {
+      "name": "clippy",
+      "command": [
+        "cargo",
+        "clippy",
+        "--locked",
+        "--offline",
+        "-p",
+        "gcoms-protocol",
+        "-p",
+        "gcoms-node",
+        "--all-features",
+        "--all-targets",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "exit_code": 0,
+      "seconds": 9.702096482738853,
+      "source_unchanged": true,
+      "log_sha256": "2aae921baabf59281e8b5f5637e1188076e91a848031f792b617319551417f5f"
+    },
+    {
+      "name": "fmt",
+      "command": [
+        "cargo",
+        "fmt",
+        "--all",
+        "--check"
+      ],
+      "exit_code": 0,
+      "seconds": 1.786134791560471,
+      "source_unchanged": true,
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ],
+  "finished_unix": 1790290084.7814558,
+  "source_unchanged": true,
+  "passed": true,
+  "scope": "bounded invitation reply and receipt repair; affected-package tests only",
+  "counts": {
+    "protocol": [
+      59,
+      0,
+      0
+    ],
+    "minimal_protocol": [
+      29,
+      0,
+      0
+    ],
+    "full_node_previous_tests": [
+      349,
+      0,
+      2
+    ],
+    "final_node_invitation": [
+      3,
+      0,
+      0
+    ]
+  },
+  "full_node_scope": "green01 exact runtime; green03 adds sender-reopen test and repairs existing no-default-feature test imports/RNG; no runtime delta",
+  "original_id_red": {
+    "command": [
+      "cargo",
+      "test",
+      "--locked",
+      "--offline",
+      "-p",
+      "gcoms-node",
+      "--all-features",
+      "--lib",
+      "invitation_receipt_uses_the_retained_logical_id",
+      "--",
+      "--nocapture",
+      "--test-threads=1"
+    ],
+    "started_unix": 1790289415.1626875,
+    "source_manifest_sha256": "0547d529e9857e5c7a1f4b1e1f61f582191dfc30bbd88a74be7db60533e1e2bc",
+    "exit_code": 101,
+    "finished_unix": 1790289430.4557617,
+    "source_unchanged": true,
+    "log_sha256": "6a41b5b29cbccc1789d46665ed0ac8f2633c7fc5d12614fd6857384be66eaeb6"
+  },
+  "original_application_red": "../ten-client-application-red-20260925/summary.json",
+  "failed_minimal_attempt_retained": "invite-green-02/protocol-minimal.log; missing alloc macros and std-only test RNG; no production failure relabelled",
+  "evidence_archive_sha256": "c912096b1db4c432e44723f9ddde953f04d52121a67c25a9f63b1bd5dfa85e22",
+  "evidence_files_verified": 23,
+  "source_check_paths": 732,
+  "research_imports_checked": 7,
+  "codematch": "unreachable",
+  "retained_evidence": "paired GChat target/channel-reconnect-20260923/reliability-20260924-01/invite-checks-evidence.tgz",
+  "not_qualified": [
+    "repaired ten-client application run",
+    "latency ceilings",
+    "full paired native",
+    "installed/release/platform upgrade or rollback"
+  ]
+}

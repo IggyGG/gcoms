@@ -1188,7 +1188,70 @@ pub(crate) fn process_frame(
                     metrics::log_event("invite_redeem_dropped_full", &[]);
                 }
             }
+            Some(DirectRecord::InviteWelcomeChunk {
+                message_id,
+                request_id,
+                chunk,
+            }) => {
+                // No assembly allocation for unsolicited or cancelled requests.
+                // Authentication has already bound sender_pk to this session.
+                let staged = match st.pending_invite_redemptions.get(&request_id) {
+                    Some(pending) if pending.owner != sender_pk => {
+                        metrics::log_event("invite_welcome_wrong_owner", &[]);
+                        return;
+                    }
+                    Some(pending) if !pending.reply.is_closed() => {
+                        let mut buffer = pending.chunks.clone();
+                        let outcome = buffer.push(&chunk).map_err(str::to_string);
+                        Some((buffer, outcome))
+                    }
+                    _ => None,
+                };
+                if let Err(error) = accept_reliable_direct(
+                    st,
+                    &sender_pk,
+                    (frame_key, frame_hash),
+                    message_id,
+                    received,
+                    &mut wrapping_key,
+                    &context,
+                ) {
+                    metrics::log_event("invite_welcome_persist_error", &[("e", error)]);
+                    return;
+                }
+                if let Some((buffer, outcome)) = staged {
+                    match outcome {
+                        Ok(None) => {
+                            st.pending_invite_redemptions
+                                .get_mut(&request_id)
+                                .expect("pending request checked above")
+                                .chunks = buffer;
+                        }
+                        result => {
+                            let pending = st
+                                .pending_invite_redemptions
+                                .remove(&request_id)
+                                .expect("pending request checked above");
+                            let _ = pending
+                                .reply
+                                .send(result.map(|welcome| welcome.expect("complete reply")));
+                            metrics::log_event("invite_welcome_assembled", &[]);
+                        }
+                    }
+                } else {
+                    // Cancelled requests cannot accumulate authenticated fragments.
+                    st.pending_invite_redemptions.remove(&request_id);
+                }
+            }
             Some(DirectRecord::InviteWelcome { message_id, result }) => {
+                if st
+                    .pending_invite_redemptions
+                    .get(&message_id)
+                    .is_some_and(|pending| pending.owner != sender_pk)
+                {
+                    metrics::log_event("invite_welcome_wrong_owner", &[]);
+                    return;
+                }
                 // Friend side. Consume the frame, then wake the waiting
                 // `join_with_invite` caller with the owner's result.
                 if let Err(error) = accept_reliable_direct(
@@ -1204,7 +1267,7 @@ pub(crate) fn process_frame(
                     return;
                 }
                 if let Some(waiter) = st.pending_invite_redemptions.remove(&message_id) {
-                    let _ = waiter.send(result);
+                    let _ = waiter.reply.send(result);
                     metrics::log_event("invite_welcome_delivered", &[]);
                 } else {
                     metrics::log_event("invite_welcome_unmatched", &[]);
@@ -1952,6 +2015,14 @@ where
             .checked_add(1)
             .ok_or("direct message sequence exhausted")?;
         let mut direct = zeroize::Zeroizing::new(encode_record(message_id, sequence)?);
+        // Invitation correlation records may intentionally encode a caller ID.
+        // Retain the authenticated logical ID so its ACK addresses this entry.
+        let message_id = decode_direct_record(&direct)
+            .ok_or("invalid direct record")?
+            .message_id();
+        if st.pending_1to1.contains_key(&message_id) {
+            return Err("direct message ID is already pending".into());
+        }
         // Validate the worst sending epoch, not just the frame produced today:
         // a durable record may need re-encryption after simultaneous initiation.
         let overhead = gcoms_crypto::session::MAX_FRAME_OVERHEAD

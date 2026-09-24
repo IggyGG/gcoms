@@ -1,3 +1,24 @@
+# Larger-channel invitation reply repair, 2026-09-25
+
+The ten-client actual GChat run stopped at the sixth join: its MLS Welcome
+exceeded the unchanged 12,217-byte direct-record limit. Five clients had joined;
+concurrent message rounds did not run. The [red receipt](docs/evidence/ten-client-application-red-20260925/summary.json)
+retains exact binaries, timing, logs and clean teardown.
+
+A separate red regression proves invitation ACK IDs did not match their retry
+outbox keys. The candidate uses the encoded logical receipt ID, rejects pending
+ID collisions, and carries larger Welcomes in bounded authenticated control
+chunks. Small replies stay compatible; no packet, authority or cover limit is
+relaxed. Owner-bound reassembly requires the complete digest and successful receive
+persistence. Sender reopen retains exact retry bytes and wire. The protocol and
+node checks/strict Clippy pass with [separate source-bound scopes](docs/evidence/invitation-reply-20260925/summary.json).
+The final extra checks fixed missing imports/std-only RNG in existing minimal-feature
+fixtures only; their original compilation failure remains retained.
+
+[Transport contract](docs/CHANNEL_INVITE_TRANSPORT.md). Actual ten-client
+qualification on the repaired source is next. Production rollout and latency
+requirements remain open; the traffic-policy decision remains pending.
+
 # Actual application connection-loss result, 2026-09-25
 
 Candidate16 replaced both established entry connections within 0–1 ms after a

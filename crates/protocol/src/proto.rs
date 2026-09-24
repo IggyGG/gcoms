@@ -40,6 +40,11 @@ const DIRECT_INVITE_REDEEM: u8 = 8;
 const DIRECT_INVITE_WELCOME: u8 = 9;
 const DIRECT_DURABLE_DATA: u8 = 10;
 const DIRECT_VOLATILE_APPLICATION: u8 = 11;
+const DIRECT_INVITE_WELCOME_CHUNK: u8 = 12;
+mod invite_chunks;
+pub use invite_chunks::{
+    encode_invite_welcome_chunk, WelcomeChunk, WelcomeChunks, WELCOME_CHUNK_BYTES,
+};
 /// Upper bound on the encoded body of an invite record, so a malicious peer
 /// cannot make us allocate unboundedly from a single sealed frame.
 const MAX_INVITE_RECORD_BYTES: usize = 256 * 1024;
@@ -229,6 +234,11 @@ impl ChannelDirectEnvelope {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum DirectRecord {
+    InviteWelcomeChunk {
+        message_id: [u8; 16],
+        request_id: [u8; 16],
+        chunk: WelcomeChunk,
+    },
     VolatileApplication {
         message_id: [u8; 16],
         sent_ms: u64,
@@ -278,6 +288,23 @@ pub enum DirectRecord {
         message_id: [u8; 16],
         result: Result<Vec<u8>, String>,
     },
+}
+
+impl DirectRecord {
+    /// The authenticated receipt identifier, also used by the retry outbox.
+    pub fn message_id(&self) -> [u8; 16] {
+        match self {
+            Self::VolatileApplication { message_id, .. }
+            | Self::Data { message_id, .. }
+            | Self::Ack { message_id, .. }
+            | Self::ContactUpdate { message_id, .. }
+            | Self::PresenceLease { message_id, .. }
+            | Self::ForwardGrant { message_id, .. }
+            | Self::InviteRedeem { message_id, .. }
+            | Self::InviteWelcome { message_id, .. }
+            | Self::InviteWelcomeChunk { message_id, .. } => *message_id,
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -601,6 +628,7 @@ pub fn decode_direct_record(encoded: &[u8]) -> Option<DirectRecord> {
     }
     let message_id = encoded.get(2..18)?.try_into().ok()?;
     match *encoded.get(1)? {
+        DIRECT_INVITE_WELCOME_CHUNK => invite_chunks::decode(encoded),
         DIRECT_VOLATILE_APPLICATION => Some(DirectRecord::VolatileApplication {
             message_id,
             sent_ms: u64::from_be_bytes(encoded.get(18..26)?.try_into().ok()?),
@@ -1248,7 +1276,11 @@ mod tests {
     #[test]
     fn contact_update_is_canonical_signed_and_bounded() {
         let identity = gcoms_crypto::IdentityKeypair::from_seed([0x51; 32]);
-        let (bundle, _) = identity.issue_bundle();
+        use rand::SeedableRng;
+        let mut rng = rand::rngs::StdRng::from_seed([0x52; 32]);
+        let (bundle, _) = identity
+            .issue_bundle_with_rng(&mut rng, 1_800_000_000)
+            .unwrap();
         let issued_at = bundle.created;
         let mut info = sample_info();
         info.identity_pk = identity.public_bytes();
