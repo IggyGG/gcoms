@@ -1,6 +1,7 @@
 """Controller regressions from the real-daemon startup/reopen attempts."""
 import importlib.util
 import base64
+import copy
 import os
 from pathlib import Path
 import socket
@@ -15,6 +16,34 @@ SPEC.loader.exec_module(turnover)
 
 @unittest.skipUnless(os.name == "posix", "Linux namespace controller")
 class ControllerTests(unittest.TestCase):
+    def test_namespace_accepts_only_unaddressed_down_unrouted_kernel_fallback(self):
+        tunnel = dict(ifname='tunl0', link_type='ipip', operstate='DOWN', flags=['NOARP'],
+                      addr_info=[], address='0.0.0.0', broadcast='0.0.0.0', link=None)
+        inventory = {}
+        for scope, device in [('observer', 'client0'), ('fixture', 'fixture0')]:
+            inventory[scope + '_links'] = [dict(ifname='lo'), dict(ifname=device), tunnel]
+            inventory[scope + '_routes'] = {'-4': [], '-6': []}
+        original = copy.deepcopy(inventory)
+        turnover.Journey.assert_topology(inventory)
+        self.assertEqual(inventory, original)  # Receipt retains every raw link.
+        for scope in ('observer', 'fixture'):
+            for change in [dict(flags=['NOARP', 'UP']), dict(operstate='UNKNOWN'),
+                           dict(addr_info=[{'local': '10.0.0.1'}]), dict(link_type='ether'),
+                           dict(address='10.0.0.1'), dict(link='eth0'), dict(master='br0'),
+                           dict(ifname='unrecognized0')]:
+                with self.subTest(scope=scope, change=change):
+                    changed = copy.deepcopy(inventory)
+                    changed[scope + '_links'][-1].update(change)
+                    with self.assertRaises(RuntimeError):
+                        turnover.Journey.assert_topology(changed)
+            for route in [dict(dev='tunl0', dst='10.0.0.0/24'),
+                          dict(dev='client0', dst='default'),
+                          dict(dev='client0', gateway='10.0.0.1')]:
+                changed = copy.deepcopy(inventory)
+                changed[scope + '_routes']['-4'].append(route)
+                with self.assertRaises(RuntimeError):
+                    turnover.Journey.assert_topology(changed)
+
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)

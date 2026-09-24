@@ -7,6 +7,11 @@ historical scope. Statistical privacy thresholds and mandatory 24-hour campaigns
 are not release gates. Authentication, persistence, correct delivery, pinned
 signatures and state-compatible rollback remain required.
 
+The user has deferred physical Android and iPhone testing for now. Continue with
+cluster Android emulators, the Mac iOS simulator and automated application journeys.
+Physical-device behavior, battery results and live APNs/FCM delivery remain
+unverified; they are not prerequisites for this deferred scope.
+
 ## Requirements
 
 Timing starts at the user action (excluding human invitation/passphrase input),
@@ -49,8 +54,8 @@ deadline verdict.
    SDK/UI contracts. Preserve IDs, authentication and generated-client consistency.
    Keep optimistic pending messages distinct from authenticated delivery.
 5. Run host/component checks and real GChat journeys in the cluster. Ten native
-   participants must send and forward; four Android emulators and iOS cloud
-   devices add installed-app coverage without pretending mobiles host relays.
+   participants must send and forward; four Android emulators and the native iOS
+   simulator add installed-app coverage without pretending mobiles host relays.
 6. Freeze one source pair, run official native/consumer checks, then build each
    platform candidate once and distribute the exact artifacts to device tests.
 7. Verify signed upgrade/rollback; canary chat/file/reconnect checks; roll remaining
@@ -90,6 +95,12 @@ Its eight source hashes and original red/green logs bind that limited scope.
 The first full script run's interruption and the original Android 1019 smoke
 failure remain retained. Shared-runtime, actual-app and installed release gates
 must still be completed before promotion.
+
+The actual-application turnover controller also supports cluster kernels which
+create an inert `tunl0` in every network namespace. It retains the raw inventory
+and admits only a down, unaddressed IPIP fallback with no route through it.
+Unexpected interfaces, configured/up tunnels and external/default routes still
+fail qualification. The historical privacy capture controller is unchanged.
 
 ## Next protocol milestone (not this release)
 

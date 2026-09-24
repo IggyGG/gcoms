@@ -14,6 +14,26 @@ RELAYS = tuple(f'11.231.97.{n}' for n in range(10, 16))
 CLIENT, CLIENT6 = base.CLIENT, base.CLIENT6
 SCOPE = 'actual_gchat_disconnected_fivehop_turnover_v2'
 
+def fixture_links(rows, routes):
+    """Allow only the kernel's inert IPIP fallback in addition to fixture links.
+
+    Some cluster kernels create tunl0 in every new netns. Keep the raw inventory
+    in receipts; this exception must never admit an addressed/up/routed tunnel.
+    """
+    result = []
+    for row in rows:
+        if row.get('ifname') != 'tunl0':
+            result.append(row)
+            continue
+        if (row.get('link_type') != 'ipip' or row.get('operstate') != 'DOWN'
+                or row.get('flags') != ['NOARP'] or row.get('addr_info') != []
+                or row.get('address') != '0.0.0.0'
+                or row.get('broadcast') != '0.0.0.0' or row.get('master')
+                or row.get('link') is not None
+                or any(route.get('dev') == 'tunl0' for family in routes.values() for route in family)):
+            raise RuntimeError('unexpected active or configured fallback tunnel')
+    return result
+
 class Journey(base.Worker):
     relay_addresses = RELAYS
 
@@ -37,8 +57,12 @@ class Journey(base.Worker):
     def topology(self):
         if os.geteuid() != 0 or os.readlink('/proc/self/ns/net') == self.spec['host_netns']:
             raise RuntimeError('worker must enter a new privileged network namespace')
-        if [r['ifname'] for r in links()] != ['lo']:
+        initial_links = links()
+        initial_routes = {af: json.loads(run(['ip', af, '-j', 'route', 'show', 'table', 'all'])) for af in ('-4', '-6')}
+        if ([r['ifname'] for r in fixture_links(initial_links, initial_routes)] != ['lo']
+                or any(initial_routes.values())):
             raise RuntimeError('fixture namespace was not empty')
+        self.result['initial_namespace'] = {'links': initial_links, 'routes': initial_routes}
         run(['mount', '--make-rprivate', '/'])
         run(['mount', '--bind', self.original_root, '/mnt'])
         for name in ('home', 'tmp', 'run', 'c0', 'c1', *[f'r{i}' for i in range(len(self.relay_addresses))]):
@@ -83,6 +107,12 @@ class Journey(base.Worker):
             'offloads': offloads, 'before': self.inventory()}
         self.assert_topology(self.result['boundary']['before'])
 
+    @staticmethod
+    def assert_topology(value):
+        checked = dict(value)
+        for scope in ('observer', 'fixture'):
+            checked[scope + '_links'] = fixture_links(value[scope + '_links'], value[scope + '_routes'])
+        base.Worker.assert_topology(checked)
 
 
     def prepare(self):
