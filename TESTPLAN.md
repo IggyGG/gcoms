@@ -1,3 +1,13 @@
+# Authenticated incomplete-referral retry
+
+`renewed_guard_retries_incomplete_referrals_before_normal_discovery_period` serves
+an authenticated own-only GCD2 reply, makes four independent fresh referrals
+available afterward and never manually wakes the owner. Require discovery within
+75 seconds, no retry before the existing 60-second backoff, exactly two requests,
+unchanged guards and a complete five-hop candidate. Preserve the failing original
+implementation. Run routing package tests and strict all-target/all-feature Clippy;
+existing failed-dial, request-independent scheduling and cancellation tests remain.
+
 # First checkpoint failure diagnostics
 
 Keep the accepted-owner-renewal and failed-promotion rollback fixtures, including

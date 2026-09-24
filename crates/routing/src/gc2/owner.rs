@@ -349,14 +349,29 @@ impl EntryOwner {
                             .map(|relay| relay.expires_at);
                     }
                 }
-                let failures = if renewed.is_some() {
+                // A fresh guard is not a complete application route. At an
+                // epoch boundary its reply may contain only its new authority
+                // while the advertised middle referrals are still refreshing.
+                // Retry that incomplete background discovery with the existing
+                // bounded failure backoff, without dialing any new guard or
+                // allowing an application request to wake this owner.
+                let complete = renewed.is_some()
+                    && self
+                        .directory
+                        .eligible(&[], now_unix())?
+                        .iter()
+                        .map(|relay| relay.addr.ip())
+                        .collect::<std::collections::HashSet<_>>()
+                        .len()
+                        >= super::path::RELAY_HOPS;
+                let failures = if complete {
                     0
                 } else {
                     schedule
                         .get(&seed.service_id)
                         .map_or(1, |old| old.failures.saturating_add(1).min(4))
                 };
-                let seconds = if renewed.is_some() {
+                let seconds = if complete {
                     DISCOVERY_PERIOD.as_secs()
                 } else {
                     (60 * (1u64 << (failures - 1))).min(DISCOVERY_PERIOD.as_secs())
@@ -498,6 +513,10 @@ async fn maintain_entry(
     }
     driver.await
 }
+
+#[cfg(test)]
+#[path = "owner_referral_tests.rs"]
+mod referral_tests;
 
 #[cfg(test)]
 #[path = "owner_expiry_tests.rs"]

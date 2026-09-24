@@ -1,3 +1,17 @@
+# Incomplete referral recovery, 2026-09-24
+
+The actual file/reopen continuation observed a temporary loss of usable five-hop
+routes across an hourly boundary while two entries remained ready. A targeted
+pinned-TLS discovery test independently reproduced a scheduling defect: an own-only
+successful refresh deferred available middle referrals for five minutes. Its
+75-second red result is retained. Candidate background discovery uses the existing
+60/120/240/300-second failure backoff until five independent fresh relay addresses
+are available. Application traffic cannot trigger it; guard selection, entry retry
+pacing, authority deadlines, route length and circuit limits are unchanged.
+Cluster red/green and affected-package qualification are in progress. This does
+not claim that the missing historical reply contents or Android's separate
+uncertain-checkpoint cause have been established. `codematch=unreachable`.
+
 # Android first checkpoint failure, 2026-09-24
 
 Physical Android 1015 reached the sticky `owner lifecycle persistence outcome is

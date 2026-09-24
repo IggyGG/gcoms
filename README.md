@@ -26,6 +26,11 @@ forwarding and NAT mapping from a client-only build. Existing embedded and IPC
 feature combinations retain their behavior. The SDK's `in-process` feature is
 the shared adapter; `embedded` additionally enables relay hosting.
 
+Background guard renewal uses bounded retry backoff when authenticated replies
+have not yet supplied enough fresh independent relays for a five-hop route. A
+fresh entry alone is not reported as a usable route; application requests do not
+trigger additional entry dials.
+
 When a protocol checkpoint fails, bounded local diagnostics distinguish encoding,
 store failure and the first owner-lifecycle pause site. Uncertain persistence still
 pauses the owner; these diagnostics do not authorize retry or confirm delivery.
