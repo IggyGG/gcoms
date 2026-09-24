@@ -1,4 +1,6 @@
 //! Resource-bounded private circuit service on the existing TP1 listener.
+#[cfg(feature = "experimental-gc2")]
+mod gc2_referrals;
 use crate::{
     carrier::{self, CarrierConfig, Records},
     directory::RELAY_BYTES,

@@ -31,11 +31,14 @@ struct Fixture {
 }
 impl Fixture {
     async fn new() -> Self {
+        Self::at("127.0.0.91:0").await
+    }
+    async fn at(address: &str) -> Self {
         let identity = TlsIdentity::generate().unwrap();
         let registry = TokenRegistry::new();
         registry.insert_post("fixture-registered");
         let server = Tp1Server::bind_with_identity(
-            "127.0.0.91:0".parse().unwrap(),
+            address.parse().unwrap(),
             registry,
             Arc::new(|_, cell| Ok(Some(cell))),
             Arc::new(|_| None),
@@ -85,6 +88,147 @@ impl Fixture {
             .unwrap();
         assert_eq!(self.service.active_circuits(), 0);
     }
+}
+
+#[tokio::test]
+async fn service_renews_only_authorized_referrals_despite_stalled_peers() {
+    let publisher = Fixture::new().await;
+    let peer = Fixture::at("127.0.0.92:0").await;
+    let undisclosed = Fixture::at("127.0.0.93:0").await;
+    let now = now_unix();
+    peer.service
+        .gc2_directory()
+        .remember(
+            &BootstrapBundle {
+                relays: vec![undisclosed.service.gc2_introduction(now)],
+            },
+            now,
+        )
+        .unwrap();
+    let old = peer.service.gc2_introduction(now - 7200);
+    assert!(old.entry(now).is_err());
+    let mut seeds = Vec::new();
+    let mut stalled = Vec::new();
+    for n in [94u8, 95] {
+        let listener = tokio::net::TcpListener::bind(format!("127.0.0.{n}:0"))
+            .await
+            .unwrap();
+        let mut seed = old.clone();
+        seed.addr = listener.local_addr().unwrap();
+        seed.service_id = [n; 32];
+        seeds.push(seed);
+        stalled.push(listener);
+    }
+    seeds.push(old.clone());
+    publisher
+        .service
+        .gc2_directory()
+        .remember(&BootstrapBundle { relays: seeds }, now)
+        .unwrap();
+    let before = publisher.service.gc2_introduction(now);
+    let client = Tp1Client::new().unwrap();
+    let initial = discovery::refresh(&client, &before, &[]).await.unwrap();
+    assert_eq!(
+        initial.relays.len(),
+        1,
+        "expired referrals cannot be advertised"
+    );
+    let service = publisher.service.clone();
+    let task = tokio::spawn(async move { service.run_gc2_referral_refresh().await });
+    timeout(Duration::from_secs(5), async {
+        loop {
+            let reply = discovery::refresh(&client, &before, &[]).await.unwrap();
+            if let Some(fresh) = reply.relays.iter().find(|r| r.service_id == old.service_id) {
+                assert_eq!(fresh.reentry_cap, old.reentry_cap);
+                assert_ne!(fresh.entry_cap, old.entry_cap);
+                fresh.entry(now_unix()).unwrap();
+                assert_eq!(
+                    reply.relays.len(),
+                    2,
+                    "peer referrals must not expand disclosure"
+                );
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+    })
+    .await
+    .unwrap();
+    task.abort();
+    assert!(task.await.unwrap_err().is_cancelled());
+    assert_eq!(
+        publisher.service.gc2_directory().reentry_candidates().len(),
+        3
+    );
+    assert!(
+        old.entry(now_unix()).is_err(),
+        "renewal cannot extend old authority"
+    );
+    drop(stalled);
+    drop(client);
+    publisher.stop().await;
+    peer.stop().await;
+    undisclosed.stop().await;
+}
+
+#[tokio::test]
+async fn private_or_unpublished_service_cannot_dial_public_referrals() {
+    use std::sync::atomic::AtomicBool;
+    let peer = Fixture::at("127.0.0.92:0").await;
+    let peer_ip = peer.service.address().ip();
+    for own_address_allowed in [false, true] {
+        let ready = Arc::new(AtomicBool::new(false));
+        let service = RelayService::new(
+            "127.0.0.91:443".parse().unwrap(),
+            [88; 32],
+            [89; 32],
+            Arc::new(Directory::new()),
+            ServicePolicy {
+                target_allowed: Arc::new(move |addr| {
+                    addr.ip() == peer_ip || (own_address_allowed && addr.ip().is_loopback())
+                }),
+                transit_ready: own_address_allowed.then(|| ready.clone()),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        service
+            .gc2_directory()
+            .remember(
+                &BootstrapBundle {
+                    relays: vec![peer.service.gc2_introduction(now_unix() - 7200)],
+                },
+                now_unix(),
+            )
+            .unwrap();
+        let running = service.clone();
+        let task = tokio::spawn(async move { running.run_gc2_referral_refresh().await });
+        tokio::time::sleep(Duration::from_millis(150)).await;
+        assert_eq!(
+            peer.connections.load(Ordering::SeqCst),
+            0,
+            "a private endpoint or unproved relay cannot dial referrals"
+        );
+        if own_address_allowed {
+            ready.store(true, Ordering::Release);
+            timeout(Duration::from_secs(3), async {
+                while service
+                    .gc2_directory()
+                    .eligible(&[], now_unix())
+                    .unwrap()
+                    .is_empty()
+                {
+                    tokio::time::sleep(Duration::from_millis(20)).await;
+                }
+            })
+            .await
+            .unwrap();
+            assert_eq!(peer.connections.load(Ordering::SeqCst), 1);
+        }
+        task.abort();
+        assert!(task.await.unwrap_err().is_cancelled());
+    }
+    peer.stop().await;
 }
 
 async fn request(
