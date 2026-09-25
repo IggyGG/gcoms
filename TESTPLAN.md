@@ -1,3 +1,11 @@
+Validated responsive-carrier implementation: [source-bound receipt](docs/evidence/responsive-carrier-20260925/summary.json)
+records 90 routing tests, 350 Node tests (two exclusions) on a fresh-credential
+rerun, one protected channel/file/renewal integration, 31 runtime tests (one
+exclusion), strict affected-package Clippy, formatting and 58 Python checks.
+The original node run crossing the UTC hour failed five static-introduction
+cases; it remains failed. Fresh replay passed unchanged source and does not
+qualify hourly recovery. Actual ten-client candidate19 is a separate next gate.
+
 ## Immediate sending and randomized cover, 2026-09-25
 
 Owner-approved policy: real traffic sends when transport capacity is available;

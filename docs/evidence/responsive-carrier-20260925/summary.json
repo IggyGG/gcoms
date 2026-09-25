@@ -1,0 +1,80 @@
+{
+  "sources": {
+    "gcoms": "0daf9632393f2c47667ec9ea706b67d7f57dbd11",
+    "gchat": "383f905e29cc9114c7d6e50294b906b9d66e44ce"
+  },
+  "profile_id": 46,
+  "policy": "immediate data; independent uniform integer cover gaps 10..10000ms; no extra bursts",
+  "archive_sha256": "a23531f844892a99c019cb02b0b9feb8e86e5a059d3a0f0e4c7e191b59f47e31",
+  "verified_evidence_files": 32,
+  "unchanged_final_source_paths": 736,
+  "counts": {
+    "routing": [
+      90,
+      0,
+      0
+    ],
+    "files": [
+      1,
+      0,
+      0
+    ],
+    "runtime": [
+      31,
+      0,
+      1
+    ]
+  },
+  "node_fresh": [
+    350,
+    0,
+    2
+  ],
+  "python_release_tests": 37,
+  "controller_tests": 21,
+  "strict_clippy": "passed affected routing/node/runtime all features/all targets",
+  "fmt": "passed",
+  "initial_failures": [
+    "old profile timer delays ready data (red)",
+    "old invalid-profile assertion and file fixture still selecting22 (first green attempt)",
+    "same-source node03 crossed credential hour:345pass/5fail/2ignore; exact source rerun fresh04 350pass/0fail/2ignore"
+  ],
+  "hour_boundary_qualification": false,
+  "application_qualification": false,
+  "privacy_qualified": false,
+  "codematch": "unreachable",
+  "files": {
+    "demand-red-01/summary.json": "33c48a875f955e8aa595bc29a5b231dcc834c712a1410888b94cec698a5995cc",
+    "demand-red-01/test.log": "b478a9b7674756225c94df81776eda19ed863634eadcd4315cf1d16da6164657",
+    "demand-red-01-source.json": "8d08590851ac1e871fbc7167080ff7c1bc9c96bbeac4bb3bc26be316a116036f",
+    "run-demand-red-01.py": "76e8dc8a826c7a8f757a8828ad8f40c0d0dd75999205eb3882cd6bdbacc394ac",
+    "demand-green-01/routing.log": "9c887068149c34961c8b053ecf774e6fdc5a6ac14266a8e146b55bbb36209cf2",
+    "demand-green-01/summary.json": "ccfc721faffdc7a78a5695691f7a6073b4da72451312fceb00ca07fcda5127b4",
+    "demand-green-01/fmt.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "demand-green-01/files.log": "6159945a1735c5cc468d8f516dc8b5060a2c65c1c05cfb2586d1922e3c930f33",
+    "demand-green-01/progress.json": "c3e8693519d5b322f2767709e5a50351731e01f1c467f1e32f76a89f4e42a862",
+    "demand-green-01/node.log": "aabf6632daf9ceed60acd25968f5f4029ca3ff8a0c4fb72fcefd31b3eab87589",
+    "demand-green-01/controller.log": "6f7c7f2ae8540c535c81a3c3dd473d0f262a9f5d5384c6ca44480f238542f49d",
+    "demand-green-01/runtime.log": "87a83cc2e87ec7fab8971dc818e093ed24da14535d4da9e0b94e2ca705c297c3",
+    "demand-green-01/clippy.log": "cc0a914c4d8b3c0e7f6355ef8716248cfb2dd04dec98a63c35cefe7afabe03ca",
+    "demand-green-01-source.json": "2137617412ed51ab784ada5a7f0aa8aea3bac252b1aff1674b66ebfeb8f6e318",
+    "run-demand-green-01.py": "cbc3dd8a40bf69dcfbf5bacf170837528de09be798aa4f7094c3ade3a3bf6074",
+    "demand-green-03/routing.log": "d08d9e7f68d7e2bbf48672128355fc4ae2fcb65a429c351a9b43cf2a50ba2201",
+    "demand-green-03/summary.json": "5c13301cafaa78c408b3be16e9e89aedeb8a80530aa50cba0fe1e724a5443eee",
+    "demand-green-03/fmt.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "demand-green-03/files.log": "9e0e7ccb847eddd9424e0b95f32b5b6ad8a2d0a93f2edefebd6299c8a9fc6aa9",
+    "demand-green-03/release-tools.log": "1ba5db3da1aba4fc69df062f30def57e33ae992b7621881fd3973199619d82c8",
+    "demand-green-03/progress.json": "ac379021d6a54d900312f440d3b164d8b77024e9f2db75cba5b3705e319610b4",
+    "demand-green-03/node.log": "544da0038c926d6f22f6145e845861e416f3d992209f013a6e8ed5ec53c2dd0e",
+    "demand-green-03/controller.log": "93c68f947c1d9878f2075005152b672c255cf145ac202befb07bc93ed0e17656",
+    "demand-green-03/runtime.log": "2e97271a54cc3a2d57d52d789719a5a98eec9b3154ed6e9500a0b962ce90da69",
+    "demand-green-03/clippy.log": "25490a4fff2e931bd797987193ae33d58f6f18116b3521b02462ce7442c3d807",
+    "demand-green-03-source.json": "84dd9d9dc28fb1d7b2667648273c8d83ded42283f6a7a01aa4b55d89d40e309f",
+    "run-demand-green-03.py": "4541a6a7659136f8eae032b9ae1eeb57eaa19849f9f84372e453eeaaeb7051c8",
+    "demand-02-candidate18-superseded.json": "6bfb684535c21b73f1f4dd300ad9fdcb632e8f04984338575c186d90b13dbafe",
+    "demand-final-checks.json": "af668382a1bf65ecd2b1ba7a2a0c5163a7bc0a2e9d45131499d93a426d519453",
+    "demand-node-fresh-04/summary.json": "84ff1eb165f6e4789b283f32e8fe7b8b3d4681ef19858f3a9a719a35749a1cd5",
+    "demand-node-fresh-04/test.log": "a3f50480f5e213cf746404268a2eafdec8856f02f6357262a81dc32dba7a8b9b",
+    "run-demand-node-fresh-04.py": "1c6ac8b88b6a9a12397ae2f9a6b8f6861d5da798f56c72d73a9aa54343f00cd7"
+  }
+}
