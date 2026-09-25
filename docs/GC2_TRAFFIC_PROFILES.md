@@ -18,8 +18,10 @@ benefit. Short gaps already occur in the randomized schedule.
 
 This is **not privacy-qualified** and is not claimed equivalent to constant-rate
 cover. An observer can infer activity from increased traffic and correlate timing;
-random cover does not hide those changes. Encryption and authentication still
-protect contents and peer authorization. The expected idle interval is 5005 ms:
+random cover does not hide those changes. Cover is stripped at the authenticated
+carrier endpoint: that relay can distinguish Cover from Data records after TLS
+decryption. This is link cover, not network-wide indistinguishable dummy messages.
+Encryption and authentication still protect application contents and peer authorization. The expected idle interval is 5005 ms:
 with two entries and both directions, about 3274 record bytes/second or 0.283 GB
 per continuously connected day, excluding TLS/H2/TCP, retries, setup and real data.
 This is an expectation, not a bandwidth cap or a measured all-egress result.
