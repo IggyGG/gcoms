@@ -103,6 +103,15 @@ class ControllerTests(unittest.TestCase):
                     turnover.main()
                 self.assertEqual(caught.exception.code, 2)
 
+    def test_release_preset_cannot_silently_change_mode_size_or_deadline(self):
+        for extra in (['--mode','smoke'], ['--mode','file-recovery','--file-bytes','1073741824'],
+                      ['--mode','file-recovery','--file-completion-seconds','1200']):
+            with self.subTest(extra=extra), mock.patch.object(os,'geteuid',return_value=1000), \
+                    mock.patch.object(sys,'argv',['gchat-turnover','--build','/unused','--out','/unused',
+                                                  '--release-check',*extra]), mock.patch.object(sys,'stderr'):
+                with self.assertRaises(SystemExit) as caught: turnover.main()
+                self.assertEqual(caught.exception.code,2)
+
     def test_file_completion_uses_one_deadline_and_rejects_late_completion(self):
         transfer = {'id': 'fixture', 'name': 'fixture.bin', 'size': 10, 'sha256': '0'*64}
         with mock.patch.object(self.worker, 'file_info', return_value={'state':'downloading','verified_bytes':'9'}), \

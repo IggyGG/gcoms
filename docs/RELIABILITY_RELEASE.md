@@ -43,7 +43,7 @@ with averages. Each case reports its actual prerequisites and all observations.
 | R04 | Valid invitation joins within 30 s, with meaningful progress/errors | Fresh and retained clients; invalid/expired/replayed invitation controls |
 | R05 | Local admission is not delivery; retries preserve ID/wire | No early delivery, failed first hop, failed wrapper/archive writes, reopen |
 | R06 | Durable state and verified pieces survive interruption | Abrupt termination and injected storage failures; exact retained IDs and hashes |
-| R07 | Files show progress and export verified complete bytes | Small file on each device path, resumable ~123 MB and 1 GiB cluster transfer |
+| R07 | Files show progress and export verified complete bytes | Small file on each device path; release-blocking 16 MiB abrupt-resume/hash/reopen check; ~123 MB and 1 GiB campaigns separate |
 | R08 | Stalled work cannot starve healthy channels/chat | Saturation/release, large/small backlogs, ten native participants all forwarding |
 | R09 | Established network survives initial bootstrap loss | Discover an eligible new relay, remove initial bootstrap services, continue work |
 | R10 | Mobile lifecycle and optional notifications work | Permission denial/opt-in/out, token rotation, live FCM/APNs, tap and reconnect |
@@ -55,7 +55,16 @@ Case failure, dependency-blocked, timeout and infrastructure failure are separat
 results; none counts as a pass. A late continuation cannot change the original
 deadline verdict.
 
-The file-recovery controller keeps its 1200-second default completion budget.
+The owner removed the 1 GiB release gate on 2026-09-25. The file-recovery
+controller's `--release-check` preset uses 16 MiB, a 180-second completion budget
+and a 600-second ceiling for the entire run, including setup, abrupt restart,
+retained-piece/identity checks, concurrent authenticated chat, final hash and
+orderly reopen/export. Authentication, persistence, signatures and rollback
+remain mandatory. Failure blocks the bounded gate; it is never excused by the
+separate campaign. Both retained 1 GiB runs timed out at their original
+1200-second completion budget, including the node-local-storage retry.
+
+Outside that explicit preset, the controller keeps its 1200-second default completion budget.
 A separate full-size correctness run may predeclare `--file-completion-seconds`
 (60–3600 seconds); the value and original failures stay in its receipt. This does
 not qualify latency or revise a previous timeout. A completion observed after

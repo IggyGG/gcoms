@@ -399,3 +399,7 @@ Validation: 51 component tests passed, two existing qualification tests ignored,
 ## Interrupted-download route recovery (2026-09-23)
 
 The client can verify a stale inbox descriptor with a message-free, authenticated cover deposit using the existing relay protocol. It reuses only the short expiry explicitly accepted by the pinned relay for that exact queue, epoch and capability. This does not renew a lease or repair a missing inbox. The live Android download and full fleet acceptance remain open until verified on the deployed clients.
+
+## Bounded release qualification (2026-09-25)
+
+Owner-approved: replace the release-blocking 1 GiB campaign with a 16 MiB interrupted-transfer/hash/reopen check, 180-second completion and 600-second overall ceiling. Preserve both failed large-file attempts; capacity qualification runs separately. Authentication, persistence, signatures and rollback remain required. Implementation and cluster validation are tracked in GChat `target/release-automation-20260925/`; no new installed or fleet qualification is inferred.

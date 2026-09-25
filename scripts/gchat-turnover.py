@@ -770,21 +770,29 @@ def main():
     parser.add_argument('--out',type=Path,required=True)
     parser.add_argument('--expiries',type=int,default=3,choices=(1,2,3))
     parser.add_argument('--mode',choices=('smoke','file-recovery','archive-failure','credential-expiry','carrier-cap','entry-loss','multi-party'),default='credential-expiry')
-    parser.add_argument('--file-bytes',type=int,default=256*1024*1024)
-    parser.add_argument('--file-completion-seconds',type=int,default=1200,
+    parser.add_argument('--file-bytes',type=int)
+    parser.add_argument('--release-check',action='store_true',
+                        help='file-recovery only: 16 MiB, 180s completion, 600s total; large-file runs stay separate')
+    parser.add_argument('--file-completion-seconds',type=int,
                         help='predeclared file-recovery completion budget, 60..3600 seconds; no latency qualification')
     parser.add_argument('--fixture-host',type=Path,
                         help='source-bound turnover_daemon example with fixture-owned signed network trust')
     args=parser.parse_args()
     if os.geteuid()==0: parser.error('run controller as ordinary owner')
+    if args.release_check and (args.mode!='file-recovery' or
+            args.file_bytes not in (None,16*1024*1024) or args.file_completion_seconds not in (None,180)):
+        parser.error('release check requires file-recovery with 16 MiB and 180 seconds')
+    if args.file_bytes is None: args.file_bytes=16*1024*1024 if args.release_check else 256*1024*1024
+    if args.file_completion_seconds is None: args.file_completion_seconds=180 if args.release_check else 1200
     maximum=1024*1024*1024 if args.mode=='file-recovery' else 256*1024*1024
-    if not 64*1024*1024<=args.file_bytes<=maximum: parser.error('file size exceeds the selected fixture bounds')
+    minimum=16*1024*1024 if args.release_check else 64*1024*1024
+    if not minimum<=args.file_bytes<=maximum: parser.error('file size exceeds the selected fixture bounds')
     if not 60<=args.file_completion_seconds<=3600: parser.error('file completion budget must be between 60 and 3600 seconds')
     if args.mode!='file-recovery' and args.file_completion_seconds!=1200: parser.error('custom file completion budget is only for file-recovery')
     root=args.out.resolve();root.mkdir(mode=0o700,parents=True,exist_ok=False)
     build=base.build_binding(args.build.resolve())
     before=links();tool_hash=sha256(Path(__file__));helper_hash=sha256(HELPER)
-    config={'mode':args.mode,'lifecycle_diagnostics':args.mode in ('carrier-cap','entry-loss'),'expiries':args.expiries,'file_bytes':args.file_bytes,'file_completion_seconds':args.file_completion_seconds,'production_credential_seconds':3600,'production_carrier_cap_seconds':1800,'recovery_seconds':300}
+    config={'release_check':args.release_check,'mode':args.mode,'lifecycle_diagnostics':args.mode in ('carrier-cap','entry-loss'),'expiries':args.expiries,'file_bytes':args.file_bytes,'file_completion_seconds':args.file_completion_seconds,'production_credential_seconds':3600,'production_carrier_cap_seconds':1800,'recovery_seconds':300}
     spec={'out':str(root),'build':build,'config':config,'workload':'turnover','seed':20260920,
           'uid':os.getuid(),'gid':os.getgid(),'run_nonce':uuid.uuid4().hex,
           'host_netns':os.readlink('/proc/self/ns/net'),'host_mountns':os.readlink('/proc/self/ns/mnt')}
@@ -795,6 +803,7 @@ def main():
     (root/'driver.py').write_bytes(Path(__file__).read_bytes())
     (root/'boundary-helper.py').write_bytes(HELPER.read_bytes())
     timeout=1800 if args.mode in ('entry-loss','multi-party') else 900 if args.mode in ('smoke','archive-failure') else 1200+args.file_completion_seconds if args.mode=='file-recovery' else 3600*(args.expiries+1)+900
+    if args.release_check: timeout=600
     command=['sudo','-n','timeout','--signal=TERM','--kill-after=20',str(timeout),
              'unshare','--net','--mount','--pid','--fork','--mount-proc','--kill-child','--propagation','private','--',
              sys.executable,str(Path(__file__).resolve()),'--worker',str(root/'spec.json')]

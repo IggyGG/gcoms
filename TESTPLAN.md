@@ -339,3 +339,7 @@ Validation: 51 component tests passed, two existing qualification tests ignored,
 ## Retained inbox authority (2026-09-23)
 
 Run `cargo test -p gcoms-node --all-features --lib lease_authority_tests -- --test-threads=1`. Cover real TLS/H2 admission for owner-renewed leases, concurrent-send coalescing, stale capability/epoch rejection, expired leases, unexpected responses, queue-path binding, GC/2 without legacy fallback, and entry plus three middles plus inbox. Also check the client-only feature graph and scheduler Clippy gates. Live acceptance requires the Android partial download to continue from its retained verified pieces through final integrity verification; offline tests alone do not establish it.
+
+## Bounded release files (2026-09-25)
+
+Use `gchat-turnover.py --mode file-recovery --release-check` with the frozen paired build and qualification host: 16 MiB, 180-second completion and 600-second total ceiling. Require abrupt restart, retained pieces/identity, authenticated chat ACK, final hash and reopen/export. The separate 1 GiB campaign is nonblocking; retain its failed deadlines. Authentication, persistence, signatures and rollback remain mandatory.
