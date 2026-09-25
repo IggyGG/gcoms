@@ -1,3 +1,16 @@
+## Skip redundant responsive cover, 2026-09-25
+
+At a random cover opportunity, sent data on that outgoing interactive channel
+replaces the cover record. The flag resets at that opportunity; idle cover resumes
+without delaying real data or accumulating missed work. No new tasks or queues.
+[Source-bound cluster validation](docs/evidence/responsive-cover-suppression-20260925/summary.json):
+92 routing tests, strict all-feature/all-target routing Clippy and formatting pass;
+739 source files unchanged. The old implementation fails the new suppression
+regression. The earlier legacy catalog timeout and formatting failure are retained;
+the final fresh-credential run passes, without proving hourly-boundary recovery.
+This later change does not inherit candidate19 application timings or qualify new
+SDK binaries, installed clients, relays or privacy. Platform rebuilds remain open.
+
 ## Responsive application result, 2026-09-25
 
 [Candidate19 application/build receipts](docs/evidence/responsive-carrier-20260925/application.json):
