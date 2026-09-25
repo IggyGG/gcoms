@@ -33,3 +33,7 @@ component grants when transporting typed service calls. Delivery receipts remain
 distinct from an application operation's durable outcome.
 
 MIT OR Apache-2.0. This is a developer preview; see the repository security policy.
+
+## IPC21 file commitments
+
+`sharing::Request::Inspect` requires negotiated IPC21 and returns an authorized immutable file commitment (ID, original filename, SHA-256, byte length). It returns no encryption key. Older requests retain their existing wire tags and minimum versions; IPC20 file reuse remains unchanged. Validation includes the SDK compatibility suite and `metadata_compat` wire-tag checks.

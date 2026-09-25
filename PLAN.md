@@ -382,3 +382,20 @@ the expected member at the owner. No network retry or crypto-state reset was
 performed. Original encrypted files stayed unchanged and temporary decrypted
 copies were removed. The first diagnostic compile failure is retained separately.
 See `docs/evidence/ten-client-application-20260925/membership-inspection.json`.
+
+
+## Five-relay carrier update — 2026-09-23
+
+The shared Rust GC/2 application carrier now selects exactly three independent middles between the retained entry and terminal inbox. Whole-path validation rejects reused IPs/service identities, excluded endpoints and expired authority before opening streams. Minimal payload route integration, uniform framing, passive attachments, replicated durability and fleet rollout remain pending.
+
+
+## Transfer recovery — 2026-09-23
+
+Accepted downloads retain verified pieces and resume automatically after restart or temporary conversation membership loss. No requests or incoming pieces are accepted without current authorization. Explicit pauses/cancellations remain stopped. Reopening repairs the older automatic membership-pause marker; other errors keep their existing recovery behavior. Transport completions continue to arm retries while files are disabled or roster refresh fails.
+
+Validation: 51 component tests passed, two existing qualification tests ignored, including an overnight restart at 80% and a send completion delivered while locked. Evidence: `test-evidence/file-resume-20260923/verification.json`. Android live recovery remains pending; these gates do not establish fleet end-to-end acceptance. No new dependencies.
+
+
+## Interrupted-download route recovery (2026-09-23)
+
+The client can verify a stale inbox descriptor with a message-free, authenticated cover deposit using the existing relay protocol. It reuses only the short expiry explicitly accepted by the pinned relay for that exact queue, epoch and capability. This does not renew a lease or repair a missing inbox. The live Android download and full fleet acceptance remain open until verified on the deployed clients.

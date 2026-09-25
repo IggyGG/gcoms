@@ -1,0 +1,60 @@
+{
+  "scope": "Shared Rust GC/2 carrier application paths: entry + three independently pinned middles + terminal inbox",
+  "result": "PASS for scoped offline gates; full fleet acceptance remains incomplete",
+  "tests": {
+    "routingUnit": 54,
+    "routingDiscovery": 6,
+    "carrier": 10,
+    "persistentNodeIntegrations": 11,
+    "freshInboxProvisioning": 1,
+    "consumerCI": 124,
+    "consumerIgnored": 2
+  },
+  "commands": [
+    "cargo test -p gcoms-routing --features experimental-gc2 -- --test-threads=2 (54 unit and 6 discovery tests passed; carrier fixture corrected and rerun separately)",
+    "cargo test -p gcoms-routing --features experimental-gc2 --test gc2_entry -- --test-threads=2",
+    "cargo test -p gcoms-node --features experimental-gc2,client-persist --test gc2_protected_route --test gc2_queue_service --test gc2_channel_files -- --test-threads=1",
+    "cargo test -p gcoms-node --features experimental-gc2,client-persist --lib fresh_carrier_node_provisions_its_inbox_over_the_protected_route -- --test-threads=1",
+    "CARGO_PROFILE_DEV_DEBUG=0 CARGO_INCREMENTAL=0 cargo test -p gcoms -p gcoms-runtime -p gcoms-sdk -p gcoms-file-transfer --all-features -- --test-threads=1"
+  ],
+  "covered": [
+    "no shorter route when fewer than three independent middles are available",
+    "complete-route expiry, IP/service identity and endpoint/exclusion checks",
+    "real nested carrier I/O and each-middle pin/capability rejection",
+    "six bulk circuits plus interactive circuit without exhausting nested driver ownership",
+    "fixed guard behavior and repeated authority renewal",
+    "fresh inbox bootstrap and end-to-end authenticated channel file transfer on loopback relays",
+    "shared runtime/SDK/application/file-transfer native and IPC integration gates"
+  ],
+  "notProven": [
+    "live deployment",
+    "uniform forwarding/terminal framing",
+    "passive relay attachments",
+    "two durable inbox replicas across restart",
+    "minimal payload route integration",
+    "cross-OS installation and persistent fleet shell acceptance"
+  ],
+  "codematch": "unavailable: no codematch/search_variant_index tool exposed",
+  "sourceSha256": {
+    "crates/node/src/node/gc2_inbox_tests.rs": "ad88d9f1ccef5f86fd13e05d300701c510d9dc53b6d33d15c2c2413ae3f7e9b8",
+    "crates/node/tests/gc2_channel_files.rs": "017399008f53e4818733d8ec502f07d8d844a3169ee5d3308d808d593cc74138",
+    "crates/node/tests/gc2_protected_route.rs": "0860bab6fc1453c8fbc327fe4634c554aff74defc5e569a09e9c9e9e8e0404cf",
+    "crates/node/tests/gc2_queue_service.rs": "d3c9963527d6e585cd8c59925cfcc2ed4bcc6515a988d42efa6aade9a6cd2700",
+    "crates/routing/Cargo.toml": "45a4fbf47021ba9baf46d28393c164cc1ca366e154a5c5a0ff79541b74ee1d65",
+    "crates/routing/src/catalog.rs": "3b893b1f8900452d5c1a68c2b665ce31b09993fc3464da2e81608bb85c1fb973",
+    "crates/routing/src/gc2.rs": "27bd180e1874a4820db2dd6b2e9b5ac664fe7d941e166e72b1cbd18ca1494fe0",
+    "crates/routing/src/gc2/connector.rs": "345daced871cfa1191a5a84d7345e1284a6ce573dcb09e967dd486d4826c4f18",
+    "crates/routing/src/gc2/entry.rs": "0c72542504912b750a84187f50c9575ce0194cf8ee20d2f5d63b15e2467b32f7",
+    "crates/routing/src/gc2/owner.rs": "43a906d80c573b1cb07dd815682d44125d27238ff630f7f13ce2e2949866c85c",
+    "crates/routing/src/gc2/owner_expiry_tests.rs": "71265f3dc4f11fbfaf264e984728071305f7074c9702025d1568977d4f109e3a",
+    "crates/routing/src/gc2/path.rs": "b61cb4e12b03946d50566eaf1e9c8c6186c53a20824b5866c6f752f34c156b28",
+    "crates/routing/src/gc2/transit.rs": "adae2067a11dbaea15dece6829d4af8f8d78637ce8c509e0aab69f510baddde1",
+    "crates/routing/tests/gc2_entry.rs": "e9e96d0c793ec2c181a5aa4e407c73729f1fad2e4ecd71e50e1a3f5168fd2c09"
+  },
+  "notes": [
+    "No production service/profile changes. Initial transport/queue fixtures assumed shorter paths and were corrected; their final logs are retained here.",
+    "The first consumer build exited 125 before tests; the successful retry uses CI debug=0 and disables incremental caching.",
+    "The routing change does not introduce a dependency. Tokio rt-multi-thread is now an explicit dev feature for existing multithreaded unit tests.",
+    "Committed logs retain the test execution sections; compile/patch warnings were omitted and whitespace normalized. Original tool logs remain in the task scratch directory."
+  ]
+}

@@ -1,0 +1,29 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 28.71s
+     Running tests/gc2_channel_files.rs (/run/media/user/SSD-2/git/ghost/coms/.worktrees/gdrop-gdrone/build/gcoms/debug/deps/gc2_channel_files-bd9ff78e8ffa0dbc)
+
+running 1 test
+test cold_bootstrap_provisions_and_delivers_channel_file_as_authenticated_bulk ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 168.08s
+
+     Running tests/gc2_protected_route.rs (/run/media/user/SSD-2/git/ghost/coms/.worktrees/gdrop-gdrone/build/gcoms/debug/deps/gc2_protected_route-c330c1824162adb6)
+
+running 3 tests
+test cold_entry_readiness_retries_without_the_minute_timer ... ok
+test missing_entries_defer_durable_delivery_without_direct_fallback ... ok
+test protected_route_carries_durable_applications_through_the_circuit ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 23.80s
+
+     Running tests/gc2_queue_service.rs (/run/media/user/SSD-2/git/ghost/coms/.worktrees/gdrop-gdrone/build/gcoms/debug/deps/gc2_queue_service-20b1a31c4e893d78)
+
+running 7 tests
+test authenticated_natural_delivery_uses_one_entry_for_both_classes ... ok
+test authentication_and_path_binding_fail_without_queue_mutation ... ok
+test composed_terminal_and_relay_services_cannot_switch_connection_roles ... ok
+test idle_subscription_stops_at_its_authenticated_expiry ... ok
+test natural_scheduler_delivers_bulk_and_chat_over_owned_ready_entries ... ok
+test revoked_subscription_cancels_a_writer_blocked_on_receive_credit ... ok
+test shutdown_owns_idle_subscriptions_and_releases_store_references ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 67.54s

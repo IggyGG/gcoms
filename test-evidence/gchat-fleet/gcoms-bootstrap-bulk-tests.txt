@@ -1,0 +1,69 @@
+   Compiling serde_core v1.0.229
+   Compiling serde v1.0.229
+   Compiling syn v3.0.4
+   Compiling gcoms-core v0.1.0 (/run/media/user/SSD-2/git/ghost/coms/.worktrees/gdrop-gdrone/gcoms/crates/core)
+   Compiling gcoms-crypto v0.1.0 (/run/media/user/SSD-2/git/ghost/coms/.worktrees/gdrop-gdrone/gcoms/crates/crypto)
+   Compiling gcoms-protocol v0.1.0 (/run/media/user/SSD-2/git/ghost/coms/.worktrees/gdrop-gdrone/gcoms/crates/protocol)
+   Compiling serde_bytes v0.11.19
+   Compiling serde_json v1.0.151
+   Compiling displaydoc v0.2.7
+   Compiling zerovec-derive v0.11.6
+   Compiling thiserror-impl v2.0.20
+   Compiling tokio-macros v2.7.2
+   Compiling serde_derive v1.0.229
+   Compiling tokio v1.53.1
+   Compiling zerotrie v0.2.5
+   Compiling zerovec v0.11.8
+   Compiling thiserror v2.0.20
+   Compiling asn1-rs v0.7.2
+   Compiling openmls_serialization_helpers v0.1.0
+   Compiling tinystr v0.8.4
+   Compiling potential_utf v0.1.6
+   Compiling icu_collections v2.3.0
+   Compiling icu_locale_core v2.3.0
+   Compiling der-parser v10.0.0
+   Compiling oid-registry v0.8.1
+   Compiling tls_codec v0.5.0
+   Compiling serde_urlencoded v0.7.1
+   Compiling icu_provider v2.3.1
+   Compiling icu_normalizer v2.3.0
+   Compiling icu_properties v2.3.0
+   Compiling x509-parser v0.18.1
+   Compiling openmls_traits v0.6.0
+   Compiling hpke-rs v0.7.0
+   Compiling openmls_memory_storage v0.6.0
+   Compiling openmls_basic_credential v0.6.0
+   Compiling openmls v0.9.0
+   Compiling openmls_rust_crypto v0.6.0
+   Compiling idna_adapter v1.2.2
+   Compiling idna v1.1.0
+   Compiling url v2.5.8
+   Compiling hyper v1.11.1
+   Compiling tokio-rustls v0.26.4
+   Compiling tokio-util v0.7.19
+   Compiling tower v0.5.3
+   Compiling gcoms-network v0.1.0 (/run/media/user/SSD-2/git/ghost/coms/.worktrees/gdrop-gdrone/gcoms/crates/network)
+   Compiling tower-http v0.6.11
+   Compiling h2 v0.4.19
+   Compiling hyper-util v0.1.20
+   Compiling hyper-rustls v0.27.9
+   Compiling reqwest v0.12.28
+   Compiling gcoms-transport v0.1.0 (/run/media/user/SSD-2/git/ghost/coms/.worktrees/gdrop-gdrone/gcoms/crates/transport)
+   Compiling gcoms-routing v0.1.0 (/run/media/user/SSD-2/git/ghost/coms/.worktrees/gdrop-gdrone/gcoms/crates/routing)
+   Compiling gcoms-mls v0.1.0 (/run/media/user/SSD-2/git/ghost/coms/.worktrees/gdrop-gdrone/gcoms/crates/mls)
+   Compiling gcoms-network-client v0.1.0 (/run/media/user/SSD-2/git/ghost/coms/.worktrees/gdrop-gdrone/gcoms/crates/network-client)
+   Compiling gcoms-node v0.1.0 (/run/media/user/SSD-2/git/ghost/coms/.worktrees/gdrop-gdrone/gcoms/crates/node)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 38.33s
+     Running unittests src/lib.rs (coms/.worktrees/gdrop-gdrone/build/gcoms/debug/deps/gcoms_node-8458bc0f614c357c)
+
+running 7 tests
+test node::direct::maintenance_tests::file_records_are_bulk_while_chat_control_and_acknowledgements_stay_interactive ... ok
+test node::direct::maintenance_tests::rerouting_deduplicates_but_rekeyed_ciphertext_gets_a_distinct_attempt ... ok
+test node::direct::maintenance_tests::rejected_ack_rotates_behind_waiters_and_preserves_renewed_route ... ok
+test node::direct::maintenance_tests::gc2_owned_retry_copies_are_charged_before_poll_and_released_on_cancel ... ok
+test node::direct::maintenance_tests::stalled_retry_does_not_block_new_ack_retry_or_presence_expiry ... ok
+test node::direct::maintenance_tests::bounds_fair_retries_and_ack_archive_survive_owner_cancellation ... ok
+test node::direct::maintenance_tests::late_acceptance_on_old_receive_queue_cannot_clear_renewed_ack ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 309 filtered out; finished in 0.29s
+

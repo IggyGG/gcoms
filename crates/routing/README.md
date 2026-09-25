@@ -9,3 +9,8 @@ The crate documentation is generated from this package's source. Applications
 normally begin with `gcoms-rpc` for typed services or `gcoms-sdk` for messaging.
 Lower layers are implementation components and have no independent stability
 promise during the developer preview.
+
+
+## Five-relay carrier update — 2026-09-23
+
+PreparedConnector now takes a fixed MiddlePath of three TransitDescriptors. EntryCarrier::connect_via validates all positions before opening the route and authenticates each middle separately; the caller authenticates the terminal. Up to 16 circuits own up to 48 nested middle drivers. Existing retained-guard selection is preserved; no dependency was added. Uniform role framing and passive-relay support remain separate unfinished work.

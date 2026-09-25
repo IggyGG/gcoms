@@ -234,3 +234,7 @@ Control protocol version 2 carries explicit carrier configuration. Older hosts
 are rejected with an incompatibility error. GC/2 requires explicit
 `.carrier_profile(gcoms::sdk::CarrierProfile::Gc2)` on either backend and host
 support for `gc2-carrier`; compiling the feature does not change a profile silently.
+
+## Scoped local component hosts
+
+`ApplicationBuilder::central_components(policy, primary, safety_number)` explicitly partitions one in-process profile between its normal application and separately authenticated local components. The identity pin is checked before changing ownership; a mismatched pin fails closed. The returned primary client cannot consume scoped inbox work. Reopening requires the same retained partition. Ordinary applications keep the personal-profile ownership guard. Validation: `central_host` integration test.

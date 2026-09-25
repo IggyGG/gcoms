@@ -185,3 +185,14 @@ Inbox replacement completes after both new queues and peer updates are committed
 Peer notifications remain in the encrypted outbox and use the bounded direct
 maintenance retry schedule; an unavailable peer cannot hold inbox installation
 open. Relay acceptance still does not imply peer delivery.
+
+## Five-relay carrier update — 2026-09-23
+
+The shared experimental GC/2 application carrier requires an entry, three independent middles and a terminal inbox. It defers delivery when a complete route is unavailable. This is a client routing change; live fleet rollout and minimal payload integration are not yet qualified. Offline validation is recorded in test-evidence/gc2-five-relay-20260923/verification.json.
+
+
+## Transfer recovery — 2026-09-23
+
+Accepted downloads retain verified pieces and resume automatically after restart or temporary conversation membership loss. No requests or incoming pieces are accepted without current authorization. Explicit pauses/cancellations remain stopped. Reopening repairs the older automatic membership-pause marker; other errors keep their existing recovery behavior. Transport completions continue to arm retries while files are disabled or roster refresh fails.
+
+Validation: 51 component tests passed, two existing qualification tests ignored, including an overnight restart at 80% and a send completion delivered while locked. Evidence: `test-evidence/file-resume-20260923/verification.json`. Android live recovery remains pending; these gates do not establish fleet end-to-end acceptance. No new dependencies.

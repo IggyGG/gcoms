@@ -30,3 +30,8 @@ fresh bundle and seeds only the client carrier directory; it does not fetch a
 provider, publish the seeds through the relay service or select a different
 protocol. Non-GC/2 nodes refuse it. The deployed-relay diagnostic is an explicitly
 ignored live provisioning test and requires separate authorization to run.
+
+
+### Stale peer inbox descriptors
+
+A locally originated send to an expired cached descriptor first sends an authenticated cover probe through the configured connector. The current relay implementation accepts the probe only for the existing queue, epoch and push capability, and only when the requested short expiry fits its live lease. The client uses that pinned acknowledgement for the same destination until the accepted expiry. GC/2 uses natural cover cells and never falls back to legacy framing. One memo per bounded scheduler lane coalesces probes and backs off failed attempts. The probe consumes one short-lived replay entry but no queued message or file storage; it cannot renew or resurrect an inbox. Already authenticated forwarded envelopes and application command deadlines are unchanged. No dependencies were added.
