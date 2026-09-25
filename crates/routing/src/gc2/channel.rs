@@ -1,7 +1,8 @@
 //! Established GCT2 channels. The owner authenticates and exchanges `Open`
 //! before running this pump, supplies bounded local I/O, and owns cancellation
 //! and the absolute connection lifetime. Responsive profiles send ready data
-//! immediately; independent randomized cover does not conceal activity rates.
+//! immediately; randomized cover skips intervals containing sent data and does
+//! not conceal activity rates.
 use super::{CoverMode, RecordCodec, RecordKind, HEADER_LEN};
 use rand::Rng;
 use std::{future::poll_fn, io, pin::Pin, task::Poll};
@@ -35,8 +36,9 @@ pub struct ChannelCounts {
 
 /// Forward one already-open channel in both directions, without detached tasks.
 /// The authenticated profile selects fixed/jittered slots or immediate data with
-/// randomized interactive cover. Bulk is immediately eligible outside full-cover
-/// mode. Blocked writes never accumulate catch-up cover bursts.
+/// randomized interactive cover, omitted when data was sent since the previous
+/// opportunity. Bulk is immediately eligible outside full-cover mode. Blocked
+/// writes never accumulate catch-up cover bursts.
 ///
 /// The owner must keep both class channels alive for its traffic-independent
 /// connected period and reserve interactive transport credit separately. This
@@ -74,6 +76,7 @@ where
     let mut encoded = Vec::new();
     let mut counts = RecordCounts::default();
     let responsive = codec.profile().mode() == CoverMode::Responsive;
+    let mut data_since_slot = false;
     let mut next_slot = if responsive {
         Instant::now() + random_cover_interval()
     } else {
@@ -83,8 +86,8 @@ where
         let ready = if codec.unshaped_bulk() {
             Some(local.read(&mut payload).await?)
         } else if responsive {
-            // Data reads are cancellation-safe. Keep this deadline unchanged on
-            // data so sustained traffic cannot continually postpone cover. One
+            // Data reads are cancellation-safe. Payload arrivals do not restart
+            // the timer; sent data replaces the next cover opportunity. One
             // bounded writer preserves ordering and transport backpressure.
             tokio::select! {
                 biased;
@@ -103,6 +106,11 @@ where
             })
             .await?
         };
+        if responsive && ready.is_none() && data_since_slot {
+            data_since_slot = false;
+            next_slot = Instant::now() + random_cover_interval();
+            continue;
+        }
         let (kind, len) = match ready {
             None => (RecordKind::Cover, 0),
             Some(0) => (RecordKind::Close, 0),
@@ -119,10 +127,12 @@ where
             return Ok(counts);
         }
         if responsive {
+            data_since_slot |= kind == RecordKind::Data;
             if kind == RecordKind::Cover || Instant::now() >= next_slot {
                 // Reschedule from completion, never retain missed cover debt.
                 // A slow data write may replace an overdue cover opportunity.
                 next_slot = Instant::now() + random_cover_interval();
+                data_since_slot = false;
             }
             continue;
         }
@@ -271,37 +281,90 @@ mod tests {
     }
 
     #[tokio::test(start_paused = true)]
-    async fn responsive_data_does_not_reset_cover_deadline() {
+    async fn responsive_data_skips_one_cover_opportunity_then_idle_cover_resumes() {
         let codec = RecordCodec::new(TrafficClass::Interactive, CandidateProfile::responsive());
         let (mut application, local) = tokio::io::duplex(MAX_RECORD);
         let (wire, mut observer) = tokio::io::duplex(MAX_RECORD);
         let writer = tokio::spawn(write_records(wire, local, codec, Instant::now()));
-        let origin = Instant::now();
         let mut record = vec![0; codec.profile().record_len()];
-        // Supplying data every millisecond must not postpone cover indefinitely.
-        let mut covered = false;
-        for _ in 0..10_002 {
+        application.write_all(&[19]).await.unwrap();
+        observer.read_exact(&mut record).await.unwrap();
+        assert_eq!(codec.decode(&record).unwrap().kind(), RecordKind::Data);
+        tokio::task::yield_now().await;
+        // Every possible first gap is now due. The sent data replaces this
+        // opportunity, but must not suppress the following idle opportunity.
+        tokio::time::advance(Duration::from_secs(10)).await;
+        tokio::task::yield_now().await;
+        assert!(
+            tokio::time::timeout(
+                Duration::from_millis(9),
+                observer.read_exact(&mut record[..1])
+            )
+            .await
+            .is_err(),
+            "sent data must suppress the due cover record"
+        );
+        tokio::time::timeout(Duration::from_secs(10), observer.read_exact(&mut record))
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(codec.decode(&record).unwrap().kind(), RecordKind::Cover);
+        writer.abort();
+        assert!(writer.await.unwrap_err().is_cancelled());
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn responsive_sustained_data_replaces_cover_without_delaying_data() {
+        let codec = RecordCodec::new(TrafficClass::Interactive, CandidateProfile::responsive());
+        let (mut application, local) = tokio::io::duplex(MAX_RECORD);
+        let (wire, mut observer) = tokio::io::duplex(MAX_RECORD);
+        let writer = tokio::spawn(write_records(wire, local, codec, Instant::now()));
+        let mut record = vec![0; codec.profile().record_len()];
+        // Cross multiple maximum-length cover intervals. The timer keeps
+        // advancing, but successfully sent data replaces each cover record.
+        for _ in 0..20_002 {
             application.write_all(&[19]).await.unwrap();
-            loop {
-                observer.read_exact(&mut record).await.unwrap();
-                let decoded = codec.decode(&record).unwrap();
-                if decoded.kind() == RecordKind::Cover {
-                    covered = true;
-                } else {
-                    assert_eq!(decoded.payload(), &[19]);
-                    break;
-                }
-            }
-            if covered {
-                break;
-            }
+            tokio::time::timeout(Duration::from_millis(1), observer.read_exact(&mut record))
+                .await
+                .expect("ready data must remain immediate")
+                .unwrap();
+            let decoded = codec.decode(&record).unwrap();
+            assert_eq!(
+                decoded.kind(),
+                RecordKind::Data,
+                "busy intervals need no cover"
+            );
+            assert_eq!(decoded.payload(), &[19]);
             tokio::time::advance(Duration::from_millis(1)).await;
         }
-        assert!(
-            covered,
-            "real traffic must not reset the independent cover timer"
-        );
-        assert!(origin.elapsed() <= Duration::from_millis(10_001));
+        writer.abort();
+        assert!(writer.await.unwrap_err().is_cancelled());
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn responsive_slow_data_consumes_overdue_opportunity_only() {
+        let codec = RecordCodec::new(TrafficClass::Interactive, CandidateProfile::responsive());
+        let (mut application, local) = tokio::io::duplex(MAX_RECORD);
+        let (wire, mut observer) = tokio::io::duplex(1);
+        let writer = tokio::spawn(write_records(wire, local, codec, Instant::now()));
+        let mut record = vec![0; codec.profile().record_len()];
+        application.write_all(&[19]).await.unwrap();
+        observer.read_exact(&mut record[..1]).await.unwrap();
+        tokio::time::advance(Duration::from_secs(30)).await;
+        observer.read_exact(&mut record[1..]).await.unwrap();
+        assert_eq!(codec.decode(&record).unwrap().kind(), RecordKind::Data);
+        tokio::task::yield_now().await;
+        assert!(tokio::time::timeout(
+            Duration::from_millis(9),
+            observer.read_exact(&mut record[..1])
+        )
+        .await
+        .is_err());
+        tokio::time::timeout(Duration::from_secs(10), observer.read_exact(&mut record))
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(codec.decode(&record).unwrap().kind(), RecordKind::Cover);
         writer.abort();
         assert!(writer.await.unwrap_err().is_cancelled());
     }

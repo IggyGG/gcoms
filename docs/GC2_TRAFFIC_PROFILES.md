@@ -7,9 +7,17 @@ cover slots. Bulk remains bounded and unpaced, without idle bulk cover. Existing
 IDs 0–35 retain their meanings. IDs 36–47 select responsive mode with the existing
 size index; their legacy period index does not set data pacing or cover timing.
 
-Each interactive writer samples its next cover gap uniformly from integer
+Each interactive writer samples its next cover opportunity uniformly from integer
 milliseconds 10 through 10,000, independently of payload arrivals. Real data does
-not restart that timer. A blocked write reschedules overdue cover from completion
+not restart that timer. At each opportunity, skip the cover record if that writer
+has successfully written and flushed any Data record since the previous opportunity,
+then clear that flag and sample the next interval. Otherwise send cover. This is
+per outgoing interactive channel/direction: received traffic, queued but unsent data,
+and data on other channels do not suppress its cover. Continuous data can replace
+all cover; after the final data, at most one opportunity is skipped before idle
+cover resumes (up to 20 seconds without blocked writes). A slow data write that
+crosses an opportunity consumes that opportunity only. No suppressed record is
+counted as sent. A blocked write reschedules overdue cover from completion
 instead of accumulating catch-up work. There is one bounded writer and no new
 queue or detached task. Backpressure, class credit, connection ownership, pinned
 TLS, authority deadlines and authenticated application ACKs remain unchanged.
