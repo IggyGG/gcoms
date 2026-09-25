@@ -33,7 +33,7 @@ f96b601ae7afdf319f56684c4a654bbc4458917d:release/rust-integration-packages-2026-
 19403023b166904161826f3c1acf1f913e2b3eba:docs/evidence/rust-integrations-20260921/windows-amd64.json:generic-api-key:2646
 
 # Reviewed 2026-09-25: four source SHA-256 maps; public deterministic
-# push-ticket token hashes; the text "credential hour:345pass/5fail/2ignore".
+# push-ticket token hashes; textual counts in an hour-boundary test summary.
 # Exact historical findings only. None contains an operational credential.
 ad7d5d85e53fac9b18b8cde90e95ec7beb09d5f8:docs/evidence/owner-role-recovery-20260924/node-02-after.json:generic-api-key:1
 ad7d5d85e53fac9b18b8cde90e95ec7beb09d5f8:docs/evidence/owner-role-recovery-20260924/node-02-before.json:generic-api-key:1
@@ -42,3 +42,6 @@ ad7d5d85e53fac9b18b8cde90e95ec7beb09d5f8:docs/evidence/owner-role-recovery-20260
 b864f9ba6660148589d1e67821f04e98064933ef:crates/node/src/push_notifications/relay-ticket-v2-vector.json:generic-api-key:13
 b864f9ba6660148589d1e67821f04e98064933ef:crates/node/src/push_notifications/relay-ticket-v2-vector.json:generic-api-key:18
 c20ecaf426798a30ebbf66969f02759be34857bd:docs/evidence/responsive-carrier-20260925/summary.json:generic-api-key:40
+
+# The preceding audit comment repeated those public test counts.
+869d6638b4183abea2d95fde5e1cfd714d841415:.gitleaksignore:generic-api-key:36
