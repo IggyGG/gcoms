@@ -1,0 +1,138 @@
+{
+  "source_pair": {
+    "gcoms": "0daf9632393f2c47667ec9ea706b67d7f57dbd11",
+    "gchat": "383f905e29cc9114c7d6e50294b906b9d66e44ce"
+  },
+  "profile_id": 46,
+  "correctness_passed": true,
+  "r02_5s_passed": true,
+  "r04_30s_passed": false,
+  "clients": 10,
+  "relays": 6,
+  "route_hops": 5,
+  "messages": 20,
+  "remote_deliveries": 180,
+  "ack_observation_seconds": {
+    "min": 0.5305438488721848,
+    "max": 0.8398866718634963
+  },
+  "measurement_note": "Per-message action to observation of nine received copies and sender authenticated delivery. Polling after submit completion makes these conservative upper bounds, not packet timestamps.",
+  "joins": [
+    {
+      "client": 1,
+      "seconds": 0.2016718527302146,
+      "r04_30s_passed": true
+    },
+    {
+      "client": 2,
+      "seconds": 26.76966838631779,
+      "r04_30s_passed": true
+    },
+    {
+      "client": 3,
+      "seconds": 26.74877515528351,
+      "r04_30s_passed": true
+    },
+    {
+      "client": 4,
+      "seconds": 6.995824771001935,
+      "r04_30s_passed": true
+    },
+    {
+      "client": 5,
+      "seconds": 24.98595968261361,
+      "r04_30s_passed": true
+    },
+    {
+      "client": 6,
+      "seconds": 33.460703884251416,
+      "r04_30s_passed": false
+    },
+    {
+      "client": 7,
+      "seconds": 2.1893796995282173,
+      "r04_30s_passed": true
+    },
+    {
+      "client": 8,
+      "seconds": 18.99084879644215,
+      "r04_30s_passed": true
+    },
+    {
+      "client": 9,
+      "seconds": 5.795400169678032,
+      "r04_30s_passed": true
+    }
+  ],
+  "cleanup_complete": true,
+  "host_links_unchanged": true,
+  "build_tooling_unchanged": true,
+  "archive_sha256": "69c07ea18b0d3ed50fe132bf180502aaca7210c527f5f3b0666a06c12c9f829a",
+  "evidence_files_verified": 54,
+  "retained_regular_files_verified": 309,
+  "build_archive_sha256": "9ea8f628650e20e3f140230806f85475d6375b9e7772c8be849700c04d74eefb",
+  "original_setup_failure": "multi-party19 missing ethtool; failed report retained, same binaries used for20",
+  "scope_excludes": [
+    "hourly credential turnover",
+    "ten forwarding participants",
+    "installed/mobile release",
+    "privacy qualification",
+    "production deployment"
+  ],
+  "files": {
+    "journeys/multi-party-20/client6.log": "882d2f0ec734cb12def51dcf16a3de83b7a78168e62a91b6c601547f70ad293b",
+    "journeys/multi-party-20/client8.log": "736c56292a8dde207d0118e9ef0488a45b32ee8af77223d2d7e49d487ba087f3",
+    "journeys/multi-party-20/client0.log": "11ab65bbd1501b82bb390d12e372c8b6d7302b5be4ac758a1c5d4a7971d92beb",
+    "journeys/multi-party-20/client3.log": "7701c366a50159b948453f58494590c1b911613e1920c8d95a98835ecbb010ee",
+    "journeys/multi-party-20/evidence-export.json": "bd6f0deb47ca4e2f263afd92ad10061e94242324e6a989c702dd227fa5012653",
+    "journeys/multi-party-20/relay0-configured.log": "bcbf1782e42c9e55cacfd0a5ced81be5eba1b3d625177901c5d17eeaafb230f2",
+    "journeys/multi-party-20/probe7.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "journeys/multi-party-20/worker.json": "0ba2068aa3e2afb9ad5c69d47539558ef9be22d7cf7940b75967b01be462f80a",
+    "journeys/multi-party-20/probe1.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "journeys/multi-party-20/probe2.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "journeys/multi-party-20/spec.json": "123098abd14c6b27c39d91f25c32cfe670b4fbb927801296e687cbe3e44e58f6",
+    "journeys/multi-party-20/relay0.log": "1bdfc500c68d764c814621f629b206226b5aefb4f60ab9a94bbac1fd394666bf",
+    "journeys/multi-party-20/client9.log": "1b7f2fc006e2ce940e1ba17172304e0c51fa9413fa4b59932b83ac70f69509c7",
+    "journeys/multi-party-20/client5.log": "e480a42d2e5682ea6df21bb8464a1de249eb16ad052b6c8a0eb195595d4c3282",
+    "journeys/multi-party-20/probe9.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "journeys/multi-party-20/probe4.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "journeys/multi-party-20/boundary-helper.py": "d881de0b73fefe45dcaab43500b5a9473f6eb87b485349a38e3268a4a63feb03",
+    "journeys/multi-party-20/client2.log": "a47c8f090053d8b98fdd8392e4532cac78ea261ed5701005379f898ec75acd2a",
+    "journeys/multi-party-20/relay3.log": "1bdfc500c68d764c814621f629b206226b5aefb4f60ab9a94bbac1fd394666bf",
+    "journeys/multi-party-20/relay4.log": "1bdfc500c68d764c814621f629b206226b5aefb4f60ab9a94bbac1fd394666bf",
+    "journeys/multi-party-20/connections.capture.log": "221d0a1eb868932e6955231781c77036faef1fdd6b1555e16281fd697ebb26c1",
+    "journeys/multi-party-20/driver.py": "c8033ebed850d57054daf95ae80f8e93daeb8e8bf69f3ff3c3111a0218e4b58e",
+    "journeys/multi-party-20/relay2-configured.log": "bcbf1782e42c9e55cacfd0a5ced81be5eba1b3d625177901c5d17eeaafb230f2",
+    "journeys/multi-party-20/client4.log": "bc1313d3646da1474f774b20fab60e0d908a9ccb392d4a62f307e413cffc0fd0",
+    "journeys/multi-party-20/relay5-configured.log": "bcbf1782e42c9e55cacfd0a5ced81be5eba1b3d625177901c5d17eeaafb230f2",
+    "journeys/multi-party-20/probe3.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "journeys/multi-party-20/network.json": "9b8aa67b6b9cd33d9431de382799e979413b29baa3e4c41bd3a0d5639b0166a7",
+    "journeys/multi-party-20/client7.log": "05e85082a37c481ab5949f8531c2a2b3c35076cd7ceb037702d2bfa6cef81e0d",
+    "journeys/multi-party-20/client1.log": "dc7601e1d0d8b64e89dd87b85484a9e99ea5286f1476263df3bd9d9c44438d40",
+    "journeys/multi-party-20/probe6.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "journeys/multi-party-20/relay1.log": "1bdfc500c68d764c814621f629b206226b5aefb4f60ab9a94bbac1fd394666bf",
+    "journeys/multi-party-20/report.json": "ffa9d75218f012fc4555d06e12ffb79208106d908ed969933602647acb4c50d3",
+    "journeys/multi-party-20/relay2.log": "1bdfc500c68d764c814621f629b206226b5aefb4f60ab9a94bbac1fd394666bf",
+    "journeys/multi-party-20/relay5.log": "1bdfc500c68d764c814621f629b206226b5aefb4f60ab9a94bbac1fd394666bf",
+    "journeys/multi-party-20/events.jsonl": "5c94de0b27dfe35b554655a394412ac0a6363e36c9e05a1419203449d7ba2f29",
+    "journeys/multi-party-20/probe5.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "journeys/multi-party-20/probe8.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "journeys/multi-party-20/controller.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "journeys/multi-party-20/relay3-configured.log": "bcbf1782e42c9e55cacfd0a5ced81be5eba1b3d625177901c5d17eeaafb230f2",
+    "journeys/multi-party-20/network-config.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "journeys/multi-party-20/relay4-configured.log": "bcbf1782e42c9e55cacfd0a5ced81be5eba1b3d625177901c5d17eeaafb230f2",
+    "journeys/multi-party-20/relay1-configured.log": "bcbf1782e42c9e55cacfd0a5ced81be5eba1b3d625177901c5d17eeaafb230f2",
+    "journeys/multi-party-20/probe0.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "journeys/multi-party-20/c0/metrics.jsonl": "b61040fa071e999548c9bc2f1f319bb0fe049b1f285972aea98597eb27049e61",
+    "journeys/multi-party-20/c1/metrics.jsonl": "d826898c91ce94f8e31a0ec940c351d997af0b3d6a85db6acd780e74a3b808bb",
+    "journeys/multi-party-20/c2/metrics.jsonl": "59f124d382cb75c52bd28d240956eb8c450e72928170cd79da941d3deddca3fb",
+    "journeys/multi-party-20/c3/metrics.jsonl": "ed7395ada671b5d191c8c4d46e631a693f252d00335f0b457ae8027860fa0316",
+    "journeys/multi-party-20/c4/metrics.jsonl": "463359411804bd79817fe176e1134ed555aeb3b37eca7f14dc313058a1b61a79",
+    "journeys/multi-party-20/c5/metrics.jsonl": "3fc58f2f0dbfa2f198e54854113329d431796294b975312db591510dba75058c",
+    "journeys/multi-party-20/c6/metrics.jsonl": "1aed094a55e58a693859106fd318eb59d75df213520858c86feb7e8aa9e66b49",
+    "journeys/multi-party-20/c7/metrics.jsonl": "ba0d1a02d930d6242344fd87fe886b91ed59de779eadcbcf61bb4416918c7ab3",
+    "journeys/multi-party-20/c8/metrics.jsonl": "776b5e0dde45fca887e7f9ebcaee755d9c637652a01933d0611957a60f07f919",
+    "journeys/multi-party-20/c9/metrics.jsonl": "949c368ac682ee2028134eea28d4bc0845eab60445be238db4fe095060650635",
+    "demand-green-03/controller.log": "93c68f947c1d9878f2075005152b672c255cf145ac202befb07bc93ed0e17656"
+  }
+}

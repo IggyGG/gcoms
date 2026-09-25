@@ -1,10 +1,28 @@
+## Responsive application result, 2026-09-25
+
+[Candidate19 application/build receipts](docs/evidence/responsive-carrier-20260925/application.json):
+all ten actual GChat clients joined over six protected relays. Two rounds of ten
+simultaneous sends produced 180 verified remote deliveries with exact IDs and
+authenticated sender ACKs. Conservative action-to-observation times were
+0.531–0.840 seconds: R02 passes in this scope. One join took 33.461 seconds, so
+R04 still fails; other joins were 0.202–26.770 seconds. No production, installed,
+mobile, hourly-turnover or ten-forwarding-participant claim follows. All child
+processes/namespaces stopped; host links, binaries and tooling unchanged.
+
+The initial namespace launch failed before clients started because this new pod
+lacked ethtool. Its failure and cleanup remain retained. The retry used identical
+binaries after installing that utility; 309 retained file hashes and 54 exported
+evidence files were verified. The paired optimized build has 16 verified evidence
+files. Further work: diagnose the remaining join/recovery waits and qualify the
+staged compatible relay/client rollout; do not weaken deadline verdicts.
+
 Validated responsive-carrier implementation: [source-bound receipt](docs/evidence/responsive-carrier-20260925/summary.json)
 records 90 routing tests, 350 Node tests (two exclusions) on a fresh-credential
 rerun, one protected channel/file/renewal integration, 31 runtime tests (one
 exclusion), strict affected-package Clippy, formatting and 58 Python checks.
 The original node run crossing the UTC hour failed five static-introduction
 cases; it remains failed. Fresh replay passed unchanged source and does not
-qualify hourly recovery. Actual ten-client candidate19 is a separate next gate.
+qualify hourly recovery. The separately bound application run is summarized below.
 
 ## Immediate sending and randomized cover, 2026-09-25
 

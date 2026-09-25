@@ -1,0 +1,30 @@
+{
+  "source_pair": {
+    "gcoms": "0daf9632393f2c47667ec9ea706b67d7f57dbd11",
+    "gchat": "383f905e29cc9114c7d6e50294b906b9d66e44ce"
+  },
+  "passed": true,
+  "source_unchanged": true,
+  "evidence_files_verified": 16,
+  "archive_sha256": "9ea8f628650e20e3f140230806f85475d6375b9e7772c8be849700c04d74eefb",
+  "fixture_host_sha256": "1fc2c984e42b46590687cb8a88bd3c01d1803adbf491578c4ded35d57efb90e2",
+  "installed_qualification": false,
+  "files": {
+    "candidate-19.json": "d0e7bf08cccd9c14698a94fca7cb277e1d922e08ff32617ab6c90a6bf8fa0d82",
+    "application-build-19/build.json": "ee829d9456654c602a70e23a443493bb5901687c56575e926947656300834e01",
+    "application-build-19/source.toml": "913fd7602bce2f61692749902a53f2ee6671c89b792ffe148cf5a83113038a6f",
+    "application-build-19.log": "33d7a1a95347f14cfcafcdb41edbda4d5575588bfb1321a71b769b0acd979c5b",
+    "application-build-19.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "application-build-19/gcoms/Cargo.lock": "7bf0e526dfea4f63b556e754d8a9b2d171815f4c3e22baad31ba006fd2f33353",
+    "application-build-19/gchat/Cargo.lock": "1e2d1c7f3d99b7f19b0016d48bd8e59d772752bf55af9b526c31f451f255edd1",
+    "application-build-19/bin/gcnode": "f86e7b3827e1acf68993db75fd0c8e20e35b22eeb960ae8a53c31a7fe8e48964",
+    "application-build-19/bin/fleet_probe": "953bedb1c27c16820747b49c59ae20f9d28ca0148e5ee4ea0d1d77cc861a3442",
+    "application-build-19/bin/gchat": "9b5e93aea41a9820a4c4c64c20149b25bca3e18572a0449f2f8e90e6bb6f134c",
+    "fixture-host-19/build.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "fixture-host-19/binding.json": "e1adb45df1da80738f30260cdc56a3388cb51e127f8726af629003e3327f7e19",
+    "fixture-host-19/clippy.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "fixture-host-19/build.log": "b05e3f62cdfa4e5d7e43bcdf44ce44b5b72c1dec7f0d98832c792d8c6a79e0a1",
+    "fixture-host-19/turnover_daemon": "1fc2c984e42b46590687cb8a88bd3c01d1803adbf491578c4ded35d57efb90e2",
+    "fixture-host-19/clippy.log": "a5afb0e5ef9f91c34e89d4e54e789f550326985f99eb19b81cb6dd724f13cecc"
+  }
+}
