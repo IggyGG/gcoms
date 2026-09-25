@@ -1,6 +1,11 @@
 name: Rust application integrations
+run-name: GComs SDK Rust ${{ inputs.request_id || github.sha }}
 on:
   workflow_dispatch:
+    inputs:
+      request_id:
+        type: string
+        default: manual
   push:
     branches: [main]
     paths:

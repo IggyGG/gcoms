@@ -1,7 +1,11 @@
 name: Mobile SDK preview
+run-name: GComs SDK Mobile ${{ inputs.request_id || github.sha }}
 on:
   workflow_dispatch:
     inputs:
+      request_id:
+        type: string
+        default: manual
       push:
         description: Qualify the separate optional push distribution
         type: boolean
@@ -18,7 +22,7 @@ on:
         default: all
   push:
     branches: [main]
-    paths: ['mobile/**', 'scripts/build-mobile.py', 'scripts/prepare-android.py', 'scripts/qualify-*.py', 'scripts/mobile_fixture.py', 'scripts/test-android.py', '.github/workflows/mobile-integrations.yml']
+    paths: ['Cargo.toml', 'Cargo.lock', 'rust-toolchain.toml', 'crates/**', 'mobile/**', 'scripts/build-mobile.py', 'scripts/prepare-android.py', 'scripts/qualify-*.py', 'scripts/mobile_fixture.py', 'scripts/test-android.py', '.github/workflows/mobile-integrations.yml']
 permissions:
   contents: read
 jobs:
