@@ -320,7 +320,8 @@ class TopologyTests(unittest.TestCase):
             root = Path(directory)
             for i in (0, 1):
                 (root / f'c{i}').mkdir()
-            worker = turnover.Journey(dict(out=str(root), uid=os.getuid(), gid=os.getgid(),
+            # This checks generated topology, not Unix ownership or namespaces.
+            worker = turnover.Journey(dict(out=str(root), uid=1000, gid=1000,
                 workload='turnover', seed=1, config={}, build={'path': str(root / 'build')}))
             worker.root = root
             (root / 'resolver').write_text('fixture')
@@ -333,6 +334,7 @@ class TopologyTests(unittest.TestCase):
                     return {'private_card_b64': 'private-fixture'}
                 return {'ready': True}
             with mock.patch.object(worker, 'relay'), mock.patch.object(worker, 'stop'), \
+                    mock.patch.object(os, 'chown', create=True), \
                     mock.patch.object(worker, 'control', side_effect=control):
                 worker.prepare()
             for client, inbox in ((0, 2), (1, 3)):
