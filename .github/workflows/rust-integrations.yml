@@ -68,9 +68,15 @@ jobs:
 
   subscription-diagnostic:
     if: ${{ inputs.subscription_diagnostic }}
-    runs-on: macos-15
-    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-24.04, macos-15, macos-15-intel, windows-2022]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 25
     steps:
+      - name: Preserve source bytes
+        run: git config --global core.autocrlf false
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           persist-credentials: false
@@ -78,11 +84,15 @@ jobs:
         shell: bash
         run: |
           rustup toolchain install 1.98.0 --profile minimal
-          for host in 102 103 104 105 106 107; do
-            sudo ifconfig lo0 alias 127.0.0.$host up
-          done
+          if [ "$RUNNER_OS" = macOS ]; then
+            for host in 102 103 104 105 106 107; do
+              sudo ifconfig lo0 alias 127.0.0.$host up
+            done
+          fi
           mkdir -p subscription-evidence
           git rev-parse HEAD > subscription-evidence/source.txt
+      - name: Prepare short private test directory
+        run: ${{ runner.os == 'Windows' && 'python' || 'python3' }} scripts/prepare-rust-tests.py
       - name: Run unchanged subscription assertions with local diagnostic events
         shell: bash
         env:
@@ -99,9 +109,15 @@ jobs:
           echo "$result" > subscription-evidence/exit.txt
           tail -120 subscription-evidence/check.log
           exit "$result"
+      - name: Check strict node Clippy
+        if: runner.os == 'Linux'
+        env:
+          CARGO_BUILD_JOBS: '4'
+          CARGO_PROFILE_DEV_DEBUG: '0'
+        run: cargo +1.98.0 clippy --locked -p gcoms-node --all-features --all-targets -- -D warnings
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: always()
         with:
-          name: protected-subscription-diagnostic-${{ github.sha }}
+          name: protected-subscription-diagnostic-${{ matrix.runner }}-${{ github.sha }}
           path: subscription-evidence/
           if-no-files-found: error
