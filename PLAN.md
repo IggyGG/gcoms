@@ -1,3 +1,15 @@
+## Production subscription fixture (2026-09-27)
+
+R07: all three protected subscription/revision recovery tests now use the current
+responsive production profile 46 instead of historical fixed-rate profile 22.
+Assertions and the 20-second deadline are unchanged. Each passes on Linux,
+Apple Silicon Mac, Intel Mac and Windows; strict node Clippy passes. Optional
+local diagnostic events contain only fixture indices, dispatch decisions and
+class counts. Production runtime bytes/constants are unchanged.
+[Evidence](docs/evidence/production-subscription-20260927/summary.json) preserves
+the old native failures and diagnostic setup failures. This does not qualify
+a new full native pair or an installed artifact.
+
 ## Manual reconnect replay isolation (2026-09-27)
 
 A release regression reproduced a manual reconnect code reusing an already

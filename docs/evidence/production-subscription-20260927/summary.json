@@ -1,0 +1,71 @@
+{
+  "run": 36321397504,
+  "scope": "Protected subscription recovery fixture on current production responsive profile; assertions/deadlines unchanged; no new full-native or installed artifact qualification",
+  "results": [
+    {
+      "artifact_id": 10932736571,
+      "name": "protected-subscription-diagnostic-ubuntu-24.04-4f92e6aac91d365a68fc0253f73eb3e85749be25",
+      "sha256": "c571216126525b2da09d9617cb9208a3ee960965d93d018209c48b3e84ca01d2",
+      "source": "4f92e6aac91d365a68fc0253f73eb3e85749be25",
+      "exit_code": 0,
+      "result": [
+        "test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 351 filtered out; finished in 1.12s"
+      ],
+      "log_sha256": "78a895d01bcf31385d462535096351b5062e11862804c9f8b58383a1fcd3304d"
+    },
+    {
+      "artifact_id": 10932533126,
+      "name": "protected-subscription-diagnostic-windows-2022-4f92e6aac91d365a68fc0253f73eb3e85749be25",
+      "sha256": "3f42406d3a25a0bc778b52e37e12c7ae0f92f3f152b508da92fcb3de43567e43",
+      "source": "4f92e6aac91d365a68fc0253f73eb3e85749be25",
+      "exit_code": 0,
+      "result": [
+        "test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 348 filtered out; finished in 0.98s"
+      ],
+      "log_sha256": "0d615922719a323a614c4e8c1f78f2132b856c5a03d74c48d15e8feea93db73c"
+    },
+    {
+      "artifact_id": 10932393622,
+      "name": "protected-subscription-diagnostic-macos-15-4f92e6aac91d365a68fc0253f73eb3e85749be25",
+      "sha256": "e193ec33f7a94173d8ba81f65a76d507947655ec4f02c532716cf375ebeb452a",
+      "source": "4f92e6aac91d365a68fc0253f73eb3e85749be25",
+      "exit_code": 0,
+      "result": [
+        "test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 351 filtered out; finished in 0.77s"
+      ],
+      "log_sha256": "e637fd00876ae327e264976b3ea0e4933b6dfda8f548f106245e8bb11a28f4ae"
+    },
+    {
+      "artifact_id": 10932023428,
+      "name": "protected-subscription-diagnostic-macos-15-intel-4f92e6aac91d365a68fc0253f73eb3e85749be25",
+      "sha256": "b89a1d2602bc8aad9058e04a0f8e520cea29eef66cdc32de59ddb1f05bb6b098",
+      "source": "4f92e6aac91d365a68fc0253f73eb3e85749be25",
+      "exit_code": 0,
+      "result": [
+        "test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 351 filtered out; finished in 0.92s"
+      ],
+      "log_sha256": "0d9481d39743ed08e447b67e1f3af8e173aed345b19a1921c0736ffffb4cd203"
+    }
+  ],
+  "schema": 1,
+  "production_source": "547dd4c770f356c357d08429d05ed5b98478dbba",
+  "production_runtime_changed": false,
+  "test_sha256": "5639985a9d552cb746d3b7f9815829a03ea009508214cc194b8be8beec900cb8",
+  "profile_before": 22,
+  "profile_after": 46,
+  "wait_seconds": 20,
+  "strict_node_clippy": {
+    "run": 36321672073,
+    "source": "7133866c6badd51c4c018e9bce87fdecf97d4208",
+    "passed": true,
+    "log_sha256": "b8169c266f250d5bd063827d283ce4048d584680fa50b10f61a20e466ee3d63c"
+  },
+  "retained_failures": {
+    "native_mac_windows": "Three subscription fixtures timed out using historical fixed-rate profile22; not relabelled",
+    "36319936092": "Diagnostic relative metrics path failed before fixture setup",
+    "36320471466": "Historical profile still failed; limited contact error metrics",
+    "36320930734": "Bulk subscriptions arrived; Interactive did not complete within20s",
+    "36321397504": "All12 focused assertions passed; overall Linux job failed because pinned Clippy was not installed"
+  },
+  "codematch": "unreachable"
+}

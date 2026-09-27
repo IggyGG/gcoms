@@ -1,3 +1,14 @@
+## Protected subscription recovery on profile 46
+
+Run `cargo test --locked -p gcoms-node --all-features --lib protected_routes -- --test-threads=1`.
+Require both classes for every retained inbox/channel alias, identical authority
+when readiness changes, genuine terminal-failure recovery and no revision change
+from unpublished dial failures. Keep the 20-second deadline. Use production
+responsive profile 46; this is not a 20-second setup claim for fixed-rate profile 22.
+The optional `subscription_diagnostic` Rust integration workflow runs the same
+assertions on all four desktop targets and strict node Clippy on Linux. Retain
+any original failures separately; no skip or timeout increase is permitted.
+
 ## Manual reconnect and background delivery
 
 Deliver an unchanged authenticated directory first, then export/import a manual

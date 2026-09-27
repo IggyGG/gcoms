@@ -202,3 +202,8 @@ Release file checks use a bounded 16 MiB interrupted transfer; the 1 GiB campaig
 Manual channel reconnect codes use separate MLS ciphertext from background
 directory announcements. They are shared out of band, after the send state is
 durably saved; automatic delivery cannot consume a code before it is pasted.
+
+Protected subscription recovery fixtures use the current responsive profile 46
+on Linux, both Mac architectures and Windows. The optional Rust integration
+workflow diagnostic retains redacted local dispatch/count evidence; it does
+not qualify installed artifacts or change production timing constants.
