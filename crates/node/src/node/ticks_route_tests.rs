@@ -59,6 +59,9 @@ struct Fixture {
 
 impl Fixture {
     async fn new(two_entries: bool) -> Self {
+        if let Some(path) = std::env::var_os("GCOMS_SUBSCRIPTION_TEST_METRICS") {
+            crate::metrics::init(std::path::Path::new(&path)).unwrap();
+        }
         let mut tasks = JoinSet::new();
         let (second_entry, held_entry) = watch::channel(None);
         let second_entry_closed = Arc::new(AtomicUsize::new(0));
@@ -318,6 +321,11 @@ impl Fixture {
             let mut keys = HashSet::new();
             for _ in 0..(self.inbox.aliases.len() + self.channel.len()) * 2 {
                 let attempt = self.attempts.recv().await.expect("subscription request");
+                eprintln!(
+                    "terminal subscription {} {:?}",
+                    attempts.len() + 1,
+                    attempt.subscription.class
+                );
                 assert!(keys.insert((attempt.subscription.queue_id, attempt.subscription.class)));
                 attempts.push(attempt);
             }
