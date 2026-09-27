@@ -166,7 +166,7 @@ impl Fixture {
             .unwrap();
         let (owner, ready) = EntryOwner::new(
             directory,
-            CandidateProfile::file_transfer(),
+            CandidateProfile::responsive(),
             if two_entries { 2 } else { 1 },
         )
         .unwrap();
