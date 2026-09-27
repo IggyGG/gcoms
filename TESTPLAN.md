@@ -397,3 +397,16 @@ Run `cargo test -p gcoms-node --all-features --lib lease_authority_tests -- --te
 ## Bounded release files (2026-09-25)
 
 Use `gchat-turnover.py --mode file-recovery --release-check` with the frozen paired build and qualification host: 16 MiB, 180-second completion and 600-second total ceiling. Require abrupt restart, retained pieces/identity, authenticated chat ACK, final hash and reopen/export. The separate 1 GiB campaign is nonblocking; retain its failed deadlines. Authentication, persistence, signatures and rollback remain mandatory.
+
+## SDK persistence setup receipt correction (2026-09-27)
+
+The Intel Mac native SDK run exposed a stale fixture assumption: authenticated
+admission metadata now has its own tracked delivery receipt, which can follow
+the warmup text ACK. Subscribe before admission and observe both setup IDs before
+disconnecting the receiver. Only these known IDs may recur; the subsequently
+admitted offline message still requires its own authenticated ACK after reopen.
+Production code is unchanged. Linux runtime: 31 pass / 0 fail / 1 existing
+namespace exclusion; strict all-feature/all-target runtime Clippy passes. A
+late known setup receipt passes and a new premature delivery event fails the
+intended assertion. Original Intel failure and initial correction compile error
+are retained. See docs/evidence/runtime-admission-ack-fixture-20260927/summary.json.

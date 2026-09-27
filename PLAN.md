@@ -459,3 +459,16 @@ The client can verify a stale inbox descriptor with a message-free, authenticate
 ## Bounded release qualification (2026-09-25)
 
 Owner-approved: replace the release-blocking 1 GiB campaign with a 16 MiB interrupted-transfer/hash/reopen check, 180-second completion and 600-second overall ceiling. Preserve both failed large-file attempts; capacity qualification runs separately. Authentication, persistence, signatures and rollback remain required. Implementation and cluster validation are tracked in GChat `target/release-automation-20260925/`; no new installed or fleet qualification is inferred.
+
+## SDK persistence setup receipt correction (2026-09-27)
+
+The Intel Mac native SDK run exposed a stale fixture assumption: authenticated
+admission metadata now has its own tracked delivery receipt, which can follow
+the warmup text ACK. Subscribe before admission and observe both setup IDs before
+disconnecting the receiver. Only these known IDs may recur; the subsequently
+admitted offline message still requires its own authenticated ACK after reopen.
+Production code is unchanged. Linux runtime: 31 pass / 0 fail / 1 existing
+namespace exclusion; strict all-feature/all-target runtime Clippy passes. A
+late known setup receipt passes and a new premature delivery event fails the
+intended assertion. Original Intel failure and initial correction compile error
+are retained. See docs/evidence/runtime-admission-ack-fixture-20260927/summary.json.

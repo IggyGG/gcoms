@@ -1,0 +1,44 @@
+{
+  "schema": 1,
+  "scope": "SDK persistence fixture setup and early-delivery observation; production bytes unchanged",
+  "base_commit": "967dba29fc3d3cb2c78ead7dfb0092552bf42324",
+  "changed_source_files": [
+    "crates/runtime/src/runtime/persistence_tests.rs"
+  ],
+  "test_sha256": "b711d97163eff7b29c74691bf383275b012f1eca4c9214c9ef38351acadeaf1e",
+  "source_files_checked": 772,
+  "source_unchanged_during_checks": true,
+  "runtime_tests": {
+    "passed": 31,
+    "failed": 0,
+    "ignored": 1,
+    "ignored_scope": "existing disconnected namespace test"
+  },
+  "strict_all_features_all_targets_runtime_clippy": "passed",
+  "controls": [
+    {
+      "name": "late-bootstrap",
+      "exit_code": 0,
+      "seconds": 29.769749992527068,
+      "test_sha256": "4800fcdd65e79af849a9b86d77dcdee50722bc92cc3675413332fbef4816ade1",
+      "log_sha256": "3617b54123fb367a9357b2e53c90935f178d10f015d571de10ddf36affd2764b"
+    },
+    {
+      "name": "premature-delivery",
+      "exit_code": 101,
+      "seconds": 18.798512858338654,
+      "test_sha256": "1c77391b24e45349c57c78fd95233d185440dce2d3614d30871347dbd3d9d1f0",
+      "log_sha256": "0e01693f9b5be6b23f5fbaa1c181fbf3f0db0184697bc25f5659360464a4bc4c"
+    }
+  ],
+  "original_intel_sdk_failure": {
+    "run": 36339403578,
+    "job": 108676399119,
+    "log_sha256": "7ddcf62b719623eb00d2a73811cd39ba9ce7fcc804dc7386d15a18aca2335304",
+    "retained": true
+  },
+  "initial_correction_compile_failure": "MessageId is not Hash; corrected test tracks its existing public 16-byte identifier. Original failed receipt retained.",
+  "evidence_archive_sha256": "b7bcc187535f56e4c7bf4d4aa219c2ca7192d302e3ce23b0724fc23d5c623c53",
+  "codematch": "unreachable",
+  "qualification_limits": "Linux affected-runtime validation only. No relabeling of previous SDK native/platform results; no new installed artifact claim."
+}

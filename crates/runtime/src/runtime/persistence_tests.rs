@@ -54,6 +54,9 @@ async fn channel_text_admission_reopen(boundary: AdmissionBoundary) {
         .unwrap();
     let join = b.prepare_channel_join("receiver").await.unwrap();
     let package = b.channel_key_package(join).await.unwrap();
+    // Subscribe before admission: the authenticated metadata bootstrap is also
+    // a tracked outbox item, and its ACK can arrive after the warmup ACK.
+    let mut sent = a.subscribe_events();
     let welcome = a
         .admit_channel("offline-hop", &package, "receiver")
         .await
@@ -61,24 +64,28 @@ async fn channel_text_admission_reopen(boundary: AdmissionBoundary) {
     b.join_channel(join, "offline-hop", ChannelVisibility::Private, &welcome)
         .await
         .unwrap();
-    let mut sent = a.subscribe_events();
     let mut received = b.subscribe_events();
     let warm_id = a
         .send_channel_tracked("offline-hop", b"before disconnect")
         .await
         .unwrap();
-    tokio::time::timeout(Duration::from_secs(30), async {
+    let delivered_before_disconnect = tokio::time::timeout(Duration::from_secs(30), async {
         loop {
             if matches!(received.recv().await.unwrap(), ClientEvent::ChannelMessage { message_id, .. } if message_id == warm_id) {
                 break;
             }
         }
-        loop {
-            if matches!(sent.recv().await.unwrap(), ClientEvent::ChannelDelivered { message_id, .. } if message_id == warm_id) {
-                break;
+        let mut delivered = std::collections::HashSet::new();
+        while delivered.len() < 2 || !delivered.contains(&warm_id.0) {
+            match sent.recv().await.expect("sender stream remains open during warmup") {
+                ClientEvent::ChannelDelivered { message_id, .. } => { delivered.insert(message_id.0); }
+                ClientEvent::EventsLagged { .. } => panic!("sender warmup observation lost events"),
+                _ => {}
             }
         }
-    }).await.expect("membership routes and authenticated warmup ACK");
+        assert_eq!(delivered.len(), 2, "only bootstrap metadata and warmup were sent");
+        delivered
+    }).await.expect("authenticated bootstrap and warmup ACKs before receiver disconnect");
     drop(b);
     drop(received);
     receiver.shutdown().await.unwrap();
@@ -93,14 +100,14 @@ async fn channel_text_admission_reopen(boundary: AdmissionBoundary) {
             .await
             .expect("bounded initial attempt")
             .expect("durable local acceptance and successful wrapper save");
-        // The untracked API returns no ID. Warmup is the only prior send, so
-        // any other delivery notification while the receiver is offline is
-        // premature; consume the queue now, before reopening either profile.
+        // The untracked API returns no ID. Only the two exact IDs confirmed
+        // before disconnect may recur. A new delivery while the receiver is
+        // offline is premature; observe it before reopening either profile.
         let blocked: Result<(), _> = tokio::time::timeout(Duration::from_millis(400), async {
             loop {
                 match sent.recv().await.expect("sender event stream remains open") {
-                    ClientEvent::ChannelDelivered { message_id, .. } => assert_eq!(
-                        message_id, warm_id,
+                    ClientEvent::ChannelDelivered { message_id, .. } => assert!(
+                        delivered_before_disconnect.contains(&message_id.0),
                         "sender claimed delivery while receiver was offline"
                     ),
                     ClientEvent::EventsLagged { .. } => panic!("sender observation lost events"),
@@ -138,7 +145,7 @@ async fn channel_text_admission_reopen(boundary: AdmissionBoundary) {
         );
         while let Ok(event) = sent.try_recv() {
             assert!(
-                !matches!(event, ClientEvent::ChannelDelivered { message_id, .. } if message_id != warm_id)
+                !matches!(event, ClientEvent::ChannelDelivered { message_id, .. } if !delivered_before_disconnect.contains(&message_id.0))
             );
         }
 
@@ -234,7 +241,10 @@ async fn channel_text_admission_reopen(boundary: AdmissionBoundary) {
     })
     .await
     .expect("retained wire retries after both profiles reopen");
-    assert_ne!(id, warm_id);
+    assert!(
+        !delivered_before_disconnect.contains(&id.0),
+        "reopened message must be distinct from both authenticated setup messages"
+    );
     tokio::time::timeout(Duration::from_secs(30), async {
         loop {
             if matches!(sent.recv().await.unwrap(), ClientEvent::ChannelDelivered { message_id, .. } if message_id == id) {
