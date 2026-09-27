@@ -45,3 +45,27 @@ c20ecaf426798a30ebbf66969f02759be34857bd:docs/evidence/responsive-carrier-202609
 
 # The preceding audit comment repeated those public test counts.
 869d6638b4183abea2d95fde5e1cfd714d841415:.gitleaksignore:generic-api-key:36
+
+# Reviewed source-file digest maps from admission/SDK checks; no credentials.
+# Exact historical findings only, independently matched to hash-only JSON rows.
+f689f583f859709487148cc6f4bf7a76462772df:docs/evidence/invitation-busy-retry-20260927/source-after.json:generic-api-key:162
+f689f583f859709487148cc6f4bf7a76462772df:docs/evidence/invitation-busy-retry-20260927/source-after.json:generic-api-key:180
+f689f583f859709487148cc6f4bf7a76462772df:docs/evidence/invitation-busy-retry-20260927/source-after.json:generic-api-key:482
+f689f583f859709487148cc6f4bf7a76462772df:docs/evidence/invitation-busy-retry-20260927/source-after.json:generic-api-key:744
+f689f583f859709487148cc6f4bf7a76462772df:docs/evidence/invitation-busy-retry-20260927/source-after.json:generic-api-key:973
+f689f583f859709487148cc6f4bf7a76462772df:docs/evidence/invitation-busy-retry-20260927/source-after.json:generic-api-key:994
+f689f583f859709487148cc6f4bf7a76462772df:docs/evidence/invitation-busy-retry-20260927/source-after.json:generic-api-key:1122
+2c108ee20facffae7562ddf4dc54cbf2bc33d7b2:docs/evidence/channel-admission-20260927/tested-sources.json:generic-api-key:162
+2c108ee20facffae7562ddf4dc54cbf2bc33d7b2:docs/evidence/channel-admission-20260927/tested-sources.json:generic-api-key:180
+2c108ee20facffae7562ddf4dc54cbf2bc33d7b2:docs/evidence/channel-admission-20260927/tested-sources.json:generic-api-key:482
+2c108ee20facffae7562ddf4dc54cbf2bc33d7b2:docs/evidence/channel-admission-20260927/tested-sources.json:generic-api-key:735
+2c108ee20facffae7562ddf4dc54cbf2bc33d7b2:docs/evidence/channel-admission-20260927/tested-sources.json:generic-api-key:964
+2c108ee20facffae7562ddf4dc54cbf2bc33d7b2:docs/evidence/channel-admission-20260927/tested-sources.json:generic-api-key:985
+2c108ee20facffae7562ddf4dc54cbf2bc33d7b2:docs/evidence/channel-admission-20260927/tested-sources.json:generic-api-key:1113
+f689f583f859709487148cc6f4bf7a76462772df:docs/evidence/invitation-busy-retry-20260927/tested-source.json:generic-api-key:162
+f689f583f859709487148cc6f4bf7a76462772df:docs/evidence/invitation-busy-retry-20260927/tested-source.json:generic-api-key:180
+f689f583f859709487148cc6f4bf7a76462772df:docs/evidence/invitation-busy-retry-20260927/tested-source.json:generic-api-key:482
+f689f583f859709487148cc6f4bf7a76462772df:docs/evidence/invitation-busy-retry-20260927/tested-source.json:generic-api-key:744
+f689f583f859709487148cc6f4bf7a76462772df:docs/evidence/invitation-busy-retry-20260927/tested-source.json:generic-api-key:973
+f689f583f859709487148cc6f4bf7a76462772df:docs/evidence/invitation-busy-retry-20260927/tested-source.json:generic-api-key:994
+f689f583f859709487148cc6f4bf7a76462772df:docs/evidence/invitation-busy-retry-20260927/tested-source.json:generic-api-key:1122
