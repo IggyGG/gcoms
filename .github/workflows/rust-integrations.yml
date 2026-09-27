@@ -15,6 +15,9 @@ on:
       local_pipe_diagnostic:
         type: boolean
         default: false
+      mac_overlay_diagnostic:
+        type: boolean
+        default: false
   push:
     branches: [main]
     paths:
@@ -29,7 +32,7 @@ permissions:
   contents: read
 jobs:
   native:
-    if: ${{ !inputs.subscription_diagnostic && !inputs.local_pipe_diagnostic }}
+    if: ${{ !inputs.subscription_diagnostic && !inputs.local_pipe_diagnostic && !inputs.mac_overlay_diagnostic }}
     timeout-minutes: 90
     strategy:
       fail-fast: false
@@ -73,7 +76,7 @@ jobs:
           if-no-files-found: error
 
   subscription-diagnostic:
-    if: ${{ inputs.subscription_diagnostic && !inputs.local_pipe_diagnostic }}
+    if: ${{ inputs.subscription_diagnostic && !inputs.local_pipe_diagnostic && !inputs.mac_overlay_diagnostic }}
     strategy:
       fail-fast: false
       matrix:
@@ -129,7 +132,7 @@ jobs:
           if-no-files-found: error
 
   local-pipe-diagnostic:
-    if: ${{ inputs.local_pipe_diagnostic }}
+    if: ${{ inputs.local_pipe_diagnostic && !inputs.mac_overlay_diagnostic }}
     runs-on: windows-2022
     timeout-minutes: 20
     steps:
@@ -157,4 +160,33 @@ jobs:
         with:
           name: local-pipe-${{ github.sha }}
           path: pipe-evidence/
+          if-no-files-found: error
+
+  mac-overlay-diagnostic:
+    if: ${{ inputs.mac_overlay_diagnostic }}
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c
+        with:
+          python-version: '3.12.10'
+      - name: Prepare pinned native worker
+        run: |
+          rustup toolchain install 1.98.0 --profile minimal
+          python3 scripts/prepare-rust-tests.py
+      - name: Compare unchanged overlay with explicit disposable port resources
+        env:
+          CARGO_BUILD_JOBS: '4'
+          CARGO_PROFILE_TEST_DEBUG: '0'
+          CARGO_PROFILE_DEV_DEBUG: '0'
+          CARGO_INCREMENTAL: '0'
+        run: python3 scripts/check-mac-overlay-resources.py --output overlay-evidence
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: mac-overlay-${{ github.sha }}
+          path: overlay-evidence/
           if-no-files-found: error
