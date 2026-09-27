@@ -1,0 +1,42 @@
+{
+  "passed": true,
+  "results": [
+    {
+      "name": "no-retry-control",
+      "command": [
+        "cargo",
+        "test",
+        "--offline",
+        "--locked",
+        "-p",
+        "gcoms-sdk",
+        "--all-features",
+        "--lib",
+        "known_busy_refusals_retry_within_the_original_budget",
+        "--",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "exit_code": 101,
+      "expected_exit": 101,
+      "log_sha256": "4479a3401c5894a053fd1e6eb70e59e6359110b9d97695009c89b3cad2a6bbe6"
+    },
+    {
+      "name": "outbound-sdk",
+      "command": [
+        "cargo",
+        "check",
+        "--offline",
+        "--locked",
+        "-p",
+        "gcoms-sdk",
+        "--no-default-features",
+        "--features",
+        "in-process"
+      ],
+      "exit_code": 0,
+      "expected_exit": 0,
+      "log_sha256": "8b3d2d39b5457c04904a744d93aeec1579d85a5ce243e78f1ffa85eae1d40ade"
+    }
+  ]
+}

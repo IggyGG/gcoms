@@ -1,3 +1,7 @@
+## Known invitation refusals (2026-09-27)
+
+R04: the shared in-process SDK retries only the two authenticated pre-admission busy refusals, retaining the prepared identity, invitation and original absolute deadline. Other errors and ambiguous outcomes are not repeated. SDK 67 cases, paired GChat core 45 cases, strict SDK Clippy and outbound-only compilation pass. Five actual clients joined and all 20 cross-client messages received authenticated ACKs. The separate 16 MiB recovery test failed its unchanged 180-second completion bound; this is not release or Android qualification. [Evidence](docs/evidence/invitation-busy-retry-20260927/summary.json).
+
 ## Admission and bootstrap ordering (2026-09-27)
 
 R04: prevent a new MLS admission from overtaking retained channel wires or an unfinished newcomer bootstrap. Keep exact Welcome replay and existing bounded invitation retries. A per-channel transient finalizer guard spans directory publication and bootstrap persistence; an always-present durable bootstrap snapshot remains gated by the newcomer's authenticated ACK. Source checks pass: 355 node, nine invitation integrations and strict Clippy. Final actual Android delivery remains a separate gate.

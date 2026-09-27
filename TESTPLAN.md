@@ -1,3 +1,7 @@
+## Bounded invitation retry (2026-09-27)
+
+Require known busy refusals followed by success with the same prepared request, no retry for rejection/expiry/ambiguous failures, and the original deadline capping backoff and the waiting future. Removing retry must fail the success regression. Run all SDK tests, strict Clippy, outbound-only compilation and the real GChat consumer. Preserve the five-client message pass separately from the failed file deadline; dropping a helper future is not scheduler cancellation proof. [Evidence](docs/evidence/invitation-busy-retry-20260927/summary.json).
+
 ## Admission and bootstrap ordering (2026-09-27)
 
 Require three negative controls: retained wire versus new epoch; empty metadata bootstrap receipt; concurrent finalization before directory publication. Verify exact ciphertext/ID through checkpoint, unchanged invitation on refusal, authenticated ACK release, replay and transient guard release. Cold-route fixtures must settle the initial bootstrap ACK before beginning the original blocked-route scenario. Full source-bound checks and prior failures are retained.

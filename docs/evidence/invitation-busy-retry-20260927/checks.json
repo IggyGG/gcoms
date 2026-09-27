@@ -1,0 +1,85 @@
+{
+  "passed": true,
+  "results": [
+    {
+      "name": "sdk",
+      "command": [
+        "cargo",
+        "test",
+        "--offline",
+        "--locked",
+        "-p",
+        "gcoms-sdk",
+        "--all-features",
+        "--",
+        "--test-threads=2"
+      ],
+      "exit_code": 0,
+      "log_sha256": "186827c0156561a709d39b0b8edd5fce4637c548d571eafbdf9fcdf00e119364"
+    },
+    {
+      "name": "sdk-clippy",
+      "command": [
+        "cargo",
+        "clippy",
+        "--offline",
+        "--locked",
+        "-p",
+        "gcoms-sdk",
+        "--all-features",
+        "--all-targets",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "exit_code": 0,
+      "log_sha256": "19287426a1403f43cd447745e6de6613a35f0bbc1c92d2f2111cfba2cc2dbcd9"
+    },
+    {
+      "name": "core",
+      "command": [
+        "cargo",
+        "test",
+        "--offline",
+        "--config",
+        "/work/release-repro-20260927/admission-barrier/checks-sdk-retry/paired.toml",
+        "-p",
+        "gchat-core",
+        "--features",
+        "gc2-carrier",
+        "--lib",
+        "--",
+        "--test-threads=2"
+      ],
+      "exit_code": 0,
+      "log_sha256": "106952a389b327d4e1c36b5852b263d0fa28bd16cc0bc771e2a2a75d1d307e15"
+    },
+    {
+      "name": "sender",
+      "command": [
+        "cargo",
+        "build",
+        "--offline",
+        "--config",
+        "/work/release-repro-20260927/admission-barrier/checks-sdk-retry/paired.toml",
+        "-p",
+        "gchat-tui",
+        "--bin",
+        "gchat",
+        "--features",
+        "gc2-carrier"
+      ],
+      "exit_code": 0,
+      "log_sha256": "2c1ea3f67f50826e544b00e33825a8dcdfc9c25dd782ea9cdf5cccebab434a6c"
+    }
+  ],
+  "binary": {
+    "sha256": "d53c6072598a8f264f13410f4aa7533f3d3dd2a1f485f7627f12787185e0a60c",
+    "size": 103755640,
+    "profile": "dev, debug info disabled; not signed release"
+  },
+  "source_changes": {
+    "gcoms": [],
+    "gchat": []
+  }
+}

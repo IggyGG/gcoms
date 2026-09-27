@@ -1,0 +1,85 @@
+warning: patch `gcoms-addon-example v0.1.0 (/work/release-repro-20260927/admission-barrier/sdk-retry/gcoms/examples/typed-addon)` was not used in the crate graph
+warning: patch `gcoms-catalog v0.1.0 (/work/release-repro-20260927/admission-barrier/sdk-retry/gcoms/crates/catalog)` was not used in the crate graph
+warning: patch `gcoms-conformance v0.1.0 (/work/release-repro-20260927/admission-barrier/sdk-retry/gcoms/crates/conformance)` was not used in the crate graph
+warning: patch `gcoms-fuzz v0.1.0 (/work/release-repro-20260927/admission-barrier/sdk-retry/gcoms/crates/fuzz)` was not used in the crate graph
+warning: patch `gcoms-renamed-dependency-check v0.1.0 (/work/release-repro-20260927/admission-barrier/sdk-retry/gcoms/examples/renamed-dependency)` was not used in the crate graph
+warning: patch `gcoms-sim v0.1.0 (/work/release-repro-20260927/admission-barrier/sdk-retry/gcoms/crates/sim)` was not used in the crate graph
+help: Check that the patched package version and available features are compatible
+      with the dependency requirements. If the patch has a different version from
+      what is locked in the Cargo.lock file, run `cargo update` to use the new
+      version. This may also occur with an optional dependency that is not enabled.
+   Compiling gcoms-core v0.1.0 (/work/release-repro-20260927/admission-barrier/sdk-retry/gcoms/crates/core)
+   Compiling gcoms-crypto v0.1.0 (/work/release-repro-20260927/admission-barrier/sdk-retry/gcoms/crates/crypto)
+   Compiling gcoms-private-fs v0.1.0 (/work/release-repro-20260927/admission-barrier/sdk-retry/gcoms/crates/private-fs)
+   Compiling gcoms-gossip v0.1.0 (/work/release-repro-20260927/admission-barrier/sdk-retry/gcoms/crates/gossip)
+   Compiling gcoms-rpc-macros v0.1.0 (/work/release-repro-20260927/admission-barrier/sdk-retry/gcoms/crates/rpc-macros)
+   Compiling gcoms-rpc-contract v0.1.0 (/work/release-repro-20260927/admission-barrier/sdk-retry/gcoms/crates/rpc-contract)
+   Compiling gcoms-transport v0.1.0 (/work/release-repro-20260927/admission-barrier/sdk-retry/gcoms/crates/transport)
+   Compiling gcoms-file-transfer v0.1.0 (/work/release-repro-20260927/admission-barrier/sdk-retry/gcoms/crates/file-transfer)
+   Compiling gcoms-routing v0.1.0 (/work/release-repro-20260927/admission-barrier/sdk-retry/gcoms/crates/routing)
+   Compiling gcoms-network v0.1.0 (/work/release-repro-20260927/admission-barrier/sdk-retry/gcoms/crates/network)
+   Compiling gcoms-mls v0.1.0 (/work/release-repro-20260927/admission-barrier/sdk-retry/gcoms/crates/mls)
+   Compiling gcoms-protocol v0.1.0 (/work/release-repro-20260927/admission-barrier/sdk-retry/gcoms/crates/protocol)
+   Compiling gcoms-network-client v0.1.0 (/work/release-repro-20260927/admission-barrier/sdk-retry/gcoms/crates/network-client)
+   Compiling gcoms-node v0.1.0 (/work/release-repro-20260927/admission-barrier/sdk-retry/gcoms/crates/node)
+   Compiling gcoms-sdk v0.1.0 (/work/release-repro-20260927/admission-barrier/sdk-retry/gcoms/crates/sdk)
+   Compiling gcoms-runtime v0.1.0 (/work/release-repro-20260927/admission-barrier/sdk-retry/gcoms/crates/runtime)
+   Compiling gcoms-rpc v0.1.0 (/work/release-repro-20260927/admission-barrier/sdk-retry/gcoms/crates/rpc)
+   Compiling gcoms v0.1.0 (/work/release-repro-20260927/admission-barrier/sdk-retry/gcoms/crates/application)
+   Compiling gchat-api v0.1.0 (/work/release-repro-20260927/admission-barrier/sdk-retry/gchat/crates/chat-api)
+   Compiling gchat-core v0.1.0 (/work/release-repro-20260927/admission-barrier/sdk-retry/gchat/crates/core)
+    Finished `test` profile [unoptimized] target(s) in 48.33s
+     Running unittests src/lib.rs (/work/target/debug/deps/gchat_core-3b2ef9ab86797b43)
+
+running 48 tests
+test chat_service::files::observation_tests::unchanged_files_need_no_candidate_and_failed_save_can_retry ... ok
+test chat_service::host::mobile_tests::desktop_default_still_uses_the_existing_embedded_attachment ... ok
+test chat_service::host::mobile_tests::outbound_host_cannot_launch_an_external_daemon ... ok
+test chat_service::host::mobile_tests::outbound_host_refuses_listener_configuration_before_creating_profile ... ok
+test chat_service::host::retained_scope_tests::personal_host_refuses_retained_machine_before_archive_or_ipc ... ok
+test chat_service::host_updates::tests::maintenance_owner_lease_and_prepared_exit_are_enforced ... ok
+test chat_service::networks::journey::combined_invitation_joins_another_network_and_retains_chat_and_file ... ignored, requires scripts/test-bootstrap-namespace.py; no external network
+test chat_service::networks::tests::joined_network_registry_is_private_isolated_and_reopens ... ignored, requires the disconnected namespace helper; creates independent protected runtimes
+test chat_service::responsiveness_tests::cached_snapshot_observes_local_send_and_cancelled_wait_does_not_consume_changes ... ok
+test chat_service::responsiveness_tests::idle_cpu_large_history_measurement ... ignored, three 60-second CPU samples; run separately from functional tests
+test chat_service::host::mobile_tests::outbound_host_reopens_encrypted_profile_and_files_without_local_endpoints ... ok
+test chat_service::responsiveness_tests::idle_windows_share_projection_and_lock_wakes_every_waiter ... ok
+test chat_service::responsiveness_tests::local_unlock_does_not_wait_for_background_restoration ... ok
+test chat_service::responsiveness_tests::ordinary_send_can_progress_beside_another_send_and_retains_correlation ... ok
+test chat_service::responsiveness_tests::reconnect_command_keeps_codes_out_of_recall_and_requires_channel_context ... ok
+test chat_service::responsiveness_tests::message_metadata_preserves_old_archive_layout_and_survives_sidecar_reopen ... ok
+test chat_service::update_gate::tests::admission_outlives_request_until_durable_completion ... ok
+test chat_service::update_gate::tests::outstanding_request_is_not_cancelled_by_preparation ... ok
+test client::catalog_tests::catalog_rejects_repeated_and_oversized_cursors_and_http_in_production ... ok
+test chat_service::responsiveness_tests::updater_waits_for_real_mutation_and_refuses_failed_archive_checkpoint ... ok
+test client::presence_view_tests::activity_is_opt_in_expires_and_is_cleared_on_disable ... ok
+test contact::tests::add_get_remove ... ok
+test conversation::tests::channel_lifecycle ... ok
+test conversation::tests::direct_created_lazily_and_dedups_by_id ... ok
+test model::tests::home_uses_latest_own_write_then_visible_fallback_and_typed_ties ... ok
+test model::tests::member_pm_precedes_speech_then_inactive_ties_are_stable ... ok
+test model::tests::public_bucket_is_conservative_and_names_do_not_form_keys ... ok
+test paths::tests::ensure_private_dir_creates_0700_and_rejects_shared ... ok
+test paths::tests::home_override ... ok
+test paths::tests::macos_and_windows_layouts ... ok
+test paths::tests::no_runtime_dir_falls_back_to_data_dir ... ok
+test paths::tests::remediation_message_names_the_fix ... ok
+test paths::tests::xdg_defaults ... ok
+test store::tests::archive_is_distinct_and_roundtrips ... ok
+test store::tests::corrupted_store_rejected ... ok
+test client::catalog_tests::fake_catalogs_cover_pages_signatures_cache_publication_and_join ... ok
+test store::tests::create_makes_missing_parent_directories ... ok
+test store::tests::create_refuses_clobber ... ok
+test store::tests::create_open_roundtrip ... ok
+test store::tests::new_store_and_parent_are_private ... ok
+test store::tests::profile_lock_rejects_a_second_writer ... ok
+test store::tests::legacy_store_and_archive_migrate_into_nested_legacy_data ... ok
+test store::tests::profile_save_counts_only_successful_replacements_as_committed ... ok
+test store::tests::protocol_profile_contains_no_chat_archive ... ok
+test store::tests::wrong_passphrase_rejected ... ok
+test store::tests::store_kind_detects_all_magics ... ok
+test transcript::tests::tamper_and_shared_channel_policy_are_rejected ... ok
+test transcript::tests::append_rotation_and_identity_binding_roundtrip ... ok
+
+test result: ok. 45 passed; 0 failed; 3 ignored; 0 measured; 0 filtered out; finished in 97.34s
+

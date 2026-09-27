@@ -1,0 +1,19 @@
+   Compiling gcoms-sdk v0.1.0 (/work/release-repro-20260927/admission-barrier/sdk-no-retry-control/gcoms/crates/sdk)
+    Finished `test` profile [unoptimized] target(s) in 6.37s
+     Running unittests src/lib.rs (/work/target/debug/deps/gcoms_sdk-98fc459604669925)
+
+running 1 test
+test embedded::invitation_retry_tests::known_busy_refusals_retry_within_the_original_budget ... 
+thread 'embedded::invitation_retry_tests::known_busy_refusals_retry_within_the_original_budget' (6786) panicked at crates/sdk/src/embedded.rs:41:10:
+called `Result::unwrap()` on an `Err` value: "membership change still awaiting acknowledgements"
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+FAILED
+
+failures:
+
+failures:
+    embedded::invitation_retry_tests::known_busy_refusals_retry_within_the_original_budget
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 54 filtered out; finished in 0.00s
+
+error: test failed, to rerun pass `-p gcoms-sdk --lib`

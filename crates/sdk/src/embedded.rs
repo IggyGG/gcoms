@@ -9,6 +9,131 @@ use gcoms_node::node::{Ev, NodeHandle};
 use gcoms_node::proto::{b64_info, info_from_b64};
 use tokio::sync::{broadcast, mpsc};
 
+async fn retry_busy_invitation<T, F, Fut>(
+    deadline: tokio::time::Instant,
+    mut attempt: F,
+) -> Result<T, String>
+where
+    F: FnMut(u64) -> Fut,
+    Fut: std::future::Future<Output = Result<T, String>>,
+{
+    loop {
+        let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
+        if remaining.is_zero() {
+            return Err("invite join deadline elapsed".into());
+        }
+        // The outer absolute timeout retains the fractional second; the lower
+        // node API accepts integer seconds and cannot extend this operation.
+        let result = tokio::time::timeout_at(deadline, attempt(remaining.as_secs().max(1)))
+            .await
+            .map_err(|_| "invite join deadline elapsed".to_string())?;
+        match result {
+            Err(error)
+                if error == "membership change still awaiting acknowledgements"
+                    || error == "channel messages still awaiting acknowledgements" =>
+            {
+                tokio::time::sleep_until(std::cmp::min(
+                    deadline,
+                    tokio::time::Instant::now() + std::time::Duration::from_millis(250),
+                ))
+                .await;
+            }
+            other => return other,
+        }
+    }
+}
+
+#[cfg(test)]
+mod invitation_retry_tests {
+    use super::retry_busy_invitation;
+    use std::{cell::Cell, time::Duration};
+    use tokio::time::Instant;
+
+    #[tokio::test]
+    async fn known_busy_refusals_retry_within_the_original_budget() {
+        let count = Cell::new(0);
+        let start = Instant::now();
+        let result = retry_busy_invitation(start + Duration::from_secs(2), |remaining| {
+            assert!((1..=2).contains(&remaining));
+            count.set(count.get() + 1);
+            let n = count.get();
+            async move {
+                match n {
+                    1 => Err("membership change still awaiting acknowledgements".into()),
+                    2 => Err("channel messages still awaiting acknowledgements".into()),
+                    _ => Ok(b"authenticated Welcome".to_vec()),
+                }
+            }
+        })
+        .await
+        .unwrap();
+        assert_eq!(result, b"authenticated Welcome");
+        assert_eq!(count.get(), 3);
+        assert!(start.elapsed() >= Duration::from_millis(500));
+        assert!(start.elapsed() < Duration::from_secs(2));
+    }
+
+    #[tokio::test]
+    async fn rejection_and_unknown_outcomes_are_not_repeated() {
+        for error in [
+            "invite already used",
+            "invite expired",
+            "invite not found",
+            "timed out waiting for the owner (they may be offline)",
+            "invite redemption cancelled",
+            "membership change still awaiting acknowledgements extra",
+        ] {
+            let count = Cell::new(0);
+            let result: Result<(), String> =
+                retry_busy_invitation(Instant::now() + Duration::from_secs(2), |_| {
+                    count.set(count.get() + 1);
+                    async { Err(error.into()) }
+                })
+                .await;
+            assert_eq!(result.unwrap_err(), error);
+            assert_eq!(count.get(), 1);
+        }
+    }
+
+    #[tokio::test]
+    async fn original_deadline_caps_busy_wait_and_cancels_a_stalled_attempt() {
+        let count = Cell::new(0);
+        let result: Result<(), String> =
+            retry_busy_invitation(Instant::now() + Duration::from_millis(30), |_| {
+                count.set(count.get() + 1);
+                async { Err("channel messages still awaiting acknowledgements".into()) }
+            })
+            .await;
+        assert_eq!(result.unwrap_err(), "invite join deadline elapsed");
+        assert_eq!(
+            count.get(),
+            1,
+            "do not hammer the owner after its busy response"
+        );
+        let dropped = Cell::new(false);
+        struct DropWitness<'a>(&'a Cell<bool>);
+        impl Drop for DropWitness<'_> {
+            fn drop(&mut self) {
+                self.0.set(true);
+            }
+        }
+        let result: Result<(), String> =
+            retry_busy_invitation(Instant::now() + Duration::from_millis(30), |_| {
+                let witness = DropWitness(&dropped);
+                async move {
+                    let _witness = witness;
+                    std::future::pending().await
+                }
+            })
+            .await;
+        assert_eq!(result.unwrap_err(), "invite join deadline elapsed");
+        assert!(
+            dropped.get(),
+            "no detached retry survives the original deadline"
+        );
+    }
+}
+
 async fn forward_events(mut source: broadcast::Receiver<Ev>, sender: mpsc::Sender<ClientEvent>) {
     loop {
         let received = tokio::select! {
@@ -158,20 +283,21 @@ impl GcClient for EmbeddedClient {
             self.node.wait_for_inbox(deadline).await?;
             let request = self.node.prepare_channel_join(display).await?;
             let package = self.node.channel_key_package(request).await?;
-            let welcome = self
-                .node
-                .redeem_invite_remote(
-                    invite.owner,
+            // Retry only an authenticated, explicit pre-admission refusal.
+            // Keep the same prepared MLS identity/package and original deadline;
+            // a lost reply or any other ambiguous outcome is never resubmitted.
+            let welcome = retry_busy_invitation(deadline, |remaining| {
+                self.node.redeem_invite_remote(
+                    invite.owner.clone(),
                     &invite.channel,
                     display,
                     &package,
                     invite.id,
                     invite.secret,
-                    deadline
-                        .saturating_duration_since(tokio::time::Instant::now())
-                        .as_secs(),
+                    remaining,
                 )
-                .await?;
+            })
+            .await?;
             self.node
                 .join_channel(
                     request,
