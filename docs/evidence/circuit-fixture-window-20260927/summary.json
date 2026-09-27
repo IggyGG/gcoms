@@ -1,0 +1,41 @@
+{
+  "scope": "Test-only fixture setup; no runtime, credential lifetime or source-limit change",
+  "base_commit": "9e9d2e8dd688f262ea5518c263a53db5290105ab",
+  "source_sha256": {
+    "crates/routing/tests/circuits.rs": "c1a125cf64b3530aa90bd426e0a8d1c3df770fd2e25eba11eb4041f2f893823b"
+  },
+  "original_failure": {
+    "run": 36346056698,
+    "fixture_started": "2026-09-27T20:59:54.5269254Z",
+    "failure": "2026-09-27T21:00:00.1436965Z",
+    "error": "no complete distinct relay path is available",
+    "source_deadline": "(epoch + 1) * 3600; directory excludes expired introductions",
+    "evidence_sha256": "c8672673a01a63a6a60ab5e50b285cb06bdeebd42fa16241b55c53863ccfda02"
+  },
+  "change": "Before clients open, wait at most60seconds if fewer than60seconds remain in the current authority epoch; refresh all fixture introductions at the same current wall time. Preserve twelve clients, twenty-four circuits and production source limits.",
+  "validation": {
+    "target": "x86_64-unknown-linux-gnu",
+    "circuits": {
+      "passed": 11,
+      "failed": 0,
+      "ignored": 0
+    },
+    "strict_routing_all_target_all_feature_clippy": true,
+    "fmt": true,
+    "source_unchanged": true,
+    "paths": 776,
+    "evidence_archive_sha256": "4b208a58e7432c0fb66b47edc27e52c9c077440b586992e37188058cf8eb9730",
+    "later_changes": "TESTPLAN and this receipt only"
+  },
+  "retained_setup_failures": [
+    "Mac compiled the fixture but lacked its distinct loopback aliases; no Mac interfaces were changed.",
+    "Cluster default Python lacked tarfile extraction filtering; rerun used existing pinned Python3.12 before source extraction."
+  ],
+  "mac_setup_evidence_sha256": "fc3295bd6a73e4ab12fe77717e36ac4c9e46f919276fc461053515331618cd8f",
+  "codematch": "unreachable",
+  "not_claimed": [
+    "forced real-hour rollover run",
+    "new full native source-pair qualification",
+    "installed or fleet qualification"
+  ]
+}

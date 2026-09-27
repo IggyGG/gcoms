@@ -426,3 +426,12 @@ barrier, all original first-hop and recipient-delivery assertions, and their
 existing deadlines. This is a correctness setup budget, not a passing join-latency
 claim. Original Windows/Mac failures remain failed; Windows and complete platform
 CI must qualify the new source separately. No production runtime change.
+## Circuit fixture credential window
+
+The retained twelve-client/source-limit fixture must start with at least sixty
+seconds left in its real authenticated credential epoch. Near the hourly boundary,
+wait for the next epoch and install freshly issued introductions before opening
+clients. Keep production expiry, source limits, the twelve retained connections
+and the twenty-four circuit assertion unchanged. Run the complete routing
+`circuits` integration target and strict all-target/all-feature routing Clippy.
+The original 2026-09-27 21:00 UTC expiry-boundary failure remains retained.
