@@ -28,7 +28,17 @@ async fn admit(
 ) -> Result<(), String> {
     let req = member.prepare_channel_join(name).await.expect("prepare");
     let kp = member.channel_key_package(req).await.expect("kp");
-    let welcome = admission::welcome(owner, channel, &kp, name).await?;
+    // This fixture co-locates 24 complete nodes. Its setup is a correctness
+    // gate, not the separately measured interactive join-latency requirement.
+    // Keep one prepared package and the normal authenticated ACK barrier.
+    let welcome = admission::welcome_with_timeout(
+        owner,
+        channel,
+        &kp,
+        name,
+        std::time::Duration::from_secs(180),
+    )
+    .await?;
     member
         .join_channel(req, channel, ChannelVisibility::Private, &welcome)
         .await

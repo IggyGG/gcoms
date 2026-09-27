@@ -410,3 +410,19 @@ namespace exclusion; strict all-feature/all-target runtime Clippy passes. A
 late known setup receipt passes and a new premature delivery event fails the
 intended assertion. Original Intel failure and initial correction compile error
 are retained. See docs/evidence/runtime-admission-ack-fixture-20260927/summary.json.
+
+## Native overlay test resources (2026-09-27)
+
+The macOS native CI entrypoint raises its soft file-descriptor limit to 8192,
+without changing the hard limit or installed application limits. Hosting 24 nodes
+in one process exhausted the shell default of 256. The unchanged overlay test
+passed after provisioning sufficient descriptors. The final harness and fixture
+pass the real 24-node delivery test, five resource-helper checks, formatting and
+strict all-target/all-feature Node Clippy. [Scoped evidence](docs/evidence/native-overlay-resources-20260927/summary.json).
+
+Only the 24-node fixture allows 180 seconds for each authenticated admission;
+other fixtures retain 30 seconds. It retains one prepared package, the normal ACK
+barrier, all original first-hop and recipient-delivery assertions, and their
+existing deadlines. This is a correctness setup budget, not a passing join-latency
+claim. Original Windows/Mac failures remain failed; Windows and complete platform
+CI must qualify the new source separately. No production runtime change.

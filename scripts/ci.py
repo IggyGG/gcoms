@@ -2,6 +2,9 @@
 """Native CI gate; runners are disposable and contain the pinned toolchain."""
 import json, os, subprocess, sys
 from pathlib import Path
+from native_limits import prepare
+
+prepare()
 
 NPM = 'npm.cmd' if os.name == 'nt' else 'npm'
 root=Path(__file__).resolve().parents[1]
