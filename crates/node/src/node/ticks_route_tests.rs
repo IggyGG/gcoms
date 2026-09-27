@@ -107,6 +107,14 @@ impl Fixture {
                 };
                 Arc::new(move |path, registered| {
                     let dispatch = handler(path, registered);
+                    if std::env::var_os("GCOMS_SUBSCRIPTION_TEST_METRICS").is_some() {
+                        let outcome = match &dispatch {
+                            Dispatch::Pass => "pass",
+                            Dispatch::Rejected => "rejected",
+                            Dispatch::Accepted(_) => "accepted",
+                        };
+                        eprintln!("fixture relay={index} entry_path={} registered={registered} dispatch={outcome}", path == entry_path);
+                    }
                     if index != 1 || path != entry_path {
                         return dispatch;
                     }
@@ -214,6 +222,12 @@ impl Fixture {
         let store = Arc::new(Mutex::new(store));
         let (observed, attempts) = mpsc::channel(16);
         let handler: DuplexHandler = Arc::new(move |token| {
+            if std::env::var_os("GCOMS_SUBSCRIPTION_TEST_METRICS").is_some() {
+                eprintln!(
+                    "fixture terminal known_path={}",
+                    aliases.contains_key(token)
+                );
+            }
             let alias = aliases.get(token)?.clone();
             let observed = observed.clone();
             let store = store.clone();
