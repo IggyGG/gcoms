@@ -58,7 +58,7 @@ pub(crate) fn prepare_channel_control(
             .collect::<Vec<_>>()
     };
     for (name, member) in leaving {
-        if let Ok(Some(_)) = prepare_channel_removal(state, &name, member, events) {
+        if let Ok(Some(_)) = prepare_channel_removal(state, &name, member, events, true) {
             if let Some(cs) = state
                 .lock()
                 .unwrap_or_else(|p| p.into_inner())
@@ -1517,6 +1517,25 @@ enum StagedAdmission {
     Fresh(gcoms_mls::Admission, tokio::sync::OwnedMutexGuard<()>),
 }
 
+/// An explicit removal revokes that recipient's membership; it does not prove
+/// delivery. Keep its retained outbox unchanged, but do not let only revoked
+/// recipients prevent future epochs. Match authenticated pseudonyms, not names
+/// that a later member may reuse.
+fn has_pending_current_recipients(cs: &crate::channel::ChannelState) -> bool {
+    let current = cs
+        .role
+        .roster_members()
+        .into_iter()
+        .map(|member| member.pseudonym)
+        .collect::<HashSet<_>>();
+    cs.message_outbox.values().any(|pending| {
+        pending
+            .expected
+            .keys()
+            .any(|peer| current.contains(peer) && !pending.acknowledged.contains(peer))
+    })
+}
+
 /// The single lock-held admission decision shared by manual admit and invite
 /// redemption: dedup, role/name/capacity checks, MLS stage+merge, and recording
 /// the `membership_outbox` + `admission_cache`. Runs entirely inside the
@@ -1550,7 +1569,7 @@ fn stage_admission_locked(
     // authenticated ACKs, not merely for the preceding membership commit.
     // Check before staging MLS or consuming a single-use invitation. Cached
     // Welcomes above remain replayable while this delivery barrier is held.
-    if !cs.message_outbox.is_empty() {
+    if has_pending_current_recipients(cs) {
         return Err("channel messages still awaiting acknowledgements".into());
     }
     // Membership ACKs can clear before finalize_admission publishes the
@@ -2314,7 +2333,7 @@ fn prepare_channel_payload(
             if cs.visibility != crate::channel::ChannelVisibility::Private {
                 return Err("Ownership transfer currently requires a private channel".into());
             }
-            if !cs.message_outbox.is_empty() {
+            if has_pending_current_recipients(cs) {
                 return Err(
                     "Wait for pending channel messages before transferring ownership".into(),
                 );
@@ -2595,6 +2614,7 @@ fn prepare_channel_removal(
     channel: &str,
     member_id: [u8; 32],
     events: &broadcast::Sender<Ev>,
+    wait_for_messages: bool,
 ) -> Result<Option<PreparedChannelRemoval>, String> {
     let removal_key = completed_member_removal_key(&member_id);
     let (commit, removed_target) = {
@@ -2610,6 +2630,13 @@ fn prepare_channel_removal(
             }
             if cs.membership_outbox.is_some() {
                 return Err("membership change still awaiting acknowledgements".into());
+            }
+            // A voluntary departure must not advance the epoch while an
+            // admitted message still needs its ACK. In particular, the old
+            // owner must acknowledge the successor's ownership announcement
+            // before leaving. Administrative removal remains explicit.
+            if wait_for_messages && has_pending_current_recipients(cs) {
+                return Err("channel messages still awaiting acknowledgements".into());
             }
             let expected = cs
                 .directory
@@ -2706,7 +2733,7 @@ pub(crate) async fn remove_channel_member(
     events: &broadcast::Sender<Ev>,
 ) -> Result<(), String> {
     let Some((commit, removed_target)) =
-        prepare_channel_removal(state, channel, member_id, events)?
+        prepare_channel_removal(state, channel, member_id, events, false)?
     else {
         return Ok(());
     };
@@ -2746,6 +2773,69 @@ mod membership_wait_tests {
     use std::task::{Context, Poll, Waker};
     use tokio::sync::Notify;
     use tokio::time::{Duration, Instant};
+
+    #[cfg(feature = "client-persist")]
+    #[tokio::test]
+    async fn revoked_recipient_does_not_block_name_reuse_or_become_acknowledged() {
+        use super::{has_pending_current_recipients, stage_admission_locked, StagedAdmission};
+        use crate::node::persist::tests::{established_owner_fixture, owned_channel_route};
+        let name = "removed-recipient-barrier";
+        let mut channel = established_owner_fixture(name);
+        let member = gcoms_mls::ChannelMember::prepare("member").unwrap();
+        let package = gcoms_mls::ChannelMember::key_package_bytes(&member).unwrap();
+        let route = owned_channel_route(
+            83,
+            gcoms_mls::ChannelMember::prepared_pseudonym(&member),
+            [83; 32],
+        );
+        drop(
+            stage_admission_locked(&mut channel, name, &route.public, &package, "member").unwrap(),
+        );
+        channel
+            .directory
+            .insert("member".into(), route.public.clone());
+        let wire = channel
+            .role
+            .send(&crate::channel::encode_text(b"still unconfirmed", false))
+            .unwrap();
+        let id = crate::channel::msg_id(name, &wire);
+        channel.message_outbox.insert(
+            id,
+            crate::channel::ChannelMessageOutbox {
+                wire: wire.clone(),
+                expected: [(route.public.pseudonym, route.public.clone())].into(),
+                acknowledged: Default::default(),
+            },
+        );
+        assert!(has_pending_current_recipients(&channel));
+        // An explicit authenticated removal can revoke an unavailable member.
+        channel.role.stage_remove(route.public.pseudonym).unwrap();
+        channel.role.merge_pending().unwrap();
+        channel.directory.remove("member");
+        assert!(!has_pending_current_recipients(&channel));
+
+        let replacement = gcoms_mls::ChannelMember::prepare("member").unwrap();
+        let package = gcoms_mls::ChannelMember::key_package_bytes(&replacement).unwrap();
+        let new_route = owned_channel_route(
+            84,
+            gcoms_mls::ChannelMember::prepared_pseudonym(&replacement),
+            [84; 32],
+        );
+        assert_ne!(route.public.pseudonym, new_route.public.pseudonym);
+        assert!(matches!(
+            stage_admission_locked(&mut channel, name, &new_route.public, &package, "member"),
+            Ok(StagedAdmission::Fresh(..))
+        ));
+        let pending = &channel.message_outbox[&id];
+        assert_eq!(pending.wire, wire);
+        assert!(pending.expected.contains_key(&route.public.pseudonym));
+        assert!(!pending.expected.contains_key(&new_route.public.pseudonym));
+        assert!(
+            pending.acknowledged.is_empty(),
+            "revocation is not delivery"
+        );
+        assert!(!has_pending_current_recipients(&channel));
+    }
 
     #[cfg(feature = "client-persist")]
     #[tokio::test]

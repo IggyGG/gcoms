@@ -1,3 +1,20 @@
+## Voluntary departure and ownership ACKs (2026-09-27)
+
+The native Mac ownership-transfer case exposed a pending successor announcement
+that could be invalidated by the old owner's removal. It also reproduces on
+Linux with a bounded 20-second diagnostic wait. Keep voluntary departures in the
+current epoch until admitted messages receive their authenticated ACKs. Check
+under the removal lock; preserve explicit administrative removal and durable
+rollback behavior. The unchanged application regression passes with this guard.
+Admission and ownership-transfer barriers consider unacknowledged recipients
+still in the authenticated roster. Explicit revocation does not turn retained
+messages into delivered messages or transfer their ACK identity to a reused
+nickname; it also cannot block every later admission on a departed member.
+Full affected-package checks and a guard-removal negative control are retained
+with the source-bound handoff; no older release receipt qualifies this change.
+
+[Completed source checks and negative controls](docs/evidence/ownership-departure-20260927/summary.json): 357 node-library passes, 12 integrations, strict Clippy and the unchanged GChat ownership case.
+
 ## Private executable fixture on macOS (2026-09-27)
 
 R07: preserve the production owner/mode/link security checks. Set the test file to the current primary group before applying unsafe privilege bits, and assert that chmod actually retained each requested mode. This fixes macOS silently stripping setgid from wheel-owned temporary files. Original fixture failure reproduced on native Mac; all three package cases and strict Clippy pass with /private/tmp. [Evidence](docs/evidence/private-executable-fixture-20260927/summary.json). Full platform release checks remain separate.

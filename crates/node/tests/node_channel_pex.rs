@@ -1,5 +1,8 @@
 //! Actual relay/channel regression: overlay PEX must traverse the same strict
 //! relay MSG ingress as channel commits and messages, without local framing refusal.
+#[path = "support/admission.rs"]
+mod admission;
+
 use gcoms_node::channel::ChannelVisibility;
 use gcoms_node::node::{start, Ev, NodeConfig, NodeProfile};
 use std::time::Duration;
@@ -45,9 +48,7 @@ async fn channel_pex_reaches_real_members_without_non_msg_relay_push() {
         for (member, name) in [(&nodes[1], "member-b"), (&nodes[2], "member-c")] {
             let request = member.prepare_channel_join(name).await?;
             let package = member.channel_key_package(request).await?;
-            let welcome = owner
-                .admit_channel("pex-regression", &package, name)
-                .await?;
+            let welcome = admission::welcome(owner, "pex-regression", &package, name).await?;
             member
                 .join_channel(
                     request,

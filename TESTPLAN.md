@@ -1,3 +1,21 @@
+## Ownership announcement before voluntary departure
+
+Withhold the old owner's authenticated ACK after transferring ownership and
+requesting leave. Require the epoch, original recipient route and exact pending
+announcement to remain unchanged. Deliver the real MLS ACK; require reclamation,
+removal and the successor's retained ownership. Removing the guard must fail the
+epoch assertion. Also run the existing real GChat transfer/leave/new-admission
+case, the complete node library, durable-removal regressions and strict Clippy.
+Sequential and concurrent integration fixtures must retain the same prepared
+package while retrying only known pre-admission busy refusals. Keep their existing
+flood, exact delivery, responsiveness and delayed-Welcome assertions. The delayed
+Welcome now explicitly checks prompt refusal and unchanged epoch before joining.
+Require a removed-recipient/name-reuse regression: pending exact wire and original
+recipient remain retained with no invented ACK, but do not block admission of a
+new pseudonym. Live unacknowledged recipients must continue to hold the barrier.
+
+[Completed source checks and negative controls](docs/evidence/ownership-departure-20260927/summary.json): 357 node-library passes, 12 integrations, strict Clippy and the unchanged GChat ownership case.
+
 ## macOS executable fixture permissions
 
 Run gcoms-private-fs tests and strict Clippy natively with TMPDIR below /private/tmp. Verify requested unsafe modes actually exist, including setuid/setgid, before requiring rejection. Keep writable/public/symlink/hardlink and accepted 0500 checks. Retain original failure; production validation must remain byte-identical. [Evidence](docs/evidence/private-executable-fixture-20260927/summary.json).

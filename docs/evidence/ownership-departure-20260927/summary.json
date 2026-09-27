@@ -1,0 +1,71 @@
+{
+  "schema": 1,
+  "scope": "source-bound voluntary departure ACK ordering and revoked-recipient admission barrier",
+  "base_gcoms": "664fb89e722180ae8f6cf4aa968cab79cc199989",
+  "paired_gchat": "e7a3445c2a9d9ac58cf26796c12f47a351d18ab2",
+  "passed": true,
+  "source_unchanged": true,
+  "counts": {
+    "node_library_passed": 357,
+    "node_library_ignored": 2,
+    "integration_passed": 12,
+    "failed": 0,
+    "gchat_ownership_regression_passed": 1
+  },
+  "strict_all_target_all_feature_node_clippy": true,
+  "changed_runtime_test_sha256": {
+    "crates/node/src/node/channels.rs": "8562f6d64cb6de158d34c70851ce7b7f82519fc699ba6242515a4e869ad2f770",
+    "crates/node/src/node/persist/tracked_send_tests.rs": "f5bef2e9cb6b76a2062ae9877485a03d06c9499d74aad51366f12e38d241a26a",
+    "crates/node/tests/node_bounds.rs": "31ffe9a162e516df8eb83d4371314b4d374f96bec7e4f242150428410c8f29fd",
+    "crates/node/tests/node_channel.rs": "309c3b67147944297e838a3a76f5f5be428aa739f9a458271bfed90b10d92c79",
+    "crates/node/tests/node_channel_pex.rs": "9e85ba9c1449e4bb565b88a31a00cc0a6d04c5e3c45252c4d8b3b589c1709f7b",
+    "crates/node/tests/node_concurrency.rs": "701ea316f566ab958b99bf52671318166bb5c55bbf2bc6994c3b8b6ead0a2be5",
+    "crates/node/tests/node_e2e.rs": "c713afc7da87598b48ade4d89e387d329c790e3be8d399f953bf65d3bc029555",
+    "crates/node/tests/node_overlay.rs": "784b7661ec8c22e14519d5ec07160c2536d53a03ee4902fa23e05cd9e04b69fa",
+    "crates/node/tests/support/admission.rs": "1428bbd194480f1b6b1d41cbdef3c54d8f12572a641d8760b185cfade25c3948"
+  },
+  "negative_controls": [
+    {
+      "name": "departure",
+      "exit_code": 101,
+      "expected_assertion_observed": true,
+      "passed": true,
+      "source_sha256": "98baa8209ac0fa951b692df63f33d950594a40ff7d3ddc73c801bd54ae9ec18b",
+      "log_sha256": "35f078ee4fc48b29e1edba340910700e643cce78af10daf3ba81206f604ba22b"
+    },
+    {
+      "name": "revoked",
+      "exit_code": 101,
+      "expected_assertion_observed": true,
+      "passed": true,
+      "source_sha256": "e6b559e75e8e0beaa5313a3dfb43daf004cddd0552140b61e505c44d69e1af3e",
+      "log_sha256": "92bfc743b3862d1ab8564a9733509a0caaa79a76795db8ff7e5c7b0f3603330c"
+    }
+  ],
+  "evidence": {
+    "retained_archive_sha256": "44f5281d3077ab61c90ccba84e4b1e01329e80ed13368fd57406084b958afe61",
+    "source_before_sha256": "cebaee1eea88788eb90c72e47c64567b2ebf652611c638e3f0c23001d56277dc",
+    "source_after_sha256": "cebaee1eea88788eb90c72e47c64567b2ebf652611c638e3f0c23001d56277dc",
+    "checks_summary_sha256": "e5f210acf945751c2e70a62bcdb8d4cae40b2324b6b2651aba1ef6e54d34379b",
+    "controls_summary_sha256": "106ddee7c1a8f42aad126a144490fb82e74bbb37208c98912494a324683f5d6b",
+    "logs": {
+      "node": "08b7a0194a61ec4e2d2b62959d15a50c84305822839a30301c3f500d52122567",
+      "node-clippy": "f3385223469c6a033c0a2340a6e3b324a4de485b5740a964ca46106867395949",
+      "chat-service": "bbb83eb742fb8b9079458173f2edf64b49e81cfdc804f13dc0ac52f5f63aa140",
+      "windows-release-tests": "fd63e5f5d59b2a252e83354baa8f098399b1d5c7eede0b73ddece945eb01980f"
+    }
+  },
+  "retained_failures": [
+    "Original Mac ownership transfer/leave/admission failure.",
+    "Original Linux reproduction still busy after 20 seconds.",
+    "First regression command selected zero tests; excluded.",
+    "Initial departure-only fix exposed explicit removal/name-reuse barrier failure; corrected with authenticated current-recipient selection."
+  ],
+  "limitations": [
+    "Existing unacknowledged active recipients still block voluntary membership changes.",
+    "Explicit removal does not acknowledge delivery or erase retained outbox.",
+    "Package/install/fleet qualification remains separate.",
+    "Full 22-case GChat chat-service pass belongs to earlier departure-only snapshot; final pair reruns affected ownership case."
+  ],
+  "codematch": "unreachable"
+}

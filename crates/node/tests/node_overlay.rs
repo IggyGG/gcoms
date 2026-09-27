@@ -1,3 +1,6 @@
+#[path = "support/admission.rs"]
+mod admission;
+
 use gcoms_node::channel::ChannelVisibility;
 use gcoms_node::node::{start, Ev, NodeConfig, NodeProfile};
 
@@ -25,7 +28,7 @@ async fn admit(
 ) -> Result<(), String> {
     let req = member.prepare_channel_join(name).await.expect("prepare");
     let kp = member.channel_key_package(req).await.expect("kp");
-    let welcome = owner.admit_channel(channel, &kp, name).await?;
+    let welcome = admission::welcome(owner, channel, &kp, name).await?;
     member
         .join_channel(req, channel, ChannelVisibility::Private, &welcome)
         .await

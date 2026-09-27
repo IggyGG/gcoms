@@ -358,6 +358,80 @@ async fn channel_metadata_successor_retains_authority_for_offline_members() {
 }
 
 #[tokio::test]
+async fn voluntary_owner_departure_waits_for_successor_announcement_ack() {
+    use crate::node::channels::prepare_channel_control;
+    let name = "handoff-ack-before-leave";
+    let (mut node, owner, owner_route) = channel_member_fixture(name);
+    node.durable_state_sink = Some(Arc::new(|_| Ok(())));
+    node.channels
+        .get_mut(name)
+        .unwrap()
+        .directory
+        .insert("owner".into(), owner_route);
+    let successor = node.channels[name].role.own_pseudonym();
+    let mut owner = ChannelRole::Owner(owner);
+    let original = owner.own_pseudonym();
+    let (events, _) = broadcast::channel(16);
+    for change in [
+        crate::channel::ChannelChange::Transfer(successor),
+        crate::channel::ChannelChange::Leave,
+    ] {
+        let mut payload = vec![crate::channel::CHAN_METADATA];
+        payload.extend(crate::channel::metadata::Metadata::prepare(&mut owner, change).unwrap());
+        let wire = owner.send(&payload).unwrap();
+        assert!(deliver_mls(
+            &mut node,
+            name,
+            &wire,
+            std::time::Instant::now(),
+            &events,
+        ));
+    }
+    let epoch = node.channels[name].role.epoch();
+    let (&id, announcement) = node.channels[name].message_outbox.iter().next().unwrap();
+    let wire = announcement.wire.clone();
+    assert!(announcement.expected.contains_key(&original));
+    let state = Arc::new(Mutex::new(node));
+    prepare_channel_control(&state, &events);
+    {
+        let state = state.lock().unwrap();
+        let channel = &state.channels[name];
+        assert_eq!(
+            channel.role.epoch(),
+            epoch,
+            "departure invalidated the pending announcement"
+        );
+        assert_eq!(channel.message_outbox[&id].wire, wire);
+        assert!(channel.directory.values().any(|r| r.pseudonym == original));
+    }
+    let gcoms_mls::ReceiveOutcome::Application { payload, .. } = owner.receive(&wire).unwrap()
+    else {
+        panic!("expected authenticated ownership announcement")
+    };
+    let Some(crate::channel::ChannelInner::Metadata(update)) =
+        crate::channel::decode_inner(&payload)
+    else {
+        panic!("expected ownership metadata")
+    };
+    crate::channel::metadata::Metadata::receive(&mut owner, successor, &update).unwrap();
+    let ack = owner
+        .send(&crate::channel::encode_text_ack(id, false))
+        .unwrap();
+    {
+        let mut state = state.lock().unwrap();
+        deliver_mls(&mut state, name, &ack, std::time::Instant::now(), &events);
+        assert!(state.channels[name].message_outbox.is_empty());
+    }
+    prepare_channel_control(&state, &events);
+    let state = state.lock().unwrap();
+    let channel = &state.channels[name];
+    assert!(channel.role.epoch() > epoch);
+    assert_eq!(channel.role.roster_members().len(), 1);
+    assert_eq!(channel.role.owner(), Some(successor));
+    assert!(!channel.directory.values().any(|r| r.pseudonym == original));
+}
+
+#[tokio::test]
 async fn channel_removal_is_durable_before_archiving_or_route_close() {
     let (mut node, mut owner, _) = channel_member_fixture("leave-checkpoint");
     let member = node.channels["leave-checkpoint"].role.own_pseudonym();

@@ -12,6 +12,9 @@
 //! `node_1to1::restored_direct_session_propagates_fresh_route_without_card_exchange`;
 //! this file is the multi-party liveness complement.
 
+#[path = "support/admission.rs"]
+mod admission;
+
 use gcoms_node::channel::ChannelVisibility;
 use gcoms_node::node::{start, Ev, NodeConfig, NodeHandle, NodeProfile};
 
@@ -32,8 +35,7 @@ async fn spawn(seed: u8) -> NodeHandle {
 async fn admit(owner: &NodeHandle, channel: &str, member: &NodeHandle, name: &str) {
     let req = member.prepare_channel_join(name).await.expect("prepare");
     let kp = member.channel_key_package(req).await.expect("kp");
-    let welcome = owner
-        .admit_channel(channel, &kp, name)
+    let welcome = admission::welcome(owner, channel, &kp, name)
         .await
         .expect("admit");
     member
