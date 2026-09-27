@@ -1,3 +1,13 @@
+## Windows named-pipe authentication ordering
+
+Run the isolated native `local_pipe_diagnostic` workflow before broad release
+builds. Cover a silent connection, canceled accept, disconnected probe, bounded
+silent-peer expiry, a 256 KiB frame with every byte preserved, and reply writes.
+Retain pinned server SID and owner-only ACL tests. The exact old local.rs must
+fail the silent-peer regression; restore and hash every tracked source afterward.
+Then require the actual Windows installed 16 MiB chat/file/reopen journey. Linux
+success or an offline Windows profile lifecycle cannot substitute for that gate.
+
 ## Native external-probe exclusion inventory
 
 Native CI records three additional explicit exclusions: the live deployed-relay

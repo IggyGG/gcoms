@@ -1,3 +1,14 @@
+## Windows named-pipe preface (2026-09-28)
+
+The retained Windows installer reached two connected profiles then its service
+exited with ERROR_CANNOT_IMPERSONATE (1368). The listener checked the client SID
+before reading data. Read one byte with a two-second bound, retain it for the
+unchanged frame parser, then apply the existing current-user impersonation check.
+Drop empty/disconnected probes without exposing them to application handlers.
+Keep SID pins, owner-only ACLs, remote-client rejection and fatal auth failures.
+Unix, wire formats, relay routing and personal profiles remain unchanged.
+Native regression/source/mutation checks must pass before runtime publication.
+
 ## Voluntary departure and ownership ACKs (2026-09-27)
 
 The native Mac ownership-transfer case exposed a pending successor announcement

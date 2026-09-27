@@ -12,6 +12,9 @@ on:
       diagnostic_linux_only:
         type: boolean
         default: false
+      local_pipe_diagnostic:
+        type: boolean
+        default: false
   push:
     branches: [main]
     paths:
@@ -26,7 +29,7 @@ permissions:
   contents: read
 jobs:
   native:
-    if: ${{ !inputs.subscription_diagnostic }}
+    if: ${{ !inputs.subscription_diagnostic && !inputs.local_pipe_diagnostic }}
     timeout-minutes: 90
     strategy:
       fail-fast: false
@@ -70,7 +73,7 @@ jobs:
           if-no-files-found: error
 
   subscription-diagnostic:
-    if: ${{ inputs.subscription_diagnostic }}
+    if: ${{ inputs.subscription_diagnostic && !inputs.local_pipe_diagnostic }}
     strategy:
       fail-fast: false
       matrix:
@@ -123,4 +126,35 @@ jobs:
         with:
           name: protected-subscription-diagnostic-${{ matrix.runner }}-${{ github.sha }}
           path: subscription-evidence/
+          if-no-files-found: error
+
+  local-pipe-diagnostic:
+    if: ${{ inputs.local_pipe_diagnostic }}
+    runs-on: windows-2022
+    timeout-minutes: 20
+    steps:
+      - run: git config --global core.autocrlf false
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c
+        with:
+          python-version: '3.12.10'
+      - name: Prepare pinned native worker
+        run: |
+          rustup toolchain install 1.98.0 --profile minimal --component clippy,rustfmt
+          python scripts/prepare-rust-tests.py
+      - name: Qualify pipe preface and original failure control
+        env:
+          CARGO_BUILD_JOBS: '4'
+          CARGO_PROFILE_TEST_DEBUG: '0'
+          CARGO_PROFILE_DEV_DEBUG: '0'
+          CARGO_INCREMENTAL: '0'
+        run: python scripts/check-local-pipe.py --output pipe-evidence
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: local-pipe-${{ github.sha }}
+          path: pipe-evidence/
           if-no-files-found: error
