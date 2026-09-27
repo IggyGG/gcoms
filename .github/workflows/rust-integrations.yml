@@ -9,6 +9,9 @@ on:
       subscription_diagnostic:
         type: boolean
         default: false
+      diagnostic_linux_only:
+        type: boolean
+        default: false
   push:
     branches: [main]
     paths:
@@ -71,7 +74,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        runner: [ubuntu-24.04, macos-15, macos-15-intel, windows-2022]
+        runner: ${{ fromJSON(inputs.diagnostic_linux_only && '["ubuntu-24.04"]' || '["ubuntu-24.04","macos-15","macos-15-intel","windows-2022"]') }}
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 25
     steps:
@@ -83,7 +86,7 @@ jobs:
       - name: Prepare the existing protected-loopback topology
         shell: bash
         run: |
-          rustup toolchain install 1.98.0 --profile minimal
+          rustup toolchain install 1.98.0 --profile minimal --component clippy
           if [ "$RUNNER_OS" = macOS ]; then
             for host in 102 103 104 105 106 107; do
               sudo ifconfig lo0 alias 127.0.0.$host up
