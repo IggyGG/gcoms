@@ -1,3 +1,17 @@
+## Manual reconnect replay isolation (2026-09-27)
+
+A release regression reproduced a manual reconnect code reusing an already
+authenticated background directory ciphertext. Keep an independent, bounded
+per-channel export cache; commit the MLS send ratchet before returning a code
+and never submit that ciphertext to the background control queue. Preserve
+wire format, recipient authentication, expiry, epoch and exact-import replay
+checks. No checkpoint format change; a restart can mint a fresh code. Cluster
+red/green, 352 node tests (two existing exclusions), 83 GChat core tests
+(three existing exclusions) and both strict affected-package Clippy checks pass.
+[Source-bound evidence](docs/evidence/manual-reconnect-20260927/summary.json)
+retains the original replay failure and harness failures. Source and formatting
+audits pass; codematch was unavailable. Installed/native-platform rollout is separate.
+
 ## Skip redundant responsive cover, 2026-09-25
 
 At a random cover opportunity, sent data on that outgoing interactive channel

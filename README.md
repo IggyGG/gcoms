@@ -198,3 +198,7 @@ Accepted downloads retain verified pieces and resume automatically after restart
 Validation: 51 component tests passed, two existing qualification tests ignored, including an overnight restart at 80% and a send completion delivered while locked. Evidence: `test-evidence/file-resume-20260923/verification.json`. Android live recovery remains pending; these gates do not establish fleet end-to-end acceptance. No new dependencies.
 
 Release file checks use a bounded 16 MiB interrupted transfer; the 1 GiB campaign runs separately. See [reliability requirements](docs/RELIABILITY_RELEASE.md).
+
+Manual channel reconnect codes use separate MLS ciphertext from background
+directory announcements. They are shared out of band, after the send state is
+durably saved; automatic delivery cannot consume a code before it is pasted.

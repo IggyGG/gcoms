@@ -534,6 +534,62 @@ fn reconnect_fixture() -> (NodeState, NodeState) {
 }
 
 #[tokio::test]
+async fn reconnect_export_is_independent_of_already_delivered_directory_wire() {
+    let (mut a, mut b) = reconnect_fixture();
+    let current = a.channels["recovery"].own_route.public.clone();
+    b.channels
+        .get_mut("recovery")
+        .unwrap()
+        .directory
+        .insert("owner".into(), current);
+    let recipient = a.channels["recovery"].directory["member"].clone();
+    let (wire, id) = stage_own_route_announcement(&mut a, "recovery", &recipient).unwrap();
+    let (events, _) = broadcast::channel(32);
+    process_chan_cell(
+        &mut b,
+        "recovery",
+        wire.clone(),
+        std::time::Instant::now(),
+        &events,
+    );
+    assert!(
+        !b.channels["recovery"].commit_ack_cache.contains_key(&id),
+        "an unchanged directory generates no reciprocal traffic"
+    );
+    let code = export_channel_reconnect(&mut a, "recovery").unwrap();
+    let decoded =
+        gcoms_transport::decode_b64url(code.strip_prefix(RECONNECT_PREFIX).unwrap()).unwrap();
+    assert_ne!(&decoded[40..], wire);
+    assert!(
+        !a.channels["recovery"]
+            .pending_control
+            .iter()
+            .any(|(_, pending)| pending == &decoded[40..]),
+        "manual reconnect ciphertext must never race automatic delivery"
+    );
+    import_channel_reconnect(&mut b, "recovery", &code)
+        .expect("a previously delivered directory must not consume the manual reconnect code");
+    import_channel_reconnect(&mut b, "recovery", &code).expect("exact manual retry is idempotent");
+}
+
+#[tokio::test]
+async fn reconnect_export_failure_preserves_ratchet_and_does_not_publish_a_cache() {
+    let (mut a, mut b) = reconnect_fixture();
+    let epoch = a.channels["recovery"].role.epoch();
+    let pending = a.channels["recovery"].pending_control.clone();
+    a.durable_state_sink = Some(Arc::new(|_| Err("export save failed".into())));
+    assert!(export_channel_reconnect(&mut a, "recovery").is_err());
+    assert_eq!(a.channels["recovery"].role.epoch(), epoch);
+    assert!(a.channels["recovery"].reconnect_announcement.is_none());
+    assert_eq!(a.channels["recovery"].pending_control, pending);
+    a.durable_state_sink = Some(Arc::new(|_| Ok(())));
+    let code = export_channel_reconnect(&mut a, "recovery").unwrap();
+    assert_eq!(a.channels["recovery"].pending_control, pending);
+    assert_eq!(export_channel_reconnect(&mut a, "recovery").unwrap(), code);
+    import_channel_reconnect(&mut b, "recovery", &code).unwrap();
+}
+
+#[tokio::test]
 async fn reconnect_code_authenticates_self_route_and_rolls_back_failed_save() {
     let (mut a, mut b) = reconnect_fixture();
     let old = b.channels["recovery"].directory["owner"].clone();

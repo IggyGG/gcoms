@@ -683,6 +683,9 @@ pub struct ChannelState {
     pub pending_control: VecDeque<(ChannelRoute, Vec<u8>)>,
     // Transient dedup only. The exact ciphertext is durably held in pending_control.
     pub(crate) route_announcement: Option<RouteAnnouncement>,
+    // Out-of-band only: never share ciphertext with the automatically sent Dir.
+    // The MLS send ratchet is persisted before exposing this transient cache.
+    pub(crate) reconnect_announcement: Option<RouteAnnouncement>,
     pub admission_cache: HashMap<[u8; 32], CachedAdmission>,
     pub admission_cache_order: VecDeque<[u8; 32]>,
     /// Single-use invite links this owner has minted. Keyed by invite id; the
@@ -920,6 +923,7 @@ impl ChannelState {
             membership_done: Arc::new(tokio::sync::Notify::new()),
             pending_control: VecDeque::new(),
             route_announcement: None,
+            reconnect_announcement: None,
             admission_cache: HashMap::new(),
             admission_cache_order: VecDeque::new(),
             invites: HashMap::new(),

@@ -1,0 +1,152 @@
+{
+  "schema": 1,
+  "scope": "manual reconnect independent ciphertext; affected node/core source validation on cluster",
+  "passed": true,
+  "base_gcoms": "f35969a43390088b402ddde93b6853ea831f81ab",
+  "gchat_test_snapshot": "44bb3ef plus recorded workflow edit; exact file manifest retained",
+  "source_manifest_sha256": "5a4621c37648d4a27695ad74035255a5ffdebcde018fa9e28b7e5a2ecdafe107",
+  "tested_files": {
+    "crates/node/src/channel.rs": "ed4ff5b018fab739e9fb05e5f17de595d43cd4cf6aefc0d1b8acf3a0abb35f39",
+    "crates/node/src/node/channel_recovery.rs": "46f398f69464dc5c19cecadbb5af2d49a819cd93310e026c72f0480179e0f95d",
+    "crates/node/src/node/channel_recovery_unit_tests.rs": "ea1db829300a1705389f9f35251fedf631f8eeca9862d387d9dbccbd862d9fe2"
+  },
+  "results": [
+    {
+      "name": "node",
+      "exit_code": 0,
+      "command": [
+        "cargo",
+        "test",
+        "--offline",
+        "--locked",
+        "-p",
+        "gcoms-node",
+        "--all-features",
+        "--lib",
+        "--",
+        "--test-threads=2"
+      ],
+      "log_sha256": "990f70e1960ab2c1fe45e48777cbcc8f291568d9eb894268241453ce09d2d35b"
+    },
+    {
+      "name": "node-clippy",
+      "exit_code": 0,
+      "command": [
+        "cargo",
+        "clippy",
+        "--offline",
+        "--locked",
+        "-p",
+        "gcoms-node",
+        "--all-features",
+        "--all-targets",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "log_sha256": "821e1b73d86d70b9796f4572fc601e147204d6ed7971880237c1681649391b99"
+    },
+    {
+      "name": "core",
+      "exit_code": 0,
+      "command": [
+        "cargo",
+        "--config",
+        "/work/release-repro-20260927/paired.toml",
+        "test",
+        "--offline",
+        "-p",
+        "gchat-core",
+        "--features",
+        "gc2-carrier",
+        "--",
+        "--test-threads=2"
+      ],
+      "log_sha256": "58099d2084e26f10ec6dcab0c80803cd8b3d3701d71ad72cc59cfc07f4900473"
+    },
+    {
+      "name": "core-clippy",
+      "exit_code": 0,
+      "command": [
+        "cargo",
+        "clippy",
+        "--config",
+        "/work/release-repro-20260927/paired.toml",
+        "--offline",
+        "-p",
+        "gchat-core",
+        "--all-features",
+        "--all-targets",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "log_sha256": "098dc158f296ae6fe8ed38b952d878c3e3176757bb421976f58f396897315ea6"
+    }
+  ],
+  "counts": {
+    "focused": [
+      12,
+      0,
+      0
+    ],
+    "node": [
+      352,
+      0,
+      2
+    ],
+    "gchat_core": [
+      83,
+      0,
+      3
+    ]
+  },
+  "source_changes": {
+    "gcoms": [],
+    "gchat": [
+      "Cargo.lock"
+    ]
+  },
+  "gchat_local_since_snapshot": [
+    "PLAN.md",
+    "README.md"
+  ],
+  "negative_control": {
+    "exit_code": 101,
+    "failure": "reconnect authentication failed after unchanged background directory already authenticated",
+    "log_sha256": "e4a307d2091efc9608af96188902f820863b241d426fbb0d6d2cab36232721f1"
+  },
+  "retained_original_failures": [
+    "missing Clippy component and generated __pycache__ audit noise",
+    "core Clippy configuration flag placement prevented offline dependency resolution"
+  ],
+  "retained_evidence": "gchat target/release-ready-20260927/cluster-evidence and gchat-validation PVC reliability-native-local-20260924 /work/release-repro-20260927",
+  "codematch": "unreachable",
+  "limitations": [
+    "not a native Mac rerun",
+    "not installed-app, mobile or production relay qualification"
+  ],
+  "evidence": {
+    "checks-after.json": "c55c9412ada039e5b5818a2f8e37c482bb424841cfc3263c5ce6d7bbdc413d68",
+    "checks-before.json": "5a4621c37648d4a27695ad74035255a5ffdebcde018fa9e28b7e5a2ecdafe107",
+    "checks-retry01-after.json": "c1d7dc3d199e5737dddaf0ea4ccdf4ddd71fe20d34dc12cf3dca236e923cb8b5",
+    "checks-retry01.json": "6f4086d8633e3095f218db85e6c15907ee3dfb6fc70587e771d86170bf1a7a53",
+    "checks-retry01.py": "5a29a76c06bcd9237356066b190e873f647e2db93c9970235afcf9d41d64b917",
+    "checks-retry02-after.json": "c1d7dc3d199e5737dddaf0ea4ccdf4ddd71fe20d34dc12cf3dca236e923cb8b5",
+    "checks-retry02.json": "88b95934157ed771a70b7e9f572ff444344d6e454324734ccd40f4c5967abaf7",
+    "checks-retry02.py": "526213a30340889df92427c1f8a0270920c87092a6aefe796e80b1a1d820e8ba",
+    "checks.json": "0d3b3089a61b84fad7df306e184ffc00a9a911c200a77579e543597cf98b5191",
+    "checks.py": "58480d885530583621e69c1a4d2f8d82203a15dd764fdb0d9aa6d17c7c3c1fe1",
+    "core-clippy-retry01.log": "4483fb42af24e62a711299904bd8c66312f180864aa480911baf84ceb642f093",
+    "core-clippy-retry02.log": "098dc158f296ae6fe8ed38b952d878c3e3176757bb421976f58f396897315ea6",
+    "core-retry01.log": "58099d2084e26f10ec6dcab0c80803cd8b3d3701d71ad72cc59cfc07f4900473",
+    "green.exit": "5feceb66ffc86f38d952786c6d696c79c2dbc239dd4e91b46729d73a27fb57e9",
+    "green.log": "187fbbaa845b9802c0e8de12376e3a23bb3fdb1eaee5dcdfe999c12f0109a7f9",
+    "node-clippy-retry01.log": "821e1b73d86d70b9796f4572fc601e147204d6ed7971880237c1681649391b99",
+    "node-clippy.log": "50bc80f155dd25bc138839b233d7300dd6af256de40d11d0fbafea1111a23738",
+    "node.log": "990f70e1960ab2c1fe45e48777cbcc8f291568d9eb894268241453ce09d2d35b",
+    "paired.toml": "71b6b0107379cd30233aa69dbb010b9d836affaac0b00c71f1fd9c13c5a0b583",
+    "red.exit": "16dc368a89b428b2485484313ba67a3912ca03f2b2b42429174a4f8b3dc84e44",
+    "red.log": "e4a307d2091efc9608af96188902f820863b241d426fbb0d6d2cab36232721f1"
+  }
+}

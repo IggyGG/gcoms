@@ -1,3 +1,15 @@
+## Manual reconnect and background delivery
+
+Deliver an unchanged authenticated directory first, then export/import a manual
+reconnect code. Require separate ciphertext and no automatic enqueue of the
+manual code; an exact manual retry remains idempotent. A failed durable export
+returns an error without exposing a cached code or changing pending control.
+Retain tamper/epoch/authority rejection tests and run the real GChat reconnect
+consumer, node library and strict Clippy. Cluster validation passed: 12 focused,
+352 node (two exclusions), 83 core (three exclusions), both strict Clippy checks.
+The original replay negative control failed as expected; see
+[receipt](docs/evidence/manual-reconnect-20260927/summary.json).
+
 ## Skip redundant responsive cover, 2026-09-25
 
 At a random cover opportunity, sent data on that outgoing interactive channel
