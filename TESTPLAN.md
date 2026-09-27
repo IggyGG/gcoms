@@ -1,3 +1,16 @@
+## Native external-probe exclusion inventory
+
+Native CI records three additional explicit exclusions: the live deployed-relay
+probe (requires a separately authorized fresh bundle), the external native
+five-hop bootstrap probe, and the nested native TLS/HTTP2 probe. These require
+separate provisioned artifacts and do not constitute desktop application coverage.
+Accept only their exact GComs test names in receipt validation; reject unknown
+names and using these exclusions in GChat reports. Keep failed native counts,
+incomplete harnesses, source bindings and installer acceptance mandatory.
+The Windows candidate's original verifier rejection remains retained. Its native
+result is 1004 GComs passes / 9 explicit exclusions and 186 GChat passes / 1
+namespace exclusion, not successful execution of the excluded tests.
+
 ## Ownership announcement before voluntary departure
 
 Withhold the old owner's authenticated ACK after transferring ownership and

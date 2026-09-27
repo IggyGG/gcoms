@@ -154,6 +154,32 @@ class EvidenceTests(unittest.TestCase):
         self.save(check)
         self.assertTrue(any("reviewed qualification policy" in error for error in self.errors()))
 
+    def test_native_gcoms_external_probes_remain_explicit_and_project_scoped(self):
+        names = (
+            "native_c_nested_carriers_pin_every_layer_and_preserve_stream_credit",
+            "native_five_hop_carrier_reuses_routes_and_renews_both_subscriptions",
+            "node::routing::gc2_inbox_tests::deployed_relay_probe",
+        )
+        check = "native.gcoms.windows-x86_64"
+        report = self.reports[check]
+        report["tests"].update(ignored=3, excluded=[
+            {"name": name, "reason": "requires separately provisioned external fixture"}
+            for name in names
+        ])
+        self.save(check)
+        self.assertEqual(self.errors(), [])
+        report["tests"]["excluded"][0]["name"] += "_unexpected"
+        self.save(check)
+        self.assertTrue(any("reviewed qualification policy" in error for error in self.errors()))
+        report["tests"]["excluded"][0]["name"] = names[0]
+        self.save(check)
+        other = "native.gchat.windows-x86_64"
+        self.reports[other]["tests"].update(ignored=1, excluded=[
+            {"name": names[0], "reason": "not a GChat exclusion"}
+        ])
+        self.save(other)
+        self.assertTrue(any("reviewed qualification policy" in error for error in self.errors()))
+
     def test_changed_log_and_artifact_bytes_block_release(self):
         (self.base / "native.gcoms.linux-x86_64.log").write_text("altered")
         self.assertTrue(any("hash mismatch" in error for error in self.errors()))
