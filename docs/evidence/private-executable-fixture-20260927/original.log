@@ -1,0 +1,19 @@
+   Compiling gcoms-private-fs v0.1.0 (/Users/iggy/.cache/gchat-private-fs-20260927/original/crates/private-fs)
+    Finished `test` profile [unoptimized] target(s) in 0.16s
+     Running unittests src/lib.rs (/Users/iggy/.cache/gchat-private-fs-20260927/target/debug/deps/gcoms_private_fs-db879b908dd20242)
+
+running 1 test
+
+thread 'tests::installed_executable_refuses_writable_public_privileged_and_aliased_files' (13705676) panicked at crates/private-fs/src/lib.rs:355:13:
+assertion failed: validate_private_executable(&image, "client").is_err()
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test tests::installed_executable_refuses_writable_public_privileged_and_aliased_files ... FAILED
+
+failures:
+
+failures:
+    tests::installed_executable_refuses_writable_public_privileged_and_aliased_files
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 2 filtered out; finished in 0.00s
+
+error: test failed, to rerun pass `-p gcoms-private-fs --lib`

@@ -1,3 +1,7 @@
+## macOS executable fixture permissions
+
+Run gcoms-private-fs tests and strict Clippy natively with TMPDIR below /private/tmp. Verify requested unsafe modes actually exist, including setuid/setgid, before requiring rejection. Keep writable/public/symlink/hardlink and accepted 0500 checks. Retain original failure; production validation must remain byte-identical. [Evidence](docs/evidence/private-executable-fixture-20260927/summary.json).
+
 ## Bounded invitation retry (2026-09-27)
 
 Require known busy refusals followed by success with the same prepared request, no retry for rejection/expiry/ambiguous failures, and the original deadline capping backoff and the waiting future. Removing retry must fail the success regression. Run all SDK tests, strict Clippy, outbound-only compilation and the real GChat consumer. Preserve the five-client message pass separately from the failed file deadline; dropping a helper future is not scheduler cancellation proof. [Evidence](docs/evidence/invitation-busy-retry-20260927/summary.json).

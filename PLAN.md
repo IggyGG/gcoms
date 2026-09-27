@@ -1,3 +1,7 @@
+## Private executable fixture on macOS (2026-09-27)
+
+R07: preserve the production owner/mode/link security checks. Set the test file to the current primary group before applying unsafe privilege bits, and assert that chmod actually retained each requested mode. This fixes macOS silently stripping setgid from wheel-owned temporary files. Original fixture failure reproduced on native Mac; all three package cases and strict Clippy pass with /private/tmp. [Evidence](docs/evidence/private-executable-fixture-20260927/summary.json). Full platform release checks remain separate.
+
 ## Known invitation refusals (2026-09-27)
 
 R04: the shared in-process SDK retries only the two authenticated pre-admission busy refusals, retaining the prepared identity, invitation and original absolute deadline. Other errors and ambiguous outcomes are not repeated. SDK 67 cases, paired GChat core 45 cases, strict SDK Clippy and outbound-only compilation pass. Five actual clients joined and all 20 cross-client messages received authenticated ACKs. The separate 16 MiB recovery test failed its unchanged 180-second completion bound; this is not release or Android qualification. [Evidence](docs/evidence/invitation-busy-retry-20260927/summary.json).

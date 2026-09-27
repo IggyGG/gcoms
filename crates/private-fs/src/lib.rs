@@ -350,9 +350,21 @@ mod tests {
         let root = tempfile::tempdir().unwrap();
         let image = root.path().join("client");
         std::fs::write(&image, b"client").unwrap();
+        // macOS inherits /private/tmp's group (wheel). For a user outside that
+        // group, chmod silently strips setgid instead of creating the unsafe
+        // fixture. Use our own group so every requested privilege bit is real.
+        rustix::fs::chown(&image, None, Some(rustix::process::getgid())).unwrap();
         for mode in [0o700, 0o600, 0o555, 0o4500, 0o2500] {
             std::fs::set_permissions(&image, std::fs::Permissions::from_mode(mode)).unwrap();
-            assert!(validate_private_executable(&image, "client").is_err());
+            assert_eq!(
+                std::fs::metadata(&image).unwrap().permissions().mode() & 0o7777,
+                mode,
+                "unsafe executable fixture must retain mode {mode:o}"
+            );
+            assert!(
+                validate_private_executable(&image, "client").is_err(),
+                "accepted unsafe executable mode {mode:o}"
+            );
         }
         std::fs::set_permissions(&image, std::fs::Permissions::from_mode(0o500)).unwrap();
         validate_private_executable(&image, "client").unwrap();
