@@ -48,6 +48,22 @@ async fn wait_ack(node: &NodeHandle, wanted: [u8; 16]) {
     }).await.expect("real authenticated all-member ACK")
 }
 
+async fn wait_bootstrap_ack(owner: &NodeHandle, channel: &str) {
+    tokio::time::timeout(Duration::from_secs(12), async {
+        loop {
+            if owner.state.upgrade().unwrap().lock().unwrap().channels[channel]
+                .message_outbox
+                .is_empty()
+            {
+                return;
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .expect("initial channel bootstrap must be acknowledged before the cold-route phase");
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn cold_both_expired_channel_queues_recover_over_bound_base_contact() {
     cold_recovery(false).await;
@@ -91,6 +107,7 @@ async fn cold_recovery(reconnect: bool) {
                 &welcome,
             )
             .await?;
+        wait_bootstrap_ack(&owner, name).await;
         let initial_id = owner
             .send_channel_text_tracked(name, b"retained before restart")
             .await?;
@@ -279,6 +296,7 @@ async fn cold_near_expiry_member_accepts_owner_directory_and_original_membership
         )
         .await
         .unwrap();
+    wait_bootstrap_ack(&owner, name).await;
     let initial = owner
         .send_channel_text_tracked(name, b"before offline membership")
         .await

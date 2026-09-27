@@ -1,0 +1,17 @@
+   Compiling gcoms-node v0.1.0 (/work/release-repro-20260927/admission-barrier/green05/gcoms/crates/node)
+    Finished `test` profile [unoptimized] target(s) in 9.72s
+     Running tests/node_invite.rs (/work/target/debug/deps/node_invite-4a44f4feb2adba7e)
+
+running 9 tests
+test expired_invite_is_refused ... ok
+test a_link_pointed_at_the_wrong_owner_does_not_redeem ... ok
+test friend_redeems_a_link_over_the_relay_and_joins ... ok
+test invite_admits_a_member_and_then_is_spent ... ok
+test remote_redeem_of_an_expired_link_is_refused ... ok
+test remote_redeem_times_out_when_the_owner_is_offline ... ok
+test remote_redeem_with_a_wrong_secret_is_refused ... ok
+test two_racing_redemptions_yield_exactly_one_success ... ok
+test wrong_secret_and_unknown_id_are_refused ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 10.77s
+

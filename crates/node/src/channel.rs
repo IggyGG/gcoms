@@ -677,6 +677,9 @@ pub struct ChannelState {
     out_of_order: std::collections::BTreeMap<u64, Vec<Vec<u8>>>,
     future_message_count: usize,
     future_message_bytes: usize,
+    /// Serializes the lock-free finalization gap between MLS admission and
+    /// durable newcomer bootstrap. Dropping its owner releases cancellation.
+    pub(crate) admission_finalizer: Arc<tokio::sync::Mutex<()>>,
     pub membership_outbox: Option<MembershipOutbox>,
     /// Woken whenever `membership_outbox` clears.
     pub membership_done: Arc<tokio::sync::Notify>,
@@ -919,6 +922,7 @@ impl ChannelState {
             out_of_order: std::collections::BTreeMap::new(),
             future_message_count: 0,
             future_message_bytes: 0,
+            admission_finalizer: Arc::new(tokio::sync::Mutex::new(())),
             membership_outbox: None,
             membership_done: Arc::new(tokio::sync::Notify::new()),
             pending_control: VecDeque::new(),

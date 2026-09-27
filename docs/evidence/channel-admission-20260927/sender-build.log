@@ -1,0 +1,32 @@
+warning: patch `gcoms-addon-example v0.1.0 (/work/release-repro-20260927/admission-barrier/green05/gcoms/examples/typed-addon)` was not used in the crate graph
+warning: patch `gcoms-catalog v0.1.0 (/work/release-repro-20260927/admission-barrier/green05/gcoms/crates/catalog)` was not used in the crate graph
+warning: patch `gcoms-conformance v0.1.0 (/work/release-repro-20260927/admission-barrier/green05/gcoms/crates/conformance)` was not used in the crate graph
+warning: patch `gcoms-fuzz v0.1.0 (/work/release-repro-20260927/admission-barrier/green05/gcoms/crates/fuzz)` was not used in the crate graph
+warning: patch `gcoms-renamed-dependency-check v0.1.0 (/work/release-repro-20260927/admission-barrier/green05/gcoms/examples/renamed-dependency)` was not used in the crate graph
+warning: patch `gcoms-sim v0.1.0 (/work/release-repro-20260927/admission-barrier/green05/gcoms/crates/sim)` was not used in the crate graph
+help: Check that the patched package version and available features are compatible
+      with the dependency requirements. If the patch has a different version from
+      what is locked in the Cargo.lock file, run `cargo update` to use the new
+      version. This may also occur with an optional dependency that is not enabled.
+   Compiling gcoms-core v0.1.0 (/work/release-repro-20260927/admission-barrier/green05/gcoms/crates/core)
+   Compiling gcoms-crypto v0.1.0 (/work/release-repro-20260927/admission-barrier/green05/gcoms/crates/crypto)
+   Compiling gcoms-private-fs v0.1.0 (/work/release-repro-20260927/admission-barrier/green05/gcoms/crates/private-fs)
+   Compiling gcoms-gossip v0.1.0 (/work/release-repro-20260927/admission-barrier/green05/gcoms/crates/gossip)
+   Compiling gcoms-rpc-contract v0.1.0 (/work/release-repro-20260927/admission-barrier/green05/gcoms/crates/rpc-contract)
+   Compiling gcoms-rpc-macros v0.1.0 (/work/release-repro-20260927/admission-barrier/green05/gcoms/crates/rpc-macros)
+   Compiling gcoms-transport v0.1.0 (/work/release-repro-20260927/admission-barrier/green05/gcoms/crates/transport)
+   Compiling gcoms-file-transfer v0.1.0 (/work/release-repro-20260927/admission-barrier/green05/gcoms/crates/file-transfer)
+   Compiling gcoms-routing v0.1.0 (/work/release-repro-20260927/admission-barrier/green05/gcoms/crates/routing)
+   Compiling gcoms-network v0.1.0 (/work/release-repro-20260927/admission-barrier/green05/gcoms/crates/network)
+   Compiling gcoms-mls v0.1.0 (/work/release-repro-20260927/admission-barrier/green05/gcoms/crates/mls)
+   Compiling gcoms-protocol v0.1.0 (/work/release-repro-20260927/admission-barrier/green05/gcoms/crates/protocol)
+   Compiling gcoms-network-client v0.1.0 (/work/release-repro-20260927/admission-barrier/green05/gcoms/crates/network-client)
+   Compiling gcoms-node v0.1.0 (/work/release-repro-20260927/admission-barrier/green05/gcoms/crates/node)
+   Compiling gcoms-sdk v0.1.0 (/work/release-repro-20260927/admission-barrier/green05/gcoms/crates/sdk)
+   Compiling gcoms-runtime v0.1.0 (/work/release-repro-20260927/admission-barrier/green05/gcoms/crates/runtime)
+   Compiling gcoms-rpc v0.1.0 (/work/release-repro-20260927/admission-barrier/green05/gcoms/crates/rpc)
+   Compiling gcoms v0.1.0 (/work/release-repro-20260927/admission-barrier/green05/gcoms/crates/application)
+   Compiling gchat-api v0.1.0 (/work/release-repro-20260927/admission-barrier/green05/gchat/crates/chat-api)
+   Compiling gchat-core v0.1.0 (/work/release-repro-20260927/admission-barrier/green05/gchat/crates/core)
+   Compiling gchat-tui v0.1.0 (/work/release-repro-20260927/admission-barrier/green05/gchat/crates/tui)
+    Finished `dev` profile [unoptimized] target(s) in 43.64s

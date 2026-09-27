@@ -1,3 +1,8 @@
+## Admission and bootstrap ordering (2026-09-27)
+
+Require three negative controls: retained wire versus new epoch; empty metadata bootstrap receipt; concurrent finalization before directory publication. Verify exact ciphertext/ID through checkpoint, unchanged invitation on refusal, authenticated ACK release, replay and transient guard release. Cold-route fixtures must settle the initial bootstrap ACK before beginning the original blocked-route scenario. Full source-bound checks and prior failures are retained.
+[Evidence](docs/evidence/channel-admission-20260927/summary.json).
+
 ## Protected subscription recovery on profile 46
 
 Run `cargo test --locked -p gcoms-node --all-features --lib protected_routes -- --test-threads=1`.

@@ -1,5 +1,121 @@
 // Native MLS/ratchet and archive boundaries, with no OS/network mocks.
 #[tokio::test]
+async fn pending_channel_wire_is_not_invalidated_by_next_admission() {
+    let name = "admission-delivery-barrier";
+    let mut owner = gcoms_mls::OwnerSession::create(
+        gcoms_crypto::IdentityKeypair::from_seed(channel_seed_from(&TEST_SEED, name)),
+        "owner",
+        8,
+    )
+    .unwrap();
+    let prepared = gcoms_mls::ChannelMember::prepare("member").unwrap();
+    let package = gcoms_mls::ChannelMember::key_package_bytes(&prepared).unwrap();
+    let invitation =
+        owner.sign_invite_key_package(&package, "member", gcoms_mls::Caps::member(), 3600);
+    let admission = owner.admit(&invitation, &package).unwrap();
+    let mut member = gcoms_mls::ChannelMember::join(prepared, &admission.welcome).unwrap();
+    let owner_route = owned_channel_route(
+        31,
+        owner.own_pseudonym(),
+        channel_direct_secret(&TEST_SEED, &owner.own_pseudonym()),
+    );
+    let member_route = route(32, member.own_pseudonym());
+    let mut channel = ChannelState::new(
+        ChannelRole::Owner(owner),
+        owner_route,
+        17,
+        name.into(),
+        crate::channel::ChannelVisibility::Private,
+    );
+    channel
+        .directory
+        .insert("owner".into(), channel.own_route.public.clone());
+    channel
+        .directory
+        .insert("member".into(), member_route.clone());
+    let wire = channel
+        .role
+        .send(&crate::channel::encode_text(
+            b"admitted before next join",
+            false,
+        ))
+        .unwrap();
+    let id = crate::channel::msg_id(name, &wire);
+    channel.message_outbox.insert(
+        id,
+        ChannelMessageOutbox {
+            wire: wire.clone(),
+            expected: HashMap::from([(member_route.pseudonym, member_route)]),
+            acknowledged: HashSet::new(),
+        },
+    );
+    let mut node = state();
+    node.channels.insert(name.into(), channel);
+    let state = Arc::new(Mutex::new(node));
+    let scheduler = state.lock().unwrap().scheduler.clone();
+    let (invite_id, secret, _) = create_channel_invite(&state, name, 3600).unwrap();
+    let next = gcoms_mls::ChannelMember::prepare("next").unwrap();
+    let next_package = gcoms_mls::ChannelMember::key_package_bytes(&next).unwrap();
+    let next_route = route(33, gcoms_mls::ChannelMember::prepared_pseudonym(&next));
+    let encoded = crate::channel::encode_join_package(&next_package, &next_route);
+    let epoch = state.lock().unwrap().channels[name].role.epoch();
+    let result = tokio::time::timeout(
+        std::time::Duration::from_millis(100),
+        redeem_invite(
+            &state, &scheduler, name, &invite_id, &secret, &encoded, "next",
+        ),
+    )
+    .await;
+    assert!(
+        matches!(result, Ok(Err(ref error)) if error == "channel messages still awaiting acknowledgements"),
+        "a new epoch must not overtake an unacknowledged wire: {result:?}"
+    );
+    {
+        let st = state.lock().unwrap();
+        let channel = &st.channels[name];
+        assert_eq!(channel.role.epoch(), epoch);
+        assert!(channel.invites[&invite_id].consumed.is_none());
+        assert!(channel.membership_outbox.is_none());
+        assert_eq!(channel.message_outbox[&id].wire, wire);
+        let restored = decode_v2(&encode_state(&st).unwrap(), &TEST_SEED).unwrap();
+        assert_eq!(
+            restored.channels[0]
+                .message_outbox
+                .iter()
+                .find(|(key, _)| *key == id)
+                .unwrap()
+                .1
+                .wire,
+            wire
+        );
+    }
+    assert!(matches!(
+        member.receive_outcome(&wire).unwrap(),
+        gcoms_mls::ReceiveOutcome::Application { .. }
+    ));
+    let ack = member
+        .send(&crate::channel::encode_text_ack(id, false))
+        .unwrap();
+    let (events, _) = broadcast::channel(8);
+    let mut st = state.lock().unwrap();
+    deliver_mls(&mut st, name, &ack, std::time::Instant::now(), &events);
+    let channel = st.channels.get_mut(name).unwrap();
+    assert!(
+        channel.message_outbox.is_empty(),
+        "only the authenticated ACK releases the barrier"
+    );
+    super::super::channels::stage_recovery_admission_fixture(
+        channel,
+        name,
+        &next_route,
+        &next_package,
+        "next",
+    )
+    .unwrap();
+    assert_eq!(channel.role.epoch(), epoch + 1);
+}
+
+#[tokio::test]
 async fn received_channel_text_cannot_schedule_ack_before_failed_checkpoint() {
     let (mut node, mut owner, mut owner_route) = channel_member_fixture("receive-checkpoint");
     node.channel_inbox = channel_inbox::Inbox::new(true);

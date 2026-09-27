@@ -1514,7 +1514,7 @@ enum StagedAdmission {
     /// This exact key package was already admitted; replay its Welcome.
     Replay(Vec<u8>),
     /// A fresh MLS add was staged and merged; broadcast the commit.
-    Fresh(gcoms_mls::Admission),
+    Fresh(gcoms_mls::Admission, tokio::sync::OwnedMutexGuard<()>),
 }
 
 /// The single lock-held admission decision shared by manual admit and invite
@@ -1545,6 +1545,22 @@ fn stage_admission_locked(
     if cs.membership_outbox.is_some() {
         return Err("membership change still awaiting acknowledgements".into());
     }
+    // Advancing the epoch can make retained application wires (including a
+    // newcomer's bootstrap metadata) unreadable. Admission must wait for their
+    // authenticated ACKs, not merely for the preceding membership commit.
+    // Check before staging MLS or consuming a single-use invitation. Cached
+    // Welcomes above remain replayable while this delivery barrier is held.
+    if !cs.message_outbox.is_empty() {
+        return Err("channel messages still awaiting acknowledgements".into());
+    }
+    // Membership ACKs can clear before finalize_admission publishes the
+    // directory and bootstrap outbox. Keep this transient owner until that
+    // function returns; an exact cached Welcome remains replayable above.
+    let finalizer = cs
+        .admission_finalizer
+        .clone()
+        .try_lock_owned()
+        .map_err(|_| "membership change still awaiting acknowledgements".to_string())?;
     let expected = cs
         .directory
         .values()
@@ -1586,10 +1602,13 @@ fn stage_admission_locked(
             cs.admission_cache.remove(&oldest);
         }
     }
-    Ok(StagedAdmission::Fresh(gcoms_mls::Admission {
-        commit: staged.commit,
-        welcome: staged.welcome,
-    }))
+    Ok(StagedAdmission::Fresh(
+        gcoms_mls::Admission {
+            commit: staged.commit,
+            welcome: staged.welcome,
+        },
+        finalizer,
+    ))
 }
 
 #[cfg(all(test, feature = "client-persist"))]
@@ -1618,7 +1637,7 @@ pub(crate) async fn admit_channel(
     if gcoms_mls::pseudonym_of_key_package(mls_key_package) != Some(member_route.pseudonym) {
         return Err("channel route does not match MLS leaf".into());
     }
-    let admission = {
+    let (admission, _finalizer) = {
         let mut st = state.lock().unwrap_or_else(|p| p.into_inner());
         let Some(cs) = st.channels.get_mut(channel) else {
             return Err("no channel".into());
@@ -1628,7 +1647,7 @@ pub(crate) async fn admit_channel(
         }
         match stage_admission_locked(cs, channel, &member_route, mls_key_package, member_name)? {
             StagedAdmission::Replay(welcome) => return Ok(welcome),
-            StagedAdmission::Fresh(admission) => admission,
+            StagedAdmission::Fresh(admission, guard) => (admission, guard),
         }
     };
     finalize_admission(
@@ -1764,14 +1783,10 @@ fn queue_channel_metadata_snapshot(
     let key = channel_archive_key(&st.identity_seed);
     let seed = channel_seed(&st, channel);
     let cs = st.channels.get_mut(channel).ok_or("no channel")?;
-    if cs
-        .role
-        .channel_metadata()
-        .map_err(|e| e.to_string())?
-        .is_empty()
-    {
-        return Ok(());
-    }
+    // Even an empty display snapshot is a bootstrap receipt: the new member
+    // can ACK it only after joining and learning the authenticated owner route.
+    // Keep it in the durable outbox so the next admission cannot overtake that
+    // setup merely because the channel has no topic or nickname overrides.
     if cs.message_outbox.len() >= 64 {
         return Err("too many unacknowledged channel messages".into());
     }
@@ -1927,7 +1942,7 @@ pub(crate) async fn redeem_invite(
     if gcoms_mls::pseudonym_of_key_package(mls_key_package) != Some(member_route.pseudonym) {
         return Err("channel route does not match MLS leaf".into());
     }
-    let admission = {
+    let (admission, _finalizer) = {
         let mut st = state.lock().unwrap_or_else(|p| p.into_inner());
         let Some(cs) = st.channels.get_mut(channel) else {
             return Err("no channel".into());
@@ -1969,11 +1984,11 @@ pub(crate) async fn redeem_invite(
                 }
                 return Ok(welcome);
             }
-            Ok(StagedAdmission::Fresh(admission)) => {
+            Ok(StagedAdmission::Fresh(admission, guard)) => {
                 if let Some(record) = cs.invites.get_mut(invite_id) {
                     record.consumed = Some(member_route.pseudonym);
                 }
-                admission
+                (admission, guard)
             }
             Err(e) => return Err(e),
         }
@@ -2105,7 +2120,8 @@ pub(crate) async fn service_one_invite(
         // the internal "still awaiting acknowledgements" string to the friend.
         match &outcome {
             Err(e)
-                if e == "membership change still awaiting acknowledgements"
+                if (e == "membership change still awaiting acknowledgements"
+                    || e == "channel messages still awaiting acknowledgements")
                     && std::time::Instant::now() < deadline =>
             {
                 tokio::time::sleep(std::time::Duration::from_millis(250)).await;
@@ -2730,6 +2746,133 @@ mod membership_wait_tests {
     use std::task::{Context, Poll, Waker};
     use tokio::sync::Notify;
     use tokio::time::{Duration, Instant};
+
+    #[cfg(feature = "client-persist")]
+    #[tokio::test]
+    async fn admission_finalization_cannot_be_overtaken_before_bootstrap() {
+        use super::{stage_admission_locked, StagedAdmission};
+        use crate::node::persist::tests::{established_owner_fixture, owned_channel_route};
+        let name = "admission-finalization";
+        let mut channel = established_owner_fixture(name);
+        let member = gcoms_mls::ChannelMember::prepare("first").unwrap();
+        let package = gcoms_mls::ChannelMember::key_package_bytes(&member).unwrap();
+        let route = owned_channel_route(
+            81,
+            gcoms_mls::ChannelMember::prepared_pseudonym(&member),
+            [81; 32],
+        );
+        let staged =
+            stage_admission_locked(&mut channel, name, &route.public, &package, "first").unwrap();
+        assert!(channel.membership_outbox.is_none());
+        assert!(channel.message_outbox.is_empty());
+        // This is the actual first-admission gap before asynchronous directory
+        // publication and bootstrap persistence, not an offline-member wait.
+        let epoch = channel.role.epoch();
+        let next = gcoms_mls::ChannelMember::prepare("next").unwrap();
+        let next_package = gcoms_mls::ChannelMember::key_package_bytes(&next).unwrap();
+        let next_route = owned_channel_route(
+            82,
+            gcoms_mls::ChannelMember::prepared_pseudonym(&next),
+            [82; 32],
+        );
+        let result = stage_admission_locked(
+            &mut channel,
+            name,
+            &next_route.public,
+            &next_package,
+            "next",
+        );
+        assert!(
+            matches!(result, Err(ref error) if error == "membership change still awaiting acknowledgements"),
+            "a second admission overtook unfinished directory/bootstrap publication"
+        );
+        assert_eq!(channel.role.epoch(), epoch);
+        // Exact retries can still replay the authenticated Welcome while the
+        // original finalizer owns its guard.
+        assert!(matches!(
+            stage_admission_locked(&mut channel, name, &route.public, &package, "first"),
+            Ok(StagedAdmission::Replay(_))
+        ));
+        drop(staged);
+        // Cancellation releases only this transient guard. Production's durable
+        // outbox remains an independent gate after bootstrap has been queued.
+        assert!(stage_admission_locked(
+            &mut channel,
+            name,
+            &next_route.public,
+            &next_package,
+            "next"
+        )
+        .is_ok());
+    }
+
+    #[cfg(all(feature = "client-persist", feature = "relay-host"))]
+    #[tokio::test]
+    async fn fresh_member_bootstrap_is_durable_without_display_metadata() {
+        use crate::node::{start_persistent, NodeConfig, NodeProfile};
+        use std::sync::Arc;
+        let config = |seed| NodeConfig {
+            seed: [seed; 32],
+            listen: "127.0.0.1:0".parse().unwrap(),
+            control: None,
+            advertise: None,
+            inbox_relay: None,
+            profile: NodeProfile::fixture(),
+            alias_lifecycle: Default::default(),
+        };
+        let owner = start_persistent(config(0xe1), Arc::new(|_| Ok(())))
+            .await
+            .unwrap();
+        let member = start_persistent(config(0xe2), Arc::new(|_| Ok(())))
+            .await
+            .unwrap();
+        let result = async {
+            let name = "bootstrap-ack";
+            owner
+                .create_channel(name, "owner", 8, crate::channel::ChannelVisibility::Private)
+                .await?;
+            let request = member.prepare_channel_join("member").await?;
+            let package = member.channel_key_package(request).await?;
+            let welcome = owner.admit_channel(name, &package, "member").await?;
+            {
+                let state = owner.state.upgrade().unwrap();
+                let state = state.lock().unwrap();
+                let channel = &state.channels[name];
+                if channel.message_outbox.len() != 1 {
+                    return Err("fresh member bootstrap has no durable ACK barrier".to_string());
+                }
+                if !channel.role.channel_metadata().unwrap().is_empty() {
+                    return Err("fixture unexpectedly has display metadata".to_string());
+                }
+            }
+            member
+                .join_channel(
+                    request,
+                    name,
+                    crate::channel::ChannelVisibility::Private,
+                    &welcome,
+                )
+                .await?;
+            tokio::time::timeout(Duration::from_secs(12), async {
+                loop {
+                    let done = owner.state.upgrade().unwrap().lock().unwrap().channels[name]
+                        .message_outbox
+                        .is_empty();
+                    if done {
+                        break;
+                    }
+                    tokio::time::sleep(Duration::from_millis(20)).await;
+                }
+            })
+            .await
+            .map_err(|_| "new member did not authenticate the bootstrap ACK".to_string())?;
+            Ok::<_, String>(())
+        }
+        .await;
+        owner.shutdown().await;
+        member.shutdown().await;
+        result.unwrap();
+    }
 
     #[tokio::test]
     async fn final_ack_between_condition_read_and_await_is_not_lost() {
