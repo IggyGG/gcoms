@@ -1,0 +1,26 @@
+{
+  "passed": true,
+  "source_unchanged": true,
+  "checks": [
+    {
+      "name": "clippy-retry",
+      "started_at": 1790577424.7639346,
+      "command": [
+        "cargo",
+        "clippy",
+        "--offline",
+        "--locked",
+        "-p",
+        "gcoms-node",
+        "--all-features",
+        "--all-targets",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "exit_code": 0,
+      "finished_at": 1790577448.4234178,
+      "log_sha256": "0b849f7d404cea1c49609b9b95172bef49fd533beb216157ceb93c59bdb9b77e"
+    }
+  ]
+}

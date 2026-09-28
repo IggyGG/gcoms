@@ -1,0 +1,50 @@
+    Finished `test` profile [unoptimized] target(s) in 0.23s
+     Running unittests src/lib.rs (/work/route-readiness/target-complete/debug/deps/gcoms_node-a9c09991362821c1)
+
+running 1 test
+fixture provision begin: eligible=3, now=1790576971
+fixture provision: no ready independent GC/2 route; eligible=3; now=1790576971
+fixture provision: no ready independent GC/2 route; eligible=3; now=1790576973
+fixture provision: no ready independent GC/2 route; eligible=3; now=1790576975
+fixture provision: no ready independent GC/2 route; eligible=3; now=1790576977
+fixture provision: no ready independent GC/2 route; eligible=3; now=1790576979
+fixture provision: no ready independent GC/2 route; eligible=3; now=1790576981
+fixture provision: no ready independent GC/2 route; eligible=3; now=1790576983
+fixture provision: no ready independent GC/2 route; eligible=3; now=1790576985
+fixture provision: no ready independent GC/2 route; eligible=3; now=1790576987
+fixture provision: no ready independent GC/2 route; eligible=3; now=1790576989
+fixture provision: no ready independent GC/2 route; eligible=3; now=1790576991
+fixture provision: no ready independent GC/2 route; eligible=3; now=1790576993
+fixture provision: no ready independent GC/2 route; eligible=3; now=1790576995
+fixture provision: no ready independent GC/2 route; eligible=3; now=1790576997
+fixture provision: no ready independent GC/2 route; eligible=3; now=1790576999
+fixture provision: no ready independent GC/2 route; eligible=3; now=1790577001
+fixture provision: no ready independent GC/2 route; eligible=3; now=1790577003
+fixture provision: no ready independent GC/2 route; eligible=3; now=1790577005
+fixture provision: no ready independent GC/2 route; eligible=3; now=1790577007
+fixture provision: no ready independent GC/2 route; eligible=3; now=1790577009
+fixture provision: no ready independent GC/2 route; eligible=3; now=1790577011
+fixture provision: no ready independent GC/2 route; eligible=3; now=1790577013
+fixture provision: no ready independent GC/2 route; eligible=3; now=1790577015
+fixture provision: no ready independent GC/2 route; eligible=3; now=1790577017
+fixture provision: no ready independent GC/2 route; eligible=3; now=1790577019
+fixture provision: no ready independent GC/2 route; eligible=3; now=1790577021
+fixture provision: no ready independent GC/2 route; eligible=3; now=1790577023
+fixture provision: no ready independent GC/2 route; eligible=3; now=1790577025
+fixture provision: no ready independent GC/2 route; eligible=3; now=1790577027
+test node::routing::gc2_inbox_tests::fresh_carrier_node_provisions_its_inbox_over_the_protected_route has been running for over 60 seconds
+fixture provision: no ready independent GC/2 route; eligible=3; now=1790577029
+
+thread 'node::routing::gc2_inbox_tests::fresh_carrier_node_provisions_its_inbox_over_the_protected_route' (84) panicked at crates/node/src/node/gc2_inbox_tests.rs:203:6:
+GCP2 provisioning answers within the startup window: Elapsed(())
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test node::routing::gc2_inbox_tests::fresh_carrier_node_provisions_its_inbox_over_the_protected_route ... FAILED
+
+failures:
+
+failures:
+    node::routing::gc2_inbox_tests::fresh_carrier_node_provisions_its_inbox_over_the_protected_route
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 362 filtered out; finished in 63.07s
+
+error: test failed, to rerun pass `-p gcoms-node --lib`

@@ -1,0 +1,25 @@
+info: syncing channel updates for 1.98.0-x86_64-unknown-linux-gnu
+info: latest update on 2026-08-20 for version 1.98.0 (88d9e12ae 2026-08-18)
+info: downloading 3 components
+warn: the missing active toolchain `1.98.0-x86_64-unknown-linux-gnu` has been auto-installed
+warn: this might cause rustup commands to take longer time to finish than expected
+info: you may opt out with `RUSTUP_AUTO_INSTALL=0` or `rustup set auto-install disable`
+   Compiling gcoms-node v0.1.0 (/work/route-readiness/windows28-fixture/green/crates/node)
+    Finished `test` profile [unoptimized] target(s) in 18.90s
+     Running unittests src/lib.rs (/work/route-readiness/target-complete/debug/deps/gcoms_node-a9c09991362821c1)
+
+running 1 test
+
+thread 'node::routing::gc2_inbox_tests::fresh_carrier_node_provisions_its_inbox_over_the_protected_route' (77) panicked at crates/node/src/node/gc2_inbox_tests.rs:204:6:
+GCP2 provisioning answers within the startup window: Elapsed(())
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test node::routing::gc2_inbox_tests::fresh_carrier_node_provisions_its_inbox_over_the_protected_route ... FAILED
+
+failures:
+
+failures:
+    node::routing::gc2_inbox_tests::fresh_carrier_node_provisions_its_inbox_over_the_protected_route
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 362 filtered out; finished in 18.08s
+
+error: test failed, to rerun pass `-p gcoms-node --lib`

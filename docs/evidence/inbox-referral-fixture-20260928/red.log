@@ -1,0 +1,83 @@
+info: syncing channel updates for 1.98.0-x86_64-unknown-linux-gnu
+info: latest update on 2026-08-20 for version 1.98.0 (88d9e12ae 2026-08-18)
+info: downloading 3 components
+warn: the missing active toolchain `1.98.0-x86_64-unknown-linux-gnu` has been auto-installed
+warn: this might cause rustup commands to take longer time to finish than expected
+info: you may opt out with `RUSTUP_AUTO_INSTALL=0` or `rustup set auto-install disable`
+   Compiling syn v3.0.4
+   Compiling serde_core v1.0.229
+   Compiling errno v0.3.14
+   Compiling serde v1.0.229
+   Compiling signal-hook-registry v1.4.8
+   Compiling serde_bytes v0.11.19
+   Compiling serde_json v1.0.151
+   Compiling gcoms-crypto v0.1.0 (/work/route-readiness/windows28-fixture/red/crates/crypto)
+   Compiling displaydoc v0.2.7
+   Compiling zerovec-derive v0.11.6
+   Compiling zerovec v0.11.8
+   Compiling tokio-macros v2.7.2
+   Compiling thiserror-impl v2.0.20
+   Compiling serde_derive v1.0.229
+   Compiling thiserror v2.0.20
+   Compiling tokio v1.53.1
+   Compiling tinystr v0.8.4
+   Compiling icu_locale_core v2.3.0
+   Compiling potential_utf v0.1.6
+   Compiling zerotrie v0.2.5
+   Compiling icu_provider v2.3.1
+   Compiling icu_collections v2.3.0
+   Compiling icu_properties v2.3.0
+   Compiling icu_normalizer v2.3.0
+   Compiling tls_codec v0.5.0
+   Compiling idna_adapter v1.2.2
+   Compiling idna v1.1.0
+   Compiling asn1-rs v0.7.2
+   Compiling openmls_traits v0.6.0
+   Compiling url v2.5.8
+   Compiling tokio-rustls v0.26.4
+   Compiling hyper v1.11.1
+   Compiling oid-registry v0.8.1
+   Compiling der-parser v10.0.0
+   Compiling hyper-util v0.1.20
+   Compiling tokio-util v0.7.19
+   Compiling gcoms-core v0.1.0 (/work/route-readiness/windows28-fixture/red/crates/core)
+   Compiling x509-parser v0.18.1
+   Compiling h2 v0.4.19
+   Compiling tower v0.5.3
+   Compiling serde_urlencoded v0.7.1
+   Compiling hpke-rs v0.7.0
+   Compiling gcoms-transport v0.1.0 (/work/route-readiness/windows28-fixture/red/crates/transport)
+   Compiling tower-http v0.6.11
+   Compiling hyper-rustls v0.27.9
+   Compiling openmls_memory_storage v0.6.0
+   Compiling openmls_serialization_helpers v0.1.0
+   Compiling openmls_rust_crypto v0.6.0
+   Compiling openmls v0.9.0
+   Compiling reqwest v0.12.28
+   Compiling gcoms-routing v0.1.0 (/work/route-readiness/windows28-fixture/red/crates/routing)
+   Compiling openmls_basic_credential v0.6.0
+   Compiling gcoms-private-fs v0.1.0 (/work/route-readiness/windows28-fixture/red/crates/private-fs)
+   Compiling gcoms-network v0.1.0 (/work/route-readiness/windows28-fixture/red/crates/network)
+   Compiling gcoms-network-client v0.1.0 (/work/route-readiness/windows28-fixture/red/crates/network-client)
+   Compiling gcoms-mls v0.1.0 (/work/route-readiness/windows28-fixture/red/crates/mls)
+   Compiling gcoms-protocol v0.1.0 (/work/route-readiness/windows28-fixture/red/crates/protocol)
+   Compiling gcoms-gossip v0.1.0 (/work/route-readiness/windows28-fixture/red/crates/gossip)
+   Compiling gcoms-node v0.1.0 (/work/route-readiness/windows28-fixture/red/crates/node)
+    Finished `test` profile [unoptimized] target(s) in 46.29s
+     Running unittests src/lib.rs (/work/route-readiness/target-complete/debug/deps/gcoms_node-a9c09991362821c1)
+
+running 1 test
+
+thread 'node::routing::gc2_inbox_tests::fresh_carrier_node_provisions_its_inbox_over_the_protected_route' (993) panicked at crates/node/src/node/gc2_inbox_tests.rs:189:6:
+GCP2 provisioning answers within the startup window: Elapsed(())
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test node::routing::gc2_inbox_tests::fresh_carrier_node_provisions_its_inbox_over_the_protected_route ... FAILED
+
+failures:
+
+failures:
+    node::routing::gc2_inbox_tests::fresh_carrier_node_provisions_its_inbox_over_the_protected_route
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 362 filtered out; finished in 18.11s
+
+error: test failed, to rerun pass `-p gcoms-node --lib`

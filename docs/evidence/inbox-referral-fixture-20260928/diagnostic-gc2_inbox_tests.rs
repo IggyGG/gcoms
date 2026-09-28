@@ -107,15 +107,6 @@ async fn start_relay(
 
 #[tokio::test]
 async fn fresh_carrier_node_provisions_its_inbox_over_the_protected_route() {
-    protected_inbox_fixture(false).await;
-}
-
-#[tokio::test]
-async fn expired_carrier_seeds_reacquire_referrals_for_protected_inbox_provisioning() {
-    protected_inbox_fixture(true).await;
-}
-
-async fn protected_inbox_fixture(expire_initial_client_seeds: bool) {
     let secret = [8; 32];
     let (introduction, service_a, _relay_a) = start_relay("127.0.0.71", secret, |target| {
         provisioning_policy(target, secret)
@@ -155,18 +146,11 @@ async fn protected_inbox_fixture(expire_initial_client_seeds: bool) {
     // Without these, expiry leaves only the three retained guards, too few for
     // a protected five-hop route. Refresh uses the normal authenticated host task.
     let public_bundle = gcoms_routing::gc2::directory::BootstrapBundle {
-        relays: services
-            .iter()
-            .map(|s| s.gc2_introduction(super::now_unix()))
-            .collect(),
+        relays: services.iter().map(|s| s.gc2_introduction(super::now_unix())).collect(),
     };
-    let provision_service = services[0].clone();
     let mut referral_tasks = Vec::new();
     for service in services {
-        service
-            .gc2_directory()
-            .remember(&public_bundle, super::now_unix())
-            .unwrap();
+        if std::env::var_os("GC2_FIXTURE_NO_REFERRALS").is_none() { service.gc2_directory().remember(&public_bundle, super::now_unix()).unwrap(); }
         referral_tasks.push(tokio::spawn(async move {
             service.run_gc2_referral_refresh().await.unwrap();
         }));
@@ -188,13 +172,7 @@ async fn protected_inbox_fixture(expire_initial_client_seeds: bool) {
             ]
             .into_iter()
             .chain(extra_introductions)
-            .map(|raw| {
-                let mut intro = gcoms_routing::gc2::directory::Introduction::decode(&raw).unwrap();
-                if expire_initial_client_seeds {
-                    intro.expires_at = intro.expires_at.min(super::now_unix() + 2);
-                }
-                intro.encode().unwrap().to_vec()
-            })
+            .map(|raw| { let mut intro = gcoms_routing::gc2::directory::Introduction::decode(&raw).unwrap(); intro.expires_at = super::now_unix() + 2; intro.encode().unwrap().to_vec() })
             .collect(),
         ),
         inbox_relay: None,
@@ -207,22 +185,16 @@ async fn protected_inbox_fixture(expire_initial_client_seeds: bool) {
     assert!(runtime.gc2.get().is_some());
     let _owner_task = tokio::spawn(prepared.owner.run());
     let _ = prepared.ready;
-    if expire_initial_client_seeds {
-        // Shorten only the client fixture authority; relay authority and normal
-        // authenticated renewal remain unchanged. The original seeds must expire
-        // before provisioning, requiring more than the three retained guards.
-        tokio::time::sleep(std::time::Duration::from_secs(3)).await;
-    }
+    tokio::time::sleep(std::time::Duration::from_secs(3)).await;
 
+    eprintln!("fixture provision begin: eligible={}, now={}", prepared.directory.eligible(&[], super::now_unix()).unwrap().len(), super::now_unix());
     // Cold-entry dials can stall on a loaded host; retry the request across the
     // owner's whole startup window instead of asserting on its readiness timer.
-    let reply = tokio::time::timeout(std::time::Duration::from_secs(240), async {
+    let reply = tokio::time::timeout(std::time::Duration::from_secs(60), async {
         loop {
-            if let Ok(reply) = runtime
-                .provision_inbox(&[gcoms_protocol::proto::PROVISION_OPTION_GC2], &[], None)
-                .await
-            {
-                return Ok::<_, String>(reply);
+            match runtime.provision_inbox(&[gcoms_protocol::proto::PROVISION_OPTION_GC2], &[], None).await {
+                Ok(reply) => return Ok::<_, String>(reply),
+                Err(error) => eprintln!("fixture provision: {error}; eligible={}; now={}", prepared.directory.eligible(&[], super::now_unix()).unwrap().len(), super::now_unix()),
             }
             tokio::time::sleep(std::time::Duration::from_secs(2)).await;
         }
@@ -256,7 +228,7 @@ async fn protected_inbox_fixture(expire_initial_client_seeds: bool) {
     // advertisement (version-1 relays keep their behavior). A request ID is
     // bound to its options, so the negative uses a fresh request.
     let current = runtime.gc2.get().expect("carrier runtime");
-    let relay_intro = provision_service.gc2_introduction(super::now_unix());
+    let relay_intro = introduction;
     let legacy = tokio::time::timeout(std::time::Duration::from_secs(120), async {
         loop {
             if let Ok(reply) = gcoms_routing::gc2::discovery::provision(
