@@ -17,6 +17,62 @@ fn endpoint() -> LocalEndpoint {
 }
 
 #[tokio::test]
+async fn cancelled_accept_preserves_the_same_client_and_first_byte() {
+    let endpoint = endpoint();
+    let mut listener = LocalListener::bind(&endpoint).unwrap();
+    let mut client = connect(&endpoint).await.unwrap();
+    for _ in 0..3 {
+        assert!(
+            tokio::time::timeout(Duration::from_millis(30), listener.accept())
+                .await
+                .is_err()
+        );
+    }
+    // This is the original connection, not a reconnect/retry workaround.
+    client
+        .write_all(b"same connection")
+        .await
+        .expect("cancelled accept must preserve the connected client");
+    tokio::time::timeout(Duration::from_secs(5), async {
+        let mut accepted = listener.accept().await.unwrap();
+        let mut bytes = [0; 15];
+        accepted.read_exact(&mut bytes).await.unwrap();
+        assert_eq!(&bytes, b"same connection");
+        accepted.write_all(b"ack").await.unwrap();
+        let mut ack = [0; 3];
+        client.read_exact(&mut ack).await.unwrap();
+        assert_eq!(&ack, b"ack");
+    })
+    .await
+    .expect("same client must finish without reconnecting");
+}
+
+#[tokio::test]
+async fn cancelled_accept_preserves_the_original_authentication_deadline() {
+    let endpoint = endpoint();
+    let mut listener = LocalListener::bind(&endpoint).unwrap();
+    let silent = connect(&endpoint).await.unwrap();
+    assert!(
+        tokio::time::timeout(Duration::from_millis(100), listener.accept())
+            .await
+            .is_err()
+    );
+    // Expire the original budget while acceptance is not being polled.
+    tokio::time::sleep(Duration::from_millis(2100)).await;
+    let mut healthy = connect(&endpoint).await.unwrap();
+    healthy.write_all(&[41]).await.unwrap();
+    tokio::time::timeout(Duration::from_secs(1), async {
+        let mut accepted = listener.accept().await.unwrap();
+        let mut byte = [0];
+        accepted.read_exact(&mut byte).await.unwrap();
+        assert_eq!(byte, [41]);
+    })
+    .await
+    .expect("cancellation must not restart the silent client's two-second budget");
+    drop(silent);
+}
+
+#[tokio::test]
 async fn silent_probe_is_not_admitted_and_cancellation_keeps_listener_usable() {
     let endpoint = endpoint();
     let mut listener = LocalListener::bind(&endpoint).unwrap();

@@ -134,7 +134,7 @@ jobs:
   local-pipe-diagnostic:
     if: ${{ inputs.local_pipe_diagnostic && !inputs.mac_overlay_diagnostic }}
     runs-on: windows-2022
-    timeout-minutes: 20
+    timeout-minutes: 45
     steps:
       - run: git config --global core.autocrlf false
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683

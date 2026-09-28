@@ -270,6 +270,10 @@ pub struct LocalListener {
     name: String,
     security: windows_security::PipeSecurity,
     pending: tokio::net::windows::named_pipe::NamedPipeServer,
+    authenticating: Option<(
+        tokio::net::windows::named_pipe::NamedPipeServer,
+        tokio::time::Instant,
+    )>,
 }
 
 #[cfg(windows)]
@@ -282,6 +286,7 @@ impl LocalListener {
             name,
             security,
             pending,
+            authenticating: None,
         })
     }
 
@@ -289,24 +294,34 @@ impl LocalListener {
         use tokio::io::AsyncReadExt;
 
         loop {
-            self.pending.connect().await.map_err(runtime_error)?;
-            let replacement = create_pipe(&self.name, &self.security, false)?;
-            let mut connected = std::mem::replace(&mut self.pending, replacement);
+            if self.authenticating.is_none() {
+                self.pending.connect().await.map_err(runtime_error)?;
+                let replacement = create_pipe(&self.name, &self.security, false)?;
+                let connected = std::mem::replace(&mut self.pending, replacement);
+                self.authenticating = Some((
+                    connected,
+                    tokio::time::Instant::now() + std::time::Duration::from_secs(2),
+                ));
+            }
+            // The enclosing server selects acceptance against completed clients.
+            // Keep the connected pipe and its original deadline in the listener
+            // so cancellation cannot close a new client or extend its budget.
+            let (connected, deadline) = self.authenticating.as_mut().unwrap();
             // Windows impersonates the security context of the last data read.
             // A connect-only probe has no such context. Read one bounded byte
             // before checking the SID, but never expose unauthenticated bytes
             // to a request handler. Preserve it for the unchanged wire parser.
             let mut first = [0];
             if !matches!(
-                tokio::time::timeout(
-                    std::time::Duration::from_secs(2),
-                    connected.read_exact(&mut first)
-                )
-                .await,
+                tokio::time::timeout_at(*deadline, connected.read_exact(&mut first)).await,
                 Ok(Ok(_))
             ) {
+                self.authenticating = None;
                 continue;
             }
+            // A one-byte read cannot make partial progress and then suspend.
+            // There are no further await points before returning the same byte.
+            let (connected, _) = self.authenticating.take().unwrap();
             if self.security.client_is_current_user(&connected)? {
                 return Ok(ServerStream {
                     pipe: connected,

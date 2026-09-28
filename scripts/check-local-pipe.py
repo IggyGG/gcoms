@@ -38,7 +38,7 @@ def main():
         path = output / (name + '.log')
         with path.open('wb') as stream:
             result = subprocess.run(command, cwd=ROOT, stdout=stream, stderr=subprocess.STDOUT,
-                                    timeout=600, check=False)
+                                    timeout=1200, check=False)
         passed = result.returncode == expected
         if assertion is not None:
             passed = passed and assertion in path.read_text(errors='replace')
@@ -54,10 +54,20 @@ def main():
         check('sdk-ipc', cargo + ['test'] + base + ['--lib', '--', '--test-threads=1'])
         check('clippy', cargo + ['clippy'] + base + ['--all-targets', '--', '-D', 'warnings'])
         source.write_bytes(subprocess.check_output(
+            ['git', 'show', 'beb0df9354f1d584e4c8d969185471417657502c:crates/sdk/src/local.rs'], cwd=ROOT))
+        check('cancelled-accept-negative-control', cargo + ['test'] + base + ['--test', 'local_windows',
+              'cancelled_accept_preserves_the_same_client_and_first_byte', '--', '--exact', '--nocapture'],
+              expected=101, assertion='cancelled accept must preserve the connected client')
+        source.write_bytes(subprocess.check_output(
             ['git', 'show', 'd82e0b0de1dee15be1074a8f2fa68b2ac1ffe654:crates/sdk/src/local.rs'], cwd=ROOT))
         check('original-negative-control', cargo + ['test'] + base + ['--test', 'local_windows',
               'silent_probe_is_not_admitted_and_cancellation_keeps_listener_usable', '--', '--exact', '--nocapture'],
               expected=101, assertion='silent connection must not be admitted or terminate the listener')
+        source.write_bytes(original)
+        check('sdk-all-features', cargo + ['test', '--locked', '-p', 'gcoms-sdk', '--all-features',
+              '--lib', '--', '--test-threads=1'])
+        check('clippy-all-features', cargo + ['clippy', '--locked', '-p', 'gcoms-sdk', '--all-features',
+              '--all-targets', '--', '-D', 'warnings'])
         report['passed'] = True
     except Exception as error:
         report['error'] = str(error)
