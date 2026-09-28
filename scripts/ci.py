@@ -2,7 +2,7 @@
 """Native CI gate; runners are disposable and contain the pinned toolchain."""
 import json, os, subprocess, sys
 from pathlib import Path
-from native_limits import prepare
+from native_limits import prepare, disposable_mac_ports
 
 prepare()
 
@@ -14,7 +14,8 @@ run([sys.executable,'scripts/check-source.py'])
 run([sys.executable,'scripts/check-research-import.py'])
 run([sys.executable,'-m','unittest','discover','-s','scripts/tests','-p','*_test.py'])
 run(['cargo','fmt','--all','--','--check'])
-run(['cargo','test','--workspace','--all-features','--locked','--','--test-threads=1'])
+with disposable_mac_ports():
+    run(['cargo','test','--workspace','--all-features','--locked','--','--test-threads=1'])
 run(['cargo','doc','--workspace','--all-features','--no-deps','--locked'])
 run(['cargo','clippy','--workspace','--all-targets','--all-features','--locked','--','-D','warnings'])
 run([NPM,'ci','--ignore-scripts'])

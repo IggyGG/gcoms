@@ -1,0 +1,15 @@
+
+running 1 test
+
+thread 'overlay_delivers_to_24_nodes' (33507) panicked at crates/node/tests/node_overlay.rs:18:6:
+node start: "Can't assign requested address (os error 49)"
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test overlay_delivers_to_24_nodes ... FAILED
+
+failures:
+
+failures:
+    overlay_delivers_to_24_nodes
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 39.21s
+

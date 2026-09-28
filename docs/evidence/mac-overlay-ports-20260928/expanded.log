@@ -1,0 +1,31 @@
+
+running 1 test
+test overlay_delivers_to_24_nodes has been running for over 60 seconds
+[t] m0 addr=127.0.0.1:63088 tag=88
+[t] m1 addr=127.0.0.1:10240 tag=40
+[t] m2 addr=127.0.0.1:10245 tag=45
+[t] m3 addr=127.0.0.1:10252 tag=52
+[t] m4 addr=127.0.0.1:10261 tag=61
+[t] m5 addr=127.0.0.1:10272 tag=72
+[t] m6 addr=127.0.0.1:10285 tag=85
+[t] m7 addr=127.0.0.1:10301 tag=01
+[t] m8 addr=127.0.0.1:10391 tag=91
+[t] m9 addr=127.0.0.1:10766 tag=66
+[t] m10 addr=127.0.0.1:11421 tag=21
+[t] m11 addr=127.0.0.1:12266 tag=66
+[t] m12 addr=127.0.0.1:13466 tag=66
+[t] m13 addr=127.0.0.1:15441 tag=41
+[t] m14 addr=127.0.0.1:17473 tag=73
+[t] m15 addr=127.0.0.1:19592 tag=92
+[t] m16 addr=127.0.0.1:22487 tag=87
+[t] m17 addr=127.0.0.1:32322 tag=22
+[t] m18 addr=127.0.0.1:53905 tag=05
+[t] m19 addr=127.0.0.1:57282 tag=82
+[t] m20 addr=127.0.0.1:62588 tag=88
+[t] m21 addr=127.0.0.1:14217 tag=17
+[t] m22 addr=127.0.0.1:20241 tag=41
+[t] m0 addr=127.0.0.1:63088 q=OvkYjM4a m7 addr=127.0.0.1:10301
+test overlay_delivers_to_24_nodes ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 130.64s
+

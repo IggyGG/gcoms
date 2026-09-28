@@ -1,0 +1,29 @@
+{
+  "diagnostic_only": true,
+  "passed": true,
+  "source_sha256": "b8a23c0983249f972a84c09efc60571a001c8d88877ab96d3d0e5087c4f8fd4f",
+  "original_nofile": [
+    10240,
+    9223372036854775807
+  ],
+  "original_ephemeral_first": "49152",
+  "checks": [
+    {
+      "name": "baseline",
+      "exit_code": 101,
+      "seconds": 39.24805537499998,
+      "ephemeral_first": 49152
+    },
+    {
+      "name": "expanded",
+      "exit_code": 0,
+      "seconds": 130.709998875,
+      "ephemeral_first": 10240
+    }
+  ],
+  "binary_sha256": "9b7b20860ab574b24c348d5f196e452677855fdfac8ce70c0c5de1d10871ae22",
+  "baseline_failed": true,
+  "binary_unchanged": true,
+  "port_setting_restored": true,
+  "source_unchanged": true
+}
