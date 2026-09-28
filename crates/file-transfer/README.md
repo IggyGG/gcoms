@@ -14,3 +14,8 @@ The additive [private piece exchange](../../docs/PRIVATE_FILES.md) supports
 encrypted sparse caches, independent piece verification, restart, and multiple
 authorized sources. Its state machine is under `gcoms_file_transfer::swarm`;
 the host supplies membership and GComs transport.
+
+For accepted retained downloads, a newly authenticated source among the first four
+is queried immediately when the periodic inventory poll is not yet due. Duplicate
+offers do not accelerate polling; later sources retain periodic rotation. This does
+not accept new offers automatically or resume an explicit pause/cancellation.

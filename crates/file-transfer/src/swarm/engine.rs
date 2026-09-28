@@ -315,11 +315,9 @@ impl Engine {
         self.served.retain(|s| s.id != id);
         Ok(())
     }
-    fn source(&mut self, id: ShareId, peer: Peer) {
+    fn source(&mut self, id: ShareId, peer: Peer) -> bool {
         let sources = self.sources.entry(id).or_default();
-        if sources.len() < MAX_PEERS {
-            sources.insert(peer);
-        }
+        sources.len() < MAX_PEERS && sources.insert(peer)
     }
     pub fn action_allowed(&self, action: &Action) -> bool {
         if !self.permits(
@@ -430,7 +428,23 @@ impl Engine {
                     }
                     let id = manifest.id;
                     self.cache.offer(manifest, now)?;
-                    self.source(id, peer);
+                    let discovered = self.source(id, peer);
+                    // Retained downloads need not wait for the periodic poll
+                    // after discovery finally replies. Only the first bounded
+                    // source set gets an immediate query; repeated offers and
+                    // later sources keep the rotating maintenance schedule.
+                    if discovered
+                        && self.refresh_at > now
+                        && self.sources[&id].len() <= MAX_SOURCES
+                        && self.backoff.get(&peer).is_none_or(|at| *at <= now)
+                        && self.cache.get(id)?.status == Status::Downloading
+                    {
+                        out.push(Action {
+                            _payload: None,
+                            peer,
+                            message: Message::Inventory { id, start: 0 },
+                        });
+                    }
                 }
                 if let Some(after) = next {
                     out.push(Action {

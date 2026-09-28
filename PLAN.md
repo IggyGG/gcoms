@@ -1,3 +1,18 @@
+## Bounded file recovery latency (2026-09-28)
+
+A reopened, already accepted download queries a newly authenticated source without
+waiting for the next 30-second inventory poll. Immediate queries retain the first
+four-source bound; repeated offers, unaccepted/paused/cancelled transfers and later
+sources do not accelerate requests. Periodic source rotation remains in place.
+
+The host admits up to eight file sends while retaining each action until its actual
+transport completion. The existing 4 MiB payload budget, 128 pending actions,
+request identities, piece verification, recipient accounting and shutdown behavior
+remain unchanged. This changes active transfer concurrency, not idle polling or
+cover timing. [Recovery checks](TESTPLAN.md#bounded-file-recovery-latency) include
+negative results at the previous limits. Exact installed-app qualification remains
+required; this source change does not relabel the failed Windows 29 transfers.
+
 ## File transport profile writes (2026-09-28)
 
 Remove whole-profile saves only for the authenticated piece application type.

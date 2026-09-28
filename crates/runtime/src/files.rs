@@ -13,6 +13,11 @@ use std::{
 use tokio::sync::{watch, Mutex as AsyncMutex};
 use zeroize::Zeroizing;
 
+// Keep the pipeline useful across delayed hop receipts. Each action still owns
+// its payload reservation until transport completion; the shared 4 MiB payload
+// and 128 pending-action bounds remain unchanged.
+const FILE_SEND_CONCURRENCY: usize = 8;
+
 pub type DiagnosticSource = Arc<dyn Fn() -> serde_json::Value + Send + Sync>;
 pub struct FileService {
     diagnostics: Mutex<Option<DiagnosticSource>>,
@@ -338,7 +343,7 @@ impl FileService {
                     continue;
                 }
                 let worker = service.clone();
-                let capacity = 4usize.saturating_sub(sends.len());
+                let capacity = FILE_SEND_CONCURRENCY.saturating_sub(sends.len());
                 let work = tokio::task::spawn_blocking(move || worker.tick(event, capacity)).await;
                 drop(operation);
                 if let Ok(Ok(actions)) = work {

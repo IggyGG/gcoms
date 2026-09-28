@@ -1,3 +1,7 @@
+Retained file downloads query newly authenticated sources immediately and use a
+bounded eight-send window; see [recovery validation](TESTPLAN.md#bounded-file-recovery-latency).
+Installed platform checks remain separate from the controlled latency model.
+
 ## Immediate sending and randomized cover, 2026-09-25
 
 Owner-approved policy: real traffic sends when transport capacity is available;

@@ -1,3 +1,21 @@
+## Bounded file recovery latency
+
+Run `cargo test --locked -p gcoms-file-transfer` and
+`cargo test --locked -p gcoms-runtime --all-features --lib`, followed by strict
+all-target/all-feature Clippy for both packages and outbound-only facade compilation.
+The reopened-cache regression must preserve verified pieces, immediately query a
+new permitted source, reject unauthorized sources, avoid duplicate-query bursts,
+respect four-source admission and preserve paused/unaccepted/cancelled intent.
+
+The runtime's controlled transport model uses real encrypted pieces, a retained
+first piece, 450 ms hop receipts, 16 MiB, the actual send-window bound and a declared
+60-second recovery allowance within 180 seconds. Four sends fail that model; eight
+complete in 147.75 simulated seconds with exact export bytes and unchanged payload /
+pending-action bounds. This is a deterministic concurrency model, not a measurement
+of installed Windows or real GC/2 paths. Keep delayed-receipt and locking/retry runtime
+regressions, and require the real signed app's interrupted-transfer/reopen/hash gate
+before publishing a Windows replacement. Preserve both original failed Windows runs.
+
 ## File transport profile writes
 
 `cargo test -p gcoms-runtime --all-features --lib piece_transport_does_not_rewrite_profiles_or_require_wrapper_saves -- --nocapture`
