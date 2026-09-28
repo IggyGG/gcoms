@@ -1,0 +1,31 @@
+    Checking typenum v1.20.1
+    Checking windows-link v0.2.1
+    Checking cfg-if v1.0.4
+    Checking subtle v2.6.1
+    Checking windows-sys v0.61.2
+    Checking thiserror v2.0.20
+    Checking serde_core v1.0.229
+    Checking cpufeatures v0.2.17
+    Checking cobs v0.3.0
+    Checking zeroize v1.9.0
+    Checking base64ct v1.8.3
+    Checking bytes v1.12.1
+    Checking generic-array v0.14.7
+    Checking pin-project-lite v0.2.17
+    Checking getrandom v0.4.3
+    Checking once_cell v1.21.4
+    Checking fastrand v2.5.0
+    Checking crypto-common v0.1.7
+    Checking block-buffer v0.10.4
+    Checking digest v0.10.7
+    Checking hmac v0.12.1
+    Checking sha2 v0.10.9
+    Checking gcoms-core v0.1.0 (D:\a\gcoms\gcoms\crates\core)
+    Checking serde v1.0.229
+    Checking postcard v1.1.3
+    Checking socket2 v0.6.5
+    Checking mio v1.2.2
+    Checking tempfile v3.27.0
+    Checking tokio v1.53.1
+    Checking gcoms-sdk v0.1.0 (D:\a\gcoms\gcoms\crates\sdk)
+    Finished `dev` profile [unoptimized] target(s) in 11.65s

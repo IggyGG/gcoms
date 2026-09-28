@@ -1,0 +1,77 @@
+{
+  "passed": true,
+  "source_commit": "e3d49773f1dec8bfdafdaf60edefa980811a335d",
+  "checks": [
+    {
+      "name": "format",
+      "exit_code": 0,
+      "passed": true,
+      "seconds": 3.2969999999999686,
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "regressions",
+      "exit_code": 0,
+      "passed": true,
+      "seconds": 40.29699999999997,
+      "log_sha256": "8693846e583794d9dda6f66759449c1885651bedda75714b73208fddbf6b809b"
+    },
+    {
+      "name": "sdk-ipc",
+      "exit_code": 0,
+      "passed": true,
+      "seconds": 5.562000000000012,
+      "log_sha256": "dacaf486168ee2535cc7ccd2f11cc7517306f9f9a31b697e61c643fe281a4b3c"
+    },
+    {
+      "name": "clippy",
+      "exit_code": 0,
+      "passed": true,
+      "seconds": 12.266000000000076,
+      "log_sha256": "11ff575b713b94000d5d5463586bb7d3d80a928bdad7d84cbafa6dd9656e0369"
+    },
+    {
+      "name": "cancelled-accept-negative-control",
+      "exit_code": 101,
+      "passed": true,
+      "seconds": 5.7970000000000255,
+      "log_sha256": "612dcd4864c5f97859da657afdf1af2489c49ced6d103d2301b5e90dbf29cfb3"
+    },
+    {
+      "name": "original-negative-control",
+      "exit_code": 101,
+      "passed": true,
+      "seconds": 5.641000000000076,
+      "log_sha256": "477f5b88e09eb42f59a5ed6e2d28c4f4d0d7cd08acd90dc908d75aa0239538ce"
+    },
+    {
+      "name": "sdk-all-features",
+      "exit_code": 0,
+      "passed": true,
+      "seconds": 151.21899999999994,
+      "log_sha256": "08d55fb4f20c448b7869f6d1e59dc1066f5b99d18d168c7309812a43cffe5739"
+    },
+    {
+      "name": "clippy-all-features",
+      "exit_code": 0,
+      "passed": true,
+      "seconds": 47.48400000000004,
+      "log_sha256": "a0a6b0e2ce8964eaa2e8c2de4c6638a2410a53d84753d23d5d9a981b97d25ec7"
+    }
+  ],
+  "source_unchanged": true,
+  "run": 36365416364,
+  "artifact": 10947456995,
+  "archive_sha256": "f5f10ad4e35c0e04d16bfbf80f2e5be8c3e091684695f024264edf78141c2cba",
+  "scope": "Native Windows SDK IPC; exact desktop installer/network requalification remains separate",
+  "source_bindings_verified": 796,
+  "original_failure": {
+    "run": 36359196020,
+    "artifact": 10946499290,
+    "archive_sha256": "2f63d38481872277764d3b81a5b38d491bb3a3b526f8f41b31945018d4fc3637",
+    "gcoms": "9a87b9829f8ffeb02532af44528596a2f7b4a0c1",
+    "test": "ipc::windows_pipe_tests::framing_security_reconnect_malformed_and_capability_denial",
+    "error": "ERROR_NO_DATA232: pipe is being closed"
+  },
+  "runtime_contract": "Listener retains one connected authentication stream and original two-second deadline across cancelled accept futures. No unauthenticated bytes exposed; original SID, pin and ACL checks retained."
+}
