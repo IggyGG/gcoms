@@ -69,3 +69,12 @@ f689f583f859709487148cc6f4bf7a76462772df:docs/evidence/invitation-busy-retry-202
 f689f583f859709487148cc6f4bf7a76462772df:docs/evidence/invitation-busy-retry-20260927/tested-source.json:generic-api-key:973
 f689f583f859709487148cc6f4bf7a76462772df:docs/evidence/invitation-busy-retry-20260927/tested-source.json:generic-api-key:994
 f689f583f859709487148cc6f4bf7a76462772df:docs/evidence/invitation-busy-retry-20260927/tested-source.json:generic-api-key:1122
+
+# Reviewed SHA-256 source inventories; exact historical findings only.
+110cc4960b51628aab235204eec3b946fddce974:docs/evidence/windows-pipe-cancellation-20260928/after.json:generic-api-key:1
+110cc4960b51628aab235204eec3b946fddce974:docs/evidence/windows-pipe-cancellation-20260928/before.json:generic-api-key:1
+8dcb22309727ac8a1c5139b03ba8596b09b9685a:docs/evidence/inbox-referral-fixture-20260928/final-before.json:generic-api-key:1
+ed492e687cc5eb7addb8277bf8ca9b5d8e6df6f3:docs/evidence/recipient-route-readiness-20260928/sources.json:generic-api-key:166
+ed492e687cc5eb7addb8277bf8ca9b5d8e6df6f3:docs/evidence/recipient-route-readiness-20260928/sources.json:generic-api-key:174
+ed492e687cc5eb7addb8277bf8ca9b5d8e6df6f3:docs/evidence/recipient-route-readiness-20260928/sources.json:generic-api-key:430
+ed492e687cc5eb7addb8277bf8ca9b5d8e6df6f3:docs/evidence/recipient-route-readiness-20260928/sources.json:generic-api-key:614
