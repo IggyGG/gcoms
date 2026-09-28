@@ -1,3 +1,16 @@
+## File transport profile writes (2026-09-28)
+
+Remove whole-profile saves only for the authenticated piece application type.
+These records use independent nonces and do not advance retained text state;
+their separate cache validates and journals file pieces. Preserve ordinary text,
+stateful event, explicit-save and shutdown barriers. The two-profile regression
+measured 32 profile saves and 1,938,231 profile bytes for 65,536 payload bytes on
+the original runtime, versus zero file-related profile saves/bytes after the
+change. This measures write amplification, not Android latency or CPU savings.
+Source checks and the actual application's bounded transfer gate remain separate.
+
+[Source-bound checks and controls](docs/evidence/piece-profile-writes-20260928/summary.json): 32 runtime passes, 20 file-package passes, strict Clippy and outbound-only compilation.
+
 ## Windows named-pipe preface (2026-09-28)
 
 The retained Windows installer reached two connected profiles then its service

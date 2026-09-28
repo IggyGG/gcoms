@@ -1,0 +1,43 @@
+{
+  "checks": [
+    {
+      "name": "clippy-retry",
+      "command": [
+        "cargo",
+        "clippy",
+        "--offline",
+        "--locked",
+        "-p",
+        "gcoms-runtime",
+        "--all-features",
+        "--all-targets",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "exit_code": 0
+    },
+    {
+      "name": "ordinary-barrier-control",
+      "command": [
+        "cargo",
+        "test",
+        "--offline",
+        "--locked",
+        "-p",
+        "gcoms-runtime",
+        "--all-features",
+        "--lib",
+        "piece_transport_does_not_rewrite_profiles_or_require_wrapper_saves",
+        "--",
+        "--nocapture"
+      ],
+      "exit_code": 101,
+      "expected_failure": true,
+      "runtime_sha256": "cb2a23568db52b6048328a4a119a3cbdeda85dd68e804c59ffc06ab3a9a797fa"
+    }
+  ],
+  "green_test_binary_sha256": "9fb7b0b45ab0bdea42dd813adf837e4f578af27a8fd8e68a40f7fd8541078fd3",
+  "source_unchanged": true,
+  "passed": true
+}

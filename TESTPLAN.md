@@ -1,3 +1,18 @@
+## File transport profile writes
+
+`cargo test -p gcoms-runtime --all-features --lib piece_transport_does_not_rewrite_profiles_or_require_wrapper_saves -- --nocapture`
+uses two encrypted profiles and authenticated channel recipients. Sixteen exact
+4 KiB piece records must request no outgoing wrapper or incoming event profile
+saves. Block profile replacement: piece transport must still work, ordinary
+private text must retain its save error, and shutdown must report failure while
+the retained encrypted bytes remain unchanged. No text ACK may masquerade as file
+completion. Keep the original-runtime red result and ordinary-barrier negative
+control. Run the runtime suite, file cache crash/journal/resume/corruption tests,
+strict Clippy and outbound-only compilation. This component test does not replace
+the signed application's bounded interrupted-transfer/reopen/hash release gate.
+
+[Source-bound checks and controls](docs/evidence/piece-profile-writes-20260928/summary.json): 32 runtime passes, 20 file-package passes, strict Clippy and outbound-only compilation.
+
 ## Windows named-pipe authentication ordering
 
 Run the isolated native `local_pipe_diagnostic` workflow before broad release

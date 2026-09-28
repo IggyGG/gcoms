@@ -1,0 +1,92 @@
+{
+  "checks": [
+    {
+      "name": "runtime",
+      "command": [
+        "cargo",
+        "test",
+        "--offline",
+        "--locked",
+        "-p",
+        "gcoms-runtime",
+        "--all-features",
+        "--lib",
+        "--",
+        "--test-threads=2"
+      ],
+      "exit_code": 0,
+      "duration_seconds": 65.35541486740112,
+      "log_sha256": "56b4c1e640c1408c2275c0e3e38429971e44eb8490797c4f891a55a2a01ce9ca"
+    },
+    {
+      "name": "files",
+      "command": [
+        "cargo",
+        "test",
+        "--offline",
+        "--locked",
+        "-p",
+        "gcoms-file-transfer",
+        "--all-features",
+        "--",
+        "--skip",
+        "gib_import_resume_export_is_streaming",
+        "--test-threads=2"
+      ],
+      "exit_code": 0,
+      "duration_seconds": 19.354743242263794,
+      "log_sha256": "d7d0ee2acc6af1f3355041976143227f985eb30ea3e47d1bae6a59cb52eb7112"
+    },
+    {
+      "name": "clippy",
+      "command": [
+        "cargo",
+        "clippy",
+        "--offline",
+        "--locked",
+        "-p",
+        "gcoms-runtime",
+        "--all-features",
+        "--all-targets",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "exit_code": 1,
+      "duration_seconds": 0.11548972129821777,
+      "log_sha256": "50bc80f155dd25bc138839b233d7300dd6af256de40d11d0fbafea1111a23738"
+    },
+    {
+      "name": "outbound",
+      "command": [
+        "cargo",
+        "check",
+        "--offline",
+        "--locked",
+        "-p",
+        "gcoms-runtime",
+        "--no-default-features",
+        "--features",
+        "files,gc2-carrier"
+      ],
+      "exit_code": 0,
+      "duration_seconds": 43.41804480552673,
+      "log_sha256": "4d510ff8848e03675fb4f15187da92f5160644b1a100785f53c1242f6d66565a"
+    },
+    {
+      "name": "fmt",
+      "command": [
+        "cargo",
+        "fmt",
+        "--all",
+        "--",
+        "--check"
+      ],
+      "exit_code": 0,
+      "duration_seconds": 1.8309218883514404,
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ],
+  "source_unchanged": true,
+  "passed": false
+}

@@ -952,10 +952,20 @@ impl ProtocolRuntime {
                 let Some(inner) = inner.upgrade() else { break };
                 let runtime = ProtocolRuntime(inner);
                 runtime.0.persistence.event(&event);
-                match runtime.save_for(SaveCause::Event).await {
+                let saved = if matches!(&event, ClientEvent::ChannelDirectMessage { body, .. }
+                    if gcoms_core::is_piece_application_payload(body))
+                {
+                    // Authenticated piece records do not advance a ratchet or
+                    // retained text state. Their consumer verifies and journals
+                    // pieces independently before reporting file completion.
+                    Ok(())
+                } else {
+                    runtime.save_for(SaveCause::Event).await
+                };
+                match saved {
                     Ok(()) => {
-                        // One completed barrier covers this event for every
-                        // hosted subscriber present at publication.
+                        // Stateful events share one completed profile barrier
+                        // across every hosted subscriber.
                         let _ = runtime.0.events.send(event);
                         runtime.0.persistence.published();
                     }
@@ -1635,7 +1645,12 @@ impl GcClient for ProtocolClient {
             .embedded
             .send_channel_direct(channel, recipient_member_id, body)
             .await?;
-        self.persist().await?;
+        // Piece transport uses independent nonces and its own durable cache,
+        // without changing retained text/ACK state. Ordinary private text keeps
+        // the profile barrier and its failure result.
+        if !gcoms_core::is_piece_application_payload(body) {
+            self.persist().await?;
+        }
         Ok(message_id)
     }
 
@@ -1721,6 +1736,8 @@ fn central_reserved(ownership: &Option<CentralPartition>, body: &[u8]) -> bool {
 
 #[cfg(test)]
 mod persistence_tests;
+#[cfg(all(test, feature = "files"))]
+mod piece_persistence_tests;
 #[cfg(test)]
 mod shutdown_tests;
 
