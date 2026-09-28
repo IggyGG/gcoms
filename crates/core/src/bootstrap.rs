@@ -18,6 +18,12 @@ pub const CONTROL_PAGE_BYTES: usize = 8192;
 /// Matches the existing CMD D13 sender's bounded object source.
 pub const MAX_ARTIFACT_BYTES: u64 = 67_108_864;
 pub const MAX_PROOF_LIFETIME_SECONDS: u64 = 300;
+/// The payload bootstrap admission runs over production relays whose delivery
+/// latency is minutes to tens of minutes. The client request, the CMD reply and
+/// the follow-on payload request must all outlive that delivery, so the client
+/// bootstrap path uses a one-hour window. Machine redemption keeps the short
+/// proof lifetime so already-installed machines stay compatible.
+pub const BOOTSTRAP_PROOF_LIFETIME_SECONDS: u64 = 3_600;
 pub const DEFAULT_TRANSFER_TIMEOUT_SECONDS: u64 = 18_000;
 pub const DEFAULT_HANDOFF_LIFETIME_SECONDS: u64 = 900;
 pub const REPORT_TIMEOUT_SECONDS: u64 = 120;
