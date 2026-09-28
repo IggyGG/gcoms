@@ -1,0 +1,32 @@
+    Checking memchr v2.8.3
+    Checking tokio v1.53.1
+    Checking nom v7.1.3
+    Checking rusticata-macros v4.1.0
+    Checking asn1-rs v0.7.2
+    Checking serde_json v1.0.151
+    Checking hyper v1.11.1
+    Checking tokio-rustls v0.26.4
+    Checking tokio-util v0.7.19
+    Checking hyper-util v0.1.20
+    Checking der-parser v10.0.0
+    Checking oid-registry v0.8.1
+    Checking gcoms-crypto v0.1.0 (/work/route-readiness/green03/gcoms/crates/crypto)
+    Checking gcoms-core v0.1.0 (/work/route-readiness/green03/gcoms/crates/core)
+    Checking h2 v0.4.19
+    Checking x509-parser v0.18.1
+    Checking tower v0.5.3
+    Checking tower-http v0.6.11
+    Checking hyper-rustls v0.27.9
+    Checking openmls_memory_storage v0.6.0
+    Checking openmls_rust_crypto v0.6.0
+    Checking gcoms-transport v0.1.0 (/work/route-readiness/green03/gcoms/crates/transport)
+    Checking gcoms-routing v0.1.0 (/work/route-readiness/green03/gcoms/crates/routing)
+    Checking reqwest v0.12.28
+    Checking gcoms-private-fs v0.1.0 (/work/route-readiness/green03/gcoms/crates/private-fs)
+    Checking gcoms-network v0.1.0 (/work/route-readiness/green03/gcoms/crates/network)
+    Checking gcoms-mls v0.1.0 (/work/route-readiness/green03/gcoms/crates/mls)
+    Checking gcoms-protocol v0.1.0 (/work/route-readiness/green03/gcoms/crates/protocol)
+    Checking gcoms-network-client v0.1.0 (/work/route-readiness/green03/gcoms/crates/network-client)
+    Checking gcoms-gossip v0.1.0 (/work/route-readiness/green03/gcoms/crates/gossip)
+    Checking gcoms-node v0.1.0 (/work/route-readiness/green03/gcoms/crates/node)
+    Finished `dev` profile [unoptimized] target(s) in 15.35s

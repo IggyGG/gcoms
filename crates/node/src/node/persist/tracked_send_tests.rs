@@ -938,3 +938,278 @@ fn tracked_channel_ack_matches_expected_member_and_commits_before_event() {
         "replayed ACK is not another completion"
     );
 }
+
+// A joined MLS roster can arrive before its authenticated directory bootstrap.
+// Exercise the actual command queue, not a caller that retries rejected sends.
+#[tokio::test(start_paused = true)]
+async fn tracked_commands_wait_for_authenticated_recipient_routes_without_resubmitting() {
+    let name = "pending-recipient-route";
+    let (mut node, mut owner, owner_route) = channel_member_fixture(name);
+    let saved = Arc::new(Mutex::new(Vec::new()));
+    let capture = saved.clone();
+    node.durable_state_sink = Some(Arc::new(move |bytes| {
+        capture.lock().unwrap().push(bytes);
+        Ok(())
+    }));
+    let scheduler = node.scheduler.clone();
+    scheduler.shutdown(); // A failed first hop must retain durable acceptance.
+    let state = Arc::new(Mutex::new(node));
+    let (events_tx, mut events) = broadcast::channel(32);
+    let (commands, cmd_rx) = mpsc::channel(8);
+    let worker =
+        super::super::commands::spawn_command_loop(super::super::commands::CommandLoopContext {
+            state: state.clone(),
+            frwd_admitted: Default::default(),
+            scheduler,
+            events_tx: events_tx.clone(),
+            #[cfg(feature = "relay-host")]
+            relay_host: None,
+            cmd_rx,
+        });
+    let mut results = Vec::new();
+    for text in [b"first".as_slice(), b"second".as_slice()] {
+        let (done, receive) = tokio::sync::oneshot::channel();
+        commands
+            .send(Cmd::SendChannelTextTracked {
+                channel: name.into(),
+                text: text.to_vec(),
+                done,
+            })
+            .await
+            .unwrap();
+        results.push(receive);
+    }
+    tokio::task::yield_now().await;
+    tokio::time::advance(std::time::Duration::from_secs(1)).await;
+    for result in &mut results {
+        assert!(
+            matches!(
+                result.try_recv(),
+                Err(tokio::sync::oneshot::error::TryRecvError::Empty)
+            ),
+            "a joined member must wait for its authenticated recipient route"
+        );
+    }
+    assert!(saved.lock().unwrap().is_empty());
+    {
+        let st = state.lock().unwrap();
+        assert!(st.channels[name].message_outbox.is_empty());
+        assert!(st.last_channel_send.is_none());
+    }
+    // A route with the right display name and wrong authenticated member ID
+    // cannot release the pending send.
+    let wrong = owner
+        .send(&crate::channel::encode_dir("owner", &route(31, [0xee; 32])))
+        .unwrap();
+    process_chan_cell(
+        &mut state.lock().unwrap(),
+        name,
+        wrong,
+        std::time::Instant::now(),
+        &events_tx,
+    );
+    tokio::time::advance(std::time::Duration::from_secs(1)).await;
+    assert!(matches!(
+        results[0].try_recv(),
+        Err(tokio::sync::oneshot::error::TryRecvError::Empty)
+    ));
+    let directory = owner
+        .send(&crate::channel::encode_dir("owner", &owner_route))
+        .unwrap();
+    process_chan_cell(
+        &mut state.lock().unwrap(),
+        name,
+        directory,
+        std::time::Instant::now(),
+        &events_tx,
+    );
+    let mut ids = Vec::new();
+    for (result, expected) in results
+        .into_iter()
+        .zip([b"first".as_slice(), b"second".as_slice()])
+    {
+        let id = tokio::time::timeout(std::time::Duration::from_secs(2), result)
+            .await
+            .unwrap()
+            .unwrap()
+            .unwrap();
+        let wire = state.lock().unwrap().channels[name].message_outbox[&id]
+            .wire
+            .clone();
+        assert_eq!(crate::channel::msg_id(name, &wire), id);
+        let gcoms_mls::ReceiveOutcome::Application { payload, .. } =
+            owner.receive_outcome(&wire).unwrap()
+        else {
+            panic!("pending send did not produce application data");
+        };
+        assert!(matches!(crate::channel::decode_inner(&payload),
+            Some(crate::channel::ChannelInner::Text { body, .. }) if body == expected));
+        ids.push(id);
+    }
+    assert_ne!(ids[0], ids[1]);
+    assert_eq!(state.lock().unwrap().channels[name].message_outbox.len(), 2);
+    while let Ok(event) = events.try_recv() {
+        assert!(
+            !matches!(event, Ev::ChannelDelivery { .. }),
+            "hop completion is not delivery"
+        );
+    }
+    let restored = decode_v2(saved.lock().unwrap().last().unwrap(), &TEST_SEED).unwrap();
+    assert_eq!(restored.channels[0].message_outbox.len(), 2);
+    for id in ids {
+        let ack = owner
+            .send(&crate::channel::encode_text_ack(id, false))
+            .unwrap();
+        process_chan_cell(
+            &mut state.lock().unwrap(),
+            name,
+            ack,
+            std::time::Instant::now(),
+            &events_tx,
+        );
+    }
+    assert!(state.lock().unwrap().channels[name]
+        .message_outbox
+        .is_empty());
+    drop(commands);
+    worker.await.unwrap();
+}
+
+#[tokio::test(start_paused = true)]
+async fn tracked_route_wait_timeout_and_cancellation_never_commit_a_wire() {
+    for cancel in [false, true] {
+        let name = "pending-route-stop";
+        let (mut node, mut owner, owner_route) = channel_member_fixture(name);
+        let saves = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let counter = saves.clone();
+        node.durable_state_sink = Some(Arc::new(move |_| {
+            counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            Ok(())
+        }));
+        let state = Arc::new(Mutex::new(node));
+        let epoch = state.lock().unwrap().channels[name].role.epoch();
+        let start = tokio::time::Instant::now();
+        let mut pending = Box::pin(prepare_tracked_channel_text_when_ready(
+            &state,
+            name,
+            b"never committed",
+            start + std::time::Duration::from_secs(120),
+        ));
+        if cancel {
+            assert!(
+                tokio::time::timeout(std::time::Duration::from_secs(1), &mut pending)
+                    .await
+                    .is_err()
+            );
+        } else {
+            assert!(
+                matches!(pending.as_mut().await, Err(error) if error.contains("send deadline"))
+            );
+            assert_eq!(start.elapsed(), std::time::Duration::from_secs(120));
+        }
+        drop(pending);
+        {
+            let st = state.lock().unwrap();
+            assert_eq!(st.channels[name].role.epoch(), epoch);
+            assert!(st.channels[name].message_outbox.is_empty());
+            assert!(st.last_channel_send.is_none());
+        }
+        assert_eq!(saves.load(std::sync::atomic::Ordering::SeqCst), 0);
+        state
+            .lock()
+            .unwrap()
+            .channels
+            .get_mut(name)
+            .unwrap()
+            .directory
+            .insert("owner".into(), owner_route);
+        let _prepared = prepare_tracked_channel_text_when_ready(
+            &state,
+            name,
+            b"only this wire",
+            tokio::time::Instant::now() + std::time::Duration::from_secs(120),
+        )
+        .await
+        .unwrap();
+        let wire = state
+            .lock()
+            .unwrap()
+            .last_channel_send
+            .as_ref()
+            .unwrap()
+            .1
+            .clone();
+        let gcoms_mls::ReceiveOutcome::Application { payload, .. } =
+            owner.receive_outcome(&wire).unwrap()
+        else {
+            panic!("only the later admitted wire can be received");
+        };
+        assert!(matches!(crate::channel::decode_inner(&payload),
+            Some(crate::channel::ChannelInner::Text { body, .. }) if body == b"only this wire"));
+        assert_eq!(state.lock().unwrap().channels[name].message_outbox.len(), 1);
+    }
+}
+
+#[tokio::test(start_paused = true)]
+async fn tracked_route_wait_does_not_retry_a_failed_commit() {
+    let name = "pending-route-commit-failure";
+    let (mut node, _, owner_route) = channel_member_fixture(name);
+    node.channels
+        .get_mut(name)
+        .unwrap()
+        .directory
+        .insert("owner".into(), owner_route);
+    let saves = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let counter = saves.clone();
+    node.durable_state_sink = Some(Arc::new(move |_| {
+        counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        Err("route-ready commit failure".into())
+    }));
+    let state = Arc::new(Mutex::new(node));
+    let epoch = state.lock().unwrap().channels[name].role.epoch();
+    let start = tokio::time::Instant::now();
+    assert!(
+        matches!(prepare_tracked_channel_text_when_ready(&state, name, b"failed", start + std::time::Duration::from_secs(120)).await,
+        Err(error) if error == "route-ready commit failure")
+    );
+    assert_eq!(start.elapsed(), std::time::Duration::ZERO);
+    assert_eq!(saves.load(std::sync::atomic::Ordering::SeqCst), 1);
+    {
+        let st = state.lock().unwrap();
+        assert_eq!(st.channels[name].role.epoch(), epoch);
+        assert!(st.channels[name].message_outbox.is_empty());
+        assert!(st.last_channel_send.is_none());
+    }
+}
+
+#[tokio::test(start_paused = true)]
+async fn tracked_route_wait_does_not_commit_after_its_original_deadline() {
+    let name = "late-recipient-route";
+    let (mut node, _, owner_route) = channel_member_fixture(name);
+    node.scheduler.shutdown();
+    node.durable_state_sink = Some(Arc::new(|_| panic!("expired send reached persistence")));
+    let state = Arc::new(Mutex::new(node));
+    let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(120);
+    let mut pending = Box::pin(prepare_tracked_channel_text_when_ready(
+        &state, name, b"late", deadline,
+    ));
+    assert!(
+        tokio::time::timeout(std::time::Duration::from_secs(1), &mut pending)
+            .await
+            .is_err()
+    );
+    tokio::time::advance(std::time::Duration::from_secs(120)).await;
+    state
+        .lock()
+        .unwrap()
+        .channels
+        .get_mut(name)
+        .unwrap()
+        .directory
+        .insert("owner".into(), owner_route);
+    assert!(matches!(pending.await, Err(error) if error.contains("send deadline")));
+    assert!(state.lock().unwrap().channels[name]
+        .message_outbox
+        .is_empty());
+    assert!(state.lock().unwrap().last_channel_send.is_none());
+}

@@ -808,6 +808,9 @@ pub(crate) fn spawn_command_loop(ctx: CommandLoopContext) -> tokio::task::JoinHa
                     text,
                     done,
                 } => {
+                    // Include waiting behind earlier sends in the same bound.
+                    let deadline =
+                        tokio::time::Instant::now() + std::time::Duration::from_secs(120);
                     let key = CmdKey::Channel(channel.clone());
                     dispatch!(
                         key,
@@ -817,7 +820,10 @@ pub(crate) fn spawn_command_loop(ctx: CommandLoopContext) -> tokio::task::JoinHa
                         events_tx,
                         prepare,
                         complete | {
-                            let prepared = prepare_channel_text(&state, &channel, &text, true)?;
+                            let prepared = prepare_tracked_channel_text_when_ready(
+                                &state, &channel, &text, deadline,
+                            )
+                            .await?;
                             let ticket = complete.register();
                             drop(prepare);
                             let _ticket = ticket.wait().await;

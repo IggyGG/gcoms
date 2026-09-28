@@ -1,0 +1,18 @@
+   Compiling gcoms-node v0.1.0 (/work/route-readiness/green03/gcoms/crates/node)
+    Finished `test` profile [unoptimized] target(s) in 25.64s
+     Running unittests src/lib.rs (/work/route-readiness/target/debug/deps/gcoms_node-a9c09991362821c1)
+
+running 7 tests
+test node::persist::tests::tracked_channel_ack_matches_expected_member_and_commits_before_event ... gcoms: protocol checkpoint storage failed: ack failpoint
+ok
+test node::persist::tests::tracked_channel_send_requires_complete_roster_and_persistence ... gcoms: protocol checkpoint storage failed: send failpoint
+ok
+test node::persist::tests::tracked_commands_wait_for_authenticated_recipient_routes_without_resubmitting ... ok
+test node::persist::tests::tracked_route_wait_does_not_commit_after_its_original_deadline ... ok
+test node::persist::tests::tracked_route_wait_does_not_retry_a_failed_commit ... gcoms: protocol checkpoint storage failed: route-ready commit failure
+ok
+test node::persist::tests::tracked_route_wait_timeout_and_cancellation_never_commit_a_wire ... ok
+test node::persist::tests::untracked_incomplete_recipient_identity_does_not_claim_durable_acceptance ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 356 filtered out; finished in 4.32s
+

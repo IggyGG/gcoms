@@ -1462,8 +1462,10 @@ impl NodeHandle {
     }
 
     /// Return the exact wire ID after durable local acceptance. Requires a
-    /// persistent sink and routes for every remote roster member. A first-hop
-    /// failure leaves the exact outbox eligible for retry across restart.
+    /// persistent sink and routes for every remote roster member. A fresh join
+    /// waits at most 120 seconds for authenticated recipient routes, before
+    /// advancing MLS or committing a wire. A first-hop failure leaves the exact
+    /// outbox eligible for retry across restart.
     pub async fn send_channel_text_tracked(
         &self,
         channel: &str,

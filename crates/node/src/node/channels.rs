@@ -2288,7 +2288,34 @@ pub(crate) fn prepare_channel_text(
     text: &[u8],
     tracked: bool,
 ) -> Result<PreparedChannelText, String> {
-    prepare_channel_payload(state, channel, text, tracked, None)
+    prepare_channel_payload(state, channel, text, tracked, None)?
+        .ok_or_else(|| "channel recipient route is not ready".into())
+}
+
+/// Wait only for a missing authenticated recipient route, before MLS advances
+/// or an outbox is committed. The command retains its per-channel preparation
+/// slot, so later sends cannot overtake it. No dial or plaintext resubmission is
+/// triggered here; incoming directory/bootstrap traffic continues independently.
+pub(crate) async fn prepare_tracked_channel_text_when_ready(
+    state: &Arc<Mutex<NodeState>>,
+    channel: &str,
+    text: &[u8],
+    deadline: tokio::time::Instant,
+) -> Result<PreparedChannelText, String> {
+    loop {
+        if tokio::time::Instant::now() >= deadline {
+            return Err("channel recipient route is not ready before the send deadline".into());
+        }
+        if let Some(prepared) = prepare_channel_payload(state, channel, text, true, None)? {
+            return Ok(prepared);
+        }
+        // Active submissions only: no background polling for idle channels.
+        tokio::time::sleep_until(std::cmp::min(
+            deadline,
+            tokio::time::Instant::now() + std::time::Duration::from_millis(250),
+        ))
+        .await;
+    }
 }
 
 pub(crate) fn prepare_channel_change(
@@ -2297,7 +2324,8 @@ pub(crate) fn prepare_channel_change(
     change: crate::channel::ChannelChange,
 ) -> Result<PreparedChannelText, String> {
     change.validate()?;
-    prepare_channel_payload(state, channel, &[], false, Some(change))
+    prepare_channel_payload(state, channel, &[], false, Some(change))?
+        .ok_or_else(|| "channel recipient route is not ready".into())
 }
 
 fn prepare_channel_payload(
@@ -2306,7 +2334,7 @@ fn prepare_channel_payload(
     text: &[u8],
     tracked: bool,
     change: Option<crate::channel::ChannelChange>,
-) -> Result<PreparedChannelText, String> {
+) -> Result<Option<PreparedChannelText>, String> {
     let closing = matches!(change, Some(crate::channel::ChannelChange::Close));
     if change.is_none() {
         validate_application_payload(text)?;
@@ -2369,9 +2397,7 @@ fn prepare_channel_payload(
                 Some(route) => {
                     expected.insert(pseudonym, route.clone());
                 }
-                None if tracked || change.is_some() => {
-                    return Err("channel recipient route is not ready".into())
-                }
+                None if tracked || change.is_some() => return Ok(None),
                 None => complete_roster = false,
             }
         }
@@ -2468,13 +2494,13 @@ fn prepare_channel_payload(
         st.last_channel_send = Some((channel.to_string(), wire.clone()));
         (wire, id, targets, durable_outbox)
     };
-    Ok(PreparedChannelText {
+    Ok(Some(PreparedChannelText {
         wire,
         id,
         channel: channel.to_string(),
         targets,
         durable_outbox,
-    })
+    }))
 }
 
 pub(crate) async fn complete_channel_text(
