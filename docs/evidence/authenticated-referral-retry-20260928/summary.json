@@ -1,0 +1,140 @@
+{
+  "schema": 1,
+  "passed": true,
+  "scope": "affected routing package validation; application and release qualification still separate",
+  "base_commit": "3f5f9c77da3c97ce352e5f300910cbc8d668d6ff",
+  "runtime_tested_files": {
+    "crates/routing/src/gc2/owner.rs": "346b6b3e6372c98d9d4b65d6501d23d787e05d5dcb2d6ee538dabbe616844be6",
+    "crates/routing/src/gc2/owner_referral_tests.rs": "10265734162b11ab9106133f5a0c0eef7a077072db89602c4e02366f03bf360a"
+  },
+  "tested_source_paths": 814,
+  "source_unchanged": true,
+  "red": {
+    "name": "red",
+    "command": [
+      "cargo",
+      "test",
+      "--offline",
+      "--locked",
+      "-p",
+      "gcoms-routing",
+      "--all-features",
+      "--lib",
+      "renewed_guard_retries_incomplete_referrals_before_normal_discovery_period",
+      "--",
+      "--nocapture"
+    ],
+    "exit_code": 101,
+    "expected_exit": 101,
+    "duration": 60.828044414520264,
+    "log_sha256": "ffe38423758f3f73e68b7bf8d23d01bad77fb458cc9c58e302aa4ac27562dae6"
+  },
+  "green_test_duration_seconds": 5.36,
+  "routing_passes": 93,
+  "routing_failures": 0,
+  "routing_exclusions": [
+    "native_five_hop_carrier_reuses_routes_and_renews_both_subscriptions: requires DS_MINIMAL_TLS_PROBE built with bootstrap qualification"
+  ],
+  "checks": [
+    {
+      "name": "green",
+      "command": [
+        "cargo",
+        "test",
+        "--offline",
+        "--locked",
+        "-p",
+        "gcoms-routing",
+        "--all-features",
+        "--lib",
+        "referral_tests",
+        "--",
+        "--nocapture"
+      ],
+      "exit_code": 0,
+      "expected_exit": 0,
+      "duration": 25.06134295463562,
+      "log_sha256": "51de27be69d3331d094fb14a67e0cbc529fdce903092bd35a0df1baade928830"
+    },
+    {
+      "name": "routing",
+      "command": [
+        "cargo",
+        "test",
+        "--offline",
+        "--locked",
+        "-p",
+        "gcoms-routing",
+        "--all-features",
+        "--",
+        "--test-threads=2"
+      ],
+      "exit_code": 0,
+      "expected_exit": 0,
+      "duration": 300.47936606407166,
+      "log_sha256": "bc4d88955198023f51e1941b36288ad155903c96900e67acd434abea295f800a"
+    },
+    {
+      "name": "clippy",
+      "command": [
+        "cargo",
+        "clippy",
+        "--offline",
+        "--locked",
+        "-p",
+        "gcoms-routing",
+        "--all-features",
+        "--all-targets",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "exit_code": 0,
+      "expected_exit": 0,
+      "duration": 13.690207719802856,
+      "log_sha256": "a317d7d944f9272b4ec4900f4bc4783ddfc07913af023f279bb13032c2ff1e3f"
+    },
+    {
+      "name": "legacy",
+      "command": [
+        "cargo",
+        "check",
+        "--offline",
+        "--locked",
+        "-p",
+        "gcoms-routing",
+        "--no-default-features"
+      ],
+      "exit_code": 0,
+      "expected_exit": 0,
+      "duration": 5.073050260543823,
+      "log_sha256": "3daba917f9772f2e713ab57402908b3cc798f5d4bd2177ca047572a4ad80c33b"
+    },
+    {
+      "name": "fmt",
+      "command": [
+        "cargo",
+        "fmt",
+        "--all",
+        "--",
+        "--check"
+      ],
+      "exit_code": 0,
+      "expected_exit": 0,
+      "duration": 1.7169995307922363,
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ],
+  "evidence_archive_sha256": "2caa5baacb8e2a3fe788ed0c0441bf4e1171f730387d5829d53f6a374f47b815",
+  "green_test_binary": {
+    "sha256": "d47677141abe78af5c5ea9a9d53815524ba19e085e95557d7878e9e8e0773bf4",
+    "size": 28915280
+  },
+  "retained_interruptions": [
+    "Python tar filter unsupported before tests; extraction boundary validated explicitly",
+    "First green reused red binary because both archived source roots retained identical historical mtimes; invalid green failed and is retained separately; forced source recompilation produced two passing tests"
+  ],
+  "code_review": "codematch=unreachable; authenticated own reply required, retained guards unchanged, no application wakeup or authority extension",
+  "log_normalization": "Published focused logs trim trailing blank lines only; original exact log hashes bind retained archive",
+  "final_source_delta": "PLAN.md, TESTPLAN.md, routing README and this receipt only; implementation/test hashes match tested snapshot"
+}

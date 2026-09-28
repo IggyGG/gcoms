@@ -239,8 +239,11 @@ actual laptop/profile recovery and Android installation.
 `renewed_guard_retries_incomplete_referrals_before_normal_discovery_period` serves
 an authenticated own-only GCD2 reply, makes four independent fresh referrals
 available afterward and never manually wakes the owner. Require discovery within
-75 seconds, no retry before the existing 60-second backoff, exactly two requests,
-unchanged guards and a complete five-hop candidate. Preserve the failing original
+15 seconds, no retry before five seconds, exactly two requests,
+unchanged guards and a complete five-hop candidate. Authenticated incomplete
+replies back off through 5/10/20/40/80/160/300 seconds; failed discovery requests
+retain 60/120/240/300 seconds and complete directories retain five minutes.
+Preserve the failing original
 implementation. Run routing package tests and strict all-target/all-feature Clippy;
 existing failed-dial, request-independent scheduling and cancellation tests remain.
 

@@ -496,3 +496,29 @@ namespace exclusion; strict all-feature/all-target runtime Clippy passes. A
 late known setup receipt passes and a new premature delivery event fails the
 intended assertion. Original Intel failure and initial correction compile error
 are retained. See docs/evidence/runtime-admission-ack-fixture-20260927/summary.json.
+
+# Authenticated referral retry after the 04:00 boundary, 2026-09-28
+
+The signed Linux 0.1.30 bounded transfer reached 15,990,784 of 16,777,216 bytes
+before its unchanged 180-second completion deadline failed. Both clients lost
+usable routes at the hourly authority boundary and regained them about a minute
+later. Offline authenticated inspection of the stopped disposable profiles showed
+fresh retained directory entries at 04:01:01–02 UTC; later authenticated relay
+observations showed all eight fresh referrals. The original failure is retained;
+this is not a successful file gate or permission to relax its deadline.
+
+A successful own-only guard reply now starts a separate bounded referral retry at
+five seconds, backing off through 10/20/40/80/160/300 seconds. Failed requests keep
+60/120/240/300 seconds; complete directories keep five minutes. This does not
+extend authority, replace guards, increase entry counts, dial from an application
+request, or alter data/cover scheduling. The same authenticated TLS regression
+fails against the old scheduler at 15 seconds and passes the new scheduler in
+5.36 seconds. Failed-request pacing and the maintenance ceiling have explicit
+checks. The new application artifact still requires its own bounded file/reopen
+and rollback validation. `codematch=unreachable`.
+
+Validation: 93 routing package passes, zero failures, one existing native probe
+exclusion; strict routing Clippy, legacy feature check, formatting and source
+audit passed. [Receipt](docs/evidence/authenticated-referral-retry-20260928/summary.json).
+The first green harness invocation reused a stale red binary from equal archive
+mtimes; that invalid result is retained separately from the rebuilt passing run.

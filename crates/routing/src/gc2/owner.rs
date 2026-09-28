@@ -40,6 +40,17 @@ struct Renewal {
     failures: u8,
 }
 
+fn discovery_retry_seconds(complete: bool, authenticated: bool, failures: u8) -> u64 {
+    if complete {
+        return DISCOVERY_PERIOD.as_secs();
+    }
+    // A valid guard reply can briefly precede its peers' epoch renewal. It is
+    // not a failed dial: retry this bounded metadata discovery sooner, then
+    // back off to the same maintenance period if referrals remain incomplete.
+    let base = if authenticated { 5 } else { 60 };
+    (base * (1u64 << failures.saturating_sub(1).min(6))).min(DISCOVERY_PERIOD.as_secs())
+}
+
 fn renewal_delay(
     normal: Duration,
     expiry: Option<u64>,
@@ -353,8 +364,8 @@ impl EntryOwner {
                 // A fresh guard is not a complete application route. At an
                 // epoch boundary its reply may contain only its new authority
                 // while the advertised middle referrals are still refreshing.
-                // Retry that incomplete background discovery with the existing
-                // bounded failure backoff, without dialing any new guard or
+                // Retry that authenticated but incomplete background discovery
+                // promptly, without dialing any new guard or
                 // allowing an application request to wake this owner.
                 let complete = renewed.is_some()
                     && self
@@ -370,13 +381,9 @@ impl EntryOwner {
                 } else {
                     schedule
                         .get(&seed.service_id)
-                        .map_or(1, |old| old.failures.saturating_add(1).min(4))
+                        .map_or(1, |old| old.failures.saturating_add(1).min(7))
                 };
-                let seconds = if complete {
-                    DISCOVERY_PERIOD.as_secs()
-                } else {
-                    (60 * (1u64 << (failures - 1))).min(DISCOVERY_PERIOD.as_secs())
-                };
+                let seconds = discovery_retry_seconds(complete, renewed.is_some(), failures);
                 // Positive jitter prevents synchronized fleet refresh bursts;
                 // it never depends on message arrivals, class or byte quotas.
                 let jitter = rand::thread_rng().gen_range(0..=seconds * 100);

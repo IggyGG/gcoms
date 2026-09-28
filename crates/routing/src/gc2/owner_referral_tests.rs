@@ -99,7 +99,7 @@ async fn renewed_guard_retries_incomplete_referrals_before_normal_discovery_peri
             expires_at: seed.expires_at,
         });
     }
-    let recovered = timeout(Duration::from_secs(75), async {
+    let recovered = timeout(Duration::from_secs(15), async {
         loop {
             if directory.eligible(&[], now_unix()).unwrap().len() == 5 {
                 break;
@@ -114,10 +114,10 @@ async fn renewed_guard_retries_incomplete_referrals_before_normal_discovery_peri
     let _ = server.await;
     assert!(
         recovered.is_ok(),
-        "fresh guard deferred missing route referrals for the normal five-minute period"
+        "authenticated guard deferred missing route referrals behind failed-dial pacing"
     );
     assert!(
-        started.elapsed() >= Duration::from_secs(60),
+        started.elapsed() >= Duration::from_secs(5),
         "incomplete referrals must retain bounded retry pacing"
     );
     assert_eq!(requests.load(Ordering::SeqCst), 2);
@@ -141,4 +141,19 @@ async fn renewed_guard_retries_incomplete_referrals_before_normal_discovery_peri
             .unwrap()
             .is_some()
     );
+}
+
+#[test]
+fn incomplete_authenticated_referrals_do_not_change_failed_discovery_pacing() {
+    let incomplete: Vec<_> = (1..=7)
+        .map(|attempt| discovery_retry_seconds(false, true, attempt))
+        .collect();
+    assert_eq!(incomplete, [5, 10, 20, 40, 80, 160, 300]);
+    let failed: Vec<_> = (1..=7)
+        .map(|attempt| discovery_retry_seconds(false, false, attempt))
+        .collect();
+    assert_eq!(failed, [60, 120, 240, 300, 300, 300, 300]);
+    assert_eq!(discovery_retry_seconds(true, true, 0), 300);
+    assert_eq!(discovery_retry_seconds(false, true, u8::MAX), 300);
+    assert_eq!(discovery_retry_seconds(false, false, u8::MAX), 300);
 }
