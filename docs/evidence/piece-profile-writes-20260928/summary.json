@@ -63,10 +63,11 @@
   ],
   "evidence_sha256": {
     "red.log": "91b70585f7ecc943f77988a4e41d60dc72f5892bc1d38ca33e88a9410397f7e8",
-    "green.log": "ca64ab701595e1e1deb14573cbaa4681323788df58e4d93d74bc855ea239bf12",
+    "green.log": "424e711425e0e373f25c70aa09693eecc88425b3479cf5c3dc5a7f924ffb44d8",
     "ordinary-control.log": "73273533fec4f9866ff434baf4388d612c7479b757238a08268766c7d8b7c0c3",
     "checks.json": "60dff21637adb247d520fd03985999ff3210eaa204cc1ffa04381685d040aba0",
     "final-checks.json": "aca8fc9add6f356601d310f79a937c6a3ba9ee002decc9b95495332561700fc5"
   },
-  "retained_archive_sha256": "5145b54de4ef1e60725326b11914720a3a616e90369c3bfb492856327d3baff2"
+  "retained_archive_sha256": "5145b54de4ef1e60725326b11914720a3a616e90369c3bfb492856327d3baff2",
+  "committed_log_format": "green.log omits trailing blank lines; the exact original remains in the hash-bound retained archive"
 }
