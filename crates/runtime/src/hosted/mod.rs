@@ -1,6 +1,7 @@
 //! Durable client-owned MLS state for ciphertext-only hosted channels.
 //! Each channel has an exclusively locked encrypted sidecar. Callers archive
 //! events before acknowledging them and schedule `Sync` while connected.
+pub(crate) mod owner;
 mod public;
 mod state;
 mod storage;

@@ -643,3 +643,11 @@ ACKs, reopen and exact recipient completion, encrypted piece storage, kick/rekey
 and replacement admission. Keep covered and bulk JSON byte counters and timing.
 This uses in-process transport and cannot qualify protected-network latency or the
 separate whole-file engine. Run the smoke before the large campaign.
+
+### Hosted owner responsiveness under uncertain acceptance
+
+Run `hosted_local_send_preempts_a_lost_network_reply_without_losing_or_duplicating_delivery`.
+Withhold an actual service reply after fsync, require a second local send to queue
+within 200ms, then retry without duplicates or false delivery. Close must interrupt
+a stalled read; reopen must retain both messages and require real recipient
+receipts before Delivered. Run strict runtime/application all-feature checks.

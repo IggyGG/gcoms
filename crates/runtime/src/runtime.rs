@@ -22,7 +22,7 @@ pub type ErrorSink = Arc<dyn Fn(String) + Send + Sync>;
 
 struct Inner {
     #[cfg(feature = "hosted-channels")]
-    hosted: tokio::sync::Mutex<Option<crate::hosted::HostedChannels>>,
+    hosted: crate::hosted::owner::Owner,
     #[cfg(feature = "hosted-channels")]
     hosted_default: (std::path::PathBuf, zeroize::Zeroizing<[u8; 32]>),
     node: NodeHandle,
@@ -711,7 +711,7 @@ impl ProtocolRuntime {
         };
         let runtime = Self(Arc::new(Inner {
             #[cfg(feature = "hosted-channels")]
-            hosted: tokio::sync::Mutex::new(None),
+            hosted: crate::hosted::owner::Owner::default(),
             #[cfg(feature = "hosted-channels")]
             hosted_default,
             closing: std::sync::atomic::AtomicBool::new(false),
@@ -843,7 +843,7 @@ impl ProtocolRuntime {
             files.shutdown().await;
         }
         #[cfg(feature = "hosted-channels")]
-        self.0.hosted.lock().await.take();
+        self.0.hosted.close().await;
         #[cfg(feature = "files")]
         if let Some(files) = self.0.files.lock().await.take() {
             files.shutdown().await;
@@ -1343,7 +1343,6 @@ impl GcClient for ProtocolClient {
         &self,
         request: gcoms_sdk::hosted_client::Request,
     ) -> Result<gcoms_sdk::hosted_client::Reply, SdkError> {
-        let mut slot = self.runtime.0.hosted.lock().await;
         if self
             .runtime
             .0
@@ -1352,28 +1351,23 @@ impl GcClient for ProtocolClient {
         {
             return Err(SdkError::ConnectionClosed);
         }
-        if slot.is_none() {
-            let (directory, key) = &self.runtime.0.hosted_default;
-            match std::fs::create_dir(directory) {
-                Ok(()) => {
-                    crate::private_fs::make_private(directory, true).map_err(SdkError::Protocol)?
+        self.runtime
+            .0
+            .hosted
+            .request(request, || {
+                let (directory, key) = &self.runtime.0.hosted_default;
+                match std::fs::create_dir(directory) {
+                    Ok(()) => crate::private_fs::make_private(directory, true)?,
+                    Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {}
+                    Err(error) => return Err(error.to_string()),
                 }
-                Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {}
-                Err(error) => return Err(SdkError::Protocol(error.to_string())),
-            }
-            // Embedded route handle prevents an Arc cycle through this runtime.
-            *slot = Some(
+                // Embedded route handle prevents an Arc cycle through this runtime.
                 crate::hosted::HostedChannels::open(
                     directory,
                     **key,
                     Arc::new(self.embedded.clone()),
                 )
-                .map_err(SdkError::Protocol)?,
-            );
-        }
-        slot.as_mut()
-            .ok_or(SdkError::ConnectionClosed)?
-            .request(request)
+            })
             .await
             .map_err(SdkError::Protocol)
     }

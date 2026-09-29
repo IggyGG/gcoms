@@ -618,3 +618,16 @@ AEAD piece storage, kick/rekey and replacement admission. It records covered/bul
 JSON volume and local timings. The explicit 500-client campaign is running;
 transport is in-process, so neither result qualifies protected-network latency.
 The detailed classic feature mapping is `docs/IRC_FEATURE_MATRIX.md`.
+
+### IRC-2/IRC-8 responsive hosted ownership — 2026-09-29
+
+The runtime previously held its hosted mutex across remote synchronization, which
+could delay a new local send by the whole request deadline. The owner now gives
+local mutations priority, interrupts network waits and retries across existing
+durable boundaries. Ordinary polling does not repeatedly interrupt joins.
+`hosted-responsive-01.log` passes a real MLS/service case with a withheld reply
+after fsync: local queue feedback within 200ms, exact deduplication, no false ACK,
+reopen/completion and prompt close during a stalled read. Strict seven-package
+Clippy passes, including the capacity-fixture iterator correction. Broader retained
+integration/regression evidence is `directory-regression-04.log` (tests passed;
+its original strict stage caught that test-only iterator lint).

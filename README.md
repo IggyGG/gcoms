@@ -12,6 +12,11 @@ remain covered. Contacts must be explicitly registered again after reopening;
 replacing that set revokes new transfer authority. File completion depends on
 piece authentication, Merkle proofs and the whole-file SHA-256.
 
+Hosted local mutations interrupt network waits instead of waiting behind replay
+or file-piece I/O. The interrupted operation retries its retained immutable work;
+this does not turn uncertain acceptance into recipient delivery. Shutdown also
+cancels those waits. Read polling does not interrupt admission preparation.
+
 File integration is undergoing end-to-end qualification. See the
 [coverage ledger](docs/IRC_PARITY.md) for remaining application, 500-member and
 release gates. An installed HTTPS service origin and explicit creation policy

@@ -105,12 +105,12 @@ async fn run(members: usize) {
     let channel = first.archive.channel;
     let mut clients = vec![first];
     let mut max_join_ms = 0;
-    for index in 1..members {
+    for (index, dir) in dirs.iter().enumerate().take(members).skip(1) {
         let joined = Instant::now();
         let mut client = joining(
             channel,
             &format!("member-{index}"),
-            dirs[index].path(),
+            dir.path(),
             network.clone(),
         )
         .await;
