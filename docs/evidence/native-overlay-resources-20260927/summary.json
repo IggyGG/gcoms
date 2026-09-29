@@ -1,0 +1,105 @@
+{
+  "schema": 1,
+  "base": "2aeb86ebfb57ffece666a23803f90f014f3768ef",
+  "scope": "native harness and fixture only; production bytes unchanged; no new full native/platform qualification",
+  "passed": true,
+  "sources": {
+    "scripts/native_limits.py": "74db7ebf64e6fe96e37510ea4f7441a79381f89f2ca30f6b341419b4498d62b9",
+    "scripts/ci.py": "68d640b83eca71de2958af1ba042af6444bebbc0f41c01b8e0706eaf01dc2c0d",
+    "scripts/tests/native_limits_test.py": "22d68eb6a0338bcccf15c5d4be71157816b020d6033b8eb151472dbc8e1c14d7",
+    "crates/node/tests/support/admission.rs": "c4a140eb895f7d1767477a9c74957e34a299e6764b92ac234d1c5e683bf06095",
+    "crates/node/tests/node_overlay.rs": "b8a23c0983249f972a84c09efc60571a001c8d88877ab96d3d0e5087c4f8fd4f"
+  },
+  "checks": [
+    {
+      "command": [
+        "python3",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "scripts/tests",
+        "-p",
+        "native_limits_test.py"
+      ],
+      "exit_code": 0,
+      "seconds": 0.2947337499999999
+    },
+    {
+      "command": [
+        "/Users/iggy/.cargo/bin/cargo",
+        "fmt",
+        "--all",
+        "--",
+        "--check"
+      ],
+      "exit_code": 0,
+      "seconds": 4.047385125
+    },
+    {
+      "command": [
+        "/Users/iggy/.cargo/bin/cargo",
+        "test",
+        "-p",
+        "gcoms-node",
+        "--test",
+        "node_overlay",
+        "--all-features",
+        "--locked",
+        "--",
+        "--nocapture"
+      ],
+      "exit_code": 0,
+      "seconds": 360.348608792
+    },
+    {
+      "command": [
+        "/Users/iggy/.cargo/bin/cargo",
+        "clippy",
+        "-p",
+        "gcoms-node",
+        "--all-targets",
+        "--all-features",
+        "--locked",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "exit_code": 0,
+      "seconds": 73.80745125000004
+    }
+  ],
+  "source_unchanged": true,
+  "archive_sha256": "5719cb8e63dde57f1f5d1adb963fdcffbe0e72bc792d37cbeebb8061e0606846",
+  "logs": {
+    "final02/._check-1.log": "67fc7effc21801fcc96cf234f0f5bcab1af961e5bdf90f82fbfaaaa5c66e900d",
+    "final02/check-1.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "final02/._check-0.log": "67fc7effc21801fcc96cf234f0f5bcab1af961e5bdf90f82fbfaaaa5c66e900d",
+    "final02/check-0.log": "f9f5adfabcc5715ebebe5ba4d8aa13bb1c06e291e8e3498679d1ad7a847e549e",
+    "final02/._check-2.log": "67fc7effc21801fcc96cf234f0f5bcab1af961e5bdf90f82fbfaaaa5c66e900d",
+    "final02/check-2.log": "94f9e2f6e5cd9e684f92b26e441fca8008987e8ebc0a73992dcce977c180c650",
+    "final02/._check-3.log": "67fc7effc21801fcc96cf234f0f5bcab1af961e5bdf90f82fbfaaaa5c66e900d",
+    "final02/check-3.log": "b1acad6295ebaf2331d724d9298a1f14d7c66bc5128b433a002afcb49a756a99"
+  },
+  "baseline": {
+    "soft_nofile": 256,
+    "failed": true,
+    "original_admission_seconds": 30,
+    "raised_nofile_unchanged_test_pass_seconds": 333.663157709
+  },
+  "changes": {
+    "macos_nofile": 8192,
+    "overlay_admission_seconds": 180,
+    "other_fixture_admission_seconds": 30,
+    "delivery_assertions": "unchanged",
+    "latency_qualified": false
+  },
+  "retained_failures": [
+    "hosted Windows admission m22 within30s",
+    "hosted MacARM initial first-hop send error",
+    "local baseline admission failure",
+    "diagnostic with original file limit failed; not qualification",
+    "first final snapshot formatting check failed"
+  ],
+  "codematch": "unreachable"
+}

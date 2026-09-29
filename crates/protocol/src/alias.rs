@@ -143,6 +143,7 @@ impl ForwardGrant {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use alloc::vec;
 
     #[test]
     fn owned_alias_zeroize_clears_all_private_authority() {

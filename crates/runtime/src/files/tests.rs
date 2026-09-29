@@ -236,3 +236,98 @@ async fn locking_during_send_completion_does_not_lose_download_retry() {
     ar.shutdown().await.unwrap();
     br.shutdown().await.unwrap();
 }
+
+/// Controlled transport model for the host's actual send-admission bound. This
+/// isolates latency from encryption correctness and does not qualify a network
+/// or Windows artifact. Each endpoint holds its slot until its real completion;
+/// delivery and the receipt occur together after a 450 ms hop.
+#[test]
+fn retained_file_window_has_room_for_recovery_under_delayed_hop_receipts() {
+    use std::io::Cursor;
+    let sender_dir = tempfile::tempdir().unwrap();
+    let receiver_dir = tempfile::tempdir().unwrap();
+    for dir in [&sender_dir, &receiver_dir] {
+        gcoms_private_fs::make_private(dir.path(), true).unwrap();
+    }
+    let mut sender_cache = Cache::open(sender_dir.path(), [7; 32], Default::default()).unwrap();
+    let mut receiver_cache = Cache::open(receiver_dir.path(), [8; 32], Default::default()).unwrap();
+    let bytes = vec![0x5a; 16 * 1024 * 1024];
+    let channel = [0x77; 32];
+    let members = [[1; 32], [2; 32]];
+    let manifest = sender_cache
+        .import(
+            [0x83; 16],
+            swarm::Scope {
+                channel,
+                participants: vec![],
+            },
+            "latency.bin".into(),
+            bytes.len() as u64,
+            &mut Cursor::new(&bytes),
+            100,
+        )
+        .unwrap();
+    receiver_cache.offer(manifest.clone(), 100).unwrap();
+    receiver_cache.accept(manifest.id, 100).unwrap();
+    let (proof, ciphertext) = sender_cache.read_piece(manifest.id, 0).unwrap();
+    receiver_cache
+        .put(manifest.id, 0, &ciphertext, &proof, 100)
+        .unwrap();
+    drop(receiver_cache);
+    let reopened = Cache::open(receiver_dir.path(), [8; 32], Default::default()).unwrap();
+    let mut engines = [Engine::new(sender_cache), Engine::new(reopened)];
+    for (i, engine) in engines.iter_mut().enumerate() {
+        engine.set_members(channel, members[i], members);
+    }
+    let mut queued: [VecDeque<Action>; 2] = Default::default();
+    let mut in_flight: [VecDeque<(u64, Action)>; 2] = Default::default();
+    // Reserve sixty seconds of the release's 180-second budget for reconnect /
+    // source discovery. This is a declared latency model, not a wall-clock claim.
+    let mut completed = None;
+    for slot in 1200..3600u64 {
+        let now = 100 + slot / 20;
+        for from in 0..2 {
+            while in_flight[from].front().is_some_and(|(due, _)| *due <= slot) {
+                let (_, action) = in_flight[from].pop_front().unwrap();
+                assert!(engines[from].action_allowed(&action));
+                engines[from].send_finished(action.send_token(), SendOutcome::HopAccepted, now);
+                let peer = Peer {
+                    channel,
+                    member: members[from],
+                };
+                let message = swarm::Message::decode(&action.message.encode().unwrap()).unwrap();
+                let replies = engines[1 - from].receive(peer, message, now).unwrap();
+                queued[1 - from].extend(replies);
+            }
+        }
+        for from in 0..2 {
+            queued[from].extend(engines[from].tick(now).unwrap());
+            while in_flight[from].len() < FILE_SEND_CONCURRENCY {
+                let Some(action) = queued[from].pop_front() else {
+                    break;
+                };
+                if engines[from].action_allowed(&action) {
+                    in_flight[from].push_back((slot + 9, action));
+                } else {
+                    engines[from].send_finished(
+                        action.send_token(),
+                        SendOutcome::DefinitelyNotSent,
+                        now,
+                    );
+                }
+            }
+            assert!(queued[from].len() <= 128, "host pending-action budget");
+            assert!(engines[from].buffered_bytes() <= swarm::PAYLOAD_BUDGET);
+        }
+        if engines[1].cache.get(manifest.id).unwrap().status == swarm::Status::Complete {
+            completed = Some(slot as f64 / 20.0);
+            break;
+        }
+    }
+    let elapsed = completed
+        .expect("bounded file window must leave room for reconnect at observed hop latency");
+    let mut output = Vec::new();
+    engines[1].cache.export(manifest.id, &mut output).unwrap();
+    assert_eq!(output, bytes);
+    println!("16 MiB retained model: {elapsed:.2}s including 60s recovery; {FILE_SEND_CONCURRENCY} sends/endpoint");
+}

@@ -1,0 +1,82 @@
+{
+  "passed": false,
+  "source_pair": {
+    "gcoms": "28b24cab672775bdba8320382f6e3d99b1848007",
+    "gchat": "8b7b9c5fa3ff3ca2f36c807a5b6f9135067ad172"
+  },
+  "scope": "ten actual GChat clients through six protected loopback relays; failed before concurrent sends",
+  "joined_clients": 8,
+  "joins": [
+    {
+      "client": 1,
+      "seconds": 45.83856806717813,
+      "r04_30s_passed": false
+    },
+    {
+      "client": 2,
+      "seconds": 98.96732277516276,
+      "r04_30s_passed": false
+    },
+    {
+      "client": 3,
+      "seconds": 49.84096120111644,
+      "r04_30s_passed": false
+    },
+    {
+      "client": 4,
+      "seconds": 79.85678866971284,
+      "r04_30s_passed": false
+    },
+    {
+      "client": 5,
+      "seconds": 100.98060426302254,
+      "r04_30s_passed": false
+    },
+    {
+      "client": 6,
+      "seconds": 81.86016129609197,
+      "r04_30s_passed": false
+    },
+    {
+      "client": 7,
+      "seconds": 92.86870551668108,
+      "r04_30s_passed": false
+    }
+  ],
+  "concurrent_rounds_executed": 0,
+  "failure": "RuntimeError: invitation join did not confirm channel membership",
+  "retained_operation_error": "runtime: invite join deadline elapsed",
+  "reply_chunks_assembled": {
+    "5": 1,
+    "6": 1,
+    "7": 1,
+    "8": 0
+  },
+  "finding": "Ninth join ran out of its original 120-second application budget while owner finalize_admission still awaited prior-member membership ACKs. Owner started finalization about36s into that request; its separate convergence wait permits90s. This identifies the blocked stage, not the sole transport cause. No deadline or ACK barrier changed.",
+  "archive_sha256": "e3d5bf707706e283b17bcb27ea01fed8f94ca1cfa5605e35d7a9a65f77230668",
+  "report_sha256": "6b66a5b43d020328c89a42e28b07f85719c4424dc4df029988efc4886b68a0c6",
+  "retained_files_verified": 300,
+  "exported_files_verified": 54,
+  "inspection_summary_sha256": "e9be53f99883fdd2617635f514c9cda99ffe26b1dc56c9afc1c553dc3265097d",
+  "inspection_controller_sha256": "6b392789040326680e67a5cb1f30e39425e9da3c20a9e3bfb1da4c7e79e47ee7",
+  "build_summary_sha256": "1524081135e3c54e50da28f488159cb2093b9f921c28674a5cf3cf556c5e001d",
+  "candidate_manifest_sha256": "808a962cc2d08f4df35386fd0ee0909e301f5fe4aa3bf564dea296b9bb677af1",
+  "source_and_tools_unchanged": true,
+  "cleanup": {
+    "children_stopped": true,
+    "retired_namespace_pids": [],
+    "host_links_unchanged": true
+  },
+  "physical_devices_accessed": false,
+  "release_qualified": false,
+  "not_qualified": [
+    "ten-client concurrent delivery",
+    "ten relay forwarders",
+    "R02/R03/R04 latency",
+    "current mobile network journeys",
+    "installed release"
+  ],
+  "measurement_note": "This controller polls group histories after all submissions return; group timing would be a conservative observation upper bound. No group round ran in this failure.",
+  "evidence_root": "paired GChat target/channel-reconnect-20260923/reliability-20260924-01",
+  "codematch": "unreachable"
+}

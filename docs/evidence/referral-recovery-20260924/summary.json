@@ -1,0 +1,35 @@
+{
+  "source": "7cb83b4c2952cc4f5c2e1c502c24674421bc0a42",
+  "checks": {
+    "routing": 0,
+    "clippy": 0
+  },
+  "source_unchanged": true,
+  "source_files": 694,
+  "passed": true,
+  "scope": "Routing package tests and strict all-target/all-feature Clippy; not full paired native or device qualification",
+  "codematch": "unreachable",
+  "git_object_bindings_verified": 694,
+  "tests": {
+    "passed": 82,
+    "failed": 0,
+    "ignored": 0
+  },
+  "negative_control": {
+    "exit_code": 101,
+    "test": "renewed_guard_retries_incomplete_referrals_before_normal_discovery_period",
+    "duration_seconds": 75.05
+  },
+  "evidence": {
+    "after.json": "9a9754c71a375b62e1cf013ea1cb87396ac9b4bea47f2fd2efc178dbe9a96efa",
+    "before.json": "9a9754c71a375b62e1cf013ea1cb87396ac9b4bea47f2fd2efc178dbe9a96efa",
+    "check.py": "ad49c3fd8ba8bc958041766e2dd0f2b336d5ac504b2e1b323c6b3184e40802bc",
+    "clippy.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "clippy.log": "cba2e0af636499e1dae8e6a49f3efd4656bff5de5207a6d44fedd03b0f9d711a",
+    "red.exit": "39b8dc3fc8b44765c8e6f1adee04c5b465e555ab791cc42d0d9e810d5b64297c",
+    "red.log": "9d476aa321cef64006f3d6471dfff4e881f6fd29e2cd226ae4bea4ddce705fb9",
+    "routing.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "routing.log": "4ed1c4bc8be08237aa9184563c59a91d08251d4812353981340dcd41c1a2e38d",
+    "summary.json": "54d35e0105d8c9f44e43611123b9ab4bf7f022fcff9a4740a67b556debbba386"
+  }
+}

@@ -7,6 +7,9 @@
 //! sends concurrently and asserts a `current_info` round-trip stays fast while
 //! an admit is in flight.
 
+#[path = "support/admission.rs"]
+mod admission;
+
 use gcoms_node::channel::ChannelVisibility;
 use gcoms_node::node::{start, ChannelStatus, NodeConfig, NodeHandle, NodeProfile};
 
@@ -38,8 +41,7 @@ async fn spawn(seed: u8) -> NodeHandle {
 async fn admit(owner: &NodeHandle, channel: &str, member: &NodeHandle, name: &str) {
     let req = member.prepare_channel_join(name).await.expect("prepare");
     let kp = member.channel_key_package(req).await.expect("kp");
-    let welcome = owner
-        .admit_channel(channel, &kp, name)
+    let welcome = admission::welcome(owner, channel, &kp, name)
         .await
         .expect("admit");
     member
@@ -94,7 +96,9 @@ async fn current_info_stays_responsive_while_admissions_and_sends_are_in_flight(
             let kp = m.channel_key_package(req).await.expect("kp");
             prepared.wait().await;
             let _cycle = admission_cycle.lock().await;
-            let welcome = owner.admit_channel("ops", &kp, &name).await.expect("admit");
+            let welcome = admission::welcome(&owner, "ops", &kp, &name)
+                .await
+                .expect("admit");
             m.join_channel(req, "ops", ChannelVisibility::Private, &welcome)
                 .await
                 .expect("join");
@@ -183,19 +187,20 @@ async fn delayed_welcome_keeps_commands_responsive_and_membership_recovers() {
         .await
         .expect("prepare");
     let second_kp = second.channel_key_package(second_req).await.expect("kp");
+    let epoch = owner.list_channels().await.unwrap()[0].epoch;
+    let error = tokio::time::timeout(
+        Duration::from_millis(500),
+        owner.admit_channel("delayed", &second_kp, "second"),
+    )
+    .await
+    .expect("pending bootstrap refuses promptly without blocking the command loop")
+    .expect_err("unacknowledged bootstrap must prevent another epoch");
+    assert_eq!(error, "channel messages still awaiting acknowledgements");
+    assert_eq!(owner.list_channels().await.unwrap()[0].epoch, epoch);
     let second_owner = owner.clone();
     let admission = tokio::spawn(async move {
-        second_owner
-            .admit_channel("delayed", &second_kp, "second")
-            .await
+        admission::welcome(&second_owner, "delayed", &second_kp, "second").await
     });
-    tokio::time::timeout(Duration::from_secs(10), async {
-        while channel_status(&owner, "delayed").await != ChannelStatus::MembershipPending {
-            tokio::time::sleep(Duration::from_millis(10)).await;
-        }
-    })
-    .await
-    .expect("second admission must await the not-yet-joined member");
     for _ in 0..20 {
         assert!(
             !admission.is_finished(),

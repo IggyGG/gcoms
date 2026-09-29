@@ -1,0 +1,176 @@
+{
+  "schema": 1,
+  "passed": true,
+  "scope": "tracked channel send preparation waits for authenticated recipient routes before MLS/outbox mutation; no iOS rebuilt-artifact or installed release claim",
+  "base_commit": "20de6488d19190e524b1bc01ae6049c8a955aaca",
+  "finished_at": 1790557217.3087254,
+  "node_library": {
+    "passed": 361,
+    "failed": 0,
+    "ignored": 2
+  },
+  "focused": {
+    "passed": 7,
+    "failed": 0,
+    "ignored": 0
+  },
+  "original_regression": "expected failure at the pending-command assertion on original runtime",
+  "deadline": "120 seconds from command-loop admission, including per-channel queue wait; no late commit or retry after uncertain submission",
+  "proofs": [
+    "two queued actual commands preserve FIFO and original wire IDs after authenticated directory arrival",
+    "wrong member identity does not release pending sends",
+    "no wire/checkpoint before route arrival; authenticated ACK alone reclaims outbox",
+    "preparation cancellation/timeout creates no wire; failed native commit is not retried",
+    "all-feature/all-target strict node Clippy and outbound-only node feature check passed"
+  ],
+  "checks": [
+    {
+      "name": "original-red",
+      "command": [
+        "cargo",
+        "test",
+        "--offline",
+        "--locked",
+        "-p",
+        "gcoms-node",
+        "--all-features",
+        "--lib",
+        "node::persist::tests::tracked_commands_wait_for_authenticated_recipient_routes_without_resubmitting",
+        "--",
+        "--exact",
+        "--nocapture"
+      ],
+      "exit_code": 101,
+      "expected_exit": 101,
+      "source_unchanged": true,
+      "log_sha256": "b02c8ecc60b4f00da00cc8ced9acbb59dfed36581aa157b04df17920d94470d1",
+      "passed": true
+    },
+    {
+      "name": "focused",
+      "command": [
+        "cargo",
+        "test",
+        "--offline",
+        "--locked",
+        "-p",
+        "gcoms-node",
+        "--all-features",
+        "--lib",
+        "tracked_",
+        "--",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "exit_code": 0,
+      "expected_exit": 0,
+      "source_unchanged": true,
+      "log_sha256": "2d1c7838744b1c69062da9bff4eca2a70873ba1744415effd524a4ddc78d73a2",
+      "passed": true
+    },
+    {
+      "name": "new-test-inventory",
+      "command": [
+        "cargo",
+        "test",
+        "--offline",
+        "--locked",
+        "-p",
+        "gcoms-node",
+        "--all-features",
+        "--lib",
+        "--",
+        "--list"
+      ],
+      "exit_code": 0,
+      "expected_exit": 0,
+      "source_unchanged": true,
+      "log_sha256": "6fb8c6f94096fbdb86c98a735ff291c80276374a3c5176c7080a5f36cee31a02",
+      "passed": true
+    },
+    {
+      "name": "green-node",
+      "command": [
+        "cargo",
+        "test",
+        "--offline",
+        "--locked",
+        "-p",
+        "gcoms-node",
+        "--all-features",
+        "--lib",
+        "--",
+        "--test-threads=2"
+      ],
+      "exit_code": 0,
+      "expected_exit": 0,
+      "source_unchanged": true,
+      "log_sha256": "2af02c9a11a08c6b6ef81a61501b49db9a87b1aa0b3f438480d15356ea1b86b6",
+      "passed": true
+    },
+    {
+      "name": "clippy",
+      "command": [
+        "cargo",
+        "clippy",
+        "--offline",
+        "--locked",
+        "-p",
+        "gcoms-node",
+        "--all-features",
+        "--all-targets",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "exit_code": 0,
+      "expected_exit": 0,
+      "source_unchanged": true,
+      "log_sha256": "3312d8c0fd1dd246acc1ef8ccb31ac013407d2d1bd510f27f4ad480366b64352",
+      "passed": true
+    },
+    {
+      "name": "network-client",
+      "command": [
+        "cargo",
+        "check",
+        "--offline",
+        "--locked",
+        "-p",
+        "gcoms-node",
+        "--no-default-features",
+        "--features",
+        "client-persist,experimental-gc2",
+        "--lib"
+      ],
+      "exit_code": 0,
+      "expected_exit": 0,
+      "source_unchanged": true,
+      "log_sha256": "2e4359f25ad200a018983822d3aab9dacc1f4de1922e524af6d4a0e1917a32ae",
+      "passed": true
+    },
+    {
+      "name": "fmt",
+      "command": [
+        "cargo",
+        "fmt",
+        "--all",
+        "--",
+        "--check"
+      ],
+      "exit_code": 0,
+      "expected_exit": 0,
+      "source_unchanged": true,
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "passed": true
+    }
+  ],
+  "sources_sha256": "b61ceb02b52189b7011aee1c07456aaf8fa34af61bd94ca9643a418c3cbf4420",
+  "retained_attempts": {
+    "archive_sha256": "d13900580e9c8a4bde667d01871853d4dc4c7e3e62d33827ac6a4cbec57da36b",
+    "invalid_comparison": "first relocated green snapshot reused original red executable; it is not a candidate result",
+    "compile_failure": "first explicit deadline test call omitted its deadline argument; E0061 retained",
+    "tool_setup": "initial Clippy invocation lacked pinned component; installed component, reran only remaining checks"
+  },
+  "remaining": "actual updated iOS application send/ACK/reopen, full release native/package/signature/compatibility gates"
+}

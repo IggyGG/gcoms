@@ -1,0 +1,51 @@
+{
+  "schema": 1,
+  "scope": "bounded retry of authenticated known pre-admission refusals; shared in-process SDK",
+  "base_gcoms": "2c108ee20facffae7562ddf4dc54cbf2bc33d7b2",
+  "sdk_source_sha256": "fb80fa1ecb4d5d9229cd8c678a0a4df4a24ccacbc1427fbe4848f4182e7c65b7",
+  "source_unchanged": true,
+  "checks": {
+    "sdk_passed": 67,
+    "sdk_failed": 0,
+    "gchat_core_passed": 45,
+    "gchat_core_ignored": 3,
+    "strict_sdk_clippy": true,
+    "outbound_only_sdk": true,
+    "no_retry_negative_control_exit": 101
+  },
+  "application": {
+    "five_clients_joined": true,
+    "all_twenty_exact_remote_message_receipts_and_sender_acks": true,
+    "join_seconds": [
+      33.847143072634935,
+      95.50797083508223,
+      64.8013974269852,
+      7.983372137881815
+    ],
+    "file_recovery_gate_passed": false,
+    "reason": "16 MiB transfer missed unchanged 180-second completion bound; retained pieces and concurrent authenticated chat passed",
+    "build": "dev, debug info disabled; not signed release",
+    "cleanup_complete": true
+  },
+  "limits": [
+    "not Android APK, installed platform or release qualification",
+    "helper cancellation drops the waiting future, not proof that queued Node work is cancelled",
+    "unknown outcomes are never retried",
+    "original policy-selector harness failure retained"
+  ],
+  "codematch": "unreachable",
+  "evidence": {
+    "sdk.log": "186827c0156561a709d39b0b8edd5fce4637c548d571eafbdf9fcdf00e119364",
+    "clippy.log": "19287426a1403f43cd447745e6de6613a35f0bbc1c92d2f2111cfba2cc2dbcd9",
+    "gchat-core.log": "106952a389b327d4e1c36b5852b263d0fa28bd16cc0bc771e2a2a75d1d307e15",
+    "checks.json": "507df3840a9501eb3837a9d74f15329dc73328609b3a284f8b6e44bd2bbfb504",
+    "tested-source.json": "f3910bfbb878531a3b9f403867bdb04d310d2c49c64c270e8d0461960bb2d92f",
+    "source-after.json": "f3910bfbb878531a3b9f403867bdb04d310d2c49c64c270e8d0461960bb2d92f",
+    "negative-control.log": "4479a3401c5894a053fd1e6eb70e59e6359110b9d97695009c89b3cad2a6bbe6",
+    "minimal-sdk.log": "8b3d2d39b5457c04904a744d93aeec1579d85a5ce243e78f1ffa85eae1d40ade",
+    "followup-checks.json": "297c096f1466535c5132fa73150a88cfdeceb2b8e68c8a129c93b17ff6abfed9",
+    "application.json": "31828e37bb074799501b77ab0d4d777e429239ac387ba33296e36f7290ed3c65",
+    "application-events.jsonl": "c4e0a2008be7da652d770ec90993b5b047a4c16bcfaf9465d9c5c5343cf1f3aa",
+    "original-policy-failure.json": "e62eb5444a73c8066abd69b4927ae4d798a976a82a7ace187f4b29e61a71beb7"
+  }
+}

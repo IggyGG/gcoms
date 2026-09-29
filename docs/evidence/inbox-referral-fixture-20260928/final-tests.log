@@ -1,0 +1,20 @@
+info: syncing channel updates for 1.98.0-x86_64-unknown-linux-gnu
+info: latest update on 2026-08-20 for version 1.98.0 (88d9e12ae 2026-08-18)
+info: downloading 3 components
+warn: the missing active toolchain `1.98.0-x86_64-unknown-linux-gnu` has been auto-installed
+warn: this might cause rustup commands to take longer time to finish than expected
+info: you may opt out with `RUSTUP_AUTO_INSTALL=0` or `rustup set auto-install disable`
+   Compiling gcoms-node v0.1.0 (/work/route-readiness/windows28-fixture/final/crates/node)
+    Finished `test` profile [unoptimized] target(s) in 19.29s
+     Running unittests src/lib.rs (/work/route-readiness/target-complete/debug/deps/gcoms_node-a9c09991362821c1)
+
+running 6 tests
+test node::routing::gc2_inbox_tests::client_bundle_install_refuses_a_non_gc2_node ... ok
+test node::routing::gc2_inbox_tests::client_bundle_install_seeds_only_the_carrier_directory ... ok
+test node::routing::gc2_inbox_tests::deployed_relay_probe ... ignored, explicit live relay provisioning; requires separately authorized GC2_PROBE_BUNDLE
+test node::routing::gc2_inbox_tests::exhausted_retained_inbox_recovery_does_not_starve_replacement ... ok
+test node::routing::gc2_inbox_tests::expired_carrier_seeds_reacquire_referrals_for_protected_inbox_provisioning ... ok
+test node::routing::gc2_inbox_tests::fresh_carrier_node_provisions_its_inbox_over_the_protected_route ... ok
+
+test result: ok. 5 passed; 0 failed; 1 ignored; 0 measured; 358 filtered out; finished in 74.41s
+

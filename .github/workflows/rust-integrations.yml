@@ -1,6 +1,23 @@
 name: Rust application integrations
+run-name: GComs SDK Rust ${{ inputs.request_id || github.sha }}
 on:
   workflow_dispatch:
+    inputs:
+      request_id:
+        type: string
+        default: manual
+      subscription_diagnostic:
+        type: boolean
+        default: false
+      diagnostic_linux_only:
+        type: boolean
+        default: false
+      local_pipe_diagnostic:
+        type: boolean
+        default: false
+      mac_overlay_diagnostic:
+        type: boolean
+        default: false
   push:
     branches: [main]
     paths:
@@ -15,6 +32,7 @@ permissions:
   contents: read
 jobs:
   native:
+    if: ${{ !inputs.subscription_diagnostic && !inputs.local_pipe_diagnostic && !inputs.mac_overlay_diagnostic }}
     timeout-minutes: 90
     strategy:
       fail-fast: false
@@ -55,4 +73,120 @@ jobs:
         with:
           name: rust-integrations-${{ matrix.runner }}-${{ github.sha }}
           path: integration-evidence/
+          if-no-files-found: error
+
+  subscription-diagnostic:
+    if: ${{ inputs.subscription_diagnostic && !inputs.local_pipe_diagnostic && !inputs.mac_overlay_diagnostic }}
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: ${{ fromJSON(inputs.diagnostic_linux_only && '["ubuntu-24.04"]' || '["ubuntu-24.04","macos-15","macos-15-intel","windows-2022"]') }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 25
+    steps:
+      - name: Preserve source bytes
+        run: git config --global core.autocrlf false
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Prepare the existing protected-loopback topology
+        shell: bash
+        run: |
+          rustup toolchain install 1.98.0 --profile minimal --component clippy
+          if [ "$RUNNER_OS" = macOS ]; then
+            for host in 102 103 104 105 106 107; do
+              sudo ifconfig lo0 alias 127.0.0.$host up
+            done
+          fi
+          mkdir -p subscription-evidence
+          git rev-parse HEAD > subscription-evidence/source.txt
+      - name: Prepare short private test directory
+        run: ${{ runner.os == 'Windows' && 'python' || 'python3' }} scripts/prepare-rust-tests.py
+      - name: Run unchanged subscription assertions with local diagnostic events
+        shell: bash
+        env:
+          CARGO_BUILD_JOBS: '4'
+          CARGO_PROFILE_TEST_DEBUG: '0'
+          CARGO_PROFILE_DEV_DEBUG: '0'
+          CARGO_INCREMENTAL: '0'
+          RUST_BACKTRACE: '1'
+        run: |
+          export GCOMS_SUBSCRIPTION_TEST_METRICS="$GITHUB_WORKSPACE/subscription-evidence/metrics.jsonl"
+          set +e
+          cargo +1.98.0 test --locked -p gcoms-node --all-features --lib protected_routes -- --test-threads=1 --nocapture > subscription-evidence/check.log 2>&1
+          result=$?
+          echo "$result" > subscription-evidence/exit.txt
+          tail -120 subscription-evidence/check.log
+          exit "$result"
+      - name: Check strict node Clippy
+        if: runner.os == 'Linux'
+        env:
+          CARGO_BUILD_JOBS: '4'
+          CARGO_PROFILE_DEV_DEBUG: '0'
+        run: cargo +1.98.0 clippy --locked -p gcoms-node --all-features --all-targets -- -D warnings
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: protected-subscription-diagnostic-${{ matrix.runner }}-${{ github.sha }}
+          path: subscription-evidence/
+          if-no-files-found: error
+
+  local-pipe-diagnostic:
+    if: ${{ inputs.local_pipe_diagnostic && !inputs.mac_overlay_diagnostic }}
+    runs-on: windows-2022
+    timeout-minutes: 45
+    steps:
+      - run: git config --global core.autocrlf false
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c
+        with:
+          python-version: '3.12.10'
+      - name: Prepare pinned native worker
+        run: |
+          rustup toolchain install 1.98.0 --profile minimal --component clippy,rustfmt
+          python scripts/prepare-rust-tests.py
+      - name: Qualify pipe preface and original failure control
+        env:
+          CARGO_BUILD_JOBS: '4'
+          CARGO_PROFILE_TEST_DEBUG: '0'
+          CARGO_PROFILE_DEV_DEBUG: '0'
+          CARGO_INCREMENTAL: '0'
+        run: python scripts/check-local-pipe.py --output pipe-evidence
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: local-pipe-${{ github.sha }}
+          path: pipe-evidence/
+          if-no-files-found: error
+
+  mac-overlay-diagnostic:
+    if: ${{ inputs.mac_overlay_diagnostic }}
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c
+        with:
+          python-version: '3.12.10'
+      - name: Prepare pinned native worker
+        run: |
+          rustup toolchain install 1.98.0 --profile minimal
+          python3 scripts/prepare-rust-tests.py
+      - name: Compare unchanged overlay with explicit disposable port resources
+        env:
+          CARGO_BUILD_JOBS: '4'
+          CARGO_PROFILE_TEST_DEBUG: '0'
+          CARGO_PROFILE_DEV_DEBUG: '0'
+          CARGO_INCREMENTAL: '0'
+        run: python3 scripts/check-mac-overlay-resources.py --output overlay-evidence
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: mac-overlay-${{ github.sha }}
+          path: overlay-evidence/
           if-no-files-found: error

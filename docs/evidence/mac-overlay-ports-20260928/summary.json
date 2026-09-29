@@ -1,0 +1,24 @@
+{
+  "passed": true,
+  "scope": "disposable GitHub macOS native test resource precondition; no transport/runtime/deadline/assertion change",
+  "diagnostic_run": 36357688455,
+  "diagnostic_artifact_sha256": "fbcbbd7435238e563d52f2910fa43705de3db9ae5536193e1d838903784e655f",
+  "diagnostic_source": "20de6488d19190e524b1bc01ae6049c8a955aaca",
+  "original_first_port": 49152,
+  "fixture_first_port": 10240,
+  "baseline": "unchanged 24-node fixture failed starting a node with EADDRNOTAVAIL (49)",
+  "expanded": "same executable passed 1/0/0 in 130.64 seconds; original port setting restored",
+  "python_tests": "10 passed including failure restoration and personal/non-Mac no-op",
+  "native_requalification": "next source-bound full native CI; diagnostic is not a release pass",
+  "sources": {
+    "scripts/ci.py": "f0149bbe5a4aa5aefe2a343525895716805992309bcbcabaa3dd6db6d00b35ff",
+    "scripts/native_limits.py": "1f30037c2c8fe345bf6a5e266041c5ebe45c2fc7e97cccc1d173c3e4a952b878",
+    "scripts/tests/native_limits_test.py": "e86e4e18ccf22c4c78bab5476ec1f2542d1b7e84e9781886a0ff4a33634a0884"
+  },
+  "files": {
+    "python-tests.log": "234e15e0dfd1246776b3734711833bd8b4122723e7709a09dff43e06cae0997f",
+    "diagnostic.json": "b0b5b0a72b450fb7388e5bccfeea4d1e6d8d719f0b05159a17316f92ffa3675c",
+    "expanded.log": "9f42755f7fafdf54ad673c699f7945156e989b90c75588733e33f2b58f349d2d",
+    "baseline.log": "678fff4c3fbcc3ca1777282234d153b6b48500b037ef17b2731e83c36c4a2c53"
+  }
+}

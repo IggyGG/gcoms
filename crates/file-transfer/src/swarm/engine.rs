@@ -38,6 +38,7 @@ pub struct Action {
     pub peer: Peer,
     pub message: Message,
     _payload: Option<PayloadReservation>,
+    discovery_generation: Option<u64>,
 }
 #[derive(Clone, Debug)]
 pub struct PayloadReservation(Arc<ReservedPayload>);
@@ -54,10 +55,25 @@ impl Drop for ReservedPayload {
 #[derive(Clone, Copy, Debug)]
 pub struct SendToken {
     peer: Peer,
-    id: ShareId,
-    piece: u32,
-    offset: u32,
-    request: [u8; 16],
+    kind: SendKind,
+}
+#[derive(Clone, Copy, Debug)]
+enum SendKind {
+    Piece {
+        id: ShareId,
+        piece: u32,
+        offset: u32,
+        request: [u8; 16],
+    },
+    Discovery {
+        generation: u64,
+    },
+}
+#[derive(Default)]
+struct Discovery {
+    retry_at: u64,
+    generation: u64,
+    pending: bool,
 }
 #[derive(Clone, Copy, Debug)]
 pub enum SendOutcome {
@@ -74,6 +90,7 @@ impl Action {
                 next: None,
             },
             _payload: None,
+            discovery_generation: None,
         }
     }
     /// Hold through encoding and transport completion. Reservation includes six
@@ -92,11 +109,19 @@ impl Action {
                 request,
             } => Some(SendToken {
                 peer: self.peer,
-                id,
-                piece,
-                offset,
-                request,
+                kind: SendKind::Piece {
+                    id,
+                    piece,
+                    offset,
+                    request,
+                },
             }),
+            Message::Discover { after: None } => {
+                self.discovery_generation.map(|generation| SendToken {
+                    peer: self.peer,
+                    kind: SendKind::Discovery { generation },
+                })
+            }
             _ => None,
         }
     }
@@ -140,6 +165,7 @@ impl Pull {
             );
             out.push(Action {
                 _payload: None,
+                discovery_generation: None,
                 peer: self.peer,
                 message: Message::Want {
                     id,
@@ -169,7 +195,8 @@ pub struct Engine {
     inventories: BTreeMap<(ShareId, Peer), Vec<bool>>,
     pulls: BTreeMap<(ShareId, u32), Pull>,
     backoff: BTreeMap<Peer, u64>,
-    discovery: BTreeMap<Peer, u64>,
+    discovery: BTreeMap<Peer, Discovery>,
+    next_discovery_generation: u64,
     refresh_at: u64,
     served: VecDeque<Served>,
     refresh_cursor: usize,
@@ -188,6 +215,7 @@ impl Engine {
             pulls: BTreeMap::new(),
             backoff: BTreeMap::new(),
             discovery: BTreeMap::new(),
+            next_discovery_generation: 0,
             refresh_at: 0,
             served: VecDeque::new(),
             refresh_cursor: 0,
@@ -315,11 +343,33 @@ impl Engine {
         self.served.retain(|s| s.id != id);
         Ok(())
     }
-    fn source(&mut self, id: ShareId, peer: Peer) {
+    fn source(&mut self, id: ShareId, peer: Peer) -> bool {
         let sources = self.sources.entry(id).or_default();
-        if sources.len() < MAX_PEERS {
-            sources.insert(peer);
+        sources.len() < MAX_PEERS && sources.insert(peer)
+    }
+    fn query_new_source(
+        &mut self,
+        id: ShareId,
+        peer: Peer,
+        now: u64,
+        out: &mut Vec<Action>,
+    ) -> Result<()> {
+        // Only authenticated advertisements reach this helper. Keep the same
+        // source, retry and user-intent bounds for offers and completion claims.
+        if self.source(id, peer)
+            && self.refresh_at > now
+            && self.sources[&id].len() <= MAX_SOURCES
+            && self.backoff.get(&peer).is_none_or(|at| *at <= now)
+            && self.cache.get(id)?.status == Status::Downloading
+        {
+            out.push(Action {
+                _payload: None,
+                discovery_generation: None,
+                peer,
+                message: Message::Inventory { id, start: 0 },
+            });
         }
+        Ok(())
     }
     pub fn action_allowed(&self, action: &Action) -> bool {
         if !self.permits(
@@ -416,6 +466,7 @@ impl Engine {
                 };
                 out.push(Action {
                     _payload: None,
+                    discovery_generation: None,
                     peer,
                     message: Message::Offers {
                         manifests: manifests.into_iter().take(8).collect(),
@@ -430,11 +481,16 @@ impl Engine {
                     }
                     let id = manifest.id;
                     self.cache.offer(manifest, now)?;
-                    self.source(id, peer);
+                    // Retained downloads need not wait for the periodic poll
+                    // after discovery finally replies. Only the first bounded
+                    // source set gets an immediate query; repeated offers and
+                    // later sources keep the rotating maintenance schedule.
+                    self.query_new_source(id, peer, now, &mut out)?;
                 }
                 if let Some(after) = next {
                     out.push(Action {
                         _payload: None,
+                        discovery_generation: None,
                         peer,
                         message: Message::Discover { after: Some(after) },
                     });
@@ -456,6 +512,7 @@ impl Engine {
                 };
                 out.push(Action {
                     _payload: None,
+                    discovery_generation: None,
                     peer,
                     message: Message::Have { id, start, pieces },
                 });
@@ -482,6 +539,7 @@ impl Engine {
                     if !pieces.is_empty() && next < total {
                         out.push(Action {
                             _payload: None,
+                            discovery_generation: None,
                             peer,
                             message: Message::Inventory {
                                 id,
@@ -506,6 +564,7 @@ impl Engine {
                 if !available {
                     out.push(Action {
                         _payload: None,
+                        discovery_generation: None,
                         peer,
                         message: Message::Unavailable { id, request },
                     });
@@ -550,6 +609,7 @@ impl Engine {
                     .unwrap();
                 out.push(Action {
                     _payload: Some(reservation),
+                    discovery_generation: None,
                     peer,
                     message: Message::Data {
                         id,
@@ -645,6 +705,7 @@ impl Engine {
                             for source in sources {
                                 out.push(Action {
                                     _payload: None,
+                                    discovery_generation: None,
                                     peer: *source,
                                     message: Message::Complete {
                                         id,
@@ -671,6 +732,10 @@ impl Engine {
                     return Err(Error::Unauthorized);
                 }
                 self.cache.receipt(id, peer.member)?;
+                // A valid completion identifies a candidate source after our
+                // restart. It does not verify any local piece or finish our
+                // download: inventory and authenticated piece checks still do.
+                self.query_new_source(id, peer, now, &mut out)?;
             }
         }
         Ok(out)
@@ -716,11 +781,18 @@ impl Engine {
                 if self.discovery.len() >= MAX_PEERS && !self.discovery.contains_key(&peer) {
                     continue;
                 }
-                let at = self.discovery.entry(peer).or_default();
-                if *at <= now && out.len() < 8 {
-                    *at = now + 60;
+                let discovery = self.discovery.entry(peer).or_default();
+                if !discovery.pending && discovery.retry_at <= now && out.len() < 8 {
+                    self.next_discovery_generation = self
+                        .next_discovery_generation
+                        .checked_add(1)
+                        .ok_or(Error::Quota)?;
+                    discovery.generation = self.next_discovery_generation;
+                    discovery.pending = true;
+                    discovery.retry_at = now.saturating_add(60);
                     out.push(Action {
                         _payload: None,
+                        discovery_generation: Some(discovery.generation),
                         peer,
                         message: Message::Discover { after: None },
                     });
@@ -748,6 +820,7 @@ impl Engine {
                             let peer = *peers[(self.refresh_cursor + n) % peers.len()];
                             out.push(Action {
                                 _payload: None,
+                                discovery_generation: None,
                                 peer,
                                 message: Message::Inventory { id: *id, start: 0 },
                             });
@@ -757,6 +830,7 @@ impl Engine {
                     for peer in sources {
                         completed.push(Action {
                             _payload: None,
+                            discovery_generation: None,
                             peer: *peer,
                             message: Message::Complete {
                                 id: *id,
@@ -771,6 +845,7 @@ impl Engine {
                     let action = &completed[(self.receipt_cursor + n) % completed.len()];
                     out.push(Action {
                         _payload: None,
+                        discovery_generation: None,
                         peer: action.peer,
                         message: action.message.clone(),
                     });
@@ -804,6 +879,7 @@ impl Engine {
                     attempt.deadline = u64::MAX; // host owns this queued attempt until completion
                     out.push(Action {
                         _payload: None,
+                        discovery_generation: None,
                         peer: pull.peer,
                         message: Message::Want {
                             id,
@@ -892,7 +968,7 @@ impl Engine {
         }
     }
 
-    /// Call once when a queued Want finishes its real transport attempt, or is
+    /// Call once when a queued request finishes its real transport attempt, or is
     /// discarded before sending. A local wrapper timeout is not completion.
     pub fn send_finished(&mut self, token: Option<SendToken>, outcome: SendOutcome, now: u64) {
         match outcome {
@@ -908,16 +984,35 @@ impl Engine {
             }
         }
         let Some(token) = token else { return };
-        let Some(pull) = self.pulls.get_mut(&(token.id, token.piece)) else {
+        let (id, piece, offset, request) = match token.kind {
+            SendKind::Piece {
+                id,
+                piece,
+                offset,
+                request,
+            } => (id, piece, offset, request),
+            SendKind::Discovery { generation } => {
+                if let Some(discovery) = self.discovery.get_mut(&token.peer) {
+                    if discovery.pending && discovery.generation == generation {
+                        discovery.pending = false;
+                        if !matches!(outcome, SendOutcome::HopAccepted) {
+                            // Discovery is idempotent, but a failed completed send
+                            // must still be paced. Reuse the piece-request retry
+                            // bound; never turn a wrapper timeout into completion.
+                            discovery.retry_at = now.saturating_add(REQUEST_TIMEOUT);
+                        }
+                    }
+                }
+                return;
+            }
+        };
+        let Some(pull) = self.pulls.get_mut(&(id, piece)) else {
             return;
         };
-        if pull.peer != token.peer || pull.request != token.request {
+        if pull.peer != token.peer || pull.request != request {
             return;
         }
-        if let Some(block) = pull
-            .outstanding
-            .get_mut(&(token.offset as usize / BLOCK_BYTES))
-        {
+        if let Some(block) = pull.outstanding.get_mut(&(offset as usize / BLOCK_BYTES)) {
             block.deadline = match outcome {
                 SendOutcome::DefinitelyNotSent => now,
                 _ => now.saturating_add(REQUEST_TIMEOUT * (1 << block.attempts)),

@@ -1,0 +1,123 @@
+{
+  "passed": true,
+  "scope": "candidate16 actual GChat core/service connection loss, authenticated chat, 64MiB exact file export and retained reopen; correctness only",
+  "source_manifest_sha256": "2456fe2e2830841a3eb196dd233cb5aee40e1f57408937de3c93df9cc152abab",
+  "report_sha256": "f3ff98f12e428e56a9b51bc1f5c54c278d02a84ee7f4934166da65ca84d6fe00",
+  "archive_sha256": "ccc3f03b2b55b389e6bd5dac056763672e4e6d43950b45dd1deb966f114ec90b",
+  "evidence_files_verified": 38,
+  "retained_cluster_files_verified": 652,
+  "entry_loss": {
+    "recovery_seconds": 38.6379274642095,
+    "r03_10s_passed": false,
+    "same_identity": true,
+    "file": {
+      "id": "58a3fa3313bc4c52bcf84600732bdeed",
+      "name": "entry-loss.bin",
+      "sha256": "f87b3cb60556cdf9bbf82410fca04be2270bfa750e2d1a9cc2a2b60535c5a77c",
+      "size": 67108864
+    },
+    "replacements": {
+      "ended": [
+        {
+          "id": 2,
+          "role": "client",
+          "phase": "transport_ended",
+          "unix_ms": 1790287866085,
+          "elapsed_ms": 66772,
+          "authority_expires_at": 1790290800,
+          "deadline_after_start_ms": 1799999,
+          "max_lifetime_ms": 1800000
+        },
+        {
+          "id": 1,
+          "role": "client",
+          "phase": "transport_ended",
+          "unix_ms": 1790287866086,
+          "elapsed_ms": 66773,
+          "authority_expires_at": 1790290800,
+          "deadline_after_start_ms": 1799999,
+          "max_lifetime_ms": 1800000
+        }
+      ],
+      "ready": [
+        {
+          "id": 3,
+          "role": "client",
+          "phase": "class_muxes_ready",
+          "unix_ms": 1790287866087,
+          "elapsed_ms": 1,
+          "authority_expires_at": 1790290800,
+          "deadline_after_start_ms": 1799999,
+          "max_lifetime_ms": 1800000
+        },
+        {
+          "id": 4,
+          "role": "client",
+          "phase": "class_muxes_ready",
+          "unix_ms": 1790287866127,
+          "elapsed_ms": 41,
+          "authority_expires_at": 1790290800,
+          "deadline_after_start_ms": 1799999,
+          "max_lifetime_ms": 1800000
+        }
+      ]
+    },
+    "scope": "established fixture TCP reset; not credential or carrier-cap expiry"
+  },
+  "replacement_start_delays_ms": [
+    0,
+    1
+  ],
+  "join_seconds": 53.87156206276268,
+  "message_ack_seconds": [
+    17.02878814190626,
+    2.9428464425727725,
+    36.148864863440394,
+    2.4546240931376815
+  ],
+  "cleanup": {
+    "empty_namespace": true,
+    "children_stopped": true,
+    "host_links_unchanged": true
+  },
+  "build": {
+    "path": "/work/application-build-16-fixture",
+    "manifest_sha256": "b8913eac4d893ebab9768b180bb5a6d4c36213fe2371c75692927e54e131380c",
+    "sources": {
+      "gcoms": {
+        "revision": "8b60e916635b8ad1a37ec54b9afbb7698b7b2504",
+        "snapshot_sha256": "28c28d8d22b8f59a8e087a3e9128ba1d15268798e4b33b5595880f01ddf2b304"
+      },
+      "gchat": {
+        "revision": "b8e6d5d5740fcad1e2ab7f4e1b3394c62a7326cd",
+        "snapshot_sha256": "14c81026d2c95567cc691af2ecad254a430bb752d5b279859d8f3d24def71ba7"
+      }
+    },
+    "artifacts": {
+      "gcnode": {
+        "sha256": "3a4e453bd76c9e5c001d962846212326ac0f4adbb42a5745acdec4f6b4ec5ff3",
+        "size": 19030968
+      },
+      "gchat": {
+        "sha256": "43e497ad5ba40def2ef3eb898fca0af48e8c2b1752159ba82f3d8a454260c1df",
+        "size": 34692696
+      },
+      "fleet_probe": {
+        "sha256": "0f3942185912b8da287a58da14d56b59273e3017ef26b8136d203527d5afc3ef",
+        "size": 2977104
+      }
+    }
+  },
+  "fixture_host": {
+    "path": "/work/fixture-host-16/turnover_daemon",
+    "sha256": "380d71226508fca2a2ada31ffd61ab7dac189501def541bc31167d69ba3572b9",
+    "size": 30524952
+  },
+  "not_qualified": [
+    "R02/R03/R04 latency ceilings",
+    "credential or 1800-second cap expiry by this run",
+    "installed/mobile/platform release",
+    "privacy"
+  ],
+  "retained_evidence": "paired GChat target/channel-reconnect-20260923/reliability-20260924-01/entry-loss-16-evidence.tgz; full profiles at cluster /work/journeys/entry-loss-16"
+}

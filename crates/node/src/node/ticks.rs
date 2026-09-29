@@ -492,9 +492,19 @@ pub(crate) fn spawn_channel_maintenance_loop(
             }
         };
         let control = async {
+            let mut maintenance = ChannelMaintenance::control();
+            let clock = tokio::time::sleep(scheduler_profile.maintenance_delay(&mut control_rng));
+            tokio::pin!(clock);
             loop {
-                tokio::time::sleep(scheduler_profile.maintenance_delay(&mut control_rng)).await;
-                channel_control_tick(&state, &scheduler, &events).await;
+                tokio::select! {
+                    _ = &mut clock => {
+                        prepare_channel_control(&state, &events);
+                        maintenance.tick(&state, &scheduler);
+                        clock.as_mut().reset(tokio::time::Instant::now()
+                            + scheduler_profile.maintenance_delay(&mut control_rng));
+                    }
+                    _ = maintenance.complete_next(&state), if !maintenance.is_empty() => {}
+                }
             }
         };
         tokio::join!(data, control);

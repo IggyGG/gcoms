@@ -1,0 +1,8 @@
+{
+  "passed": true,
+  "commit": "a7dc7549dd3f44397852355440ab8f05e20b8bed",
+  "source_archive_sha256": "6775e6c46786c19ad5e56929d222c496ca0e6976bff3c7e5a78f1fa46d719ce8",
+  "command": "cargo +1.98.0 fmt --all -- --check",
+  "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "scope": "Formatting-only descendant, not Android1019 build inputs"
+}

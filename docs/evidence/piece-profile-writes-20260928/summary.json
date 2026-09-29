@@ -1,0 +1,73 @@
+{
+  "schema": 1,
+  "base_commit": "110cc4960b51628aab235204eec3b946fddce974",
+  "scope": "affected runtime and file-package source validation; not an installed artifact, CPU or Android latency qualification",
+  "status": "passed",
+  "tested_source_files": {
+    "crates/runtime/src/runtime.rs": "5c8f33dee041c9445e57d414c907c784b74bb7210fa2951b382bcee24be28613",
+    "crates/runtime/src/runtime/piece_persistence_tests.rs": "2b1ab279d561305a552cda4f2d64212a5198c44a9dd46378b723a0db7f161698"
+  },
+  "snapshot": {
+    "file_count": 808,
+    "manifest_sha256": "4c1cdb8e6796864a3178195cd14527843287815705a15e56b0dffdd95cb26864",
+    "before_sha256": "f99ec8ec78e46cb0eb57e004106a6726ce4468fc8e55815e32a97238b23066dc",
+    "after_sha256": "f99ec8ec78e46cb0eb57e004106a6726ce4468fc8e55815e32a97238b23066dc",
+    "unchanged": true
+  },
+  "measurement": {
+    "original": {
+      "blocks": 16,
+      "event": "piece_profile_write_measurement",
+      "payload_bytes": 65536,
+      "receiver_event_saves": 16,
+      "receiver_profile_bytes": 960951,
+      "sender_profile_bytes": 977280,
+      "sender_wrapper_saves": 16
+    },
+    "candidate": {
+      "blocks": 16,
+      "event": "piece_profile_write_measurement",
+      "payload_bytes": 65536,
+      "receiver_event_saves": 0,
+      "receiver_profile_bytes": 0,
+      "sender_profile_bytes": 0,
+      "sender_wrapper_saves": 0
+    }
+  },
+  "validation": {
+    "runtime_passed": 32,
+    "runtime_ignored": [
+      "bootstrap::gc2_tests::production_bootstrap_fresh_reopen_and_recovery: requires disconnected namespace"
+    ],
+    "file_package_passed": 20,
+    "file_filtered": [
+      "gib_import_resume_export_is_streaming: separate nonblocking campaign"
+    ],
+    "strict_all_feature_all_target_clippy": true,
+    "outbound_only_check": true,
+    "fmt": true,
+    "original_runtime_expected_failure": true,
+    "ordinary_save_barrier_removal_expected_failure": true
+  },
+  "retained_failures": [
+    "Original runtime fails the no-wrapper-save assertion after measurement.",
+    "First check aggregate failed because fresh worker lacked Clippy. Installing the pinned toolchain component and rerunning only Clippy passed; original aggregate remains failed.",
+    "Initial worker could not reserve CPU; alternate worker used. Incomplete cache-copy attempts were setup interruptions before compilation."
+  ],
+  "codematch": "unreachable (previously established)",
+  "docs_only_after_checks": [
+    "PLAN.md",
+    "TESTPLAN.md",
+    "crates/runtime/README.md",
+    "docs/evidence/piece-profile-writes-20260928/"
+  ],
+  "evidence_sha256": {
+    "red.log": "91b70585f7ecc943f77988a4e41d60dc72f5892bc1d38ca33e88a9410397f7e8",
+    "green.log": "424e711425e0e373f25c70aa09693eecc88425b3479cf5c3dc5a7f924ffb44d8",
+    "ordinary-control.log": "73273533fec4f9866ff434baf4388d612c7479b757238a08268766c7d8b7c0c3",
+    "checks.json": "60dff21637adb247d520fd03985999ff3210eaa204cc1ffa04381685d040aba0",
+    "final-checks.json": "aca8fc9add6f356601d310f79a937c6a3ba9ee002decc9b95495332561700fc5"
+  },
+  "retained_archive_sha256": "5145b54de4ef1e60725326b11914720a3a616e90369c3bfb492856327d3baff2",
+  "committed_log_format": "green.log omits trailing blank lines; the exact original remains in the hash-bound retained archive"
+}

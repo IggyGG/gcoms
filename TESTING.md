@@ -1,5 +1,28 @@
 # Validation
 
+The current [reliability requirements](docs/RELIABILITY_RELEASE.md) define the
+cluster/device release matrix. Use `python3 scripts/reliability-suite.py --manifest
+SUITE.json --root . --output target/reliability/UNIQUE-RUN` on a cluster worker
+(or through `workstation-batch` locally). A manifest has a nonempty `cases` array;
+each case contains `id`, `command` (argv array), `timeout_seconds`, `requirements`
+(`R01`..`R12`), optional `requires` (earlier case IDs) and optional `cleanup` argv.
+Commands are trusted operator inputs, must not contain secrets, and own their
+entire process group. Cleanup gets a separate 30-second budget. Source snapshots,
+logs, hashes and all case outcomes are retained; independent cases continue after
+failure. Existing output directories are never overwritten. This is component
+evidence, not automatic application/release qualification. The runner adds no
+third-party dependency.
+
+`gchat-turnover.py --mode smoke --build BUILD --out UNIQUE-OUTPUT` runs the
+six-relay, five-hop actual-daemon chat/file/reopen prerequisite without waiting
+for an hourly expiry. Both message directions require matching received IDs and
+the sender's authenticated delivery state. Offline admission must stay pending;
+the retained ID must be delivered after reopening without resubmission. This
+smoke scope does not qualify the 5/10/30-second latency ceilings, consecutive
+credential expiry or the 1800-second carrier cap. Use the separate modes and
+requirement cases for those results. Namespace runs need a dedicated worker with
+the required namespace capabilities; never use personal profiles.
+
 Current release work covers GComs/GChat source, signed installers, and GChat's
 website/onboarding. Validate secure connections on Linux, the native MSVC Windows
 VM, and GitHub-hosted macOS Apple Silicon/Intel runners. The local Mac remains

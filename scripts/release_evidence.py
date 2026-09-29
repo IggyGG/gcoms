@@ -48,6 +48,9 @@ EXCLUSIONS = {
     "native_c_handshake_accepts_only_the_pinned_relay_and_h2": "private external TLS probe",
     "native_c_deadline_bounds_stalled_and_trickling_peers": "private external TLS probe",
     "native_c_http2_uses_existing_tp1_post_and_stream_paths": "private external TLS probe",
+    "native_c_nested_carriers_pin_every_layer_and_preserve_stream_credit": "private external TLS probe",
+    "native_five_hop_carrier_reuses_routes_and_renews_both_subscriptions": "private external native bootstrap probe",
+    "node::routing::gc2_inbox_tests::deployed_relay_probe": "separately authorized live relay provisioning",
 }
 # These installed-network fixtures require the separate Linux namespace runner.
 # Native package tests record the exclusion; they never imply installed coverage.

@@ -1,0 +1,44 @@
+[
+  {
+    "started_at": 1790576902.0491116,
+    "command": [
+      "cargo",
+      "test",
+      "--offline",
+      "--locked",
+      "-p",
+      "gcoms-node",
+      "--all-features",
+      "--lib",
+      "node::routing::gc2_inbox_tests::fresh_carrier_node_provisions_its_inbox_over_the_protected_route",
+      "--",
+      "--exact",
+      "--nocapture"
+    ],
+    "control": false,
+    "exit_code": 0,
+    "finished_at": 1790576967.7887459,
+    "log_sha256": "2bfb1fcb3b9e53c1e8bc59cedf6965bc25b271d4faeebadb0bbb80f43567b6e7"
+  },
+  {
+    "started_at": 1790576967.789113,
+    "command": [
+      "cargo",
+      "test",
+      "--offline",
+      "--locked",
+      "-p",
+      "gcoms-node",
+      "--all-features",
+      "--lib",
+      "node::routing::gc2_inbox_tests::fresh_carrier_node_provisions_its_inbox_over_the_protected_route",
+      "--",
+      "--exact",
+      "--nocapture"
+    ],
+    "control": true,
+    "exit_code": 101,
+    "finished_at": 1790577031.1244118,
+    "log_sha256": "821bb91bfc75a903cbbb493fca5e454d727174f94841d6aa83ab7bed25ff96d4"
+  }
+]

@@ -1,0 +1,19 @@
+   Compiling gcoms-sdk v0.1.0 (D:\a\gcoms\gcoms\crates\sdk)
+    Finished `test` profile [unoptimized] target(s) in 5.65s
+     Running tests\local_windows.rs (target\debug\deps\local_windows-9003355088f36fa2.exe)
+
+running 1 test
+
+thread 'cancelled_accept_preserves_the_same_client_and_first_byte' (3672) panicked at crates\sdk\tests\local_windows.rs:35:10:
+cancelled accept must preserve the connected client: Os { code: 232, kind: BrokenPipe, message: "The pipe is being closed." }
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test cancelled_accept_preserves_the_same_client_and_first_byte ... FAILED
+
+failures:
+
+failures:
+    cancelled_accept_preserves_the_same_client_and_first_byte
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 4 filtered out; finished in 0.11s
+
+error: test failed, to rerun pass `-p gcoms-sdk --test local_windows`

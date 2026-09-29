@@ -116,8 +116,12 @@ not convert GC/1 authority into GC/2 authority.
 The caller starts the future for an explicitly chosen connected period. It
 retains up to three guards and attempts the configured one to three entries
 without receiving application events. Entry retries have a 30-second background
-interval; successful private renewal recurs after five minutes plus 0–10% random
-jitter, serially across retained guards, with a 20-second deadline per attempt.
+interval. A carrier that was published for at least 30 seconds can replace
+itself immediately after completion, using only its still-retained guard and
+currently valid introduction. Its old ready publication is removed first. This
+does not retry unrelated failed guards or reset the periodic retry clock;
+unpublished and shorter-lived failures continue through normal maintenance.
+Successful private renewal recurs after five minutes plus 0–10% random jitter, serially across retained guards, with a 20-second deadline per attempt.
 Failures retry after 60, 120, 240 and then at most 300 seconds plus the same
 jitter, independently for each guard. This avoids waiting a full refresh period
 on first failure and spreads synchronized fleet retries without using chat as

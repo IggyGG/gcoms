@@ -1,0 +1,53 @@
+    Checking zerovec v0.11.8
+    Checking serde_core v1.0.229
+    Checking errno v0.3.14
+    Checking signal-hook-registry v1.4.8
+    Checking tokio v1.53.1
+    Checking serde v1.0.229
+    Checking tinystr v0.8.4
+    Checking icu_locale_core v2.3.0
+    Checking thiserror v2.0.20
+    Checking potential_utf v0.1.6
+    Checking zerotrie v0.2.5
+    Checking icu_collections v2.3.0
+    Checking icu_provider v2.3.1
+    Checking icu_normalizer v2.3.0
+    Checking icu_properties v2.3.0
+    Checking serde_bytes v0.11.19
+    Checking tls_codec v0.5.0
+    Checking idna_adapter v1.2.2
+    Checking asn1-rs v0.7.2
+    Checking idna v1.1.0
+    Checking serde_json v1.0.151
+    Checking hyper v1.11.1
+    Checking tokio-rustls v0.26.4
+    Checking url v2.5.8
+    Checking openmls_traits v0.6.0
+    Checking tokio-util v0.7.19
+    Checking hyper-util v0.1.20
+    Checking oid-registry v0.8.1
+    Checking der-parser v10.0.0
+    Checking gcoms-crypto v0.1.0 (/work/route-readiness/windows28-fixture/final/crates/crypto)
+    Checking gcoms-core v0.1.0 (/work/route-readiness/windows28-fixture/final/crates/core)
+    Checking x509-parser v0.18.1
+    Checking tower v0.5.3
+    Checking h2 v0.4.19
+    Checking serde_urlencoded v0.7.1
+    Checking hpke-rs v0.7.0
+    Checking tower-http v0.6.11
+    Checking hyper-rustls v0.27.9
+    Checking openmls_memory_storage v0.6.0
+    Checking openmls_rust_crypto v0.6.0
+    Checking reqwest v0.12.28
+    Checking gcoms-transport v0.1.0 (/work/route-readiness/windows28-fixture/final/crates/transport)
+    Checking openmls v0.9.0
+    Checking gcoms-routing v0.1.0 (/work/route-readiness/windows28-fixture/final/crates/routing)
+    Checking openmls_basic_credential v0.6.0
+    Checking gcoms-private-fs v0.1.0 (/work/route-readiness/windows28-fixture/final/crates/private-fs)
+    Checking gcoms-network v0.1.0 (/work/route-readiness/windows28-fixture/final/crates/network)
+    Checking gcoms-network-client v0.1.0 (/work/route-readiness/windows28-fixture/final/crates/network-client)
+    Checking gcoms-protocol v0.1.0 (/work/route-readiness/windows28-fixture/final/crates/protocol)
+    Checking gcoms-gossip v0.1.0 (/work/route-readiness/windows28-fixture/final/crates/gossip)
+    Checking gcoms-mls v0.1.0 (/work/route-readiness/windows28-fixture/final/crates/mls)
+    Checking gcoms-node v0.1.0 (/work/route-readiness/windows28-fixture/final/crates/node)
+    Finished `dev` profile [unoptimized] target(s) in 23.53s

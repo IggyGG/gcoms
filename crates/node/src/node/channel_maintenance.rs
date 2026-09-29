@@ -1,4 +1,4 @@
-//! Bounded channel-data admission. Receipts remain owned across maintenance
+//! Bounded channel data/control admission. Receipts remain owned across maintenance
 //! ticks; a slow hop must neither block other channels nor trigger a duplicate.
 use super::*;
 use futures_util::{future::BoxFuture, stream::FuturesUnordered, StreamExt};
@@ -15,6 +15,24 @@ enum Work {
     Pull([u8; 16], [u8; 32]),
     Message([u8; 16]),
     Pex(u8),
+    Control([u8; 32]),
+    Membership([u8; 32]),
+}
+
+// Bind work to the complete authenticated route and exact retained wire. A
+// changed recipient capability must not settle an older route's pending ACK.
+fn control_key(route: &crate::channel::ChannelRoute, wire: &[u8]) -> [u8; 32] {
+    let mut hash = Sha256::new();
+    hash.update(b"channel-control-maintenance\0");
+    hash.update(route.encode());
+    hash.update(wire);
+    hash.finalize().into()
+}
+
+fn control_target(route: &crate::channel::ChannelRoute) -> crate::channel::PeerRef {
+    let mut target = crate::channel::PeerRef::from_route(route);
+    target.contact = route.control.clone();
+    target
 }
 
 #[cfg(all(test, feature = "client-persist"))]
@@ -54,6 +72,171 @@ mod tests {
             },
         );
         id
+    }
+
+    #[tokio::test]
+    async fn empty_control_rounds_remain_idle() {
+        let (state, scheduler) = fixture(&["idle"]);
+        let mut maintenance = ChannelMaintenance::control();
+        for _ in 0..3 {
+            maintenance.tick(&state, &scheduler);
+        }
+        assert!(maintenance.is_empty());
+        assert!(maintenance.plans.is_empty());
+        assert_eq!(scheduler.resource_snapshot().bytes, 0);
+        scheduler.shutdown();
+    }
+
+    #[tokio::test]
+    async fn control_receipts_retain_partial_failed_and_changed_route_work() {
+        let (state, scheduler) = fixture(&["control"]);
+        let route = state.lock().unwrap().channels["control"]
+            .own_route
+            .public
+            .clone();
+        let wire = vec![7; 40 * 1024];
+        state
+            .lock()
+            .unwrap()
+            .channels
+            .get_mut("control")
+            .unwrap()
+            .pending_control
+            .push_back((route.clone(), wire.clone()));
+        let mut maintenance = ChannelMaintenance::control();
+        maintenance.stage(&state, &scheduler);
+        let mut held = Vec::new();
+        maintenance.admit_with(|_, _| {
+            let (send, receipt) = Receipt::test_channel();
+            held.push(send);
+            Ok(receipt)
+        });
+        assert!(held.len() > 1, "control wire spans multiple cells");
+        let accepted = held.len();
+        for (index, send) in held.drain(..).enumerate() {
+            send.send(if index == 0 {
+                JobResult::Failed("fixture refusal".into())
+            } else {
+                JobResult::HopAccepted(bytes::Bytes::new())
+            })
+            .ok()
+            .unwrap();
+        }
+        for _ in 0..accepted {
+            maintenance.complete_next(&state).await;
+        }
+        assert_eq!(
+            state.lock().unwrap().channels["control"]
+                .pending_control
+                .len(),
+            1,
+            "partial hop success must not consume the retained control wire"
+        );
+        maintenance.stage(&state, &scheduler);
+        maintenance.admit_with(|_, _| {
+            let (send, receipt) = Receipt::test_channel();
+            held.push(send);
+            Ok(receipt)
+        });
+        // The original receipt owns its original target. A replacement route
+        // retains the same wire but must remain queued when that receipt settles.
+        state
+            .lock()
+            .unwrap()
+            .channels
+            .get_mut("control")
+            .unwrap()
+            .pending_control[0]
+            .0
+            .control
+            .queue_id[0] ^= 1;
+        let count = held.len();
+        for send in held.drain(..) {
+            send.send(JobResult::HopAccepted(bytes::Bytes::new()))
+                .ok()
+                .unwrap();
+        }
+        for _ in 0..count {
+            maintenance.complete_next(&state).await;
+        }
+        assert_eq!(
+            state.lock().unwrap().channels["control"]
+                .pending_control
+                .len(),
+            1
+        );
+        maintenance.stage(&state, &scheduler);
+        maintenance.admit_with(|_, _| {
+            let (send, receipt) = Receipt::test_channel();
+            held.push(send);
+            Ok(receipt)
+        });
+        drop(maintenance);
+        drop(held);
+        assert_eq!(
+            state.lock().unwrap().channels["control"].pending_control[0].1,
+            wire,
+            "shutdown/drop does not settle queued or in-flight control work"
+        );
+        assert_eq!(scheduler.resource_snapshot().jobs, 0);
+        assert_eq!(scheduler.resource_snapshot().bytes, 0);
+        scheduler.shutdown();
+    }
+
+    #[tokio::test]
+    async fn control_membership_hop_receipt_does_not_ack_member_or_duplicate_attempt() {
+        let (state, scheduler) = fixture(&["control"]);
+        let mut route = state.lock().unwrap().channels["control"]
+            .own_route
+            .public
+            .clone();
+        route.pseudonym = [19; 32];
+        state
+            .lock()
+            .unwrap()
+            .channels
+            .get_mut("control")
+            .unwrap()
+            .membership_outbox = Some(crate::channel::MembershipOutbox {
+            commit_id: [3; 16],
+            epoch: 1,
+            commit: vec![5; 32],
+            expected: [(route.pseudonym, route)].into_iter().collect(),
+            acknowledged: HashSet::new(),
+        });
+        let mut maintenance = ChannelMaintenance::control();
+        let mut held = Vec::new();
+        for _ in 0..3 {
+            maintenance.stage(&state, &scheduler);
+            maintenance.admit_with(|_, _| {
+                let (send, receipt) = Receipt::test_channel();
+                held.push(send);
+                Ok(receipt)
+            });
+        }
+        assert_eq!(
+            held.len(),
+            1,
+            "owned pending receipt suppresses repeated admission"
+        );
+        held.pop()
+            .unwrap()
+            .send(JobResult::HopAccepted(bytes::Bytes::new()))
+            .ok()
+            .unwrap();
+        maintenance.complete_next(&state).await;
+        assert!(
+            state.lock().unwrap().channels["control"]
+                .membership_outbox
+                .as_ref()
+                .unwrap()
+                .acknowledged
+                .is_empty(),
+            "hop success is not authenticated member ACK"
+        );
+        drop(maintenance);
+        assert_eq!(scheduler.resource_snapshot().bytes, 0);
+        scheduler.shutdown();
     }
 
     #[tokio::test]
@@ -329,6 +512,7 @@ impl Plan {
 
 #[derive(Default)]
 pub(crate) struct ChannelMaintenance {
+    control: bool,
     plans: VecDeque<Plan>,
     completions: FuturesUnordered<BoxFuture<'static, (u64, bool)>>,
     last_channel: Option<String>,
@@ -337,6 +521,13 @@ pub(crate) struct ChannelMaintenance {
 }
 
 impl ChannelMaintenance {
+    pub(crate) fn control() -> Self {
+        Self {
+            control: true,
+            ..Self::default()
+        }
+    }
+
     pub(crate) fn is_empty(&self) -> bool {
         self.completions.is_empty()
     }
@@ -385,19 +576,40 @@ impl ChannelMaintenance {
                 if cs.own_route.aliases.len() != 2 {
                     continue;
                 }
-                let mut work: Vec<_> = cs.pending.iter().map(|p| Work::Forward(p.id)).collect();
-                work.extend(
-                    cs.pull_outbox
+                let mut work: Vec<_> = if self.control {
+                    let mut work: Vec<_> = cs
+                        .pending_control
                         .iter()
-                        .map(|(p, id, _)| Work::Pull(*id, p.pseudonym)),
-                );
-                work.extend(cs.message_outbox.iter().filter_map(|(id, p)| {
-                    p.expected
-                        .keys()
-                        .any(|peer| !p.acknowledged.contains(peer))
-                        .then_some(Work::Message(*id))
-                }));
-                work.extend([Work::Pex(0), Work::Pex(1)]);
+                        .map(|(route, wire)| Work::Control(control_key(route, wire)))
+                        .collect();
+                    if let Some(outbox) = &cs.membership_outbox {
+                        work.extend(
+                            outbox
+                                .expected
+                                .iter()
+                                .filter(|(identity, _)| !outbox.acknowledged.contains(*identity))
+                                .map(|(_, route)| {
+                                    Work::Membership(control_key(route, &outbox.commit))
+                                }),
+                        );
+                    }
+                    work
+                } else {
+                    let mut work: Vec<_> = cs.pending.iter().map(|p| Work::Forward(p.id)).collect();
+                    work.extend(
+                        cs.pull_outbox
+                            .iter()
+                            .map(|(p, id, _)| Work::Pull(*id, p.pseudonym)),
+                    );
+                    work.extend(cs.message_outbox.iter().filter_map(|(id, p)| {
+                        p.expected
+                            .keys()
+                            .any(|peer| !p.acknowledged.contains(peer))
+                            .then_some(Work::Message(*id))
+                    }));
+                    work.extend([Work::Pex(0), Work::Pex(1)]);
+                    work
+                };
                 work.sort();
                 work.dedup();
                 let pivot = self
@@ -405,6 +617,9 @@ impl ChannelMaintenance {
                     .get(name)
                     .map_or(0, |last| work.partition_point(|key| key <= last));
                 let count = work.len();
+                if count == 0 {
+                    continue;
+                }
                 work.rotate_left(pivot % count);
                 for key in work {
                     if !attempted.insert((name.clone(), key.clone())) {
@@ -514,6 +729,23 @@ impl ChannelMaintenance {
                             .collect(),
                     )
                 }
+                Work::Control(key) => {
+                    let (route, wire) = cs
+                        .pending_control
+                        .iter()
+                        .find(|(route, wire)| control_key(route, wire) == *key)?;
+                    (wire, vec![control_target(route)])
+                }
+                Work::Membership(key) => {
+                    let outbox = cs.membership_outbox.as_ref()?;
+                    let route = outbox
+                        .expected
+                        .iter()
+                        .filter(|(identity, _)| !outbox.acknowledged.contains(*identity))
+                        .map(|(_, route)| route)
+                        .find(|route| control_key(route, &outbox.commit) == *key)?;
+                    (&outbox.commit, vec![control_target(route)])
+                }
                 Work::Pex(_) => unreachable!(),
             };
             if targets.is_empty() {
@@ -574,13 +806,12 @@ impl ChannelMaintenance {
     }
 
     fn admit(&mut self, scheduler: &RelayScheduler) {
-        self.admit_with(|peer, cell| {
-            scheduler.push(
-                ProducerClass::ChannelData,
-                peer.contact.clone(),
-                cell.clone(),
-            )
-        });
+        let class = if self.control {
+            ProducerClass::ChannelControl
+        } else {
+            ProducerClass::ChannelData
+        };
+        self.admit_with(|peer, cell| scheduler.push(class, peer.contact.clone(), cell.clone()));
     }
 
     fn admit_with(
@@ -694,6 +925,19 @@ impl ChannelMaintenance {
                                 || target.contact != plan.targets[0].contact
                                 || plan.wire_digest != Some(Sha256::digest(wire).into())
                         });
+                    }
+                    Work::Control(key) if accepted => {
+                        let mut index = 0;
+                        while index < cs.pending_control.len() {
+                            let (route, wire) = &cs.pending_control[index];
+                            if control_key(route, wire) == key {
+                                if let Some((_, mut wire)) = cs.pending_control.remove(index) {
+                                    wire.fill(0);
+                                }
+                            } else {
+                                index += 1;
+                            }
+                        }
                     }
                     _ => {}
                 }

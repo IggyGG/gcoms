@@ -952,6 +952,7 @@ fn is_ordinary_global(ip: IpAddr) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use alloc::vec;
 
     const NOW: u64 = 1_800_000_000;
     const PUSH_CAP: PushCap = [0x41; 32];

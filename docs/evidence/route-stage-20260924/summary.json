@@ -1,0 +1,56 @@
+{
+  "sources": {
+    "gcoms": {
+      "commit": "3c7b628add1c7748f53e1e702939be5ae0ef6314",
+      "tree": "d0507e604ebca804b98ccebfdc69398ae3355aeb"
+    }
+  },
+  "checks": {
+    "fmt": {
+      "exit_code": 0,
+      "source_unchanged": true
+    },
+    "tests": {
+      "exit_code": 0,
+      "source_unchanged": true
+    },
+    "clippy": {
+      "exit_code": 0,
+      "source_unchanged": true
+    }
+  },
+  "source_unchanged": true,
+  "passed": true,
+  "artifact": null,
+  "finished": "2026-09-24T04:11:47.732374+00:00",
+  "scope": "Frozen protected-route error context; no recovery behavior change or physical-device pass inferred",
+  "totals": {
+    "passed": 148,
+    "failed": 0,
+    "ignored": 4
+  },
+  "source_file_count": 712,
+  "codematch": "unreachable",
+  "evidence_root": "/run/media/user/SSD-2/git/ghost/coms/.worktrees/gcoms-public/gcoms/.worktrees/fleet-files/gchat/target/channel-reconnect-20260923/route-stage-01",
+  "archive_sha256": "bec52329205798f90a41e8425ddb4e569b9b72eb94db1850282541fbe75d655e",
+  "evidence": {
+    "retained/environment.log": "0cbf161b5e03d0b04489700a74be444a769021659f9b16f3e964016bef24feb3",
+    "retained/summary.json": "2a0dee0e403ef05879969e7f6d22612f989004e89a3995398efac29a7a5be1b5",
+    "retained/source.json": "d78e3e39046db2cfa83c5bfab9cbe5df25322aceb0b3645cadc25024505f5401",
+    "retained/fmt.exit": "5feceb66ffc86f38d952786c6d696c79c2dbc239dd4e91b46729d73a27fb57e9",
+    "retained/tests.log": "6f499bf902f3ec31ba1be94298ef06010b0856c39f153b32b559e594e8f8859a",
+    "retained/clippy.log": "aed4c385d6f4a14f38794f2990fecf3bcb84f5066680b18cea8ef6664f22210d",
+    "retained/clippy.exit": "5feceb66ffc86f38d952786c6d696c79c2dbc239dd4e91b46729d73a27fb57e9",
+    "retained/tests.exit": "5feceb66ffc86f38d952786c6d696c79c2dbc239dd4e91b46729d73a27fb57e9",
+    "retained/check.py": "889f38dac9aed954ad1f6bb7f0d0673a0028dc0b1f2280d5da669a7f8f8f36f6",
+    "retained/fmt.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "retained/whole-workspace-format-failure/summary.json": "844a95d784a2588b8e9782fe2b33b202c04e0984bc6f7a58fbf0a194717d2d03",
+    "retained/whole-workspace-format-failure/fmt.exit": "6b86b273ff34fce19d6b804eff5a3f5747ada4eaa22f1d49c01e52ddb7875b4b",
+    "retained/whole-workspace-format-failure/progress.json": "1f08bae7f5e1297e9650f0423e245fa3861319d0622d6545a37f8143ce29327e",
+    "retained/whole-workspace-format-failure/fmt.log": "e3b73ec35fba26d07fbd110df83d3cdf32d7175fa89e7b12c13432874eb28533"
+  },
+  "limitations": [
+    "Whole-workspace formatting failed in preexisting node direct.rs/direct_maintenance_tests; original failure retained. Changed routing/transport files pass pinned rustfmt.",
+    "No Android installation or resume recovery pass inferred."
+  ]
+}

@@ -19,6 +19,18 @@ See the [application guide](../crates/application/README.md) and
 The consumer explicitly selects GC/2 in every mode. Applications supply signed
 network configuration and their own provisioned invitation.
 
+## Responsive carrier source and artifact scope
+
+The shared runtime's GC/2 production preset selects profile 46. Both outbound
+and embedded Rust clients inherit immediate data plus random interactive cover
+opportunities, skipping cover after data sent on that outgoing channel. The
+Kotlin/Swift client and relay packages use the same runtime through the native
+ABI. IPC consumers use their host's carrier; changing an IPC wrapper alone does
+not update the host. Low-level users that explicitly select older profiles keep
+those profiles. Previously built libraries, AARs, XCFrameworks, installed apps
+and hosts must be rebuilt and qualified; the measurements below do not qualify
+this later policy. See [traffic policy](GC2_TRAFFIC_PROFILES.md).
+
 ## Native size measurements
 
 These are runnable consumers with channel and file operations, built with Rust

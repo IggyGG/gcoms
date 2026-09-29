@@ -132,6 +132,24 @@ impl Network {
             relays.push(run(server.with_duplex(service.handler())));
             services.push(service);
         }
+        // These fixtures test routing and source limits within one credential
+        // epoch. Starting seconds before its boundary can expire earlier
+        // clients while later ones are still being connected. Wait for the
+        // next real epoch when needed, then install genuinely fresh authority;
+        // never extend a credential or weaken the production expiry check.
+        let now = now_unix();
+        let remaining = services
+            .iter()
+            .map(|service| service.introduction(now).expires_at.saturating_sub(now))
+            .min()
+            .expect("fixture has relay services");
+        if remaining < 60 {
+            tokio::time::sleep(Duration::from_secs(remaining + 1)).await;
+        }
+        let now = now_unix();
+        for service in &services {
+            directory.install(service.introduction(now), now).unwrap();
+        }
         let (server, _, _) = listener("127.0.0.99", true).await;
         Self {
             relays,

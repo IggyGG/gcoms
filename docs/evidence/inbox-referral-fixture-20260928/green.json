@@ -1,0 +1,20 @@
+{
+  "started_at": 1790576778.4790168,
+  "command": [
+    "cargo",
+    "test",
+    "--offline",
+    "--locked",
+    "-p",
+    "gcoms-node",
+    "--all-features",
+    "--lib",
+    "node::routing::gc2_inbox_tests::fresh_carrier_node_provisions_its_inbox_over_the_protected_route",
+    "--",
+    "--exact",
+    "--nocapture"
+  ],
+  "exit_code": 101,
+  "finished_at": 1790576825.4333458,
+  "log_sha256": "b13aa43e0cda7aecd049d2d8c7bc82fab7b4bb8e77126a9d6094f74f9e241434"
+}

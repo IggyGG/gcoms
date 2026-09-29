@@ -1,0 +1,64 @@
+{
+  "schema": 1,
+  "observed_at": 1790585698.372836,
+  "passed": true,
+  "scope": "affected file-transfer/runtime source checks and controlled transport model; no installed Windows or real-network release qualification",
+  "base_commit": "8dcb22309727ac8a1c5139b03ba8596b09b9685a",
+  "source_files": {
+    "crates/file-transfer/src/swarm/engine.rs": "56dc475047cedff88609baa6dbcb201521407ddccc5db18a72e94f06fcac07e9",
+    "crates/file-transfer/tests/swarm_recovery.rs": "478f62362593fe3d97a61e0bb2f8c8578c6295f22041b52830141047197afe42",
+    "crates/runtime/src/files.rs": "d2ed0be8fec53d537bb5fab012be2ea625d057d2bf447e68bd154c5ed7714c0b",
+    "crates/runtime/src/files/tests.rs": "1331fc7abd90ce68ef550c81bd7f60bfc262cf0c302e1852f53256161b48db08"
+  },
+  "checks": {
+    "file_transfer": {
+      "passed": 23,
+      "failed": 0,
+      "ignored": 1
+    },
+    "runtime_library_all_features": {
+      "passed": 33,
+      "failed": 0,
+      "ignored": 1
+    },
+    "strict_clippy": "both packages, all targets and features passed",
+    "outbound_facade": "network-client,files --no-default-features passed",
+    "rustfmt": "passed",
+    "source_audit": "835 paths passed; only four documentation files differ from tested snapshot"
+  },
+  "negative_results": {
+    "old_inventory": "new authenticated source produced no immediate inventory query",
+    "four_send_window": "failed180s model budget with60s recovery allowance",
+    "archive_source_checker": "original runner exit1: no Git metadata in frozen tar; final checkout source checker passed; test/Clippy/fmt results unaffected"
+  },
+  "model": {
+    "file_bytes": 16777216,
+    "retained_piece_bytes": 262144,
+    "hop_receipt_delay_ms": 450,
+    "recovery_allowance_seconds": 60,
+    "completion_simulated_seconds": 147.75,
+    "send_window": 8,
+    "payload_budget_bytes": 4194304,
+    "pending_action_limit": 128,
+    "actual_windows_claim": false
+  },
+  "evidence_root": "/run/media/user/SSD-2/git/ghost/coms/.worktrees/gcoms-public/gcoms/.worktrees/fleet-files/gchat/target/release-ready-20260927/file-recovery-latency",
+  "logs": {
+    "red.log": "de90b7482c85b57133eacbc736246672f6e11d6f6b83352c1edbf331252eb622",
+    "green.log": "2a298c6ecd301ec751a376392f8f616c5ded294ac2bbac8bd76f8e83c0e0602a",
+    "window-red.log": "dd8284cae3023d1f972949ecdf3cbb6b79fbbbf67ac5bae2b8ec731dbb737a87",
+    "runtime-green.log": "e1a149c1eeb7e187ba903da121e533f334d2a084abe452634d00e6b8ab6d45b3",
+    "combined-clippy.log": "8a55c6cbfbae33b09f4d416776fd2abca7b82d50d7f73c8b5fda31d3ca947794",
+    "client-check.log": "73a8227f628a449a3eb4694feb0341d3600d9cdc291a8d11bc51ca39c0f79edb",
+    "final-fmt.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "source-check.log": "9317fd1f078044a202c34b7b639c163f812995ec73bb315ec2b0e4b522ef2a3e",
+    "source-check-local.log": "6840818cb643dbd01447b4e4927ea511c46d71279d269066f1e41e616733eb01"
+  },
+  "snapshots": {
+    "red-source.json": "8bf00b5e6a602d942723b68c0403ac9d17a331054518a17d9578d8a5e26b6203",
+    "window-red-source.json": "10c99a38cf6360d1b02419317278087134d2665e10b2075e12a6a460365a90ab",
+    "tested-source.json": "65e23c212647b755ea707151482b00fc8626bc61f068b2b1d82c786ced352cc1",
+    "final-source.json": "c30b0554eef1c3783e8f847876211d48e217f76dbffc8b910231aa1c327b7783"
+  },
+  "codematch": "unreachable"
+}

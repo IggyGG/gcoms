@@ -8,8 +8,8 @@ use tokio_rustls::TlsAcceptor;
 
 const WAIT: Duration = Duration::from_secs(20);
 
-type Peers = Arc<Mutex<Vec<(TrafficClass, DuplexStream)>>>;
-type Starts = Arc<Mutex<Vec<Instant>>>;
+pub(crate) type Peers = Arc<Mutex<Vec<(TrafficClass, DuplexStream)>>>;
+pub(crate) type Starts = Arc<Mutex<Vec<Instant>>>;
 
 fn target() -> Target {
     Target::Relay {
@@ -18,7 +18,7 @@ fn target() -> Target {
     }
 }
 
-fn fixture() -> (TlsIdentity, EntryDescriptor, Peers, mux::TargetConnector) {
+pub(crate) fn fixture() -> (TlsIdentity, EntryDescriptor, Peers, mux::TargetConnector) {
     let identity = TlsIdentity::generate().unwrap();
     let descriptor = EntryDescriptor {
         addr: "192.0.2.1:443".parse().unwrap(),
@@ -40,7 +40,7 @@ fn fixture() -> (TlsIdentity, EntryDescriptor, Peers, mux::TargetConnector) {
 // Disabling only this fixture peer's outer timeout isolates run()'s cap. All
 // TLS, class framing, multiplexing and target admission stay real. Conversely,
 // capped=true exercises the production ConnectionContext::accept timeout.
-async fn serve(
+pub(crate) async fn serve(
     io: DuplexStream,
     identity: TlsIdentity,
     descriptor: EntryDescriptor,

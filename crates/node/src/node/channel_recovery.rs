@@ -271,8 +271,7 @@ pub(crate) fn export_channel_reconnect(
     let cs = st.channels.get(channel).ok_or("no channel")?;
     let id = cs.id;
     let epoch = cs.role.epoch();
-    let recipient = cs
-        .directory
+    cs.directory
         .values()
         .find(|route| {
             route.pseudonym != cs.role.own_pseudonym()
@@ -282,9 +281,42 @@ pub(crate) fn export_channel_reconnect(
                     .iter()
                     .any(|m| m.pseudonym == route.pseudonym)
         })
-        .cloned()
         .ok_or("channel has no other retained member")?;
-    let (wire, _) = stage_own_route_announcement(st, channel, &recipient)?;
+    let own = cs.own_route.public.clone();
+    if !own.is_valid() || own.data.expiry <= now_unix() || own.control.expiry <= now_unix() {
+        return Err("current owned channel route is unavailable".into());
+    }
+    let mut candidate = None;
+    let wire = if let Some(cached) = cs
+        .reconnect_announcement
+        .as_ref()
+        .filter(|cached| cached.epoch == epoch && cached.route == own)
+    {
+        cached.wire.clone()
+    } else {
+        // A normal Dir may already have been authenticated over the network
+        // without a reciprocal reply (its route was unchanged). Reusing it
+        // here would ask the recipient to consume the same MLS ratchet twice.
+        let key = channel_archive_key(&st.identity_seed);
+        let seed = channel_seed(st, channel);
+        let checkpoint = cs.role.checkpoint(&key).map_err(|e| e.to_string())?;
+        let mut role = cs
+            .role
+            .restore_checkpoint(&key, &checkpoint, || IdentityKeypair::from_seed(seed))
+            .map_err(|e| e.to_string())?;
+        let name = role
+            .roster()
+            .into_iter()
+            .find_map(|(_, name)| {
+                (role.pseudonym_for_name(&name) == Some(own.pseudonym)).then_some(name)
+            })
+            .ok_or("own channel roster entry missing")?;
+        let wire = role
+            .send(&crate::channel::encode_dir(&name, &own))
+            .map_err(|e| e.to_string())?;
+        candidate = Some(role);
+        wire
+    };
     let mut bytes = Vec::with_capacity(40 + wire.len());
     bytes.extend_from_slice(&id.0);
     bytes.extend_from_slice(&epoch.to_be_bytes());
@@ -292,6 +324,22 @@ pub(crate) fn export_channel_reconnect(
     let code = format!("{RECONNECT_PREFIX}{}", encode_b64url(&bytes));
     if code.len() > MAX_RECONNECT_CODE {
         return Err("channel reconnect code exceeds limit".into());
+    }
+    if let Some(candidate) = candidate {
+        let cs = st.channels.get_mut(channel).expect("held state");
+        let previous = std::mem::replace(&mut cs.role, candidate);
+        if let Err(error) = persist_current_direct_state(st) {
+            st.channels.get_mut(channel).expect("held state").role = previous;
+            return Err(error);
+        }
+        st.channels
+            .get_mut(channel)
+            .expect("held state")
+            .reconnect_announcement = Some(crate::channel::RouteAnnouncement {
+            epoch,
+            route: own,
+            wire,
+        });
     }
     Ok(code)
 }

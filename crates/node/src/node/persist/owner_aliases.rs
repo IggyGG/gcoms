@@ -699,6 +699,14 @@ impl Record {
         st.contact_aliases_activated = now
             .checked_sub(self.active_age(effective)?)
             .ok_or("owner alias active age is unrepresentable")?;
+        // This is a complete retained record. Runtime recovery also calls this
+        // on populated state; appending would duplicate draining queue IDs and
+        // fail the next durable checkpoint. Roles absent or expired in the
+        // record must not survive from the previous in-memory collections.
+        st.staged_contact_aliases = None;
+        st.unannounced_old_contact_aliases = None;
+        st.unannounced_contact_deadlines = None;
+        st.draining_contact_aliases.clear();
         for group in &self.groups {
             if group.role != Role::Active && group.deadline_ms <= effective {
                 continue;

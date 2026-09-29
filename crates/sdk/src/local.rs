@@ -36,7 +36,54 @@ pub type ClientStream = tokio::net::windows::named_pipe::NamedPipeClient;
 #[cfg(unix)]
 pub type ServerStream = tokio::net::UnixStream;
 #[cfg(windows)]
-pub type ServerStream = tokio::net::windows::named_pipe::NamedPipeServer;
+pub struct ServerStream {
+    pipe: tokio::net::windows::named_pipe::NamedPipeServer,
+    first: Option<u8>,
+}
+
+#[cfg(windows)]
+impl tokio::io::AsyncRead for ServerStream {
+    fn poll_read(
+        self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+        buf: &mut tokio::io::ReadBuf<'_>,
+    ) -> std::task::Poll<std::io::Result<()>> {
+        let this = self.get_mut();
+        if buf.remaining() == 0 {
+            return std::task::Poll::Ready(Ok(()));
+        }
+        if let Some(first) = this.first.take() {
+            buf.put_slice(&[first]);
+            return std::task::Poll::Ready(Ok(()));
+        }
+        tokio::io::AsyncRead::poll_read(std::pin::Pin::new(&mut this.pipe), cx, buf)
+    }
+}
+
+#[cfg(windows)]
+impl tokio::io::AsyncWrite for ServerStream {
+    fn poll_write(
+        self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+        buf: &[u8],
+    ) -> std::task::Poll<std::io::Result<usize>> {
+        tokio::io::AsyncWrite::poll_write(std::pin::Pin::new(&mut self.get_mut().pipe), cx, buf)
+    }
+
+    fn poll_flush(
+        self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<std::io::Result<()>> {
+        tokio::io::AsyncWrite::poll_flush(std::pin::Pin::new(&mut self.get_mut().pipe), cx)
+    }
+
+    fn poll_shutdown(
+        self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<std::io::Result<()>> {
+        tokio::io::AsyncWrite::poll_shutdown(std::pin::Pin::new(&mut self.get_mut().pipe), cx)
+    }
+}
 
 #[cfg(unix)]
 pub async fn connect(endpoint: &LocalEndpoint) -> Result<ClientStream, SdkError> {
@@ -223,6 +270,10 @@ pub struct LocalListener {
     name: String,
     security: windows_security::PipeSecurity,
     pending: tokio::net::windows::named_pipe::NamedPipeServer,
+    authenticating: Option<(
+        tokio::net::windows::named_pipe::NamedPipeServer,
+        tokio::time::Instant,
+    )>,
 }
 
 #[cfg(windows)]
@@ -235,16 +286,47 @@ impl LocalListener {
             name,
             security,
             pending,
+            authenticating: None,
         })
     }
 
     pub async fn accept(&mut self) -> Result<ServerStream, SdkError> {
+        use tokio::io::AsyncReadExt;
+
         loop {
-            self.pending.connect().await.map_err(runtime_error)?;
-            let replacement = create_pipe(&self.name, &self.security, false)?;
-            let connected = std::mem::replace(&mut self.pending, replacement);
+            if self.authenticating.is_none() {
+                self.pending.connect().await.map_err(runtime_error)?;
+                let replacement = create_pipe(&self.name, &self.security, false)?;
+                let connected = std::mem::replace(&mut self.pending, replacement);
+                self.authenticating = Some((
+                    connected,
+                    tokio::time::Instant::now() + std::time::Duration::from_secs(2),
+                ));
+            }
+            // The enclosing server selects acceptance against completed clients.
+            // Keep the connected pipe and its original deadline in the listener
+            // so cancellation cannot close a new client or extend its budget.
+            let (connected, deadline) = self.authenticating.as_mut().unwrap();
+            // Windows impersonates the security context of the last data read.
+            // A connect-only probe has no such context. Read one bounded byte
+            // before checking the SID, but never expose unauthenticated bytes
+            // to a request handler. Preserve it for the unchanged wire parser.
+            let mut first = [0];
+            if !matches!(
+                tokio::time::timeout_at(*deadline, connected.read_exact(&mut first)).await,
+                Ok(Ok(_))
+            ) {
+                self.authenticating = None;
+                continue;
+            }
+            // A one-byte read cannot make partial progress and then suspend.
+            // There are no further await points before returning the same byte.
+            let (connected, _) = self.authenticating.take().unwrap();
             if self.security.client_is_current_user(&connected)? {
-                return Ok(connected);
+                return Ok(ServerStream {
+                    pipe: connected,
+                    first: Some(first[0]),
+                });
             }
             connected.disconnect().map_err(runtime_error)?;
         }
@@ -256,7 +338,7 @@ fn create_pipe(
     name: &str,
     security: &windows_security::PipeSecurity,
     first: bool,
-) -> Result<ServerStream, SdkError> {
+) -> Result<tokio::net::windows::named_pipe::NamedPipeServer, SdkError> {
     use tokio::net::windows::named_pipe::ServerOptions;
 
     let mut options = ServerOptions::new();
@@ -747,13 +829,9 @@ mod windows_tests {
         ));
         let mut listener = LocalListener::bind(&endpoint).unwrap();
         let server = tokio::spawn(async move {
-            let mut denied = listener.accept().await.unwrap();
             let mut byte = [0];
-            let read = denied.read(&mut byte).await;
-            assert!(
-                matches!(read, Ok(0)) || read.is_err(),
-                "rejected connection sent bytes"
-            );
+            // A client which rejects the server pin sends no request bytes and
+            // must never be exposed as an authenticated accepted connection.
             let mut accepted = listener.accept().await.unwrap();
             accepted.read_exact(&mut byte).await.unwrap();
             assert_eq!(byte, [7]);

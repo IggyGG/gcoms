@@ -1,0 +1,61 @@
+{
+  "passed": true,
+  "before": {
+    "crates/private-fs/src/lib.rs": "8a013f660cc51d3cd610ffbbb281ba0d22b12cc5b89886fe562b8b3af9fbe918",
+    "crates/private-fs/Cargo.toml": "d80e119362b03410e0690693f1891f3f250e853bc48537c69eddc19a9494b0a6",
+    "Cargo.lock": "7bf0e526dfea4f63b556e754d8a9b2d171815f4c3e22baad31ba006fd2f33353"
+  },
+  "after": {
+    "crates/private-fs/src/lib.rs": "8a013f660cc51d3cd610ffbbb281ba0d22b12cc5b89886fe562b8b3af9fbe918",
+    "crates/private-fs/Cargo.toml": "d80e119362b03410e0690693f1891f3f250e853bc48537c69eddc19a9494b0a6",
+    "Cargo.lock": "7bf0e526dfea4f63b556e754d8a9b2d171815f4c3e22baad31ba006fd2f33353"
+  },
+  "unchanged": true,
+  "checks": [
+    {
+      "name": "tests",
+      "command": [
+        "/Users/iggy/.cargo/bin/cargo",
+        "+1.98.0",
+        "test",
+        "--locked",
+        "-p",
+        "gcoms-private-fs",
+        "--all-features",
+        "--",
+        "--test-threads=1"
+      ],
+      "exit_code": 0,
+      "sha256": "2e7ce929655ba8a9e5c7adf4b0933f3b97dd11d68f1d413e34d07414a5bb23b8"
+    },
+    {
+      "name": "clippy",
+      "command": [
+        "/Users/iggy/.cargo/bin/cargo",
+        "+1.98.0",
+        "clippy",
+        "--locked",
+        "-p",
+        "gcoms-private-fs",
+        "--all-features",
+        "--all-targets",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "exit_code": 0,
+      "sha256": "eea66783edd36912c8caa955bc3c0cee86281e9322022cb292090123e56affe5"
+    }
+  ],
+  "scope": "Mac arm64 affected-package native tests with TMPDIR under /private/tmp, not full native release qualification",
+  "original_failure_reproduced": true,
+  "production_source_unchanged": true,
+  "reason": "macOS inherits wheel from /private/tmp; chmod strips setgid for a non-member. Assign the owned test file to the current primary group before asserting all requested unsafe modes.",
+  "codematch": "unreachable",
+  "evidence": {
+    "original.json": "b75853be3b1272c9a576c283f2d16db1fb0e65a74c508090858ade2fe65aea76",
+    "original.log": "7fde27ac6abdae4e44517f1c8930e66a3fc1832f720b70743c388e2c9fe85ab5",
+    "tests.log": "2e7ce929655ba8a9e5c7adf4b0933f3b97dd11d68f1d413e34d07414a5bb23b8",
+    "clippy.log": "eea66783edd36912c8caa955bc3c0cee86281e9322022cb292090123e56affe5"
+  }
+}

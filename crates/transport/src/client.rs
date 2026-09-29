@@ -739,7 +739,8 @@ impl Tp1Client {
         let config = tls::client_config_pinned(pool_key.1)?;
         let tls_stream = TlsConnector::from(Arc::new(config))
             .connect(tls::server_name_ip(pool_key.0.ip()), tcp)
-            .await?;
+            .await
+            .map_err(|error| format!("terminal TLS handshake: {error}"))?;
         if tls_stream.get_ref().1.alpn_protocol() != Some(tls::ALPN_H2) {
             return Err("endpoint did not negotiate h2".into());
         }

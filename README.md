@@ -1,3 +1,47 @@
+Retained file downloads query newly authenticated sources immediately and use a
+bounded eight-send window; see [recovery validation](TESTPLAN.md#bounded-file-recovery-latency).
+Installed platform checks remain separate from the controlled latency model.
+
+## Immediate sending and randomized cover, 2026-09-25
+
+Owner-approved policy: real traffic sends when transport capacity is available;
+interactive cover opportunities are independently uniform 10–10,000 ms. A cover
+record is skipped if that writer sent real data since the previous opportunity;
+the next random interval still starts on schedule. GChat selects
+new authenticated profile 46, preserving old profile meanings. This removes
+intentional cover-slot waiting, not congestion or route setup. Timing/activity
+privacy is reduced and unqualified. Extra bursts remain deferred. See
+[traffic policy](docs/GC2_TRAFFIC_PROFILES.md) for costs, migration and limitations.
+Current validation must prove immediate data/EOF, bounded cover and no catch-up
+burst, cover suppression after sent data and idle resumption, old-profile compatibility, durable profile
+selection, class isolation and real application delivery/recovery. R02/R03/R04
+remain open until source-bound application measurements pass; prior slow/failed
+runs remain failures. No deployed or installed behavior is claimed by source edits.
+
+> Established GC/2 carriers now replace themselves on completion after at least
+> 30 seconds of published readiness, without waiting for another maintenance tick.
+> Failed/short-lived attempts retain retry pacing. This removes a reproduced
+> owner delay; it does not yet qualify the application recovery latency target.
+> See [background ownership](docs/GC2_DISCOVERY.md).
+
+The current [reliability release requirements](docs/RELIABILITY_RELEASE.md)
+define delivery/recovery deadlines, cluster validation and the subsequent graph
+routing milestone. Historical qualification counts below retain their own scope.
+
+## Protected-route error context
+
+Recovery errors identify the failing middle number and handshake/admission stage,
+or the terminal TLS handshake. These local diagnostics contain no relay addresses
+or private capabilities and do not alter authentication or recovery policy.
+
+## Local GC/2 admission diagnostics
+
+With the existing optional metrics sink enabled, `gchat_queue_refused` records
+only `operation` (`push` or `subscribe`) and a static refusal reason. It separates
+queue fullness, aggregate storage and replay capacity while retaining the same
+network replies and security limits. This is local troubleshooting data, not a
+delivery receipt.
+
 # GComs
 
 Rust applications start with the [`gcoms` application API](crates/application/README.md):
@@ -25,6 +69,30 @@ build. It hosts its inbox on remote relays and excludes local queue hosting,
 forwarding and NAT mapping from a client-only build. Existing embedded and IPC
 feature combinations retain their behavior. The SDK's `in-process` feature is
 the shared adapter; `embedded` additionally enables relay hosting.
+
+Background guard renewal uses bounded retry backoff when authenticated replies
+have not yet supplied enough fresh independent relays for a five-hop route. A
+fresh entry alone is not reported as a usable route; application requests do not
+trigger additional entry dials.
+
+Routed profile reopening retains expired inbox authority privately for background
+recovery. Public addresses respect the sealed owner lifetime even when a renewed
+lease carries a later timestamp; this never extends the original saved budget.
+Recovery replaces the complete saved owner-role collections rather than appending
+them to live state, so retained draining queues remain unique across reconnects.
+
+When a protocol checkpoint fails, bounded local diagnostics distinguish encoding,
+store failure and the first owner-lifecycle pause site. Uncertain persistence still
+pauses the owner; these diagnostics do not authorize retry or confirm delivery.
+
+An in-process application can opt into `durable_channel_inbox(true)` before
+receiving starts. Channel and channel-private plaintext is sealed with the
+receive checkpoint before acknowledgment; the archive owner explicitly consumes
+each saved record. The inbox is bounded to 256 messages and 4 MiB and rejects new
+receives at capacity without advancing their ratchets. File pieces retain their
+separate journal. Shared/attached IPC clients cannot silently opt into ownership.
+Enabled profiles use the `GCNSTM` checkpoint wrapper, which requires a compatible
+reader and rollback binary; older binaries cannot read it.
 
 **GComs** is a Rust communication protocol for secure connections, with typed
 service APIs for addon and client integration. **GChat** is its separate reference
@@ -117,6 +185,10 @@ All three Rust variants are tested natively on Linux x86_64, macOS arm64/x86_64
 and Windows x64 MSVC.
 Measured sizes and exact validation inputs are in [the Rust integration report](docs/RUST_INTEGRATIONS.md).
 
+Inbox replacement completes after both new queues and peer updates are committed.
+Peer notifications remain in the encrypted outbox and use the bounded direct
+maintenance retry schedule; an unavailable peer cannot hold inbox installation
+open. Relay acceptance still does not imply peer delivery.
 
 ## Five-relay carrier update — 2026-09-23
 
@@ -128,3 +200,14 @@ The shared experimental GC/2 application carrier requires an entry, three indepe
 Accepted downloads retain verified pieces and resume automatically after restart or temporary conversation membership loss. No requests or incoming pieces are accepted without current authorization. Explicit pauses/cancellations remain stopped. Reopening repairs the older automatic membership-pause marker; other errors keep their existing recovery behavior. Transport completions continue to arm retries while files are disabled or roster refresh fails.
 
 Validation: 51 component tests passed, two existing qualification tests ignored, including an overnight restart at 80% and a send completion delivered while locked. Evidence: `test-evidence/file-resume-20260923/verification.json`. Android live recovery remains pending; these gates do not establish fleet end-to-end acceptance. No new dependencies.
+
+Release file checks use a bounded 16 MiB interrupted transfer; the 1 GiB campaign runs separately. See [reliability requirements](docs/RELIABILITY_RELEASE.md).
+
+Manual channel reconnect codes use separate MLS ciphertext from background
+directory announcements. They are shared out of band, after the send state is
+durably saved; automatic delivery cannot consume a code before it is pasted.
+
+Protected subscription recovery fixtures use the current responsive profile 46
+on Linux, both Mac architectures and Windows. The optional Rust integration
+workflow diagnostic retains redacted local dispatch/count evidence; it does
+not qualify installed artifacts or change production timing constants.

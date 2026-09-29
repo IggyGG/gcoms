@@ -1,7 +1,0 @@
-    Finished `test` profile [unoptimized + debuginfo] target(s) in 27.33s
-     Running unittests src/lib.rs (/run/media/user/SSD-2/git/ghost/coms/.worktrees/gdrop-gdrone/build/gcoms/debug/deps/gcoms_node-b67388a9fd3f8117)
-
-running 1 test
-test node::routing::gc2_inbox_tests::fresh_carrier_node_provisions_its_inbox_over_the_protected_route ... ok
-
-test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 315 filtered out; finished in 22.63s

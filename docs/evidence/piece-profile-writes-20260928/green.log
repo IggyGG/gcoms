@@ -1,0 +1,13 @@
+   Compiling gcoms-runtime v0.1.0 (/work/piece-persistence/green/crates/runtime)
+    Finished `test` profile [unoptimized] target(s) in 10.47s
+     Running unittests src/lib.rs (/work/route-readiness/target-complete/debug/deps/gcoms_runtime-463cb3c87dde685b)
+
+running 1 test
+{"blocks":16,"event":"piece_profile_write_measurement","payload_bytes":65536,"receiver_event_saves":0,"receiver_profile_bytes":0,"sender_profile_bytes":0,"sender_wrapper_saves":0}
+gcoms: protocol checkpoint storage failed: Is a directory (os error 21)
+gcoms: protocol checkpoint storage failed: Is a directory (os error 21)
+gcoms: protocol checkpoint storage failed: Is a directory (os error 21)
+gcoms: protocol checkpoint storage failed: Is a directory (os error 21)
+test runtime::piece_persistence_tests::piece_transport_does_not_rewrite_profiles_or_require_wrapper_saves ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 32 filtered out; finished in 12.19s

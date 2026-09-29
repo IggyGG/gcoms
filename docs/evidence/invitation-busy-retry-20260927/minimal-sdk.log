@@ -1,0 +1,41 @@
+    Checking tokio v1.53.1
+    Checking gcoms-crypto v0.1.0 (/work/release-repro-20260927/admission-barrier/sdk-retry/gcoms/crates/crypto)
+    Checking gcoms-core v0.1.0 (/work/release-repro-20260927/admission-barrier/sdk-retry/gcoms/crates/core)
+    Checking gcoms-network v0.1.0 (/work/release-repro-20260927/admission-barrier/sdk-retry/gcoms/crates/network)
+    Checking gcoms-mls v0.1.0 (/work/release-repro-20260927/admission-barrier/sdk-retry/gcoms/crates/mls)
+    Checking gcoms-protocol v0.1.0 (/work/release-repro-20260927/admission-barrier/sdk-retry/gcoms/crates/protocol)
+    Checking hyper v1.11.1
+    Checking tokio-rustls v0.26.4
+    Checking tokio-util v0.7.19
+    Checking tower v0.5.3
+    Checking tower-http v0.6.11
+    Checking h2 v0.4.19
+    Checking hyper-util v0.1.20
+    Checking hyper-rustls v0.27.9
+    Checking reqwest v0.12.28
+    Checking gcoms-transport v0.1.0 (/work/release-repro-20260927/admission-barrier/sdk-retry/gcoms/crates/transport)
+    Checking gcoms-routing v0.1.0 (/work/release-repro-20260927/admission-barrier/sdk-retry/gcoms/crates/routing)
+    Checking gcoms-network-client v0.1.0 (/work/release-repro-20260927/admission-barrier/sdk-retry/gcoms/crates/network-client)
+    Checking gcoms-node v0.1.0 (/work/release-repro-20260927/admission-barrier/sdk-retry/gcoms/crates/node)
+warning: unused variable: `tls_identity`
+    --> crates/node/src/node/mod.rs:1000:5
+     |
+1000 |     tls_identity: TlsIdentity,
+     |     ^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_tls_identity`
+     |
+     = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: associated function `decode` is never used
+   --> crates/node/src/node/channel_inbox.rs:181:12
+    |
+111 | impl Inbox {
+    | ---------- associated function in this implementation
+...
+181 |     pub fn decode(bytes: &[u8]) -> Result<Self, String> {
+    |            ^^^^^^
+    |
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: `gcoms-node` (lib) generated 2 warnings (run `cargo fix --lib -p gcoms-node` to apply 1 suggestion)
+    Checking gcoms-sdk v0.1.0 (/work/release-repro-20260927/admission-barrier/sdk-retry/gcoms/crates/sdk)
+    Finished `dev` profile [unoptimized] target(s) in 11.30s

@@ -59,6 +59,9 @@ struct Fixture {
 
 impl Fixture {
     async fn new(two_entries: bool) -> Self {
+        if let Some(path) = std::env::var_os("GCOMS_SUBSCRIPTION_TEST_METRICS") {
+            crate::metrics::init(std::path::Path::new(&path)).unwrap();
+        }
         let mut tasks = JoinSet::new();
         let (second_entry, held_entry) = watch::channel(None);
         let second_entry_closed = Arc::new(AtomicUsize::new(0));
@@ -104,6 +107,14 @@ impl Fixture {
                 };
                 Arc::new(move |path, registered| {
                     let dispatch = handler(path, registered);
+                    if std::env::var_os("GCOMS_SUBSCRIPTION_TEST_METRICS").is_some() {
+                        let outcome = match &dispatch {
+                            Dispatch::Pass => "pass",
+                            Dispatch::Rejected => "rejected",
+                            Dispatch::Accepted(_) => "accepted",
+                        };
+                        eprintln!("fixture relay={index} entry_path={} registered={registered} dispatch={outcome}", path == entry_path);
+                    }
                     if index != 1 || path != entry_path {
                         return dispatch;
                     }
@@ -155,7 +166,7 @@ impl Fixture {
             .unwrap();
         let (owner, ready) = EntryOwner::new(
             directory,
-            CandidateProfile::file_transfer(),
+            CandidateProfile::responsive(),
             if two_entries { 2 } else { 1 },
         )
         .unwrap();
@@ -211,6 +222,12 @@ impl Fixture {
         let store = Arc::new(Mutex::new(store));
         let (observed, attempts) = mpsc::channel(16);
         let handler: DuplexHandler = Arc::new(move |token| {
+            if std::env::var_os("GCOMS_SUBSCRIPTION_TEST_METRICS").is_some() {
+                eprintln!(
+                    "fixture terminal known_path={}",
+                    aliases.contains_key(token)
+                );
+            }
             let alias = aliases.get(token)?.clone();
             let observed = observed.clone();
             let store = store.clone();
@@ -318,6 +335,11 @@ impl Fixture {
             let mut keys = HashSet::new();
             for _ in 0..(self.inbox.aliases.len() + self.channel.len()) * 2 {
                 let attempt = self.attempts.recv().await.expect("subscription request");
+                eprintln!(
+                    "terminal subscription {} {:?}",
+                    attempts.len() + 1,
+                    attempt.subscription.class
+                );
                 assert!(keys.insert((attempt.subscription.queue_id, attempt.subscription.class)));
                 attempts.push(attempt);
             }

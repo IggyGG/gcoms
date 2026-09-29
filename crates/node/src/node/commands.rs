@@ -808,6 +808,9 @@ pub(crate) fn spawn_command_loop(ctx: CommandLoopContext) -> tokio::task::JoinHa
                     text,
                     done,
                 } => {
+                    // Include waiting behind earlier sends in the same bound.
+                    let deadline =
+                        tokio::time::Instant::now() + std::time::Duration::from_secs(120);
                     let key = CmdKey::Channel(channel.clone());
                     dispatch!(
                         key,
@@ -817,7 +820,10 @@ pub(crate) fn spawn_command_loop(ctx: CommandLoopContext) -> tokio::task::JoinHa
                         events_tx,
                         prepare,
                         complete | {
-                            let prepared = prepare_channel_text(&state, &channel, &text, true)?;
+                            let prepared = prepare_tracked_channel_text_when_ready(
+                                &state, &channel, &text, deadline,
+                            )
+                            .await?;
                             let ticket = complete.register();
                             drop(prepare);
                             let _ticket = ticket.wait().await;
@@ -896,7 +902,13 @@ pub(crate) fn spawn_command_loop(ctx: CommandLoopContext) -> tokio::task::JoinHa
                                     &channel,
                                     PresenceMode::Invisible,
                                     0,
-                                )?;
+                                )
+                                .map_err(|error| {
+                                    // Local opt-out was already committed above.
+                                    // Preparation can fail during membership recovery
+                                    // just like the later network withdrawal can.
+                                    format!("presence disabled locally; withdrawal failed: {error}")
+                                })?;
                                 let ticket = complete.register();
                                 drop(prepare);
                                 let _ticket = ticket.wait().await;
@@ -1043,6 +1055,40 @@ pub(crate) fn spawn_command_loop(ctx: CommandLoopContext) -> tokio::task::JoinHa
                     let mut st = state.lock().unwrap_or_else(|p| p.into_inner());
                     let result = submit_local_component(&mut st, &body);
                     body.fill(0);
+                    let _ = done.send(result);
+                }
+                Cmd::ChannelInboxPage { after, limit, done } => {
+                    let st = state.lock().unwrap_or_else(|p| p.into_inner());
+                    let result = if st.durable_state_sink.is_none() {
+                        Err("channel inbox requires persistent state".into())
+                    } else {
+                        st.channel_inbox.page(after, limit)
+                    };
+                    let _ = done.send(result);
+                }
+                Cmd::ChannelInboxReceipt {
+                    sequence,
+                    digest,
+                    done,
+                } => {
+                    let mut st = state.lock().unwrap_or_else(|p| p.into_inner());
+                    let prior = st.channel_inbox.clone();
+                    let result = if st.durable_state_sink.is_none() || !st.channel_inbox.enabled {
+                        Err("channel inbox requires persistent state".into())
+                    } else {
+                        st.channel_inbox
+                            .consume(sequence, digest)
+                            .and_then(|changed| {
+                                if changed {
+                                    persist_current_direct_state(&st)
+                                } else {
+                                    Ok(())
+                                }
+                            })
+                    };
+                    if result.is_err() {
+                        st.channel_inbox = prior;
+                    }
                     let _ = done.send(result);
                 }
                 Cmd::ApplicationInboxPage { after, limit, done } => {

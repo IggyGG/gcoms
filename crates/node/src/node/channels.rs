@@ -37,9 +37,8 @@ pub(crate) async fn channel_tick(
 
 /// Control recovery keeps its independent maintenance clock. Data admission
 /// and held hop receipts never own the clock that retransmits ACKs and commits.
-pub(crate) async fn channel_control_tick(
+pub(crate) fn prepare_channel_control(
     state: &Arc<Mutex<NodeState>>,
-    scheduler: &RelayScheduler,
     events: &broadcast::Sender<Ev>,
 ) {
     let leaving = {
@@ -59,7 +58,7 @@ pub(crate) async fn channel_control_tick(
             .collect::<Vec<_>>()
     };
     for (name, member) in leaving {
-        if let Ok(Some(_)) = prepare_channel_removal(state, &name, member, events) {
+        if let Ok(Some(_)) = prepare_channel_removal(state, &name, member, events, true) {
             if let Some(cs) = state
                 .lock()
                 .unwrap_or_else(|p| p.into_inner())
@@ -73,14 +72,13 @@ pub(crate) async fn channel_control_tick(
             }
         }
     }
-    let control_actions = {
+    {
         let mut st = state.lock().unwrap_or_else(|p| p.into_inner());
         if st.owner_transition_failed {
             return;
         }
         expire_channel_presence(&mut st, std::time::Instant::now(), events);
-        let mut control_actions = Vec::new();
-        for (chan, cs) in st.channels.iter_mut() {
+        for cs in st.channels.values_mut() {
             if cs.own_route.aliases.len() != 2 {
                 continue;
             }
@@ -90,75 +88,8 @@ pub(crate) async fn channel_control_tick(
                     wire.fill(0);
                 }
             }
-            control_actions.extend(
-                cs.pending_control
-                    .iter()
-                    .cloned()
-                    .map(|(peer, wire)| (chan.clone(), peer, wire)),
-            );
-            if let Some(outbox) = &cs.membership_outbox {
-                control_actions.extend(
-                    outbox
-                        .expected
-                        .iter()
-                        .filter(|(identity, _)| !outbox.acknowledged.contains(*identity))
-                        .map(|(_, peer)| (chan.clone(), peer.clone(), outbox.commit.clone())),
-                );
-            }
         }
-        control_actions
-    };
-
-    futures_join_all(control_actions.into_iter().map(|(chan, peer, wire)| {
-        let state = state.clone();
-        let scheduler = scheduler.clone();
-        async move {
-            let cells = crate::proto::encode_chan_cells(&chan, &wire).unwrap_or_default();
-            let mut sent = !cells.is_empty();
-            let receipts = cells
-                .iter()
-                .map(|cell| {
-                    scheduler.push(
-                        ProducerClass::ChannelControl,
-                        peer.control.clone(),
-                        cell.clone(),
-                    )
-                })
-                .collect::<Vec<_>>();
-            // Every peer's jobs are queued before waiting for another peer. A
-            // failed/slow lane must not serialise all membership ACK retransmits.
-            sent &= tokio::time::timeout(std::time::Duration::from_secs(120), async {
-                let outcomes = futures_join_all(receipts.into_iter().map(|receipt| async move {
-                    match receipt {
-                        Ok(receipt) => receipt.completion().await.accepted().is_ok(),
-                        Err(_) => false,
-                    }
-                }))
-                .await;
-                outcomes.into_iter().all(|accepted| accepted)
-            })
-            .await
-            .unwrap_or(false);
-            if sent {
-                let mut st = state.lock().unwrap_or_else(|p| p.into_inner());
-                if let Some(cs) = st.channels.get_mut(&chan) {
-                    let mut index = 0;
-                    while index < cs.pending_control.len() {
-                        let remove = cs.pending_control[index].0 == peer
-                            && cs.pending_control[index].1 == wire;
-                        if remove {
-                            if let Some((_, mut pending_wire)) = cs.pending_control.remove(index) {
-                                pending_wire.fill(0);
-                            }
-                        } else {
-                            index += 1;
-                        }
-                    }
-                }
-            }
-        }
-    }))
-    .await;
+    }
 }
 
 /// Pairwise channel encryption keeps targeted maintenance off the shared MLS
@@ -381,7 +312,6 @@ pub(crate) fn deliver_mls(
     events: &broadcast::Sender<Ev>,
 ) -> bool {
     let node_tag = short_addr_tag(&info_addr(&st.info));
-    let scheduler = st.scheduler.clone();
     let id = crate::channel::msg_id(chan, wire);
     let mut was_text = false;
     let archive_key = channel_archive_key(&st.identity_seed);
@@ -516,25 +446,15 @@ pub(crate) fn deliver_mls(
                         .channels
                         .get(chan)
                         .and_then(|channel| channel.role.pseudonym_for_name(&sender));
-                    if let Some(sender_pseudonym) = sender_pseudonym {
-                        if let Some(cs) = st.channels.get_mut(chan) {
-                            queue_authenticated_channel_ack(
-                                cs,
-                                &scheduler,
-                                chan,
+                    let ack = sender_pseudonym.map(|sender| {
+                        (
+                            sender,
+                            crate::channel::encode_text_ack(
                                 id,
-                                sender_pseudonym,
-                                crate::channel::encode_text_ack(
-                                    id,
-                                    st.channel_presence_opt_in.contains(chan),
-                                ),
-                            );
-                        }
-                    }
-                    if let Err(error) = persist_current_direct_state(st) {
-                        metrics::log_event("channel_message_persist_error", &[("e", error)]);
-                        return false;
-                    }
+                                st.channel_presence_opt_in.contains(chan),
+                            ),
+                        )
+                    });
                     let display_sender = sender_pseudonym
                         .and_then(|member| {
                             st.channels
@@ -545,16 +465,28 @@ pub(crate) fn deliver_mls(
                                 .and_then(|metadata| metadata.nickname(member).map(str::to_owned))
                         })
                         .unwrap_or_else(|| sender.clone());
-                    let sent_ok = events.send(Ev::ChannelMessage {
+                    let message = channel_inbox::Message::Channel {
                         channel: chan.to_string(),
-                        msg_id: id,
-                        ts_unix: now_unix(),
+                        id,
+                        timestamp: now_unix(),
                         sender: display_sender,
-                        channel_epoch,
-                        sender_index: sender_idx,
-                        text: body,
-                        latency_hint_ms: latency,
-                    });
+                        epoch: channel_epoch,
+                        index: sender_idx,
+                        body,
+                        latency,
+                    };
+                    if !commit_channel_receive(
+                        st,
+                        chan,
+                        id,
+                        ack,
+                        &role_checkpoint,
+                        false,
+                        Some(message.clone()),
+                    ) {
+                        return false;
+                    }
+                    let sent_ok = events.send(message.event());
                     if let Some(sender_pseudonym) = sender_pseudonym.filter(|member_id| {
                         share_presence
                             && st.channel_presence_opt_in.contains(chan)
@@ -838,38 +770,31 @@ pub(crate) fn deliver_mls(
         Ok(gcoms_mls::ReceiveOutcome::CommitMerged {
             sender_index: sender_idx,
         }) => {
-            if let Some(cs) = st.channels.get_mut(chan) {
-                // The authenticated commit is the membership authority. Remove
-                // obsolete public routing before an ACK or any later state save;
-                // a re-added name must learn its new route from a fresh MLS Dir.
-                cs.directory.retain(|name, route| {
-                    cs.role.pseudonym_for_name(name) == Some(route.pseudonym)
-                });
+            let ack = st.channels.get(chan).and_then(|cs| {
+                cs.role
+                    .roster()
+                    .into_iter()
+                    .find(|(idx, _)| *idx == sender_idx)
+                    .and_then(|(_, name)| cs.role.pseudonym_for_name(&name))
+                    .map(|sender| {
+                        (
+                            sender,
+                            crate::channel::encode_commit_ack(
+                                id,
+                                cs.role.epoch(),
+                                st.channel_presence_opt_in.contains(chan),
+                            ),
+                        )
+                    })
+            });
+            if !commit_channel_receive(st, chan, id, ack, &role_checkpoint, true, None) {
+                return false;
+            }
+            if let Some(cs) = st.channels.get(chan) {
                 let _ = events.send(Ev::ChannelRosterChanged {
                     channel: chan.to_string(),
                     channel_id: cs.id,
                 });
-                let sender_pseudonym = cs
-                    .role
-                    .roster()
-                    .into_iter()
-                    .find(|(idx, _)| *idx == sender_idx)
-                    .and_then(|(_, name)| cs.role.pseudonym_for_name(&name));
-                if let Some(sender_pseudonym) = sender_pseudonym {
-                    let epoch = cs.role.epoch();
-                    queue_authenticated_channel_ack(
-                        cs,
-                        &scheduler,
-                        chan,
-                        id,
-                        sender_pseudonym,
-                        crate::channel::encode_commit_ack(
-                            id,
-                            epoch,
-                            st.channel_presence_opt_in.contains(chan),
-                        ),
-                    );
-                }
             }
             metrics::log_event(
                 "chan_commit_merged",
@@ -1094,18 +1019,83 @@ pub(crate) fn commit_authenticated_directory(
     true
 }
 
-pub(crate) fn queue_authenticated_channel_ack(
+/// Persist the received MLS state and its exact ACK before either can escape.
+/// Rollback keeps the original incoming wire retryable on storage/admission failure.
+#[allow(clippy::too_many_arguments)]
+fn commit_channel_receive(
+    st: &mut NodeState,
+    chan: &str,
+    id: [u8; 16],
+    ack: Option<([u8; 32], Vec<u8>)>,
+    checkpoint: &[u8],
+    prune_directory: bool,
+    message: Option<channel_inbox::Message>,
+) -> bool {
+    let prior_inbox = st.channel_inbox.clone();
+    let journal_result = message.map_or(Ok(()), |message| st.channel_inbox.stage(message));
+    let Some(cs) = st.channels.get_mut(chan) else {
+        st.channel_inbox = prior_inbox;
+        return false;
+    };
+    let previous = (
+        cs.pending_control.clone(),
+        cs.commit_ack_cache.clone(),
+        cs.commit_ack_order.clone(),
+        cs.unrouted_ack_journal.clone(),
+        cs.unrouted_ack_order.clone(),
+    );
+    let directory = prune_directory.then(|| cs.directory.clone());
+    if prune_directory {
+        // A re-added name must learn its new route from a fresh authenticated Dir.
+        cs.directory
+            .retain(|name, route| cs.role.pseudonym_for_name(name) == Some(route.pseudonym));
+    }
+    let staged = match ack {
+        Some((sender, body)) => stage_authenticated_channel_ack(cs, id, sender, body),
+        None => Ok(()),
+    };
+    if let Err(error) = journal_result
+        .and(staged)
+        .and_then(|_| persist_current_direct_state(st))
+    {
+        st.channel_inbox = prior_inbox;
+        if let Some(cs) = st.channels.get_mut(chan) {
+            (
+                cs.pending_control,
+                cs.commit_ack_cache,
+                cs.commit_ack_order,
+                cs.unrouted_ack_journal,
+                cs.unrouted_ack_order,
+            ) = previous;
+            if let Some(directory) = directory {
+                cs.directory = directory;
+            }
+            cs.overlay.forget_sighting(id);
+        }
+        restore_directory_receive(st, chan, checkpoint);
+        metrics::log_event("channel_receive_persist_error", &[("e", error)]);
+        return false;
+    }
+    if let Some((route, wire)) = st
+        .channels
+        .get(chan)
+        .and_then(|cs| cs.commit_ack_cache.get(&id))
+    {
+        enqueue_channel_control(&st.scheduler, chan, route, wire);
+    }
+    true
+}
+
+fn stage_authenticated_channel_ack(
     channel: &mut crate::channel::ChannelState,
-    scheduler: &RelayScheduler,
-    channel_name: &str,
     original_id: [u8; 16],
     sender_pseudonym: [u8; 32],
     ack: Vec<u8>,
-) {
+) -> Result<(), String> {
     if sender_pseudonym == channel.role.own_pseudonym()
         || channel.commit_ack_cache.contains_key(&original_id)
     {
-        return;
+        return Ok(());
     }
     let key = crate::channel::UnroutedAckKey {
         original_id,
@@ -1117,24 +1107,22 @@ pub(crate) fn queue_authenticated_channel_ack(
         .find(|route| route.pseudonym == sender_pseudonym)
         .cloned();
     if route.is_some() && channel.pending_control.len() >= crate::channel::CHANNEL_ACK_LIMIT {
-        return;
+        return Err("channel ACK queue is full".into());
     }
     if route.is_none() && !channel.can_journal_unrouted_ack(&key) {
-        return;
+        return Err("channel unrouted ACK journal is full".into());
     }
-    let Ok(mut wire) = channel.role.send(&ack) else {
-        return;
-    };
+    let mut wire = channel.role.send(&ack).map_err(|e| e.to_string())?;
     if let Some(route) = route {
         channel
             .pending_control
             .push_back((route.clone(), wire.clone()));
         channel.cache_ack(original_id, route.clone(), wire.clone());
-        enqueue_channel_control(scheduler, channel_name, &route, &wire);
         wire.fill(0);
     } else {
         channel.journal_unrouted_ack(key, wire);
     }
+    Ok(())
 }
 
 pub(crate) fn enqueue_channel_control(
@@ -1526,7 +1514,26 @@ enum StagedAdmission {
     /// This exact key package was already admitted; replay its Welcome.
     Replay(Vec<u8>),
     /// A fresh MLS add was staged and merged; broadcast the commit.
-    Fresh(gcoms_mls::Admission),
+    Fresh(gcoms_mls::Admission, tokio::sync::OwnedMutexGuard<()>),
+}
+
+/// An explicit removal revokes that recipient's membership; it does not prove
+/// delivery. Keep its retained outbox unchanged, but do not let only revoked
+/// recipients prevent future epochs. Match authenticated pseudonyms, not names
+/// that a later member may reuse.
+fn has_pending_current_recipients(cs: &crate::channel::ChannelState) -> bool {
+    let current = cs
+        .role
+        .roster_members()
+        .into_iter()
+        .map(|member| member.pseudonym)
+        .collect::<HashSet<_>>();
+    cs.message_outbox.values().any(|pending| {
+        pending
+            .expected
+            .keys()
+            .any(|peer| current.contains(peer) && !pending.acknowledged.contains(peer))
+    })
 }
 
 /// The single lock-held admission decision shared by manual admit and invite
@@ -1557,6 +1564,22 @@ fn stage_admission_locked(
     if cs.membership_outbox.is_some() {
         return Err("membership change still awaiting acknowledgements".into());
     }
+    // Advancing the epoch can make retained application wires (including a
+    // newcomer's bootstrap metadata) unreadable. Admission must wait for their
+    // authenticated ACKs, not merely for the preceding membership commit.
+    // Check before staging MLS or consuming a single-use invitation. Cached
+    // Welcomes above remain replayable while this delivery barrier is held.
+    if has_pending_current_recipients(cs) {
+        return Err("channel messages still awaiting acknowledgements".into());
+    }
+    // Membership ACKs can clear before finalize_admission publishes the
+    // directory and bootstrap outbox. Keep this transient owner until that
+    // function returns; an exact cached Welcome remains replayable above.
+    let finalizer = cs
+        .admission_finalizer
+        .clone()
+        .try_lock_owned()
+        .map_err(|_| "membership change still awaiting acknowledgements".to_string())?;
     let expected = cs
         .directory
         .values()
@@ -1598,10 +1621,13 @@ fn stage_admission_locked(
             cs.admission_cache.remove(&oldest);
         }
     }
-    Ok(StagedAdmission::Fresh(gcoms_mls::Admission {
-        commit: staged.commit,
-        welcome: staged.welcome,
-    }))
+    Ok(StagedAdmission::Fresh(
+        gcoms_mls::Admission {
+            commit: staged.commit,
+            welcome: staged.welcome,
+        },
+        finalizer,
+    ))
 }
 
 #[cfg(all(test, feature = "client-persist"))]
@@ -1630,7 +1656,7 @@ pub(crate) async fn admit_channel(
     if gcoms_mls::pseudonym_of_key_package(mls_key_package) != Some(member_route.pseudonym) {
         return Err("channel route does not match MLS leaf".into());
     }
-    let admission = {
+    let (admission, _finalizer) = {
         let mut st = state.lock().unwrap_or_else(|p| p.into_inner());
         let Some(cs) = st.channels.get_mut(channel) else {
             return Err("no channel".into());
@@ -1640,7 +1666,7 @@ pub(crate) async fn admit_channel(
         }
         match stage_admission_locked(cs, channel, &member_route, mls_key_package, member_name)? {
             StagedAdmission::Replay(welcome) => return Ok(welcome),
-            StagedAdmission::Fresh(admission) => admission,
+            StagedAdmission::Fresh(admission, guard) => (admission, guard),
         }
     };
     finalize_admission(
@@ -1776,14 +1802,10 @@ fn queue_channel_metadata_snapshot(
     let key = channel_archive_key(&st.identity_seed);
     let seed = channel_seed(&st, channel);
     let cs = st.channels.get_mut(channel).ok_or("no channel")?;
-    if cs
-        .role
-        .channel_metadata()
-        .map_err(|e| e.to_string())?
-        .is_empty()
-    {
-        return Ok(());
-    }
+    // Even an empty display snapshot is a bootstrap receipt: the new member
+    // can ACK it only after joining and learning the authenticated owner route.
+    // Keep it in the durable outbox so the next admission cannot overtake that
+    // setup merely because the channel has no topic or nickname overrides.
     if cs.message_outbox.len() >= 64 {
         return Err("too many unacknowledged channel messages".into());
     }
@@ -1939,7 +1961,7 @@ pub(crate) async fn redeem_invite(
     if gcoms_mls::pseudonym_of_key_package(mls_key_package) != Some(member_route.pseudonym) {
         return Err("channel route does not match MLS leaf".into());
     }
-    let admission = {
+    let (admission, _finalizer) = {
         let mut st = state.lock().unwrap_or_else(|p| p.into_inner());
         let Some(cs) = st.channels.get_mut(channel) else {
             return Err("no channel".into());
@@ -1981,11 +2003,11 @@ pub(crate) async fn redeem_invite(
                 }
                 return Ok(welcome);
             }
-            Ok(StagedAdmission::Fresh(admission)) => {
+            Ok(StagedAdmission::Fresh(admission, guard)) => {
                 if let Some(record) = cs.invites.get_mut(invite_id) {
                     record.consumed = Some(member_route.pseudonym);
                 }
-                admission
+                (admission, guard)
             }
             Err(e) => return Err(e),
         }
@@ -2029,10 +2051,19 @@ pub(crate) async fn redeem_invite_remote(
     let body_id = crate::node::state::fresh_msg_id();
     {
         let mut st = state.lock().unwrap_or_else(|p| p.into_inner());
+        st.pending_invite_redemptions
+            .retain(|_, pending| !pending.reply.is_closed());
         if st.pending_invite_redemptions.len() >= 64 {
             return Err("too many invite redemptions in flight".into());
         }
-        st.pending_invite_redemptions.insert(body_id, tx);
+        st.pending_invite_redemptions.insert(
+            body_id,
+            crate::node::state::PendingInviteReply {
+                owner: owner.identity_pk.clone(),
+                reply: tx,
+                chunks: Default::default(),
+            },
+        );
     }
     let channel_owned = channel.to_string();
     let member_owned = member_name.to_string();
@@ -2108,7 +2139,8 @@ pub(crate) async fn service_one_invite(
         // the internal "still awaiting acknowledgements" string to the friend.
         match &outcome {
             Err(e)
-                if e == "membership change still awaiting acknowledgements"
+                if (e == "membership change still awaiting acknowledgements"
+                    || e == "channel messages still awaiting acknowledgements")
                     && std::time::Instant::now() < deadline =>
             {
                 tokio::time::sleep(std::time::Duration::from_millis(250)).await;
@@ -2145,21 +2177,77 @@ pub(crate) async fn service_one_invite(
     };
     // The record echoes the id the friend registered its waiter under.
     let waited_id = request.message_id;
-    if let Err(error) = send_direct_record(
-        state,
-        scheduler,
-        &peer,
-        None,
-        false,
-        move |_generated_id, _seq| {
-            crate::proto::encode_invite_welcome(waited_id, &result)
-                .ok_or_else(|| "invite welcome too large".to_string())
-        },
-    )
-    .await
-    {
+    if let Err(error) = send_invite_reply(state, scheduler, &peer, waited_id, result).await {
         metrics::log_event("invite_reply_send_failed", &[("e", error)]);
     }
+}
+
+/// Keep small replies wire-compatible. Larger Welcomes use bounded authenticated
+/// control records, each with its own receipt ID and the original request ID.
+/// Frame/flow limits are unchanged; older peers cannot claim a partial join.
+async fn send_invite_reply(
+    state: &Arc<Mutex<NodeState>>,
+    scheduler: &RelayScheduler,
+    peer: &NodeInfo,
+    request_id: [u8; 16],
+    result: Result<Vec<u8>, String>,
+) -> Result<(), String> {
+    use futures_util::{stream, StreamExt};
+    let encoded = crate::proto::encode_invite_welcome(request_id, &result)
+        .ok_or("invite welcome too large")?;
+    let overhead = gcoms_crypto::session::MAX_FRAME_OVERHEAD
+        + 3
+        + state
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .info
+            .identity_pk
+            .len();
+    if encoded.len().saturating_add(overhead) <= gcoms_core::MAX_MESSAGE {
+        send_direct_record(state, scheduler, peer, None, false, move |_, _| Ok(encoded)).await?;
+        return Ok(());
+    }
+    let welcome = result.map_err(|_| "invite error reply too large")?;
+    let digest: [u8; 32] = Sha256::digest(&welcome).into();
+    let total = u32::try_from(welcome.len()).map_err(|_| "invite welcome too large")?;
+    let mut prepared = Vec::new();
+    for (index, bytes) in welcome
+        .chunks(crate::proto::WELCOME_CHUNK_BYTES)
+        .enumerate()
+    {
+        let chunk = crate::proto::WelcomeChunk {
+            digest,
+            total,
+            offset: (index * crate::proto::WELCOME_CHUNK_BYTES) as u32,
+            bytes: bytes.to_vec(),
+        };
+        prepared.push(prepare_direct_record(
+            state,
+            peer,
+            None,
+            false,
+            None,
+            move |id, _| {
+                crate::proto::encode_invite_welcome_chunk(id, request_id, &chunk)
+                    .ok_or_else(|| "invalid invite welcome chunk".to_string())
+            },
+        )?);
+    }
+    // Preparation retains exact bytes before fanout. At most four first-hop
+    // completions run together; normal per-peer flow credit and retries apply.
+    let mut completions = stream::iter(
+        prepared
+            .into_iter()
+            .map(|record| complete_direct_record(scheduler, record)),
+    )
+    .buffer_unordered(4);
+    let mut first_error = None;
+    while let Some(result) = completions.next().await {
+        if let Err(error) = result {
+            first_error.get_or_insert(error);
+        }
+    }
+    first_error.map_or(Ok(()), Err)
 }
 
 #[cfg(test)]
@@ -2200,7 +2288,34 @@ pub(crate) fn prepare_channel_text(
     text: &[u8],
     tracked: bool,
 ) -> Result<PreparedChannelText, String> {
-    prepare_channel_payload(state, channel, text, tracked, None)
+    prepare_channel_payload(state, channel, text, tracked, None)?
+        .ok_or_else(|| "channel recipient route is not ready".into())
+}
+
+/// Wait only for a missing authenticated recipient route, before MLS advances
+/// or an outbox is committed. The command retains its per-channel preparation
+/// slot, so later sends cannot overtake it. No dial or plaintext resubmission is
+/// triggered here; incoming directory/bootstrap traffic continues independently.
+pub(crate) async fn prepare_tracked_channel_text_when_ready(
+    state: &Arc<Mutex<NodeState>>,
+    channel: &str,
+    text: &[u8],
+    deadline: tokio::time::Instant,
+) -> Result<PreparedChannelText, String> {
+    loop {
+        if tokio::time::Instant::now() >= deadline {
+            return Err("channel recipient route is not ready before the send deadline".into());
+        }
+        if let Some(prepared) = prepare_channel_payload(state, channel, text, true, None)? {
+            return Ok(prepared);
+        }
+        // Active submissions only: no background polling for idle channels.
+        tokio::time::sleep_until(std::cmp::min(
+            deadline,
+            tokio::time::Instant::now() + std::time::Duration::from_millis(250),
+        ))
+        .await;
+    }
 }
 
 pub(crate) fn prepare_channel_change(
@@ -2209,7 +2324,8 @@ pub(crate) fn prepare_channel_change(
     change: crate::channel::ChannelChange,
 ) -> Result<PreparedChannelText, String> {
     change.validate()?;
-    prepare_channel_payload(state, channel, &[], false, Some(change))
+    prepare_channel_payload(state, channel, &[], false, Some(change))?
+        .ok_or_else(|| "channel recipient route is not ready".into())
 }
 
 fn prepare_channel_payload(
@@ -2218,7 +2334,7 @@ fn prepare_channel_payload(
     text: &[u8],
     tracked: bool,
     change: Option<crate::channel::ChannelChange>,
-) -> Result<PreparedChannelText, String> {
+) -> Result<Option<PreparedChannelText>, String> {
     let closing = matches!(change, Some(crate::channel::ChannelChange::Close));
     if change.is_none() {
         validate_application_payload(text)?;
@@ -2245,7 +2361,7 @@ fn prepare_channel_payload(
             if cs.visibility != crate::channel::ChannelVisibility::Private {
                 return Err("Ownership transfer currently requires a private channel".into());
             }
-            if !cs.message_outbox.is_empty() {
+            if has_pending_current_recipients(cs) {
                 return Err(
                     "Wait for pending channel messages before transferring ownership".into(),
                 );
@@ -2281,9 +2397,7 @@ fn prepare_channel_payload(
                 Some(route) => {
                     expected.insert(pseudonym, route.clone());
                 }
-                None if tracked || change.is_some() => {
-                    return Err("channel recipient route is not ready".into())
-                }
+                None if tracked || change.is_some() => return Ok(None),
                 None => complete_roster = false,
             }
         }
@@ -2380,13 +2494,13 @@ fn prepare_channel_payload(
         st.last_channel_send = Some((channel.to_string(), wire.clone()));
         (wire, id, targets, durable_outbox)
     };
-    Ok(PreparedChannelText {
+    Ok(Some(PreparedChannelText {
         wire,
         id,
         channel: channel.to_string(),
         targets,
         durable_outbox,
-    })
+    }))
 }
 
 pub(crate) async fn complete_channel_text(
@@ -2526,6 +2640,7 @@ fn prepare_channel_removal(
     channel: &str,
     member_id: [u8; 32],
     events: &broadcast::Sender<Ev>,
+    wait_for_messages: bool,
 ) -> Result<Option<PreparedChannelRemoval>, String> {
     let removal_key = completed_member_removal_key(&member_id);
     let (commit, removed_target) = {
@@ -2541,6 +2656,13 @@ fn prepare_channel_removal(
             }
             if cs.membership_outbox.is_some() {
                 return Err("membership change still awaiting acknowledgements".into());
+            }
+            // A voluntary departure must not advance the epoch while an
+            // admitted message still needs its ACK. In particular, the old
+            // owner must acknowledge the successor's ownership announcement
+            // before leaving. Administrative removal remains explicit.
+            if wait_for_messages && has_pending_current_recipients(cs) {
+                return Err("channel messages still awaiting acknowledgements".into());
             }
             let expected = cs
                 .directory
@@ -2637,7 +2759,7 @@ pub(crate) async fn remove_channel_member(
     events: &broadcast::Sender<Ev>,
 ) -> Result<(), String> {
     let Some((commit, removed_target)) =
-        prepare_channel_removal(state, channel, member_id, events)?
+        prepare_channel_removal(state, channel, member_id, events, false)?
     else {
         return Ok(());
     };
@@ -2677,6 +2799,196 @@ mod membership_wait_tests {
     use std::task::{Context, Poll, Waker};
     use tokio::sync::Notify;
     use tokio::time::{Duration, Instant};
+
+    #[cfg(feature = "client-persist")]
+    #[tokio::test]
+    async fn revoked_recipient_does_not_block_name_reuse_or_become_acknowledged() {
+        use super::{has_pending_current_recipients, stage_admission_locked, StagedAdmission};
+        use crate::node::persist::tests::{established_owner_fixture, owned_channel_route};
+        let name = "removed-recipient-barrier";
+        let mut channel = established_owner_fixture(name);
+        let member = gcoms_mls::ChannelMember::prepare("member").unwrap();
+        let package = gcoms_mls::ChannelMember::key_package_bytes(&member).unwrap();
+        let route = owned_channel_route(
+            83,
+            gcoms_mls::ChannelMember::prepared_pseudonym(&member),
+            [83; 32],
+        );
+        drop(
+            stage_admission_locked(&mut channel, name, &route.public, &package, "member").unwrap(),
+        );
+        channel
+            .directory
+            .insert("member".into(), route.public.clone());
+        let wire = channel
+            .role
+            .send(&crate::channel::encode_text(b"still unconfirmed", false))
+            .unwrap();
+        let id = crate::channel::msg_id(name, &wire);
+        channel.message_outbox.insert(
+            id,
+            crate::channel::ChannelMessageOutbox {
+                wire: wire.clone(),
+                expected: [(route.public.pseudonym, route.public.clone())].into(),
+                acknowledged: Default::default(),
+            },
+        );
+        assert!(has_pending_current_recipients(&channel));
+        // An explicit authenticated removal can revoke an unavailable member.
+        channel.role.stage_remove(route.public.pseudonym).unwrap();
+        channel.role.merge_pending().unwrap();
+        channel.directory.remove("member");
+        assert!(!has_pending_current_recipients(&channel));
+
+        let replacement = gcoms_mls::ChannelMember::prepare("member").unwrap();
+        let package = gcoms_mls::ChannelMember::key_package_bytes(&replacement).unwrap();
+        let new_route = owned_channel_route(
+            84,
+            gcoms_mls::ChannelMember::prepared_pseudonym(&replacement),
+            [84; 32],
+        );
+        assert_ne!(route.public.pseudonym, new_route.public.pseudonym);
+        assert!(matches!(
+            stage_admission_locked(&mut channel, name, &new_route.public, &package, "member"),
+            Ok(StagedAdmission::Fresh(..))
+        ));
+        let pending = &channel.message_outbox[&id];
+        assert_eq!(pending.wire, wire);
+        assert!(pending.expected.contains_key(&route.public.pseudonym));
+        assert!(!pending.expected.contains_key(&new_route.public.pseudonym));
+        assert!(
+            pending.acknowledged.is_empty(),
+            "revocation is not delivery"
+        );
+        assert!(!has_pending_current_recipients(&channel));
+    }
+
+    #[cfg(feature = "client-persist")]
+    #[tokio::test]
+    async fn admission_finalization_cannot_be_overtaken_before_bootstrap() {
+        use super::{stage_admission_locked, StagedAdmission};
+        use crate::node::persist::tests::{established_owner_fixture, owned_channel_route};
+        let name = "admission-finalization";
+        let mut channel = established_owner_fixture(name);
+        let member = gcoms_mls::ChannelMember::prepare("first").unwrap();
+        let package = gcoms_mls::ChannelMember::key_package_bytes(&member).unwrap();
+        let route = owned_channel_route(
+            81,
+            gcoms_mls::ChannelMember::prepared_pseudonym(&member),
+            [81; 32],
+        );
+        let staged =
+            stage_admission_locked(&mut channel, name, &route.public, &package, "first").unwrap();
+        assert!(channel.membership_outbox.is_none());
+        assert!(channel.message_outbox.is_empty());
+        // This is the actual first-admission gap before asynchronous directory
+        // publication and bootstrap persistence, not an offline-member wait.
+        let epoch = channel.role.epoch();
+        let next = gcoms_mls::ChannelMember::prepare("next").unwrap();
+        let next_package = gcoms_mls::ChannelMember::key_package_bytes(&next).unwrap();
+        let next_route = owned_channel_route(
+            82,
+            gcoms_mls::ChannelMember::prepared_pseudonym(&next),
+            [82; 32],
+        );
+        let result = stage_admission_locked(
+            &mut channel,
+            name,
+            &next_route.public,
+            &next_package,
+            "next",
+        );
+        assert!(
+            matches!(result, Err(ref error) if error == "membership change still awaiting acknowledgements"),
+            "a second admission overtook unfinished directory/bootstrap publication"
+        );
+        assert_eq!(channel.role.epoch(), epoch);
+        // Exact retries can still replay the authenticated Welcome while the
+        // original finalizer owns its guard.
+        assert!(matches!(
+            stage_admission_locked(&mut channel, name, &route.public, &package, "first"),
+            Ok(StagedAdmission::Replay(_))
+        ));
+        drop(staged);
+        // Cancellation releases only this transient guard. Production's durable
+        // outbox remains an independent gate after bootstrap has been queued.
+        assert!(stage_admission_locked(
+            &mut channel,
+            name,
+            &next_route.public,
+            &next_package,
+            "next"
+        )
+        .is_ok());
+    }
+
+    #[cfg(all(feature = "client-persist", feature = "relay-host"))]
+    #[tokio::test]
+    async fn fresh_member_bootstrap_is_durable_without_display_metadata() {
+        use crate::node::{start_persistent, NodeConfig, NodeProfile};
+        use std::sync::Arc;
+        let config = |seed| NodeConfig {
+            seed: [seed; 32],
+            listen: "127.0.0.1:0".parse().unwrap(),
+            control: None,
+            advertise: None,
+            inbox_relay: None,
+            profile: NodeProfile::fixture(),
+            alias_lifecycle: Default::default(),
+        };
+        let owner = start_persistent(config(0xe1), Arc::new(|_| Ok(())))
+            .await
+            .unwrap();
+        let member = start_persistent(config(0xe2), Arc::new(|_| Ok(())))
+            .await
+            .unwrap();
+        let result = async {
+            let name = "bootstrap-ack";
+            owner
+                .create_channel(name, "owner", 8, crate::channel::ChannelVisibility::Private)
+                .await?;
+            let request = member.prepare_channel_join("member").await?;
+            let package = member.channel_key_package(request).await?;
+            let welcome = owner.admit_channel(name, &package, "member").await?;
+            {
+                let state = owner.state.upgrade().unwrap();
+                let state = state.lock().unwrap();
+                let channel = &state.channels[name];
+                if channel.message_outbox.len() != 1 {
+                    return Err("fresh member bootstrap has no durable ACK barrier".to_string());
+                }
+                if !channel.role.channel_metadata().unwrap().is_empty() {
+                    return Err("fixture unexpectedly has display metadata".to_string());
+                }
+            }
+            member
+                .join_channel(
+                    request,
+                    name,
+                    crate::channel::ChannelVisibility::Private,
+                    &welcome,
+                )
+                .await?;
+            tokio::time::timeout(Duration::from_secs(12), async {
+                loop {
+                    let done = owner.state.upgrade().unwrap().lock().unwrap().channels[name]
+                        .message_outbox
+                        .is_empty();
+                    if done {
+                        break;
+                    }
+                    tokio::time::sleep(Duration::from_millis(20)).await;
+                }
+            })
+            .await
+            .map_err(|_| "new member did not authenticate the bootstrap ACK".to_string())?;
+            Ok::<_, String>(())
+        }
+        .await;
+        owner.shutdown().await;
+        member.shutdown().await;
+        result.unwrap();
+    }
 
     #[tokio::test]
     async fn final_ack_between_condition_read_and_await_is_not_lost() {

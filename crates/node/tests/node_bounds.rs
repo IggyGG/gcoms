@@ -8,6 +8,9 @@
 //! still answers `current_info` promptly, its intermediary stats stay bounded,
 //! and it remains usable for a fresh delivery.
 
+#[path = "support/admission.rs"]
+mod admission;
+
 use gcoms_node::channel::ChannelVisibility;
 use gcoms_node::node::{start, NodeConfig, NodeHandle, NodeProfile};
 
@@ -28,8 +31,7 @@ async fn spawn(seed: u8) -> NodeHandle {
 async fn admit(owner: &NodeHandle, channel: &str, member: &NodeHandle, name: &str) {
     let req = member.prepare_channel_join(name).await.expect("prepare");
     let kp = member.channel_key_package(req).await.expect("kp");
-    let welcome = owner
-        .admit_channel(channel, &kp, name)
+    let welcome = admission::welcome(owner, channel, &kp, name)
         .await
         .expect("admit");
     member

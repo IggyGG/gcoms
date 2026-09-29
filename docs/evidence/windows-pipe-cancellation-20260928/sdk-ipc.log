@@ -1,0 +1,46 @@
+   Compiling gcoms-sdk v0.1.0 (D:\a\gcoms\gcoms\crates\sdk)
+    Finished `test` profile [unoptimized] target(s) in 5.44s
+     Running unittests src\lib.rs (target\debug\deps\gcoms_sdk-aef2759ee4a181f8.exe)
+
+running 38 tests
+test bootstrap::tests::bootstrap_registration_cannot_inherit_managed_or_chat_capabilities_and_routes ... ok
+test bootstrap::tests::file_events_require_current_admission_for_the_same_authenticated_peer_and_component ... ok
+test bootstrap::tests::listener_capacity_rejects_new_peers_without_extending_or_evicting_live_entries ... ok
+test files::tests::chunk_negotiation_preserves_old_contacts_and_byte_credit ... ok
+test files::tests::managed_calls_append_without_reinterpreting_legacy_file_ordinals ... ok
+test ipc::application_version_tests::application_operations_are_appended_and_require_ipc17 ... ok
+test ipc::interrupted_read_tests::inbound_event_does_not_discard_a_partial_request_prefix ... ok
+test ipc::ipc19_compat_tests::file_reuse_is_ipc20_only_and_existing_file_snapshot_bytes_stay_unchanged ... ok
+test ipc::ipc19_compat_tests::ipc19_requests_keep_application18_tags_and_append_channel_management ... ok
+test ipc::ipc19_compat_tests::ipc19_responses_keep_application18_wire_and_do_not_reuse_runtime_status ... ok
+test ipc::metadata_compat::file_metadata_requires_ipc21_and_preserves_existing_file_wire_tags ... ok
+test ipc::sharing_version_tests::sharing_and_status_append_without_reusing_prior_tags ... ok
+test ipc::sharing_version_tests::sharing_upload_is_bounded_at_codec_and_clears_owned_bytes ... ok
+test ipc::tests::channel_management_requires_ipc19_and_the_correct_capability ... ok
+test ipc::tests::channel_reconnect_is_member_only_bounded_and_versioned ... ok
+test ipc::tests::events_require_their_domain_capability_in_addition_to_event_read ... ok
+test ipc::tests::frame_roundtrip_and_trailing_bytes_rejected ... ok
+test ipc::tests::ipc_payload_boundary_is_enforced_before_encoding ... ok
+test ipc::tests::older_fleet_v11_hello_is_rejected_before_negotiation ... ok
+test ipc::tests::payload_cleanup_codec_preserves_exact_wire_and_owned_body ... ok
+test ipc::tests::payload_cleanup_on_partial_write_error_and_cancel ... ok
+test ipc::tests::payload_cleanup_read_errors_reject_partial_and_trailing_frames ... ok
+test ipc::tests::removal_request_roundtrips_canonical_member_id ... ok
+test ipc::tests::requests_declare_required_capability ... ok
+test ipc::tests::shared_family_hello_layout_and_capability_ordinals_are_pinned ... ok
+test ipc::tests::tracked_send_lost_or_malformed_response_is_uncertain ... ok
+test ipc::tests::tracked_send_wire_version_and_capabilities_are_explicit ... ok
+test local::windows_tests::current_user_security_descriptor_can_be_built ... ok
+test local::windows_tests::pinned_pipe_authenticates_the_server_before_request_bytes ... ok
+test local::windows_tests::pinned_pipe_refuses_invalid_pins_and_relative_paths ... ok
+test local::windows_tests::pipe_names_are_stable_distinct_and_sanitized ... ok
+test machine::volatile_tests::scoped_volatile_event_rejects_wrong_peer_source_destination_type_and_old_version ... ok
+test private_fs::tests::make_private_removes_other_explicit_grants_and_children_inherit_privacy ... ok
+test private_fs::tests::make_private_then_validate_round_trips ... ok
+test types::tests::application_message_roundtrip_is_strict ... ok
+test types::tests::application_payload_boundary_is_explicit ... ok
+test types::tests::channel_ids_order_lexicographically_by_canonical_bytes ... ok
+test types::tests::payload_cleanup_application_keeps_type_and_clears_owned_bytes ... ok
+
+test result: ok. 38 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.08s
+

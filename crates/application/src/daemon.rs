@@ -174,6 +174,7 @@ async fn handle(
                 secret,
                 *create,
                 gcoms_runtime::RuntimeOptions {
+                    durable_channel_inbox: false,
                     listen: config.listen,
                     advertise: config.advertise,
                     relay: config.relay.clone().map(gcoms_sdk::RelayCard),

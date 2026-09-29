@@ -1,0 +1,20 @@
+{
+  "scope": "release evidence policy only; no runtime or native build rerun",
+  "passed": true,
+  "tests": 21,
+  "new_exclusions": [
+    "node::routing::gc2_inbox_tests::deployed_relay_probe",
+    "native_five_hop_carrier_reuses_routes_and_renews_both_subscriptions",
+    "native_c_nested_carriers_pin_every_layer_and_preserve_stream_credit"
+  ],
+  "excluded_tests_executed": false,
+  "original_windows_candidate": "1e20c92c77874ffec500789d2e7f43cbe4b91bdf9eba3f6ab4c2e1635eb8ac9f",
+  "original_rejection": "test exclusion is not in the reviewed qualification policy",
+  "source_sha256": {
+    "scripts/release_evidence.py": "fe3ee699b92512611e23e34b792aece03c22c7c1568fbd5f7ba951885be5f7b1",
+    "scripts/tests/release_evidence_test.py": "96d9a62e2b05846787482cc9eeac016af83faa09019b069a315e3301a9668da3"
+  },
+  "cluster_log_sha256": "c189490a2b6bd08ae69e2ce9e7e48c402a56e26f4d05a80262d29aaf4c90f3f7",
+  "controller_image": "sha256:653fa25a84cc6ea713e4d6d6ee098f9afa80714c6fc2049346344a41ba4c3c59",
+  "codematch": "unreachable"
+}

@@ -14,3 +14,10 @@ promise during the developer preview.
 ## Five-relay carrier update — 2026-09-23
 
 PreparedConnector now takes a fixed MiddlePath of three TransitDescriptors. EntryCarrier::connect_via validates all positions before opening the route and authenticates each middle separately; the caller authenticates the terminal. Up to 16 circuits own up to 48 nested middle drivers. Existing retained-guard selection is preserved; no dependency was added. Uniform role framing and passive-relay support remain separate unfinished work.
+
+Authenticated guard replies can briefly lack fresh middle referrals at hourly
+renewal. Background discovery retries this case after five seconds, then backs
+off to five minutes if it stays incomplete. Failed requests keep their existing
+60-second initial backoff. Complete directories keep the five-minute schedule.
+Neither application traffic nor a missing referral opens additional guard
+connections or extends an introduction's authority.

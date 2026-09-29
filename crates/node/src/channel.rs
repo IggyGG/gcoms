@@ -677,12 +677,18 @@ pub struct ChannelState {
     out_of_order: std::collections::BTreeMap<u64, Vec<Vec<u8>>>,
     future_message_count: usize,
     future_message_bytes: usize,
+    /// Serializes the lock-free finalization gap between MLS admission and
+    /// durable newcomer bootstrap. Dropping its owner releases cancellation.
+    pub(crate) admission_finalizer: Arc<tokio::sync::Mutex<()>>,
     pub membership_outbox: Option<MembershipOutbox>,
     /// Woken whenever `membership_outbox` clears.
     pub membership_done: Arc<tokio::sync::Notify>,
     pub pending_control: VecDeque<(ChannelRoute, Vec<u8>)>,
     // Transient dedup only. The exact ciphertext is durably held in pending_control.
     pub(crate) route_announcement: Option<RouteAnnouncement>,
+    // Out-of-band only: never share ciphertext with the automatically sent Dir.
+    // The MLS send ratchet is persisted before exposing this transient cache.
+    pub(crate) reconnect_announcement: Option<RouteAnnouncement>,
     pub admission_cache: HashMap<[u8; 32], CachedAdmission>,
     pub admission_cache_order: VecDeque<[u8; 32]>,
     /// Single-use invite links this owner has minted. Keyed by invite id; the
@@ -916,10 +922,12 @@ impl ChannelState {
             out_of_order: std::collections::BTreeMap::new(),
             future_message_count: 0,
             future_message_bytes: 0,
+            admission_finalizer: Arc::new(tokio::sync::Mutex::new(())),
             membership_outbox: None,
             membership_done: Arc::new(tokio::sync::Notify::new()),
             pending_control: VecDeque::new(),
             route_announcement: None,
+            reconnect_announcement: None,
             admission_cache: HashMap::new(),
             admission_cache_order: VecDeque::new(),
             invites: HashMap::new(),

@@ -1,0 +1,58 @@
+{
+  "passed": true,
+  "source_commit": "7be1757d612b15b234f9c28305ec74e0cacedb5e",
+  "checks": [
+    {
+      "name": "format",
+      "exit_code": 0,
+      "passed": true,
+      "seconds": 2.8430000000000177,
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "regressions",
+      "exit_code": 0,
+      "passed": true,
+      "seconds": 24.109999999999957,
+      "log_sha256": "5b57e196fdfb4cd4077006e631c1940ca63d9cbd40c202755c0a6007645a264a"
+    },
+    {
+      "name": "sdk-ipc",
+      "exit_code": 0,
+      "passed": true,
+      "seconds": 4.156000000000006,
+      "log_sha256": "56f2dad9fc2ab4aa3ad361decc8ddfd46e2bd24ff8d1621f2307be124b15ed38"
+    },
+    {
+      "name": "clippy",
+      "exit_code": 0,
+      "passed": true,
+      "seconds": 9.281000000000006,
+      "log_sha256": "d18232f775437ea31050edb29a605c4b7cec3514f469e36c45c5f6a0b309b3aa"
+    },
+    {
+      "name": "original-negative-control",
+      "exit_code": 101,
+      "passed": true,
+      "seconds": 4.296999999999969,
+      "log_sha256": "84cbb7e66e69eba06498436ecaaf9286f2084cf9bf296dafa29f8e1083e0bac4"
+    }
+  ],
+  "source_unchanged": true,
+  "scope": "Windows SDK IPC only; installed application requalification remains open",
+  "run": 36356904846,
+  "artifact": 10944047413,
+  "archive_sha256": "45b4d363ac063d6ce3796614a9501fcda4258a52a5ac5898fe647ccb952f8ca7",
+  "original_application_failure": {
+    "run": 36356329877,
+    "artifact": 10943737410,
+    "error": "ERROR_CANNOT_IMPERSONATE 1368 after two connected profiles"
+  },
+  "source_files": {
+    "crates/sdk/src/local.rs": "0719a865829c796035add757ec3a6488ef6110d1f1c4a8c4cd89951eaed8e2ef",
+    "crates/sdk/tests/local_windows.rs": "8fb121acfd241f47dc29fdd9d8ed9fafab2782a0dd6b61e1882602be329504e7",
+    "scripts/check-local-pipe.py": "bf5df9de71edeb9bcea0353a274816b7ab70e3f284573f11df0d99aa13117ca7"
+  },
+  "codematch": "unreachable",
+  "reference": "https://learn.microsoft.com/en-us/windows/win32/api/namedpipeapi/nf-namedpipeapi-impersonatenamedpipeclient"
+}

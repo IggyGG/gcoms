@@ -1,0 +1,60 @@
+{
+  "completed": "2026-09-23T16:27:34.965994+00:00",
+  "gcoms_commit": "15be9487812cbd2568638054a6228cd1f6dad20a",
+  "gchat_build_commit": "48ccdfb8b2a4d9dc13acebf3f2701d77504d3a5d",
+  "changed_runtime": [
+    "crates/node/src/node/aliases.rs"
+  ],
+  "source_files": 691,
+  "source_unchanged": true,
+  "node": {
+    "passed": 333,
+    "failed": 0,
+    "ignored": 2
+  },
+  "strict_node_all_targets_all_features_clippy": true,
+  "negative_control": {
+    "exit_code": 101,
+    "assertion": "durably installed inbox waited for peer notification",
+    "same_final_test": true,
+    "authenticated_stalled_request_observed": true
+  },
+  "scope": "shared inbox-installation path; TLS loopback regression with real scheduler, captured durable checkpoint and pending exact peer updates; not an Android delivery pass",
+  "retained_setup_failures": [
+    "overlapping fixture queue/capability identifiers",
+    "expired fixture peer route",
+    "maintenance future not initially polled"
+  ],
+  "behavior": "After accepting and committing both queues plus peer update outbox, return installation; existing bounded maintenance handles notifications on retained retry schedule. No authority/deadline extension or new dialing.",
+  "codematch": "unreachable",
+  "remaining": [
+    "physical Android recovery",
+    "two-device message ACK and file transfer",
+    "background phone notification"
+  ],
+  "evidence": {
+    "green-preliminary.log": "d5b4316ae95dcfe56585033d98a4aabca8cf73d4dd4a13865b49bc588f85ecc9",
+    "red-setup-01.exit": "39b8dc3fc8b44765c8e6f1adee04c5b465e555ab791cc42d0d9e810d5b64297c",
+    "final-red.exit": "39b8dc3fc8b44765c8e6f1adee04c5b465e555ab791cc42d0d9e810d5b64297c",
+    "green-setup-02.exit": "39b8dc3fc8b44765c8e6f1adee04c5b465e555ab791cc42d0d9e810d5b64297c",
+    "cluster-after.json": "7bddb1c601e2f2e2ca8e2066e66cde2bd7822c4376d930a9e60e54defbdbae7f",
+    "after.json": "7bddb1c601e2f2e2ca8e2066e66cde2bd7822c4376d930a9e60e54defbdbae7f",
+    "red-setup-02.exit": "39b8dc3fc8b44765c8e6f1adee04c5b465e555ab791cc42d0d9e810d5b64297c",
+    "green-preliminary.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "red-setup-02.log": "5686fd244beb46c231eb88f9946509ad2fda6cce4d145319c88fa275b674de55",
+    "red.log": "337fd78b47cb01006b4663156fb67658b23815b0adf8de5ce26150f2b2af16c9",
+    "red-setup-03.exit": "39b8dc3fc8b44765c8e6f1adee04c5b465e555ab791cc42d0d9e810d5b64297c",
+    "green-setup-01.exit": "39b8dc3fc8b44765c8e6f1adee04c5b465e555ab791cc42d0d9e810d5b64297c",
+    "red-setup-01.log": "971ee914aaefa5701d1ec0fb7c9ca967846f8829a519535d08e88a7c41cb52f1",
+    "green-setup-02.log": "562948ddcac0fb5168c76ecab0f3e645c80bbfe05eb34bde808c182b6828c010",
+    "before.json": "7bddb1c601e2f2e2ca8e2066e66cde2bd7822c4376d930a9e60e54defbdbae7f",
+    "final-red.log": "ef8ba3efb29f82c59446564426b9a1ec6652cb811be2c4ece6d4a144ffa6921d",
+    "node.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "clippy.log": "20633f324df966e8578c7fc9324d114a86c8b1866f0368b087baefff369e4733",
+    "green-setup-01.log": "b376908b145d024a2e94e6adda836007b398cb05217900f3ca6806648e8f3616",
+    "clippy.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "node.log": "4c2a4a2b078e293e38349ddb4ebd89a6df426f3062c5488b7785eee3a96b0fe9",
+    "red.exit": "39b8dc3fc8b44765c8e6f1adee04c5b465e555ab791cc42d0d9e810d5b64297c",
+    "red-setup-03.log": "f295473ec249869b15d58996ef3c8cf61a99a639b624fc274b84c81645005f2e"
+  }
+}

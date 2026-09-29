@@ -47,6 +47,7 @@ const MAGIC_V19: &[u8; 6] = b"GCNSTJ";
 const MAGIC_V20: &[u8; 6] = b"GCNSTK";
 /// v21 seals bounded logical receipt history across authenticated GC/2 recovery.
 const MAGIC_V21: &[u8; 6] = b"GCNSTL";
+const MAGIC_CHANNEL_INBOX: &[u8; 6] = b"GCNSTM";
 const ROLE_OWNER: u8 = 1;
 const ROLE_MEMBER: u8 = 2;
 const MAX_ARCHIVE_BYTES: usize = 256 * 1024 * 1024;
@@ -102,6 +103,7 @@ struct Archive {
     tls_identity: Option<TlsIdentity>,
     exported_ms: u64,
     next_direct_sequence: u64,
+    channel_inbox: channel_inbox::Inbox,
     application_inbox: application_inbox::ApplicationInbox,
     #[cfg(feature = "experimental-gc2")]
     gc2_receipts: Option<gc2_receipts::Ledger>,
@@ -1119,10 +1121,49 @@ fn encode_state_inner(
         v.fill(0);
         return Err("node state export too large".into());
     }
+    if st.channel_inbox.enabled {
+        let mut wrapped = SecretBuffer(MAGIC_CHANNEL_INBOX.to_vec());
+        put32(&mut wrapped, &v)?;
+        let plain = SecretBuffer(st.channel_inbox.encode()?);
+        put_sensitive(
+            &mut wrapped,
+            seal_bytes(
+                &channel_archive_key(&st.identity_seed),
+                &channel_inbox_context(&st.identity_seed, &v)?,
+                &plain,
+            )?,
+        )?;
+        if wrapped.len() > MAX_ARCHIVE_BYTES {
+            return Err("node state export too large".into());
+        }
+        return Ok(wrapped.into_vec());
+    }
     Ok(v.into_vec())
 }
 
 fn decode_v2(buf: &[u8], identity_seed: &[u8; 32]) -> Result<Archive, String> {
+    if buf.get(..6) == Some(MAGIC_CHANNEL_INBOX) {
+        if buf.len() > MAX_ARCHIVE_BYTES {
+            return Err(malformed());
+        }
+        let mut position = 6;
+        let base = take32(buf, &mut position)?;
+        if base.get(..6) == Some(MAGIC_CHANNEL_INBOX) {
+            return Err(malformed());
+        }
+        let sealed = take32(buf, &mut position)?;
+        if position != buf.len() || sealed.len() > channel_inbox::BYTE_LIMIT + 28 {
+            return Err(malformed());
+        }
+        let plain = SecretBuffer(open_bytes(
+            &channel_archive_key(identity_seed),
+            &channel_inbox_context(identity_seed, base)?,
+            sealed,
+        )?);
+        let mut archive = decode_v2(base, identity_seed)?;
+        archive.channel_inbox = channel_inbox::Inbox::decode(&plain)?;
+        return Ok(archive);
+    }
     let archive_key = channel_archive_key(identity_seed);
     if buf.len() > MAX_ARCHIVE_BYTES
         || !matches!(buf.get(..6), Some(magic) if magic == MAGIC_V2 || magic == MAGIC_V3 || magic == MAGIC_V4 || magic == MAGIC_V5 || magic == MAGIC_V6 || magic == MAGIC_V7 || magic == MAGIC_V8 || magic == MAGIC_V9 || magic == MAGIC_V10 || magic == MAGIC_V11 || magic == MAGIC_V12 || magic == MAGIC_V13 || magic == MAGIC_V14 || magic == MAGIC_V15 || magic == MAGIC_V16 || magic == MAGIC_V17 || magic == MAGIC_V18 || magic == MAGIC_V19 || magic == MAGIC_V20 || magic == MAGIC_V21)
@@ -1862,6 +1903,7 @@ fn decode_v2(buf: &[u8], identity_seed: &[u8; 32]) -> Result<Archive, String> {
         next_prep_id,
         exported_ms,
         next_direct_sequence,
+        channel_inbox: channel_inbox::Inbox::default(),
         application_inbox,
         #[cfg(feature = "experimental-gc2")]
         gc2_receipts,
@@ -2086,6 +2128,16 @@ fn gc2_receipts_context(seed: &[u8; 32]) -> Result<SessionContext, String> {
     .map_err(|e| e.to_string())
 }
 
+fn channel_inbox_context(seed: &[u8; 32], base: &[u8]) -> Result<SessionContext, String> {
+    SessionContext::new(
+        Sha256::digest(IdentityKeypair::from_seed(*seed).public_bytes()),
+        b"channel-inbox",
+        Sha256::digest(base),
+        b"gcoms/channel-inbox/v1",
+    )
+    .map_err(|e| e.to_string())
+}
+
 fn application_inbox_context(seed: &[u8; 32]) -> Result<SessionContext, String> {
     SessionContext::new(
         Sha256::digest(IdentityKeypair::from_seed(*seed).public_bytes()),
@@ -2239,7 +2291,7 @@ pub async fn decode_state(
             return Err("cannot replace initialized central ownership".into());
         }
     }
-    if matches!(buf.get(..6), Some(magic) if magic == MAGIC_V15 || magic == MAGIC_V16 || magic == MAGIC_V17 || magic == MAGIC_V18 || magic == MAGIC_V19 || magic == MAGIC_V20 || magic == MAGIC_V21)
+    if matches!(buf.get(..6), Some(magic) if magic == MAGIC_CHANNEL_INBOX || magic == MAGIC_V15 || magic == MAGIC_V16 || magic == MAGIC_V17 || magic == MAGIC_V18 || magic == MAGIC_V19 || magic == MAGIC_V20 || magic == MAGIC_V21)
     {
         return Err("owner alias archives require constructor restoration".into());
     }
@@ -2254,7 +2306,17 @@ pub(super) async fn decode_state_at_startup(
     if buf.len() > MAX_ARCHIVE_BYTES {
         return Err("node state export too large".into());
     }
-    if matches!(buf.get(..6), Some(magic) if magic == MAGIC_V20 || magic == MAGIC_V21) {
+    let effective = if buf.get(..6) == Some(MAGIC_CHANNEL_INBOX) {
+        let mut position = 6;
+        let base = take32(buf, &mut position)?;
+        if base.get(..6) == Some(MAGIC_CHANNEL_INBOX) {
+            return Err(malformed());
+        }
+        base
+    } else {
+        buf
+    };
+    if matches!(effective.get(..6), Some(magic) if magic == MAGIC_V20 || magic == MAGIC_V21) {
         #[cfg(feature = "experimental-gc2")]
         if !state.lock().unwrap_or_else(|p| p.into_inner()).gc2_sessions {
             return Err("GC/2 archive requires explicit GC/2 session selection".into());
@@ -2664,6 +2726,9 @@ pub(super) async fn decode_state_at_startup(
     }
     st.prepared = restored_prepared.into_iter().collect();
     st.next_prep_id = archive.next_prep_id;
+    let enabled = st.channel_inbox.enabled;
+    st.channel_inbox = archive.channel_inbox;
+    st.channel_inbox.enabled |= enabled;
     st.application_inbox = archive.application_inbox;
     for delivery in direct_acks {
         if let Some(destination) = delivery.peer.primary().cloned() {
@@ -2759,6 +2824,7 @@ pub(in crate::node) mod tests {
     include!("persist/gc2_control_tests.rs");
     include!("persist/channel_directory_tests.rs");
     include!("persist/channel_pex_tests.rs");
+    include!("persist/owner_reopen_tests.rs");
 
     fn contact(byte: u8) -> AliasContact {
         AliasContact {
@@ -3006,6 +3072,7 @@ pub(in crate::node) mod tests {
             local_contact_generation: 1,
             pending_1to1: HashMap::new(),
             next_direct_sequence: 1,
+            channel_inbox: channel_inbox::Inbox::default(),
             durable_applications_enabled: false,
             application_inbox: application_inbox::ApplicationInbox::default(),
             direct_ack_outbox: VecDeque::new(),
@@ -3225,6 +3292,177 @@ pub(in crate::node) mod tests {
         node.session_states
             .insert(alice.identity_pk.clone(), DirectSessionState::Established);
         (node, alice.identity_pk, alice_session)
+    }
+
+    #[test]
+    fn invitation_receipt_uses_the_retained_logical_id() {
+        for welcome in [false, true] {
+            let (node, peer_pk, mut remote) = direct_fixture();
+            let peer = node.peer_routes[&peer_pk].clone();
+            let shared = Arc::new(Mutex::new(node));
+            let correlation = [0x73; 16];
+            let prepared = prepare_direct_record(&shared, &peer, None, false, None, |_, _| {
+                if welcome {
+                    crate::proto::encode_invite_welcome(correlation, &Ok(vec![1; 256]))
+                } else {
+                    crate::proto::encode_invite_redeem(
+                        correlation,
+                        "receipt",
+                        "member",
+                        &[2; 16],
+                        &[3; 32],
+                        &[4; 128],
+                    )
+                }
+                .ok_or_else(|| "fixture encoding failed".to_string())
+            })
+            .unwrap();
+            assert_eq!(
+                prepared.message_id, correlation,
+                "ACK must address the retained outbox ID"
+            );
+            let (events, mut seen) = broadcast::channel(8);
+            let ack = remote.send(&encode_direct_ack(correlation, false)).unwrap();
+            let mut node = shared.lock().unwrap();
+            assert!(node.pending_1to1.contains_key(&correlation));
+            process_frame(&mut node, peer_pk, ack, &events);
+            assert!(
+                node.pending_1to1.is_empty(),
+                "authenticated invitation ACK must reclaim retry state"
+            );
+            assert!(
+                seen.try_recv().is_err(),
+                "control ACK is not user message delivery"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn invitation_chunk_retry_survives_reopen_and_refuses_id_collision() {
+        let (node, peer_pk, _) = direct_fixture();
+        let peer = node.peer_routes[&peer_pk].clone();
+        let shared = Arc::new(Mutex::new(node));
+        let chunk = crate::proto::WelcomeChunk {
+            digest: [7; 32],
+            total: 8193,
+            offset: 0,
+            bytes: vec![8; 8192],
+        };
+        let id = [0x45; 16];
+        let record = crate::proto::encode_invite_welcome_chunk(id, [0x46; 16], &chunk).unwrap();
+        prepare_direct_record(&shared, &peer, None, false, None, |_, _| Ok(record.clone()))
+            .unwrap();
+        let (archive, scheduler, wire, sequence) = {
+            let node = shared.lock().unwrap();
+            (
+                encode_state(&node).unwrap(),
+                node.scheduler.clone(),
+                node.pending_1to1[&id].delivery.cells[0]
+                    .encode_wire()
+                    .unwrap(),
+                node.next_direct_sequence,
+            )
+        };
+        let error =
+            prepare_direct_record(&shared, &peer, None, false, None, |_, _| Ok(record.clone()))
+                .err()
+                .expect("duplicate logical ID must not overwrite retained bytes");
+        assert!(error.contains("already pending"));
+        {
+            let node = shared.lock().unwrap();
+            assert_eq!(node.next_direct_sequence, sequence);
+            assert_eq!(node.pending_1to1.len(), 1);
+            assert_eq!(
+                node.pending_1to1[&id].delivery.cells[0]
+                    .encode_wire()
+                    .unwrap(),
+                wire
+            );
+        }
+        let mut reopened = state();
+        reopened.scheduler.shutdown();
+        reopened.scheduler = scheduler.clone();
+        let reopened = Arc::new(Mutex::new(reopened));
+        decode_state_at_startup(&reopened, &scheduler, &archive)
+            .await
+            .unwrap();
+        let node = reopened.lock().unwrap();
+        assert_eq!(
+            node.pending_1to1[&id].logical_record.as_deref(),
+            Some(record.as_slice())
+        );
+        assert_eq!(
+            node.pending_1to1[&id].delivery.cells[0]
+                .encode_wire()
+                .unwrap(),
+            wire
+        );
+        assert!(!node.pending_1to1[&id].application_event);
+    }
+
+    #[test]
+    fn invitation_chunks_require_owner_complete_hash_and_durable_receive() {
+        let (mut node, peer_pk, mut remote) = direct_fixture();
+        let request_id = [0x29; 16];
+        let (tx, mut rx) = tokio::sync::oneshot::channel();
+        node.pending_invite_redemptions.insert(
+            request_id,
+            crate::node::state::PendingInviteReply {
+                owner: vec![0; peer_pk.len()],
+                reply: tx,
+                chunks: Default::default(),
+            },
+        );
+        let welcome = vec![0xA6; crate::proto::WELCOME_CHUNK_BYTES + 7];
+        let digest: [u8; 32] = Sha256::digest(&welcome).into();
+        let first = crate::proto::WelcomeChunk {
+            digest,
+            total: welcome.len() as u32,
+            offset: 0,
+            bytes: welcome[..crate::proto::WELCOME_CHUNK_BYTES].to_vec(),
+        };
+        let final_part = crate::proto::WelcomeChunk {
+            digest,
+            total: welcome.len() as u32,
+            offset: crate::proto::WELCOME_CHUNK_BYTES as u32,
+            bytes: welcome[crate::proto::WELCOME_CHUNK_BYTES..].to_vec(),
+        };
+        let (events, mut seen) = broadcast::channel(8);
+        let wire = crate::proto::encode_invite_welcome_chunk([1; 16], request_id, &first).unwrap();
+        let frame = remote.send(&wire).unwrap();
+        process_frame(&mut node, peer_pk.clone(), frame.clone(), &events);
+        assert!(
+            node.processed_direct.is_empty(),
+            "wrong owner must not consume the request"
+        );
+        assert!(rx.try_recv().is_err());
+        node.pending_invite_redemptions
+            .get_mut(&request_id)
+            .unwrap()
+            .owner = peer_pk.clone();
+        node.durable_state_sink =
+            Some(Arc::new(|_| Err("injected receive storage failure".into())));
+        process_frame(&mut node, peer_pk.clone(), frame.clone(), &events);
+        assert!(node.processed_direct.is_empty());
+        assert!(rx.try_recv().is_err());
+        node.durable_state_sink = Some(Arc::new(|_| Ok(())));
+        // Deliver the final short fragment first. Failed receipt storage above
+        // must not have retained/published the first chunk in the assembly.
+        let last_wire =
+            crate::proto::encode_invite_welcome_chunk([2; 16], request_id, &final_part).unwrap();
+        let last_frame = remote.send(&last_wire).unwrap();
+        process_frame(&mut node, peer_pk.clone(), last_frame, &events);
+        assert!(
+            rx.try_recv().is_err(),
+            "partial or failed-persistence bytes are not a complete Welcome"
+        );
+        process_frame(&mut node, peer_pk, frame, &events);
+        assert_eq!(rx.try_recv().unwrap().unwrap(), welcome);
+        assert!(!node.pending_invite_redemptions.contains_key(&request_id));
+        assert!(
+            seen.try_recv().is_err(),
+            "invitation receipts are not user message delivery"
+        );
     }
 
     #[test]
@@ -5448,6 +5686,59 @@ pub(in crate::node) mod tests {
     }
 
     #[tokio::test]
+    async fn owner_recovery_replaces_retained_roles_without_duplicate_queues() {
+        let mut node = state();
+        let now = std::time::Instant::now();
+        let aliases = staged_pair(&node);
+        node.draining_contact_aliases.push(DrainingContactAliases {
+            aliases: aliases.clone(),
+            receive_until: now + std::time::Duration::from_secs(30),
+            next_revoke: now + std::time::Duration::from_secs(30),
+            abandon_at: now + std::time::Duration::from_secs(60),
+        });
+        let original =
+            owner_aliases::open_unbound(&owner_aliases::seal_current(&node).unwrap(), &TEST_SEED)
+                .unwrap();
+        let records = Arc::new(Mutex::new(Vec::new()));
+        let capture = records.clone();
+        node.durable_state_sink = Some(Arc::new(move |bytes| {
+            capture.lock().unwrap().push(decode_v2(&bytes, &TEST_SEED)?);
+            Ok(())
+        }));
+        // Routed recovery re-applies a complete retained record to a live
+        // state, unlike startup's initially empty role collections.
+        for _ in 0..2 {
+            let record = owner_aliases::open_unbound(
+                &owner_aliases::seal_current(&node).unwrap(),
+                &TEST_SEED,
+            )
+            .unwrap();
+            let clock = node.owner_clock.lock().unwrap().clone();
+            super::super::aliases::owner_transition(&mut node, |st| {
+                record.apply_retained(st, clock, false)
+            })
+            .expect("recovery must checkpoint each retained queue exactly once");
+            assert!(!node.owner_transition_failed);
+            assert_eq!(node.draining_contact_aliases.len(), 1);
+            assert_eq!(node.draining_contact_aliases[0].aliases, aliases);
+        }
+        let saved = records.lock().unwrap();
+        assert_eq!(saved.len(), 2);
+        for archive in saved.iter() {
+            let record = archive.owner_aliases.as_ref().unwrap();
+            assert_eq!(record.groups.len(), original.groups.len());
+            for (before, after) in original.groups.iter().zip(&record.groups) {
+                assert_eq!(before.role, after.role);
+                assert_eq!(before.provision, after.provision);
+                assert_eq!(before.origins, after.origins);
+                assert!(after.deadline_ms <= before.deadline_ms);
+                assert!(after.receive_until_ms <= before.receive_until_ms);
+            }
+        }
+        node.scheduler.shutdown();
+    }
+
+    #[tokio::test]
     async fn owner_accepted_renewal_is_durable_and_failure_rolls_back() {
         for fail in [false, true] {
             let mut node = state();
@@ -5770,6 +6061,196 @@ pub(in crate::node) mod tests {
         assert_eq!(restored.pending_1to1[&[3; 16]].delivery.cells.len(), 1);
         assert_eq!(restored.sessions[&peer.identity_pk].send_ctr(), counter + 2);
         node.scheduler.shutdown();
+    }
+
+    #[tokio::test]
+    async fn installed_inbox_does_not_wait_for_peer_update_delivery() {
+        use std::time::Duration;
+        use tokio::time::timeout;
+        let identity = TlsIdentity::generate().unwrap();
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let target = RelayTarget {
+            address: listener.local_addr().unwrap(),
+            relay_service_id: identity.service_id(),
+        };
+        let acceptor = tokio_rustls::TlsAcceptor::from(Arc::new(identity.server_config().unwrap()));
+        let (observed, mut requests) = tokio::sync::mpsc::channel(16);
+        let server = tokio::spawn(async move {
+            let mut connections = tokio::task::JoinSet::new();
+            loop {
+                let (tcp, _) = listener.accept().await.unwrap();
+                let acceptor = acceptor.clone();
+                let observed = observed.clone();
+                connections.spawn(async move {
+                    let tls = acceptor.accept(tcp).await.unwrap();
+                    let mut h2 = h2::server::handshake(tls).await.unwrap();
+                    let mut jobs = tokio::task::JoinSet::new();
+                    while let Some(Ok((request, mut reply))) = h2.accept().await {
+                        let observed = observed.clone();
+                        jobs.spawn(async move {
+                            let mut body = request.into_body();
+                            let mut wire = Vec::new();
+                            while let Some(Ok(bytes)) = body.data().await {
+                                body.flow_control().release_capacity(bytes.len()).unwrap();
+                                wire.extend_from_slice(&bytes);
+                            }
+                            let cell = gcoms_core::decode(&wire).unwrap();
+                            let mut response =
+                                reply.send_response(http::Response::new(()), false).unwrap();
+                            observed.send(cell.cell_type().unwrap()).await.unwrap();
+                            if cell.cell_type() == Some(CellType::RelaySub) {
+                                response
+                                    .send_data(
+                                        bytes::Bytes::from(
+                                            gcoms_transport::HopReply::Accepted
+                                                .cell()
+                                                .encode_wire()
+                                                .unwrap(),
+                                        ),
+                                        true,
+                                    )
+                                    .unwrap();
+                            } else {
+                                // Keep a live authenticated response outstanding. An
+                                // unrelated peer's progress cannot gate installation.
+                                let _held = response;
+                                std::future::pending::<()>().await;
+                            }
+                        });
+                    }
+                });
+            }
+        });
+        let (mut node, _, _) = direct_fixture();
+        for peer in node.peer_routes.values_mut() {
+            for alias in &mut peer.aliases {
+                alias.expiry = now_unix() + 3600;
+            }
+        }
+        node.scheduler.shutdown();
+        let saved = Arc::new(Mutex::new(Vec::new()));
+        let sink = saved.clone();
+        node.durable_state_sink = Some(Arc::new(move |bytes| {
+            *sink.lock().unwrap() = bytes;
+            Ok(())
+        }));
+        let scheduler = RelayScheduler::with_profile(
+            Arc::new(Tp1Client::new().unwrap()),
+            SchedulerProfile::compressed_production(93),
+        );
+        node.scheduler = scheduler.clone();
+        node.frwd_target_policy = FrwdTargetPolicy::new(true);
+        let mut provision = owner_relay();
+        for (index, alias) in provision.aliases.iter_mut().enumerate() {
+            let mut contact = contact(100 + 20 * index as u8);
+            contact.expiry = now_unix() + 3600;
+            contact.target = target.clone();
+            *alias = valid_alias(contact, 100 + 20 * index as u8);
+        }
+        let mut card = peer(40);
+        card.aliases = provision
+            .aliases
+            .iter()
+            .map(|a| a.contact.clone())
+            .collect();
+        card.provisioning = Some(provision.clone());
+        let state = Arc::new(Mutex::new(node));
+        let (events, mut event_rx) = broadcast::channel(8);
+        let mut installation = tokio::spawn({
+            let state = state.clone();
+            let scheduler = scheduler.clone();
+            let events = events.clone();
+            async move {
+                super::super::aliases::install_inbox_relay(&state, &scheduler, &events, &card).await
+            }
+        });
+        for _ in 0..2 {
+            assert_eq!(
+                timeout(Duration::from_secs(5), requests.recv())
+                    .await
+                    .unwrap(),
+                Some(CellType::RelaySub)
+            );
+        }
+        tokio::select! {
+            biased;
+            event = timeout(Duration::from_secs(5), event_rx.recv()) => assert!(matches!(event.unwrap().unwrap(), Ev::IdentityUpdated { .. })),
+            result = &mut installation => panic!("installation ended before identity event: {result:?}"),
+        }
+        let completed = timeout(Duration::from_secs(2), &mut installation).await;
+        let archive = {
+            let st = state.lock().unwrap();
+            assert_eq!(st.client_relay, provision);
+            assert!(!st.pending_1to1.is_empty());
+            assert!(st
+                .pending_1to1
+                .values()
+                .all(|pending| !pending.application_event));
+            encode_state(&st).unwrap()
+        };
+        let restored = decode_v2(&saved.lock().unwrap(), &TEST_SEED).unwrap();
+        let in_memory = decode_v2(&archive, &TEST_SEED).unwrap();
+        assert_eq!(
+            restored.pending_direct.len(),
+            in_memory.pending_direct.len()
+        );
+        assert!(
+            !restored.pending_direct.is_empty(),
+            "peer updates must remain durable"
+        );
+        if matches!(&completed, Ok(Ok(Ok(())))) {
+            let retained: Vec<_> = state
+                .lock()
+                .unwrap()
+                .pending_1to1
+                .iter()
+                .map(|(id, pending)| {
+                    (
+                        *id,
+                        pending.delivery.cells.clone(),
+                        pending.application_event,
+                    )
+                })
+                .collect();
+            // Make the existing retry due; do not alter production retry clocks.
+            for pending in state.lock().unwrap().pending_1to1.values_mut() {
+                pending.next_attempt = std::time::Instant::now();
+            }
+            let mut maintenance = super::super::direct::DirectMaintenance::default();
+            maintenance.tick(&state, &scheduler, &events);
+            tokio::select! {
+                observed = timeout(Duration::from_secs(5), requests.recv()) => assert_eq!(observed.unwrap(), Some(CellType::Frwd)),
+                _ = maintenance.complete_next(&state) => panic!("stalled peer unexpectedly completed"),
+            }
+            drop(maintenance);
+            let st = state.lock().unwrap();
+            for (id, cells, application_event) in retained {
+                assert_eq!(st.pending_1to1[&id].delivery.cells, cells);
+                assert_eq!(st.pending_1to1[&id].application_event, application_event);
+            }
+            assert!(
+                event_rx.try_recv().is_err(),
+                "hop work cannot claim application delivery"
+            );
+        }
+        if completed.is_err() {
+            assert_eq!(
+                timeout(Duration::from_secs(2), requests.recv())
+                    .await
+                    .unwrap(),
+                Some(CellType::Frwd),
+                "the stalled peer request must actually reach the authenticated fixture"
+            );
+            installation.abort();
+            let _ = installation.await;
+        }
+        server.abort();
+        let _ = server.await;
+        scheduler.shutdown();
+        assert!(
+            matches!(completed, Ok(Ok(Ok(())))),
+            "durably installed inbox waited for peer notification"
+        );
     }
 
     #[tokio::test]

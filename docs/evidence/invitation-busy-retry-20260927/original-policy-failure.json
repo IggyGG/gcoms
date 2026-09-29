@@ -1,0 +1,12 @@
+{
+  "schema": 1,
+  "scope": "five actual GChat CLI profiles over deployed authenticated production relays; candidate owner and SDK; not Android APK qualification",
+  "passed": false,
+  "error": "RuntimeError: both classes deadline; last error: None",
+  "cleanup_complete": true,
+  "completed_at": 1790522738,
+  "binaries": {
+    "gchat": "d53c6072598a8f264f13410f4aa7533f3d3dd2a1f485f7627f12787185e0a60c",
+    "fleet_probe": "415bdbbf452d8a18aa5eaf651dd5fc50956e5c5f2891a5ff31eec6616f7f06c5"
+  }
+}

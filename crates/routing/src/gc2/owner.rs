@@ -30,7 +30,7 @@ use tokio::{
 const RETRY_PERIOD: Duration = Duration::from_secs(30);
 const DISCOVERY_PERIOD: Duration = Duration::from_secs(300);
 const DIAL_TIMEOUT: Duration = Duration::from_secs(20);
-type EntryTask = Pin<Box<dyn Future<Output = [u8; 32]> + Send>>;
+type EntryTask = Pin<Box<dyn Future<Output = ([u8; 32], Option<Instant>)> + Send>>;
 struct ActiveEntry {
     addr: SocketAddr,
     cancel: Option<oneshot::Sender<()>>,
@@ -38,6 +38,17 @@ struct ActiveEntry {
 struct Renewal {
     next: Instant,
     failures: u8,
+}
+
+fn discovery_retry_seconds(complete: bool, authenticated: bool, failures: u8) -> u64 {
+    if complete {
+        return DISCOVERY_PERIOD.as_secs();
+    }
+    // A valid guard reply can briefly precede its peers' epoch renewal. It is
+    // not a failed dial: retry this bounded metadata discovery sooner, then
+    // back off to the same maintenance period if referrals remain incomplete.
+    let base = if authenticated { 5 } else { 60 };
+    (base * (1u64 << failures.saturating_sub(1).min(6))).min(DISCOVERY_PERIOD.as_secs())
 }
 
 fn renewal_delay(
@@ -55,6 +66,7 @@ fn renewal_delay(
 struct ReadyEntry {
     introduction: Introduction,
     carrier: EntryCarrier,
+    published_at: Instant,
 }
 #[derive(Default)]
 struct ReadyState {
@@ -349,18 +361,29 @@ impl EntryOwner {
                             .map(|relay| relay.expires_at);
                     }
                 }
-                let failures = if renewed.is_some() {
+                // A fresh guard is not a complete application route. At an
+                // epoch boundary its reply may contain only its new authority
+                // while the advertised middle referrals are still refreshing.
+                // Retry that authenticated but incomplete background discovery
+                // promptly, without dialing any new guard or
+                // allowing an application request to wake this owner.
+                let complete = renewed.is_some()
+                    && self
+                        .directory
+                        .eligible(&[], now_unix())?
+                        .iter()
+                        .map(|relay| relay.addr.ip())
+                        .collect::<std::collections::HashSet<_>>()
+                        .len()
+                        >= super::path::RELAY_HOPS;
+                let failures = if complete {
                     0
                 } else {
                     schedule
                         .get(&seed.service_id)
-                        .map_or(1, |old| old.failures.saturating_add(1).min(4))
+                        .map_or(1, |old| old.failures.saturating_add(1).min(7))
                 };
-                let seconds = if renewed.is_some() {
-                    DISCOVERY_PERIOD.as_secs()
-                } else {
-                    (60 * (1u64 << (failures - 1))).min(DISCOVERY_PERIOD.as_secs())
-                };
+                let seconds = discovery_retry_seconds(complete, renewed.is_some(), failures);
                 // Positive jitter prevents synchronized fleet refresh bursts;
                 // it never depends on message arrivals, class or byte quotas.
                 let jitter = rand::thread_rng().gen_range(0..=seconds * 100);
@@ -397,53 +420,95 @@ impl EntryOwner {
         let mut active = HashMap::<[u8; 32], ActiveEntry>::new();
         let mut cursor = 0usize;
         loop {
-            tokio::select! {
-                Some(pin) = tasks.next(), if !tasks.is_empty() => { active.remove(&pin); },
+            let completed = tokio::select! {
+                Some(completed) = tasks.next(), if !tasks.is_empty() => Some(completed),
                 _ = async { tokio::select! {
                     _ = tick.tick() => (),
                     _ = self.refreshed.notified() => (),
-                }} => {
-                    self.retain_guards()?;
-                    let guards = self.directory.guards();
-                    let eligible = self.directory.eligible(&[], now_unix())?;
-                    for (pin, attempt) in &mut active {
-                        if !guards.contains(pin) || !eligible.iter().any(|relay| &relay.service_id == pin && relay.addr == attempt.addr) {
-                            attempt.cancel.take();
-                        }
+                }} => None,
+            };
+            let replacement = if let Some((pin, published_at)) = completed {
+                active.remove(&pin);
+                // Only an established, long-lived entry earns an immediate
+                // replacement. Unpublished/short-lived failures retain the
+                // existing retry clock; application traffic cannot wake it.
+                if !published_at.is_some_and(|at| at.elapsed() >= RETRY_PERIOD) {
+                    continue;
+                }
+                Some(pin)
+            } else {
+                None
+            };
+            self.retain_guards()?;
+            let guards = self.directory.guards();
+            let eligible = self.directory.eligible(&[], now_unix())?;
+            for (pin, attempt) in &mut active {
+                if !guards.contains(pin)
+                    || !eligible
+                        .iter()
+                        .any(|relay| &relay.service_id == pin && relay.addr == attempt.addr)
+                {
+                    attempt.cancel.take();
+                }
+            }
+            // A timer/refresh can coincide with driver completion. Reap those
+            // slots before filling them. A targeted completion instead leaves
+            // other completions queued, so each retains its own retry decision.
+            if replacement.is_none() {
+                while let Some(Some((pin, _))) = tasks.next().now_or_never() {
+                    active.remove(&pin);
+                }
+            }
+            let start = cursor;
+            for offset in 0..guards.len() {
+                if active.len() == self.entries {
+                    break;
+                }
+                let index = start.wrapping_add(offset) % guards.len();
+                let pin = guards[index];
+                if active.contains_key(&pin) || replacement.is_some_and(|wanted| wanted != pin) {
+                    continue;
+                }
+                let Some(introduction) = eligible
+                    .iter()
+                    .find(|relay| relay.service_id == pin)
+                    .cloned()
+                else {
+                    continue;
+                };
+                let (cancel, canceled) = oneshot::channel();
+                active.insert(
+                    pin,
+                    ActiveEntry {
+                        addr: introduction.addr,
+                        cancel: Some(cancel),
+                    },
+                );
+                cursor = (index + 1) % guards.len();
+                let dial = self.dial.clone();
+                let state = self.state.clone();
+                let profile = self.profile;
+                tasks.push(Box::pin(async move {
+                    let _slot = ReadySlot {
+                        state: state.clone(),
+                        pin,
+                    };
+                    tokio::select! {
+                        biased;
+                        _ = canceled => (),
+                        _ = maintain_entry(dial, state.clone(), introduction, profile) => (),
                     }
-                    // Canceled drivers still count until polled to completion;
-                    // a configuration change cannot transiently double entries.
-                    // Renewal and expiry may become ready in the same poll.
-                    // Reap completed/canceled drivers before consuming the
-                    // renewal wakeup, so their old slots cannot defer new
-                    // authority until another 30-second retry opportunity.
-                    while let Some(Some(pin)) = tasks.next().now_or_never() {
-                        active.remove(&pin);
-                    }
-                    let start = cursor;
-                    for offset in 0..guards.len() {
-                        if active.len() == self.entries { break; }
-                        let index = start.wrapping_add(offset) % guards.len();
-                        let pin = guards[index];
-                        if active.contains_key(&pin) { continue; }
-                        let Some(introduction) = eligible.iter().find(|relay| relay.service_id == pin).cloned() else { continue; };
-                        let (cancel, canceled) = oneshot::channel();
-                        active.insert(pin, ActiveEntry { addr: introduction.addr, cancel: Some(cancel) });
-                        cursor = (index + 1) % guards.len();
-                        let dial = self.dial.clone();
-                        let state = self.state.clone();
-                        let profile = self.profile;
-                        tasks.push(Box::pin(async move {
-                            let _slot = ReadySlot { state: state.clone(), pin };
-                            tokio::select! {
-                                biased;
-                                _ = canceled => (),
-                                _ = maintain_entry(dial, state, introduction, profile) => (),
-                            }
-                            pin
-                        }));
-                    }
-                },
+                    let published_at = state
+                        .entries
+                        .read()
+                        .unwrap_or_else(|p| p.into_inner())
+                        .iter()
+                        .find(|entry| entry.introduction.service_id == pin)
+                        .map(|entry| entry.published_at);
+                    // ReadySlot removes the old publication before the owner
+                    // observes this completion and can start a replacement.
+                    (pin, published_at)
+                }));
             }
         }
     }
@@ -491,6 +556,7 @@ async fn maintain_entry(
         entries.push(ReadyEntry {
             introduction,
             carrier,
+            published_at: Instant::now(),
         });
         state
             .revision
@@ -498,6 +564,14 @@ async fn maintain_entry(
     }
     driver.await
 }
+
+#[cfg(test)]
+#[path = "owner_completion_tests.rs"]
+mod completion_tests;
+
+#[cfg(test)]
+#[path = "owner_referral_tests.rs"]
+mod referral_tests;
 
 #[cfg(test)]
 #[path = "owner_expiry_tests.rs"]

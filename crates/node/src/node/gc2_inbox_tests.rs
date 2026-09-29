@@ -72,6 +72,7 @@ async fn start_relay(
     policy: impl FnOnce(RelayTarget) -> ServicePolicy,
 ) -> (
     gcoms_routing::gc2::directory::Introduction,
+    Arc<RelayService>,
     tokio::task::JoinHandle<()>,
 ) {
     let identity = TlsIdentity::generate().unwrap();
@@ -101,35 +102,45 @@ async fn start_relay(
     let handle = tokio::spawn(async move {
         let _ = server.run_until(std::future::pending::<()>()).await;
     });
-    (introduction, handle)
+    (introduction, service, handle)
 }
 
 #[tokio::test]
 async fn fresh_carrier_node_provisions_its_inbox_over_the_protected_route() {
+    protected_inbox_fixture(false).await;
+}
+
+#[tokio::test]
+async fn expired_carrier_seeds_reacquire_referrals_for_protected_inbox_provisioning() {
+    protected_inbox_fixture(true).await;
+}
+
+async fn protected_inbox_fixture(expire_initial_client_seeds: bool) {
     let secret = [8; 32];
-    let (introduction, _relay_a) = start_relay("127.0.0.71", secret, |target| {
+    let (introduction, service_a, _relay_a) = start_relay("127.0.0.71", secret, |target| {
         provisioning_policy(target, secret)
     })
     .await;
     let intro_addr = introduction.addr;
     let intro_service = introduction.service_id;
-    let (middle, _relay_b) = start_relay("127.0.0.87", [9; 32], |_| ServicePolicy {
+    let (middle, service_b, _relay_b) = start_relay("127.0.0.87", [9; 32], |_| ServicePolicy {
         carrier: CarrierConfig::fixture(),
         target_allowed: Arc::new(|addr| addr.ip().is_loopback()),
         ..ServicePolicy::default()
     })
     .await;
-    let (third, _relay_c) = start_relay("127.0.0.88", [10; 32], |_| ServicePolicy {
+    let (third, service_c, _relay_c) = start_relay("127.0.0.88", [10; 32], |_| ServicePolicy {
         carrier: CarrierConfig::fixture(),
         target_allowed: Arc::new(|addr| addr.ip().is_loopback()),
         ..ServicePolicy::default()
     })
     .await;
 
+    let mut services = vec![service_a, service_b, service_c];
     let mut extra_relays = Vec::new();
     let mut extra_introductions = Vec::new();
     for (ip, secret) in [("127.0.0.89", 11), ("127.0.0.90", 12)] {
-        let (introduction, relay) = start_relay(ip, [secret; 32], |_| ServicePolicy {
+        let (introduction, service, relay) = start_relay(ip, [secret; 32], |_| ServicePolicy {
             carrier: CarrierConfig::fixture(),
             target_allowed: Arc::new(|addr| addr.ip().is_loopback()),
             ..ServicePolicy::default()
@@ -137,10 +148,30 @@ async fn fresh_carrier_node_provisions_its_inbox_over_the_protected_route() {
         .await;
         extra_introductions.push(introduction.encode().unwrap().to_vec());
         extra_relays.push(relay);
+        services.push(service);
     }
 
-    // Fresh carrier node: directory seeded only with the relay's private
-    // introduction; nothing else is shared.
+    // Public relay referrals are configured independently of the client directory.
+    // Without these, expiry leaves only the three retained guards, too few for
+    // a protected five-hop route. Refresh uses the normal authenticated host task.
+    let public_bundle = gcoms_routing::gc2::directory::BootstrapBundle {
+        relays: services
+            .iter()
+            .map(|s| s.gc2_introduction(super::now_unix()))
+            .collect(),
+    };
+    let provision_service = services[0].clone();
+    let mut referral_tasks = Vec::new();
+    for service in services {
+        service
+            .gc2_directory()
+            .remember(&public_bundle, super::now_unix())
+            .unwrap();
+        referral_tasks.push(tokio::spawn(async move {
+            service.run_gc2_referral_refresh().await.unwrap();
+        }));
+    }
+    // Fresh client: only introductions, never shared relay directory state.
     let cfg = NodeConfig {
         seed: [7; 32],
         listen: "127.0.0.72:0".parse().unwrap(),
@@ -157,6 +188,13 @@ async fn fresh_carrier_node_provisions_its_inbox_over_the_protected_route() {
             ]
             .into_iter()
             .chain(extra_introductions)
+            .map(|raw| {
+                let mut intro = gcoms_routing::gc2::directory::Introduction::decode(&raw).unwrap();
+                if expire_initial_client_seeds {
+                    intro.expires_at = intro.expires_at.min(super::now_unix() + 2);
+                }
+                intro.encode().unwrap().to_vec()
+            })
             .collect(),
         ),
         inbox_relay: None,
@@ -169,6 +207,12 @@ async fn fresh_carrier_node_provisions_its_inbox_over_the_protected_route() {
     assert!(runtime.gc2.get().is_some());
     let _owner_task = tokio::spawn(prepared.owner.run());
     let _ = prepared.ready;
+    if expire_initial_client_seeds {
+        // Shorten only the client fixture authority; relay authority and normal
+        // authenticated renewal remain unchanged. The original seeds must expire
+        // before provisioning, requiring more than the three retained guards.
+        tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+    }
 
     // Cold-entry dials can stall on a loaded host; retry the request across the
     // owner's whole startup window instead of asserting on its readiness timer.
@@ -212,7 +256,7 @@ async fn fresh_carrier_node_provisions_its_inbox_over_the_protected_route() {
     // advertisement (version-1 relays keep their behavior). A request ID is
     // bound to its options, so the negative uses a fresh request.
     let current = runtime.gc2.get().expect("carrier runtime");
-    let relay_intro = introduction;
+    let relay_intro = provision_service.gc2_introduction(super::now_unix());
     let legacy = tokio::time::timeout(std::time::Duration::from_secs(120), async {
         loop {
             if let Ok(reply) = gcoms_routing::gc2::discovery::provision(
@@ -413,4 +457,197 @@ async fn client_bundle_install_refuses_a_non_gc2_node() {
         .unwrap_err();
     assert_eq!(error, "GC/2 carrier directory is not enabled");
     node.shutdown().await;
+}
+
+#[cfg(feature = "client-persist")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn exhausted_retained_inbox_recovery_does_not_starve_replacement() {
+    use std::time::Duration;
+    use tokio::time::timeout;
+
+    let config = |seed: u8| NodeConfig {
+        seed: [seed; 32],
+        listen: format!("127.0.0.{seed}:0").parse().unwrap(),
+        control: None,
+        advertise: None,
+        profile: NodeProfile::gchat_file_transfer_fixture(2, u64::from(seed)),
+        inbox_relay: None,
+        alias_lifecycle: Default::default(),
+    };
+    let mut relays = Vec::new();
+    for seed in 131..136 {
+        relays.push(
+            start_with_routing(config(seed), RoutingConfig::default())
+                .await
+                .unwrap(),
+        );
+    }
+    let bundle = gcoms_routing::gc2::directory::BootstrapBundle {
+        relays: relays
+            .iter()
+            .map(|r| r.gc2_relay_introduction().unwrap())
+            .collect(),
+    };
+    for relay in &relays {
+        relay.install_gc2_routing_bootstrap(&bundle).unwrap();
+    }
+    let runtime = RoutingRuntime::new(
+        RoutingConfig {
+            gc2_bootstrap: Some(bundle),
+            ..Default::default()
+        },
+        Directory::new(),
+        true,
+    )
+    .unwrap();
+    let prepared = super::super::gc2_bootstrap::prepare(&config(140), Some(&runtime))
+        .unwrap()
+        .unwrap();
+    let ready = prepared.ready.clone();
+    let mut tasks = tokio::task::JoinSet::new();
+    tasks.spawn(async move {
+        let _ = prepared.owner.run().await;
+    });
+    timeout(Duration::from_secs(30), async {
+        while ready.ready_entries() < 2 {
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .expect("protected entries become ready");
+
+    // The old inbox completes pinned TLS and reads the request, but never
+    // answers it. A TLS-connect timeout must not masquerade as this full
+    // administrative-request stall.
+    let identity = TlsIdentity::generate().unwrap();
+    let terminal = Tp1Server::bind_with_identity(
+        "127.0.0.141:0".parse().unwrap(),
+        TokenRegistry::new(),
+        Arc::new(|_, _| Ok(None)),
+        Arc::new(|_| None),
+        &identity,
+    )
+    .await
+    .unwrap();
+    let old_target = RelayTarget {
+        address: terminal.local_addr().unwrap(),
+        relay_service_id: identity.service_id(),
+    };
+    let (observed, mut accepted) = tokio::sync::mpsc::channel(8);
+    let terminal = terminal.with_dispatch_factory(Arc::new(move || {
+        let observed = observed.clone();
+        Arc::new(move |_, _| {
+            let observed = observed.clone();
+            gcoms_transport::server::Dispatch::Accepted(Box::new(move |mut body, response| {
+                Box::pin(async move {
+                    let request =
+                        gcoms_transport::server::read_body(&mut body, gcoms_core::gc2::MAX_CELL)
+                            .await
+                            .unwrap();
+                    assert!(!request.is_empty());
+                    let _ = observed.send(()).await;
+                    std::future::pending::<()>().await;
+                    drop((body, response));
+                })
+            }))
+        })
+    }));
+    tasks.spawn(async move {
+        let _ = terminal.run().await;
+    });
+    let scheduler = RelayScheduler::gc2(ready).unwrap();
+    let mut node = persist::tests::state();
+    node.scheduler = scheduler.clone();
+    node.gc2_carrier = Some(runtime.gc2.get().unwrap().ready.clone());
+    node.gc2_carrier_directory = Some(runtime.gc2.get().unwrap().directory.clone());
+    node.routing = Some(runtime.clone());
+    let saved = Arc::new(Mutex::new(Vec::new()));
+    let sink = saved.clone();
+    node.durable_state_sink = Some(Arc::new(move |bytes| {
+        *sink.lock().unwrap() = bytes;
+        Ok(())
+    }));
+    let mut old_leases = crate::queues::LeaseStore::new(
+        old_target.relay_service_id,
+        crate::queues::StoreConfig::default(),
+    )
+    .unwrap();
+    for alias in &mut node.client_relay.aliases {
+        let grant = old_leases
+            .issue_grant(
+                GrantRequest {
+                    queue_id: alias.contact.queue_id,
+                    epoch: alias.contact.epoch,
+                    limits: alias.limits,
+                },
+                now_unix(),
+            )
+            .unwrap();
+        alias.contact.target = old_target.clone();
+        alias.contact.expiry = now_unix() + 300;
+        let create = LeaseCreate {
+            queue_id: alias.contact.queue_id,
+            epoch: alias.contact.epoch,
+            lease_expiry: alias.contact.expiry,
+            queue_cells: alias.limits.max_queue_cells,
+            queue_bytes: alias.limits.max_queue_bytes,
+            capabilities: alias.capabilities,
+            nonce: rand::random(),
+            grant: grant.wire,
+        };
+        let wire = create.encode(&old_target.relay_service_id).unwrap();
+        old_leases.create_lease(&wire, now_unix()).unwrap();
+        alias.create_path = encode_b64url(&grant.wire[49..81]);
+        alias.lease_create = Cell::new(CellType::RelaySub, 0, 0, wire.to_vec());
+    }
+    node.info.aliases = node
+        .client_relay
+        .aliases
+        .iter()
+        .map(|a| a.contact.clone())
+        .collect();
+    let old = node.client_relay.clone();
+    let state = Arc::new(Mutex::new(node));
+    runtime.bind_state(&state).unwrap();
+    let (events, _) = broadcast::channel(16);
+
+    // The caller has exhausted the retained-recovery rounds. A still-hung old
+    // terminal must not consume every subsequent round before failover starts.
+    timeout(
+        Duration::from_secs(45),
+        recover_owner(&state, &scheduler, &events, &runtime, true),
+    )
+    .await
+    .unwrap_or_else(|_| {
+        panic!(
+            "replacement must not wait on the exhausted retained route: old request observed={}, phase={:?}",
+            accepted.try_recv().is_ok(), runtime.recovery_status.lock().unwrap()
+        )
+    })
+    .expect("healthy protected relay provisions the replacement");
+    assert!(
+        matches!(
+            accepted.try_recv(),
+            Err(tokio::sync::mpsc::error::TryRecvError::Empty)
+        ),
+        "exhausted recovery must not start another retained request"
+    );
+    {
+        let st = state.lock().unwrap();
+        assert_ne!(st.client_relay.aliases[0].contact.target, old_target);
+        assert_eq!(
+            st.unannounced_old_contact_aliases.as_ref(),
+            Some(&old.aliases)
+        );
+        assert!(!st.owner_transition_failed);
+        assert!(
+            !saved.lock().unwrap().is_empty(),
+            "replacement commits before publication"
+        );
+    }
+    scheduler.shutdown();
+    tasks.shutdown().await;
+    for relay in relays {
+        relay.shutdown().await;
+    }
 }

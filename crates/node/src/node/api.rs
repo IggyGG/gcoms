@@ -298,6 +298,16 @@ pub enum Cmd {
         body: Vec<u8>,
         done: tokio::sync::oneshot::Sender<Result<(), String>>,
     },
+    ChannelInboxPage {
+        after: u64,
+        limit: usize,
+        done: tokio::sync::oneshot::Sender<Result<Vec<channel_inbox::Delivery>, String>>,
+    },
+    ChannelInboxReceipt {
+        sequence: u64,
+        digest: [u8; 32],
+        done: tokio::sync::oneshot::Sender<Result<(), String>>,
+    },
     ApplicationInboxPage {
         after: u64,
         limit: usize,
@@ -456,7 +466,10 @@ pub struct NodeDiagnostics {
     pub relay_resources: crate::scheduler::ResourceSnapshot,
 }
 
-/// Local readiness and class counts. No private addresses, tokens or identities.
+/// Local readiness, class counts and bounded backend failure context.
+/// Never includes authority objects or application payloads.
+pub use super::routing::RecoveryStatus;
+
 #[derive(Debug, Default, serde::Serialize)]
 pub struct TransportStatus {
     pub protocol: &'static str,
@@ -470,6 +483,8 @@ pub struct TransportStatus {
     pub recovering_inbox: bool,
     pub owned_aliases: usize,
     pub subscribed_owned_aliases: usize,
+    pub owner_transition_failed: bool,
+    pub recovery: RecoveryStatus,
 }
 
 #[derive(Clone)]
@@ -568,6 +583,14 @@ impl NodeHandle {
         };
         let st = state.lock().unwrap_or_else(|p| p.into_inner());
         result.recovering_inbox = super::routing::recovering(&st);
+        result.owner_transition_failed = st.owner_transition_failed;
+        if let Some(runtime) = &st.routing {
+            result.recovery = runtime
+                .recovery_status
+                .lock()
+                .unwrap_or_else(|p| p.into_inner())
+                .clone();
+        }
         result.owned_aliases = st.client_relay.aliases.len();
         result.subscribed_owned_aliases = st
             .client_relay
@@ -1439,8 +1462,10 @@ impl NodeHandle {
     }
 
     /// Return the exact wire ID after durable local acceptance. Requires a
-    /// persistent sink and routes for every remote roster member. A first-hop
-    /// failure leaves the exact outbox eligible for retry across restart.
+    /// persistent sink and routes for every remote roster member. A fresh join
+    /// waits at most 120 seconds for authenticated recipient routes, before
+    /// advancing MLS or committing a wire. A first-hop failure leaves the exact
+    /// outbox eligible for retry across restart.
     pub async fn send_channel_text_tracked(
         &self,
         channel: &str,
@@ -1714,6 +1739,35 @@ impl NodeHandle {
         receive.await.map_err(|error| error.to_string())?
     }
 
+    /// Local archive-owner API; observing broadcast events never consumes these records.
+    pub async fn channel_inbox(
+        &self,
+        after: u64,
+        limit: usize,
+    ) -> Result<Vec<channel_inbox::Delivery>, String> {
+        let (done, receive) = tokio::sync::oneshot::channel();
+        self.cmd_tx
+            .send(Cmd::ChannelInboxPage { after, limit, done })
+            .await
+            .map_err(|_| "node stopped".to_string())?;
+        receive.await.map_err(|_| "node stopped".to_string())?
+    }
+    pub async fn commit_channel_delivery(
+        &self,
+        sequence: u64,
+        digest: [u8; 32],
+    ) -> Result<(), String> {
+        let (done, receive) = tokio::sync::oneshot::channel();
+        self.cmd_tx
+            .send(Cmd::ChannelInboxReceipt {
+                sequence,
+                digest,
+                done,
+            })
+            .await
+            .map_err(|_| "node stopped".to_string())?;
+        receive.await.map_err(|_| "node stopped".to_string())?
+    }
     pub async fn application_inbox(
         &self,
         after: u64,

@@ -1,0 +1,19 @@
+   Compiling gcoms-node v0.1.0 (/work/release-repro-20260927/admission-barrier/bootstrap-red/gcoms/crates/node)
+    Finished `test` profile [unoptimized] target(s) in 16.16s
+     Running unittests src/lib.rs (/work/target/debug/deps/gcoms_node-a9c09991362821c1)
+
+running 1 test
+test node::channels::membership_wait_tests::fresh_member_bootstrap_is_durable_without_display_metadata ... 
+thread 'node::channels::membership_wait_tests::fresh_member_bootstrap_is_durable_without_display_metadata' (1160) panicked at crates/node/src/node/channels.rs:2808:16:
+called `Result::unwrap()` on an `Err` value: "fresh member bootstrap has no durable ACK barrier"
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+FAILED
+
+failures:
+
+failures:
+    node::channels::membership_wait_tests::fresh_member_bootstrap_is_durable_without_display_metadata
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 355 filtered out; finished in 0.61s
+
+error: test failed, to rerun pass `-p gcoms-node --lib`

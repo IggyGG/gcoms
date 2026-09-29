@@ -1,0 +1,89 @@
+{
+  "schema": 1,
+  "base_gcoms": "0b41cb2ef16f8ddab81ca8b38182522a31735900",
+  "scope": "Test-only protected-inbox fixture referral renewal; no runtime/protocol/authority/deadline change",
+  "source_file": "crates/node/src/node/gc2_inbox_tests.rs",
+  "source_sha256": "f499d8931269c457b50df3c5b08610cfb0de8b446d086bb7dd20dfe40df49c01",
+  "source_paths_unchanged_during_checks": 817,
+  "passed": true,
+  "node_fixture": {
+    "passed": 5,
+    "failed": 0,
+    "ignored": 1,
+    "ignored_reason": "explicit deployed relay probe not invoked"
+  },
+  "strict_all_feature_all_target_node_clippy": true,
+  "red_control": "Same disposable shortened-initial-authority reproduction has 5 eligible introductions and passes with configured public referrals; 3 eligible and timeout when only referral publication is removed.",
+  "original_windows_cause": "Not conclusively established: no per-test start timestamp or introduction expiry in original failed log. Fixture defect reproduced independently.",
+  "retained_failures": [
+    "Original Windows native timeout at 240s",
+    "First disposable 15s red and green both timed out; not a successful differential",
+    "Final focused tests passed but initial Clippy command lacked the installed toolchain component; unchanged-source Clippy retry passed"
+  ],
+  "evidence": [
+    {
+      "path": "clippy-retry.json",
+      "sha256": "696fc0384f26dd525f6ed0c4fb2451ab102b897b72c30208448fb7fd7c00a985"
+    },
+    {
+      "path": "diagnostic-gc2_inbox_tests.rs",
+      "sha256": "f93ad05236d89435d4c5d700c4a26fa67b2f10472003e2a8d6634add9dfc5c5d"
+    },
+    {
+      "path": "diagnostic.json",
+      "sha256": "f98d55217563fc517513648482f6a760c9db927e54809e890820df87eb3fb4a0"
+    },
+    {
+      "path": "final-before.json",
+      "sha256": "613e0bae8aee7e0df3c8aac5e839edf8ca7181b9d86968d7b3b832e4df1f4352"
+    },
+    {
+      "path": "final-clippy-retry.log",
+      "sha256": "0b849f7d404cea1c49609b9b95172bef49fd533beb216157ceb93c59bdb9b77e"
+    },
+    {
+      "path": "final-clippy.log",
+      "sha256": "50bc80f155dd25bc138839b233d7300dd6af256de40d11d0fbafea1111a23738"
+    },
+    {
+      "path": "final-tests.log",
+      "sha256": "4f41b54a633d0d2365c11bd5fe17dd7ede51f8cee387d3079b97a4792af09223"
+    },
+    {
+      "path": "final.json",
+      "sha256": "95c3bec06eea2ff4ec9763e5a6ae5a6804c321601ebcb1b202dffed743ef1412"
+    },
+    {
+      "path": "green.json",
+      "sha256": "e93e72427dc9c28a88d5dcfcc983198d1403f0eea46f633c67386e70c35d6cc0"
+    },
+    {
+      "path": "green.log",
+      "sha256": "b13aa43e0cda7aecd049d2d8c7bc82fab7b4bb8e77126a9d6094f74f9e241434"
+    },
+    {
+      "path": "red.json",
+      "sha256": "a2e2c7707bbe99effbceecff49c7014b5bed87a2d00b518c1c9c7f33aff6291c"
+    },
+    {
+      "path": "red.log",
+      "sha256": "b4449ce20f867976094af5bc8a7666110e2aa14964a60244bd1224d1fba0cd19"
+    },
+    {
+      "path": "referrals-absent.json",
+      "sha256": "53e68f10381f241ada07d4d481b6b875abac32c12fb0a3031d4b752778a61b2c"
+    },
+    {
+      "path": "referrals-absent.log",
+      "sha256": "821bb91bfc75a903cbbb493fca5e454d727174f94841d6aa83ab7bed25ff96d4"
+    },
+    {
+      "path": "referrals-present.json",
+      "sha256": "f9d3533e1c8aacbf40d1e65410b69fe593db697ae2c753f42bcf393cd64f92e6"
+    },
+    {
+      "path": "referrals-present.log",
+      "sha256": "2bfb1fcb3b9e53c1e8bc59cedf6965bc25b271d4faeebadb0bbb80f43567b6e7"
+    }
+  ]
+}

@@ -51,11 +51,14 @@ def until(fn, deadline, name):
     while time.monotonic() < deadline:
         try:
             value = fn()
-            if value:
+            if value and time.monotonic() < deadline:
                 return value
         except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as exc:
             error = str(exc)
-        time.sleep(.1)
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            break
+        time.sleep(min(.1, remaining))
     raise RuntimeError(f'{name} deadline; last error: {error}')
 
 
@@ -83,6 +86,10 @@ def build_binding(build):
 
 
 class Worker:
+    # Preserve the historical calibration topology; subclasses may supply the
+    # larger topology required by their separately versioned application scope.
+    relay_addresses = tuple(RELAYS)
+
     def __init__(self, spec):
         self.spec = spec
         self.original_root = Path(spec['out'])
@@ -145,7 +152,7 @@ class Worker:
             raise RuntimeError('fixture namespace was not empty')
         run(['mount', '--make-rprivate', '/'])
         run(['mount', '--bind', self.original_root, '/mnt'])
-        for name in ('home', 'tmp', 'run', 'c0', 'c1', *[f'r{i}' for i in range(4)]):
+        for name in ('home', 'tmp', 'run', 'c0', 'c1', *[f'r{i}' for i in range(len(self.relay_addresses))]):
             path = self.root / name
             path.mkdir(mode=0o700)
             os.chown(path, self.uid, self.gid)
@@ -168,7 +175,7 @@ class Worker:
         if len({observer_net, self.spec['host_netns'], os.readlink('/proc/self/ns/net')}) != 3:
             raise RuntimeError('network namespaces are not distinct')
         run(['ip', 'link', 'add', 'fixture0', 'type', 'veth', 'peer', 'name', 'client0', 'netns', str(self.holder.pid)])
-        for address in [FIXTURE, *RELAYS]:
+        for address in [FIXTURE, *self.relay_addresses]:
             run(['ip', 'addr', 'add', address + '/24', 'dev', 'fixture0'])
         run(['ip', '-6', 'addr', 'add', FIXTURE6 + '/64', 'dev', 'fixture0', 'nodad'])
         run(['ip', 'link', 'set', 'fixture0', 'up'])
@@ -255,15 +262,15 @@ class Worker:
             run(self.owner([binary, 'keygen', '--out', folder / 'key', '--pass-file', self.root / 'pass']), env=self.env)
         return self.spawn(f'relay{i}' + ('-configured' if bootstrap else ''), [binary, 'serve',
             '--keystore', folder / 'key', '--pass-file', self.root / 'pass', '--port', 24500 + i,
-            '--advertise-addr', f'{RELAYS[i]}:{24500+i}', '--control-port', 19500 + i,
+            '--advertise-addr', f'{self.relay_addresses[i]}:{24500+i}', '--control-port', 19500 + i,
             '--schedule', 'gchat-files', '--no-router-mapping', '--metrics', folder / 'metrics.jsonl'],
             env={'GC_ROUTING_BOOTSTRAP': str(bootstrap)} if bootstrap else {})
 
     def prepare(self):
         self.private(self.root / 'pass', uuid.uuid4().hex + '\n')
-        relays = [self.relay(i) for i in range(4)]
+        relays = [self.relay(i) for i in range(len(self.relay_addresses))]
         records = []
-        for i in range(4):
+        for i in range(len(self.relay_addresses)):
             value = until(lambda: self.control(i, 'routing_bootstrap'), time.monotonic() + 30, 'relay startup')
             encoded = value['routing_bundle_b64']
             raw = base64.urlsafe_b64decode(encoded + '=' * (-len(encoded) % 4))
@@ -272,8 +279,8 @@ class Worker:
             records.append(raw[6:161])
         for p in relays:
             self.stop(p)
-        self.private(self.root / 'bootstrap', b'GCRB\x02\x04' + b''.join(records))
-        for i in range(4):
+        self.private(self.root / 'bootstrap', b'GCRB\x02' + bytes([len(records)]) + b''.join(records))
+        for i in range(len(self.relay_addresses)):
             self.relay(i, self.root / 'bootstrap')
             until(lambda: self.control(i, 'status'), time.monotonic() + 30, 'configured relay startup')
         self.result['bootstrap_sha256'] = sha256(self.root / 'bootstrap')
@@ -283,7 +290,7 @@ class Worker:
             (folder / 'fixtures').mkdir(mode=0o700); os.chown(folder / 'fixtures', self.uid, self.gid)
             card = self.control(inbox, 'provision_client_relay')['private_card_b64']
             self.private(folder / 'card', card + '\n')
-            self.private(folder / 'bootstrap', b'GCRB\x02\x03' + b''.join(r for i, r in enumerate(records) if i != inbox))
+            self.private(folder / 'bootstrap', b'GCRB\x02' + bytes([len(records) - 1]) + b''.join(r for i, r in enumerate(records) if i != inbox))
         self.result['private_inputs'] = {str(p.relative_to(self.root)): sha256(p) for p in
             [self.root / 'bootstrap', self.root / 'resolver', self.root / 'nsswitch',
              *[self.root / f'c{i}' / n for i in (0, 1) for n in ('bootstrap', 'card')]]}
@@ -517,7 +524,7 @@ class Worker:
             self.result['capture_returncode'] = self.capture.poll() if self.capture else None
             self.result['loopback_capture_returncode'] = self.loop_capture.poll() if self.loop_capture else None
             self.result['application_returncodes'] = [p.poll() for p in self.clients]
-            for name in ('observer.pcap', 'observer.capture.log', 'loopback.pcap', 'loopback.capture.log', 'events.jsonl', 'client0.log', 'client1.log', *[f'r{i}/metrics.jsonl' for i in range(4)]):
+            for name in ('observer.pcap', 'observer.capture.log', 'loopback.pcap', 'loopback.capture.log', 'events.jsonl', 'client0.log', 'client1.log', *[f'r{i}/metrics.jsonl' for i in range(len(self.relay_addresses))]):
                 path = self.original_root / name
                 if path.exists():
                     self.result.setdefault('evidence', {})[name] = sha256(path)

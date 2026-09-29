@@ -1,0 +1,26 @@
+   Compiling libc v0.2.189
+   Compiling rustix v1.1.4
+   Compiling bitflags v2.13.1
+   Compiling getrandom v0.4.3
+   Compiling errno v0.3.14
+   Compiling cfg-if v1.0.4
+   Compiling once_cell v1.21.4
+   Compiling fastrand v2.5.0
+   Compiling tempfile v3.27.0
+   Compiling gcoms-private-fs v0.1.0 (/Users/iggy/.cache/gchat-private-fs-20260927/gcoms/crates/private-fs)
+    Finished `test` profile [unoptimized] target(s) in 1.97s
+     Running unittests src/lib.rs (/Users/iggy/.cache/gchat-private-fs-20260927/target/debug/deps/gcoms_private_fs-db879b908dd20242)
+
+running 3 tests
+test tests::installed_executable_refuses_writable_public_privileged_and_aliased_files ... ok
+test tests::make_private_then_validate_round_trips ... ok
+test tests::rejects_group_readable_file_and_directory ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+   Doc-tests gcoms_private_fs
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

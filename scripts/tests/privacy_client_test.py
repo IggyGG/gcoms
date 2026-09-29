@@ -112,6 +112,19 @@ class ClientPacketsTest(unittest.TestCase):
 
 
 class ClientIpcDeadlineTest(unittest.TestCase):
+    def test_late_success_does_not_pass_the_original_observation_deadline(self):
+        spec = importlib.util.spec_from_file_location('late_capture_driver', SCRIPTS / 'privacy-client-capture.py')
+        driver = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(driver)
+        clock = [0.0]
+        def late():
+            clock[0] = 11.0
+            return True
+        with patch.object(driver.time, 'monotonic', side_effect=lambda: clock[0]), \
+                patch.object(driver.time, 'sleep'):
+            with self.assertRaisesRegex(RuntimeError, 'deadline'):
+                driver.until(late, 10.0, 'delivery')
+
     def test_long_setup_response_uses_phase_budget_and_expired_budget_refuses_io(self):
         spec = importlib.util.spec_from_file_location('client_capture_driver', SCRIPTS / 'privacy-client-capture.py')
         driver = importlib.util.module_from_spec(spec)

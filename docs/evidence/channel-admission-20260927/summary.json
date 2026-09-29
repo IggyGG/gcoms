@@ -1,0 +1,55 @@
+{
+  "schema": 1,
+  "scope": "source-bound node admission/delivery barrier and bounded transient finalization ownership",
+  "base_commit": "9804272eba99c3117672e49b173d68eb4d5ddf75",
+  "passed": true,
+  "counts": {
+    "node_passed": 355,
+    "node_failed": 0,
+    "node_ignored": 2,
+    "invitation_integration_passed": 9
+  },
+  "strict_all_target_all_feature_node_clippy": true,
+  "source_unchanged": true,
+  "changed_source_hashes": {
+    "crates/node/src/channel.rs": "15a0a44c828855678e2f285aa87215f1d74591d5d29c517c70919672e7e9c378",
+    "crates/node/src/node/channels.rs": "da0f72382ff0f8c6d04eb204142480b6388b11cb32cc1d7e8c286669332e7dea",
+    "crates/node/src/node/channel_cold_route_tests.rs": "cbdb7ce65e12b501834bc70308d4b985a2d00797ee243632c432e5ccf802e075",
+    "crates/node/src/node/persist/tracked_send_tests.rs": "569289e29b0c4a04ad5d1012a781b2aaa223c20043e6c61aa4df2679291ea06f"
+  },
+  "regressions": [
+    "pending exact MLS application wire blocks a new epoch and does not consume invitation; authenticated ACK releases it",
+    "empty channel display metadata still retains an authenticated newcomer bootstrap receipt",
+    "second admission cannot overtake unfinished finalization; exact Welcome replay and guard cancellation release remain possible"
+  ],
+  "candidate_binary": {
+    "sha256": "3d1ef837681d70e21fb8e509750287235a79889d6b262f086f84b4e83e475bed",
+    "size": 103763880,
+    "profile": "dev, debug info disabled; not signed release"
+  },
+  "codematch": "unreachable",
+  "limitations": [
+    "no timing/privacy claim",
+    "native checks do not qualify installed release or all four Android clients",
+    "offline unacknowledged recipients may block new admissions; deadlines unchanged",
+    "cancellation guard is transient, not a new crash-atomic admission transaction"
+  ],
+  "retained_failed_attempts": [
+    "first red command selected zero tests: excluded",
+    "initial wire fixture used mismatched route identity: corrected fixture only",
+    "green03 shared-target stale executable: excluded and recompiled",
+    "green03 three cold fixtures began before newly required bootstrap ACK: explicit setup wait added, original recovery assertions unchanged",
+    "first four Android baseline: two unsuccessful joins",
+    "green04 four joins but incomplete member roster and one missing owner message; UI notification and scrolling observation failures retained"
+  ],
+  "evidence": {
+    "sender-build.log": "a3d1e9f9e76c6f26294730bf53aa84a8a77ad372bff01832c012864f4edc99fb",
+    "tested-sources.json": "7336ea4a766eaf172a67eb0faf87a3df65d6311f0ecefab5642c08064ec739cf",
+    "invitations.log": "e665edbbfceb2833e38b30469db572db7b49b562d8d0e5f43e0516b9763e89bd",
+    "pending-wire-red.log": "e79768a7c52cd99b75720573ea537f68c799cd6cc76c3fb809c57a3b182ed90c",
+    "clippy.log": "aa640e68a582f7afaa88941c22f0d233a0ca64b1ee559a63776f9319e021916b",
+    "node.log": "ca7738fef71784126c10cbbfd740512e361c49d4b6c520359f110d57b97f49cc",
+    "finalization-red.log": "e79160dbcd2edc00ca869a01e2783649e8a0cc57c2731d92808ec741dd28d229",
+    "empty-bootstrap-red.log": "32b68f041a3be8019224c1516b9560e311a0c128c1d701e85222714bcf9e5dd2"
+  }
+}

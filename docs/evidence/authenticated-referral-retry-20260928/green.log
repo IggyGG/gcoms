@@ -1,0 +1,19 @@
+info: syncing channel updates for 1.98.0-x86_64-unknown-linux-gnu
+info: latest update on 2026-08-20 for version 1.98.0 (88d9e12ae 2026-08-18)
+info: downloading 3 components
+warn: the missing active toolchain `1.98.0-x86_64-unknown-linux-gnu` has been auto-installed
+warn: this might cause rustup commands to take longer time to finish than expected
+info: you may opt out with `RUSTUP_AUTO_INSTALL=0` or `rustup set auto-install disable`
+   Compiling gcoms-core v0.1.0 (/work/epoch-0400/green/crates/core)
+   Compiling gcoms-crypto v0.1.0 (/work/epoch-0400/green/crates/crypto)
+   Compiling gcoms-transport v0.1.0 (/work/epoch-0400/green/crates/transport)
+   Compiling gcoms-protocol v0.1.0 (/work/epoch-0400/green/crates/protocol)
+   Compiling gcoms-routing v0.1.0 (/work/epoch-0400/green/crates/routing)
+    Finished `test` profile [unoptimized] target(s) in 7.64s
+     Running unittests src/lib.rs (/work/route-readiness/target-complete/debug/deps/gcoms_routing-8a468679e455d388)
+
+running 2 tests
+test gc2::owner::referral_tests::incomplete_authenticated_referrals_do_not_change_failed_discovery_pacing ... ok
+test gc2::owner::referral_tests::renewed_guard_retries_incomplete_referrals_before_normal_discovery_period ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 62 filtered out; finished in 5.36s

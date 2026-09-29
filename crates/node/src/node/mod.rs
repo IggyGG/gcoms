@@ -42,6 +42,7 @@ use tokio::sync::{broadcast, mpsc};
 mod aliases;
 mod api;
 mod application_inbox;
+pub mod channel_inbox;
 
 mod channel_direct;
 mod channel_recovery;
@@ -329,14 +330,14 @@ impl NodeProfile {
         })
     }
 
-    /// Explicit GChat file policy: fixed chat cover and observable unpaced bulk.
+    /// GChat policy: immediate data, random interactive cover, unpaced bulk.
     #[cfg(feature = "experimental-gc2")]
     pub fn gchat_file_transfer_production(
         directory: Option<std::path::PathBuf>,
         entries: usize,
     ) -> Self {
         Self::gc2_carrier_production(directory, entries)
-            .with_gc2_traffic_profile(gcoms_routing::gc2::CandidateProfile::file_transfer())
+            .with_gc2_traffic_profile(gcoms_routing::gc2::CandidateProfile::responsive())
             .expect("carrier profile is selected")
     }
 
@@ -389,7 +390,7 @@ impl NodeProfile {
             unreachable!()
         };
         fixture.gc2_carrier_period_ms = 1000;
-        fixture.gc2_cover_mode = gcoms_routing::gc2::CoverMode::Interactive;
+        fixture.gc2_cover_mode = gcoms_routing::gc2::CoverMode::Responsive;
         Self::Fixture(fixture)
     }
 
@@ -927,6 +928,7 @@ async fn start_with_tls_policy_control_sink_and_bootstrap(
         routing_config,
         bootstrap_directory,
         true,
+        false,
     )
     .await
 }
@@ -956,6 +958,38 @@ pub async fn start_client_persistent_restored(
         routing,
         None,
         false,
+        false,
+    )
+    .await
+}
+
+/// Start a profile with a durable channel archive handoff enabled before ingress.
+#[cfg(feature = "client-persist")]
+pub async fn start_with_channel_inbox(
+    cfg: NodeConfig,
+    policy: Option<FrwdTargetPolicy>,
+    sink: DurableStateSink,
+    initial: Option<&[u8]>,
+    routing: Option<RoutingConfig>,
+    host_relay: bool,
+) -> Result<NodeHandle, String> {
+    let tls = match initial {
+        Some(bytes) => persist::restore_tls_identity(bytes, &cfg.seed)?,
+        None => None,
+    }
+    .map(Ok)
+    .unwrap_or_else(|| TlsIdentity::generate().map_err(|e| e.to_string()))?;
+    start_role(
+        cfg,
+        tls,
+        policy,
+        None,
+        Some(sink),
+        initial,
+        routing,
+        None,
+        host_relay,
+        true,
     )
     .await
 }
@@ -971,6 +1005,7 @@ async fn start_role(
     routing_config: Option<RoutingConfig>,
     bootstrap_directory: Option<std::path::PathBuf>,
     host_relay: bool,
+    durable_channels: bool,
 ) -> Result<NodeHandle, String> {
     if host_relay && !cfg!(feature = "relay-host") {
         return Err("relay hosting is not compiled in; use the outbound client constructor".into());
@@ -1312,6 +1347,7 @@ async fn start_role(
             local_contact_generation: 1,
             pending_1to1: HashMap::new(),
             next_direct_sequence: 1,
+            channel_inbox: channel_inbox::Inbox::new(durable_channels),
             durable_applications_enabled: false,
             application_inbox: application_inbox::ApplicationInbox::default(),
             direct_ack_outbox: VecDeque::new(),
@@ -1480,6 +1516,23 @@ async fn start_role(
                 scheduler.clone(),
                 events_tx.clone(),
             ));
+        }
+
+        #[cfg(all(feature = "relay-host", feature = "experimental-gc2"))]
+        if let Some(service) = routing.as_ref().and_then(|runtime| {
+            runtime
+                .service
+                .lock()
+                .unwrap_or_else(|p| p.into_inner())
+                .clone()
+        }) {
+            // Separate relay advertisement state; never expose client guards.
+            // The node owns cancellation alongside its other background tasks.
+            tasks.push(tokio::spawn(async move {
+                if let Err(error) = service.run_gc2_referral_refresh().await {
+                    metrics::log_event("gc2_referral_owner_error", &[("e", error.to_string())]);
+                }
+            }));
         }
 
         let workers = vec![
@@ -1714,8 +1767,24 @@ fn checkpoint_direct_state(
             Some((peer, sealed)) => persist::encode_state_with_session(st, peer, sealed),
             None => persist::encode_state(st),
         }
-        .map_err(DirectPersistenceError::Storage)?;
-        sink(bytes).map_err(DirectPersistenceError::Storage)?;
+        .map_err(|error| {
+            if !st.owner_transition_failed {
+                eprintln!(
+                    "gcoms: protocol checkpoint encoding failed: {}",
+                    error.chars().take(240).collect::<String>()
+                );
+            }
+            DirectPersistenceError::Storage(error)
+        })?;
+        sink(bytes).map_err(|error| {
+            if !st.owner_transition_failed {
+                eprintln!(
+                    "gcoms: protocol checkpoint storage failed: {}",
+                    error.chars().take(240).collect::<String>()
+                );
+            }
+            DirectPersistenceError::Storage(error)
+        })?;
     }
     #[cfg(not(feature = "client-persist"))]
     let _ = (st, session_override);

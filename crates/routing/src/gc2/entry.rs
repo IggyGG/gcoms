@@ -92,7 +92,7 @@ impl Drop for Lifecycle {
 
 #[cfg(test)]
 #[path = "entry_lifetime_tests.rs"]
-mod lifetime_tests;
+pub(crate) mod lifetime_tests;
 
 /// Explicit GC/2 entry authority. It is deliberately a distinct type from a
 /// GC/1 relay introduction; there is no implicit compatibility conversion.
@@ -169,7 +169,8 @@ impl EntryCarrier {
             });
             let (extended, driver) =
                 super::transit::open(stream, class, middle, next.as_ref().unwrap_or(target))
-                    .await?;
+                    .await
+                    .map_err(|error| format!("GC/2 middle {}: {error}", index + 1))?;
             self.nested
                 .send(driver)
                 .await

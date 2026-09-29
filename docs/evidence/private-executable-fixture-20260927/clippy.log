@@ -1,0 +1,11 @@
+    Checking libc v0.2.189
+    Checking bitflags v2.13.1
+    Checking cfg-if v1.0.4
+    Checking fastrand v2.5.0
+    Checking once_cell v1.21.4
+    Checking errno v0.3.14
+    Checking getrandom v0.4.3
+    Checking rustix v1.1.4
+    Checking tempfile v3.27.0
+    Checking gcoms-private-fs v0.1.0 (/Users/iggy/.cache/gchat-private-fs-20260927/gcoms/crates/private-fs)
+    Finished `dev` profile [unoptimized] target(s) in 0.88s

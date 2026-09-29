@@ -1,0 +1,72 @@
+{
+  "passed": true,
+  "source_pair": {
+    "gcoms": "28b24cab672775bdba8320382f6e3d99b1848007",
+    "gchat": "8b7b9c5fa3ff3ca2f36c807a5b6f9135067ad172"
+  },
+  "source_unchanged": true,
+  "files_verified": 16,
+  "artifacts": {
+    "gcnode": {
+      "sha256": "59dc05e9c852d4f1a54770b7d9801752812eab128aea8ea8db7e830a96bf26ee",
+      "size": 18990384
+    },
+    "gchat": {
+      "sha256": "0d9ea2e2d9410cef73f0d85462a9c8e71553a8b63c85caa21105fd7472c158d6",
+      "size": 34622656
+    },
+    "fleet_probe": {
+      "sha256": "a8e3bb607e3e23bcf3d9f0bbfa7eae55865e587a9ddac1f8908d839fcd76a8fc",
+      "size": 2977336
+    }
+  },
+  "host": {
+    "binary_sha256": "2c5bd8e5327ef7d0fa43d26e7cb12e8fcaaebffdd758fccd8dd8731d14694b40",
+    "canonical_example": true,
+    "source_sha256": "2c839c0146ba80b5bbdec35ff14993fb7653343e6b329cfb531c06d5628743ad",
+    "build_receipt_sha256": "1894057b4aca72885904c2a5cca612ab4b7c84ffeddec765f3e44f65d20fd054",
+    "candidate_manifest_sha256": "808a962cc2d08f4df35386fd0ee0909e301f5fe4aa3bf564dea296b9bb677af1",
+    "commands": [
+      [
+        "cargo",
+        "build",
+        "--locked",
+        "--offline",
+        "--release",
+        "--config",
+        "/work/application-build-17/source.toml",
+        "-p",
+        "gchat-core",
+        "--example",
+        "turnover_daemon",
+        "--features",
+        "gc2-carrier"
+      ],
+      [
+        "cargo",
+        "clippy",
+        "--locked",
+        "--offline",
+        "--config",
+        "/work/application-build-17/source.toml",
+        "-p",
+        "gchat-core",
+        "--example",
+        "turnover_daemon",
+        "--features",
+        "gc2-carrier",
+        "--",
+        "-D",
+        "warnings"
+      ]
+    ],
+    "passed": true,
+    "installed_qualification": false
+  },
+  "archive_sha256": "a37138a21e63edb62861d2019946ad43bcd8b004016c74bbedf18cacda3250d4",
+  "scope": "optimized cluster application build and host strict Clippy; not full native or installed qualification",
+  "resolved_locks": {
+    "gcoms": "7bf0e526dfea4f63b556e754d8a9b2d171815f4c3e22baad31ba006fd2f33353",
+    "gchat": "1e2d1c7f3d99b7f19b0016d48bd8e59d772752bf55af9b526c31f451f255edd1"
+  }
+}

@@ -74,6 +74,15 @@ async fn unavailable_entries_preserve_inbox_and_channel_authority() {
 
 #[tokio::test]
 async fn channel_control_retries_while_data_response_is_stalled() {
+    channel_control_progress(false).await;
+}
+
+#[tokio::test]
+async fn new_channel_control_progresses_while_prior_control_response_is_stalled() {
+    channel_control_progress(true).await;
+}
+
+async fn channel_control_progress(stall_control: bool) {
     let identity = TlsIdentity::generate().unwrap();
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let target = RelayTarget {
@@ -91,7 +100,13 @@ async fn channel_control_retries_while_data_response_is_stalled() {
     channel.learn(&peer);
     let wire = b"retained opaque MLS data".to_vec();
     let id = crate::channel::msg_id("ops", &wire);
-    channel.queue_pull(crate::channel::PeerRef::from_route(&peer), id, wire);
+    if stall_control {
+        let mut blocked_peer = peer.clone();
+        blocked_peer.control = peer.data.clone();
+        channel.pending_control.push_back((blocked_peer, wire));
+    } else {
+        channel.queue_pull(crate::channel::PeerRef::from_route(&peer), id, wire);
+    }
 
     let profile = SchedulerProfile::compressed_production(42);
     let scheduler =
@@ -167,8 +182,8 @@ async fn channel_control_retries_while_data_response_is_stalled() {
         .await
         .unwrap()
         .unwrap();
-    // The first data cycle is already waiting for a response body. Queue a
-    // newly generated ACK now: it needs a later, independent control cycle.
+    // The previous response body is still held. Newly generated ACKs need a
+    // later admission opportunity even when that held work is also control.
     state
         .lock()
         .unwrap()
@@ -186,9 +201,10 @@ async fn channel_control_retries_while_data_response_is_stalled() {
     }
     tokio::time::timeout(Duration::from_secs(5), async {
         loop {
-            if state.lock().unwrap().channels["ops"]
+            if !state.lock().unwrap().channels["ops"]
                 .pending_control
-                .is_empty()
+                .iter()
+                .any(|(_, wire)| wire == b"retained opaque MLS ACK")
             {
                 break;
             }
@@ -199,7 +215,7 @@ async fn channel_control_retries_while_data_response_is_stalled() {
     .unwrap();
     assert!(
         scheduler.resource_snapshot().jobs > 0,
-        "data is still in flight"
+        "the original response is still in flight"
     );
     maintenance.abort();
     let _ = maintenance.await;

@@ -1,0 +1,136 @@
+{
+  "schema": 1,
+  "scope": "five actual GChat CLI profiles over deployed authenticated production relays; candidate owner and SDK; not Android APK qualification",
+  "passed": false,
+  "joins": [
+    {
+      "client": 1,
+      "seconds": 33.847143072634935,
+      "conversation": "channel/b7e7cd56373c36b52f7d920e673997806ce8ee54bc24ea10b2ce80f345fa696f"
+    },
+    {
+      "client": 2,
+      "seconds": 95.50797083508223,
+      "conversation": "channel/b7e7cd56373c36b52f7d920e673997806ce8ee54bc24ea10b2ce80f345fa696f"
+    },
+    {
+      "client": 3,
+      "seconds": 64.8013974269852,
+      "conversation": "channel/b7e7cd56373c36b52f7d920e673997806ce8ee54bc24ea10b2ce80f345fa696f"
+    },
+    {
+      "client": 4,
+      "seconds": 7.983372137881815,
+      "conversation": "channel/b7e7cd56373c36b52f7d920e673997806ce8ee54bc24ea10b2ce80f345fa696f"
+    }
+  ],
+  "message_receipts": [
+    {
+      "sender": 0,
+      "receiver": 1,
+      "id": "eb777c74d1735a6ca610f22800021e1e"
+    },
+    {
+      "sender": 0,
+      "receiver": 2,
+      "id": "eb777c74d1735a6ca610f22800021e1e"
+    },
+    {
+      "sender": 0,
+      "receiver": 3,
+      "id": "eb777c74d1735a6ca610f22800021e1e"
+    },
+    {
+      "sender": 0,
+      "receiver": 4,
+      "id": "eb777c74d1735a6ca610f22800021e1e"
+    },
+    {
+      "sender": 1,
+      "receiver": 0,
+      "id": "e104a94e0103c4081703892ec41033bc"
+    },
+    {
+      "sender": 1,
+      "receiver": 2,
+      "id": "e104a94e0103c4081703892ec41033bc"
+    },
+    {
+      "sender": 1,
+      "receiver": 3,
+      "id": "e104a94e0103c4081703892ec41033bc"
+    },
+    {
+      "sender": 1,
+      "receiver": 4,
+      "id": "e104a94e0103c4081703892ec41033bc"
+    },
+    {
+      "sender": 2,
+      "receiver": 0,
+      "id": "e49f16cf409d50282112e01dd7e19cd3"
+    },
+    {
+      "sender": 2,
+      "receiver": 1,
+      "id": "e49f16cf409d50282112e01dd7e19cd3"
+    },
+    {
+      "sender": 2,
+      "receiver": 3,
+      "id": "e49f16cf409d50282112e01dd7e19cd3"
+    },
+    {
+      "sender": 2,
+      "receiver": 4,
+      "id": "e49f16cf409d50282112e01dd7e19cd3"
+    },
+    {
+      "sender": 3,
+      "receiver": 0,
+      "id": "5210a130f18f05a6ee489a57eff905c5"
+    },
+    {
+      "sender": 3,
+      "receiver": 1,
+      "id": "5210a130f18f05a6ee489a57eff905c5"
+    },
+    {
+      "sender": 3,
+      "receiver": 2,
+      "id": "5210a130f18f05a6ee489a57eff905c5"
+    },
+    {
+      "sender": 3,
+      "receiver": 4,
+      "id": "5210a130f18f05a6ee489a57eff905c5"
+    },
+    {
+      "sender": 4,
+      "receiver": 0,
+      "id": "6051f9eb4bf21d0265314f404aae0bce"
+    },
+    {
+      "sender": 4,
+      "receiver": 1,
+      "id": "6051f9eb4bf21d0265314f404aae0bce"
+    },
+    {
+      "sender": 4,
+      "receiver": 2,
+      "id": "6051f9eb4bf21d0265314f404aae0bce"
+    },
+    {
+      "sender": 4,
+      "receiver": 3,
+      "id": "6051f9eb4bf21d0265314f404aae0bce"
+    }
+  ],
+  "error": "RuntimeError: independent file completion deadline",
+  "cleanup_complete": true,
+  "completed_at": 1790523232,
+  "binaries": {
+    "gchat": "d53c6072598a8f264f13410f4aa7533f3d3dd2a1f485f7627f12787185e0a60c",
+    "fleet_probe": "415bdbbf452d8a18aa5eaf651dd5fc50956e5c5f2891a5ff31eec6616f7f06c5"
+  }
+}

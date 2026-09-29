@@ -1,0 +1,47 @@
+{
+  "passed": false,
+  "source_unchanged": true,
+  "checks": [
+    {
+      "name": "tests",
+      "started_at": 1790577122.6638813,
+      "command": [
+        "cargo",
+        "test",
+        "--offline",
+        "--locked",
+        "-p",
+        "gcoms-node",
+        "--all-features",
+        "--lib",
+        "node::routing::gc2_inbox_tests",
+        "--",
+        "--test-threads=1",
+        "--nocapture"
+      ],
+      "exit_code": 0,
+      "finished_at": 1790577227.161137,
+      "log_sha256": "4f41b54a633d0d2365c11bd5fe17dd7ede51f8cee387d3079b97a4792af09223"
+    },
+    {
+      "name": "clippy",
+      "started_at": 1790577227.161333,
+      "command": [
+        "cargo",
+        "clippy",
+        "--offline",
+        "--locked",
+        "-p",
+        "gcoms-node",
+        "--all-features",
+        "--all-targets",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "exit_code": 1,
+      "finished_at": 1790577227.3254483,
+      "log_sha256": "50bc80f155dd25bc138839b233d7300dd6af256de40d11d0fbafea1111a23738"
+    }
+  ]
+}

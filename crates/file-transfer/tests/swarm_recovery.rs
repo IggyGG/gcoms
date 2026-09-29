@@ -287,3 +287,193 @@ fn waiting_download_cannot_request_or_accept_data_without_current_scope() {
         .iter()
         .any(|a| matches!(a.message, Message::Want { .. })));
 }
+
+#[test]
+fn reopened_download_queries_new_source_without_waiting_for_inventory_clock() {
+    let source_dir = directory();
+    let target_dir = directory();
+    let mut source = cache(source_dir.path());
+    let bytes = vec![7; 2 * PIECE_BYTES];
+    let manifest = source
+        .import(
+            [14; 16],
+            Scope {
+                channel: CHANNEL,
+                participants: vec![],
+            },
+            "recovered.bin".into(),
+            bytes.len() as u64,
+            &mut Cursor::new(&bytes),
+            1,
+        )
+        .unwrap();
+    let mut target = cache(target_dir.path());
+    target.offer(manifest.clone(), 2).unwrap();
+    target.accept(manifest.id, 2).unwrap();
+    let (proof, ciphertext) = source.read_piece(manifest.id, 0).unwrap();
+    target.put(manifest.id, 0, &ciphertext, &proof, 3).unwrap();
+    drop(target);
+    let mut receiver = Engine::new(cache(target_dir.path()));
+    receiver.set_members(CHANNEL, RECEIVER, [SENDER, RECEIVER]);
+    // Opening starts the periodic inventory clock before discovery has replied.
+    receiver.tick(100).unwrap();
+    let peer = Peer {
+        channel: CHANNEL,
+        member: SENDER,
+    };
+    let offer = || Message::Offers {
+        manifests: vec![manifest.clone()],
+        next: None,
+    };
+    let actions = receiver.receive(peer, offer(), 101).unwrap();
+    assert_eq!(
+        actions.len(),
+        1,
+        "fresh authenticated source should be queried immediately"
+    );
+    assert!(matches!(actions[0].message, Message::Inventory { id, start: 0 } if id == manifest.id));
+    assert!(receiver.action_allowed(&actions[0]));
+    assert_eq!(
+        receiver.cache.get(manifest.id).unwrap().verified_bytes(),
+        PIECE_BYTES as u64
+    );
+    assert!(
+        receiver.receive(peer, offer(), 102).unwrap().is_empty(),
+        "duplicate offers must not accelerate inventory traffic"
+    );
+    receiver
+        .receive(
+            peer,
+            Message::Have {
+                id: manifest.id,
+                start: 0,
+                pieces: vec![true, true],
+            },
+            103,
+        )
+        .unwrap();
+    let wants: Vec<_> = receiver
+        .tick(103)
+        .unwrap()
+        .into_iter()
+        .filter(|a| matches!(a.message, Message::Want { .. }))
+        .collect();
+    assert!(!wants.is_empty());
+    assert!(wants
+        .iter()
+        .all(|a| matches!(a.message, Message::Want { piece: 1, .. })));
+}
+
+#[test]
+fn fresh_source_does_not_start_unaccepted_paused_or_cancelled_downloads() {
+    let source_dir = directory();
+    let mut source = cache(source_dir.path());
+    let manifest = source
+        .import(
+            [15; 16],
+            Scope {
+                channel: CHANNEL,
+                participants: vec![],
+            },
+            "intent.bin".into(),
+            1,
+            &mut Cursor::new([7]),
+            1,
+        )
+        .unwrap();
+    for status in [Status::Offered, Status::Paused, Status::Cancelled] {
+        let dir = directory();
+        let mut target = cache(dir.path());
+        target.offer(manifest.clone(), 2).unwrap();
+        if status != Status::Offered {
+            target.accept(manifest.id, 2).unwrap();
+            if status == Status::Paused {
+                target.pause(manifest.id).unwrap();
+            } else {
+                target.cancel(manifest.id).unwrap();
+            }
+        }
+        drop(target);
+        let mut receiver = Engine::new(cache(dir.path()));
+        receiver.set_members(CHANNEL, RECEIVER, [SENDER, RECEIVER]);
+        let offer = || Message::Offers {
+            manifests: vec![manifest.clone()],
+            next: None,
+        };
+        assert!(receiver
+            .receive(
+                Peer {
+                    channel: CHANNEL,
+                    member: [99; 32]
+                },
+                offer(),
+                3
+            )
+            .is_err());
+        assert!(receiver
+            .receive(
+                Peer {
+                    channel: CHANNEL,
+                    member: SENDER
+                },
+                offer(),
+                3
+            )
+            .unwrap()
+            .is_empty());
+        assert_eq!(receiver.cache.get(manifest.id).unwrap().status, status);
+    }
+}
+
+#[test]
+fn immediate_inventory_queries_keep_source_and_periodic_admission_bounds() {
+    let source_dir = directory();
+    let target_dir = directory();
+    let mut source = cache(source_dir.path());
+    let manifest = source
+        .import(
+            [16; 16],
+            Scope {
+                channel: CHANNEL,
+                participants: vec![],
+            },
+            "bounded.bin".into(),
+            1,
+            &mut Cursor::new([7]),
+            1,
+        )
+        .unwrap();
+    let mut target = cache(target_dir.path());
+    target.offer(manifest.clone(), 2).unwrap();
+    target.accept(manifest.id, 2).unwrap();
+    let mut receiver = Engine::new(target);
+    let sources: Vec<_> = (10..16).map(|n| [n; 32]).collect();
+    receiver.set_members(CHANNEL, RECEIVER, sources.iter().copied().chain([RECEIVER]));
+    receiver.tick(100).unwrap();
+    let offer = || Message::Offers {
+        manifests: vec![manifest.clone()],
+        next: None,
+    };
+    for (index, member) in sources.iter().enumerate() {
+        let peer = Peer {
+            channel: CHANNEL,
+            member: *member,
+        };
+        let actions = receiver.receive(peer, offer(), 101).unwrap();
+        assert_eq!(actions.len(), usize::from(index < 4));
+        assert!(actions.iter().all(|a| receiver.action_allowed(a)));
+        assert!(receiver.receive(peer, offer(), 102).unwrap().is_empty());
+    }
+    let mut queried = BTreeSet::new();
+    for now in [130, 160] {
+        let actions: Vec<_> = receiver
+            .tick(now)
+            .unwrap()
+            .into_iter()
+            .filter(|a| matches!(a.message, Message::Inventory { .. }))
+            .collect();
+        assert!(actions.len() <= 4);
+        queried.extend(actions.into_iter().map(|a| a.peer.member));
+    }
+    assert_eq!(queried, sources.into_iter().collect());
+}

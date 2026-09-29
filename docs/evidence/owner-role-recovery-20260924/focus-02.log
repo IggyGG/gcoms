@@ -1,0 +1,19 @@
+   Compiling gcoms-crypto v0.1.0 (/gchat-work/owner-role-recovery-01/green-02/gcoms/crates/crypto)
+   Compiling gcoms-core v0.1.0 (/gchat-work/owner-role-recovery-01/green-02/gcoms/crates/core)
+   Compiling gcoms-private-fs v0.1.0 (/gchat-work/owner-role-recovery-01/green-02/gcoms/crates/private-fs)
+   Compiling gcoms-gossip v0.1.0 (/gchat-work/owner-role-recovery-01/green-02/gcoms/crates/gossip)
+   Compiling gcoms-transport v0.1.0 (/gchat-work/owner-role-recovery-01/green-02/gcoms/crates/transport)
+   Compiling gcoms-network v0.1.0 (/gchat-work/owner-role-recovery-01/green-02/gcoms/crates/network)
+   Compiling gcoms-protocol v0.1.0 (/gchat-work/owner-role-recovery-01/green-02/gcoms/crates/protocol)
+   Compiling gcoms-mls v0.1.0 (/gchat-work/owner-role-recovery-01/green-02/gcoms/crates/mls)
+   Compiling gcoms-routing v0.1.0 (/gchat-work/owner-role-recovery-01/green-02/gcoms/crates/routing)
+   Compiling gcoms-network-client v0.1.0 (/gchat-work/owner-role-recovery-01/green-02/gcoms/crates/network-client)
+   Compiling gcoms-node v0.1.0 (/gchat-work/owner-role-recovery-01/green-02/gcoms/crates/node)
+    Finished `test` profile [unoptimized] target(s) in 21.34s
+     Running unittests src/lib.rs (/gchat-work/target/debug/deps/gcoms_node-a9c09991362821c1)
+
+running 1 test
+test node::persist::tests::owner_recovery_replaces_retained_roles_without_duplicate_queues ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 336 filtered out; finished in 0.61s
+

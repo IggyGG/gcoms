@@ -16,6 +16,51 @@ fn config(seed: [u8; 32], listen: std::net::SocketAddr) -> NodeConfig {
 fn fixture_sink() -> DurableStateSink {
     Arc::new(|_| Ok(()))
 }
+
+#[tokio::test]
+async fn presence_opt_out_local_save_failure_is_not_a_withdrawal_warning() {
+    use std::sync::atomic::{AtomicBool, Ordering};
+    let fail = Arc::new(AtomicBool::new(false));
+    let saved = Arc::new(Mutex::new(Vec::new()));
+    let sink: DurableStateSink = {
+        let fail = fail.clone();
+        let saved = saved.clone();
+        Arc::new(move |bytes| {
+            if fail.load(Ordering::SeqCst) {
+                return Err("fixture presence save failed".into());
+            }
+            *saved.lock().unwrap() = bytes.to_vec();
+            Ok(())
+        })
+    };
+    let seed = [0xd1; 32];
+    let node = start_persistent(config(seed, "127.0.0.1:0".parse().unwrap()), sink)
+        .await
+        .unwrap();
+    node.create_channel(
+        "presence-save",
+        "owner",
+        8,
+        crate::channel::ChannelVisibility::Private,
+    )
+    .await
+    .unwrap();
+    node.set_channel_presence_opt_in("presence-save", true)
+        .await
+        .unwrap();
+    fail.store(true, Ordering::SeqCst);
+    let error = node
+        .set_channel_presence_opt_in("presence-save", false)
+        .await
+        .unwrap_err();
+    assert_eq!(error, "fixture presence save failed");
+    assert!(decode_v2(&saved.lock().unwrap(), &seed)
+        .unwrap()
+        .channel_presence_opt_in
+        .contains("presence-save"));
+    fail.store(false, Ordering::SeqCst);
+    node.shutdown().await;
+}
 fn expire_owned(bytes: &[u8], seed: &[u8; 32], name: &str) -> Vec<u8> {
     let mut archive = decode_v2(bytes, seed).unwrap();
     let own = archive.channel_routes.get_mut(name).unwrap();
@@ -46,6 +91,22 @@ async fn wait_ack(node: &NodeHandle, wanted: [u8; 16]) {
             if matches!(node.next_event().await, Some(Ev::ChannelDelivery { msg_id, .. }) if msg_id == wanted) { return; }
         }
     }).await.expect("real authenticated all-member ACK")
+}
+
+async fn wait_bootstrap_ack(owner: &NodeHandle, channel: &str) {
+    tokio::time::timeout(Duration::from_secs(12), async {
+        loop {
+            if owner.state.upgrade().unwrap().lock().unwrap().channels[channel]
+                .message_outbox
+                .is_empty()
+            {
+                return;
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .expect("initial channel bootstrap must be acknowledged before the cold-route phase");
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -91,6 +152,7 @@ async fn cold_recovery(reconnect: bool) {
                 &welcome,
             )
             .await?;
+        wait_bootstrap_ack(&owner, name).await;
         let initial_id = owner
             .send_channel_text_tracked(name, b"retained before restart")
             .await?;
@@ -279,6 +341,7 @@ async fn cold_near_expiry_member_accepts_owner_directory_and_original_membership
         )
         .await
         .unwrap();
+    wait_bootstrap_ack(&owner, name).await;
     let initial = owner
         .send_channel_text_tracked(name, b"before offline membership")
         .await
@@ -296,10 +359,36 @@ async fn cold_near_expiry_member_accepts_owner_directory_and_original_membership
         .admit_channel(name, &next_package, "next")
         .await
         .unwrap();
+    owner.set_channel_presence_opt_in(name, true).await.unwrap();
+    let before_opt_out = decode_v2(&owner.export_state().await.unwrap(), &a_seed).unwrap();
+    assert!(before_opt_out.channel_presence_opt_in.contains(name));
+    let error = owner
+        .set_channel_presence_opt_in(name, false)
+        .await
+        .unwrap_err();
+    assert_eq!(
+        error,
+        "presence disabled locally; withdrawal failed: channel membership is still converging",
+        "a committed local opt-out must not turn pending membership into an unlock failure"
+    );
     let a_before = owner.export_state().await.unwrap();
     owner.shutdown().await;
     next.shutdown().await;
     let owner_archive = decode_v2(&a_before, &a_seed).unwrap();
+    assert!(!owner_archive.channel_presence_opt_in.contains(name));
+    assert_eq!(
+        owner_archive.channels[0]
+            .membership_outbox
+            .as_ref()
+            .unwrap()
+            .commit,
+        before_opt_out.channels[0]
+            .membership_outbox
+            .as_ref()
+            .unwrap()
+            .commit,
+        "opting out must not bypass or replace the pending membership commit"
+    );
     let membership = owner_archive.channels[0]
         .membership_outbox
         .as_ref()

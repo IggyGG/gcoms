@@ -214,6 +214,7 @@ impl ProtocolRuntime {
             profile,
             options.network,
             host_relay,
+            options.durable_channel_inbox,
         )
         .await
     }
@@ -553,6 +554,7 @@ impl ProtocolRuntime {
             profile,
             installed,
             true,
+            false,
         )
         .await
     }
@@ -567,6 +569,7 @@ impl ProtocolRuntime {
         profile: gcoms_node::node::NodeProfile,
         installed: Option<gcoms_network_client::InstalledNetwork>,
         host_relay: bool,
+        durable_channel_inbox: bool,
     ) -> Result<Self, String> {
         let identity_seed = data.identity_seed;
         let node_state = data.node_state;
@@ -607,7 +610,24 @@ impl ProtocolRuntime {
             alias_lifecycle: Default::default(),
         };
         let policy = build_frwd_policy(allow_frwd_private_cidrs, listen.port())?;
-        let node = if !host_relay {
+        let node = if durable_channel_inbox {
+            let routing = if node_config.profile.is_production() {
+                let mut routing = gcoms_node::node::RoutingConfig::from_environment()?;
+                routing.connectivity = connectivity;
+                Some(routing)
+            } else {
+                None
+            };
+            gcoms_node::node::start_with_channel_inbox(
+                node_config,
+                policy,
+                durable_state_sink,
+                node_state.as_deref(),
+                routing,
+                host_relay,
+            )
+            .await?
+        } else if !host_relay {
             let routing = if node_config.profile.is_production() {
                 Some(gcoms_node::node::RoutingConfig::from_environment()?)
             } else {
@@ -932,10 +952,20 @@ impl ProtocolRuntime {
                 let Some(inner) = inner.upgrade() else { break };
                 let runtime = ProtocolRuntime(inner);
                 runtime.0.persistence.event(&event);
-                match runtime.save_for(SaveCause::Event).await {
+                let saved = if matches!(&event, ClientEvent::ChannelDirectMessage { body, .. }
+                    if gcoms_core::is_piece_application_payload(body))
+                {
+                    // Authenticated piece records do not advance a ratchet or
+                    // retained text state. Their consumer verifies and journals
+                    // pieces independently before reporting file completion.
+                    Ok(())
+                } else {
+                    runtime.save_for(SaveCause::Event).await
+                };
+                match saved {
                     Ok(()) => {
-                        // One completed barrier covers this event for every
-                        // hosted subscriber present at publication.
+                        // Stateful events share one completed profile barrier
+                        // across every hosted subscriber.
                         let _ = runtime.0.events.send(event);
                         runtime.0.persistence.published();
                     }
@@ -1615,7 +1645,12 @@ impl GcClient for ProtocolClient {
             .embedded
             .send_channel_direct(channel, recipient_member_id, body)
             .await?;
-        self.persist().await?;
+        // Piece transport uses independent nonces and its own durable cache,
+        // without changing retained text/ACK state. Ordinary private text keeps
+        // the profile barrier and its failure result.
+        if !gcoms_core::is_piece_application_payload(body) {
+            self.persist().await?;
+        }
         Ok(message_id)
     }
 
@@ -1701,6 +1736,8 @@ fn central_reserved(ownership: &Option<CentralPartition>, body: &[u8]) -> bool {
 
 #[cfg(test)]
 mod persistence_tests;
+#[cfg(all(test, feature = "files"))]
+mod piece_persistence_tests;
 #[cfg(test)]
 mod shutdown_tests;
 
