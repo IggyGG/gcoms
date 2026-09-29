@@ -232,3 +232,15 @@ cursor. The application uses the same runtime SDK through desktop/TUI; generated
 contracts, typed action/notice display, IRC formatting, member roles, presence and
 operator information commands are included. Full IRC-4/IRC-8 qualification remains
 open, as do encrypted new-member topic recovery and the remaining client workflows.
+
+The follow-up `receipt-02.log` passes six runtime tests, fourteen service tests,
+three GChat hosted archive tests, and strict paired GChat workspace Clippy.
+`receipt-01.log` retains a harness PATH failure before any compile. Source hashes
+for this run are retained in `test-evidence/irc-parity/receipt-source-01.json` in
+both worktrees. Presence renews only after explicit opt-in, with a ten-minute
+lease and seven-minute renewal interval to bound idle large-channel traffic.
+Presence updates do not require per-recipient receipt fanout. Opt-out persists
+before sending and retries its invisible update after pending work clears.
+Available/away is an advertised state, not proof of an active connection.
+Further receipt-log corruption/quota checks and the full updated GChat suite are
+running separately; end-to-end network latency remains unqualified.

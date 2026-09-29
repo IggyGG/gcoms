@@ -104,6 +104,8 @@ struct Receipts {
     committed: u64,
     cursor: u64,
     received: BTreeMap<[u8; 32], Vec<[u8; 32]>>,
+    desired_presence: Option<api::Presence>,
+    renew_presence_at: u64,
 }
 fn decode_archive(bytes: &[u8]) -> Result<(Archive, Receipts), String> {
     let (archive, tail): (Archive, _) =
@@ -286,16 +288,47 @@ impl Client {
         self.checkpoint()
     }
     pub fn set_presence(&mut self, enabled: bool, state: api::Presence) -> Result<(), String> {
-        let content = api::Content::Presence {
-            state: if enabled {
-                state
-            } else {
-                api::Presence::Invisible
-            },
-            lease_secs: if enabled { 120 } else { 0 },
+        self.healthy()?;
+        let enabled =
+            enabled && matches!(state, api::Presence::Available | api::Presence::Away { .. });
+        let state = if enabled {
+            state
+        } else {
+            api::Presence::Invisible
         };
-        self.queue_send(content)?;
+        validate(&api::Content::Presence {
+            state: state.clone(),
+            lease_secs: 600,
+        })?;
+        // Persist the privacy choice before transport admission. A full queue or
+        // pending rekey must never keep automatic renewal enabled after opt-out.
         self.archive.presence_opt_in = enabled;
+        self.receipts.desired_presence = Some(state);
+        self.receipts.renew_presence_at = 0;
+        self.checkpoint()?;
+        self.renew_presence(now())
+    }
+    pub fn renew_presence(&mut self, at: u64) -> Result<(), String> {
+        if at < self.receipts.renew_presence_at || !matches!(self.archive.phase, Phase::Ready)
+            || !self.session.active() || !self.session.rules().pending_removals().is_empty()
+            || self.archive.pending.iter().any(|p| matches!(p, Pending::Message { application, .. } if matches!(application.content, api::Content::Presence { .. }))) {
+            return Ok(());
+        }
+        let Some(state) = self.receipts.desired_presence.clone() else {
+            return Ok(());
+        };
+        let enabled = self.archive.presence_opt_in;
+        self.queue_send(api::Content::Presence {
+            state,
+            lease_secs: if enabled { 600 } else { 0 },
+        })?;
+        // Ten-minute leases and seven-minute renewal bound large-channel idle
+        // traffic. Available/away is an advertised state, not proof of being online.
+        self.receipts.renew_presence_at = if enabled {
+            at.saturating_add(420)
+        } else {
+            u64::MAX
+        };
         self.checkpoint()
     }
     pub fn restore(
@@ -405,7 +438,10 @@ impl Client {
             .roster()
             .into_iter()
             .map(|member| member.pseudonym)
-            .filter(|member| *member != self.session.member_id())
+            .filter(|member| {
+                *member != self.session.member_id()
+                    && !matches!(application.content, api::Content::Presence { .. })
+            })
             .collect();
         self.session = candidate;
         self.archive.sent.insert(
@@ -665,7 +701,10 @@ impl Client {
                         .roster()
                         .into_iter()
                         .map(|m| m.pseudonym)
-                        .filter(|id| *id != candidate.member_id())
+                        .filter(|id| {
+                            *id != candidate.member_id()
+                                && !matches!(application.content, api::Content::Presence { .. })
+                        })
                         .collect();
                 }
                 self.session = candidate;
@@ -1041,6 +1080,8 @@ impl Client {
                     )
                     .into();
                     let key = (sender, application.id);
+                    let needs_receipt =
+                        !matches!(application.content, api::Content::Presence { .. });
                     let receipt_valid = self
                         .archive
                         .seen
@@ -1074,7 +1115,7 @@ impl Client {
                             }
                         }
                     }
-                    if receipt_valid && sender != self.session.member_id() {
+                    if needs_receipt && receipt_valid && sender != self.session.member_id() {
                         let receipt = self
                             .session
                             .receipt(sender, record.id(), record.sequence)
@@ -1175,6 +1216,7 @@ impl Client {
             self.recover_refused()?;
         }
         self.sync_receipts().await?;
+        self.renew_presence(now())?;
         Ok(progressed)
     }
 }

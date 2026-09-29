@@ -421,3 +421,34 @@ async fn covered_receipts_require_every_original_recipient_and_survive_lost_repl
     assert_eq!(messages(&alice).len(), 1);
     assert_eq!(messages(&carol).len(), 0);
 }
+
+#[tokio::test]
+async fn presence_renews_only_after_opt_in_and_off_persists_without_receipt_fanout() {
+    let server_dir = private_dir();
+    let alice_dir = private_dir();
+    let transport = service(server_dir.path());
+    let mut alice = owner(alice_dir.path(), transport).await;
+    alice.renew_presence(now() + 1000).unwrap();
+    assert!(messages(&alice).is_empty());
+    alice
+        .set_presence(
+            true,
+            api::Presence::Away {
+                reason: "lunch".into(),
+            },
+        )
+        .unwrap();
+    pump(&mut alice).await;
+    assert!(alice.view().presence_opt_in);
+    let count = messages(&alice).len();
+    alice.renew_presence(now() + 500).unwrap();
+    assert_eq!(messages(&alice).len(), count + 1);
+    pump(&mut alice).await;
+    alice.set_presence(false, api::Presence::Available).unwrap();
+    pump(&mut alice).await;
+    let count = messages(&alice).len();
+    alice.renew_presence(now() + 10000).unwrap();
+    assert!(!alice.view().presence_opt_in);
+    assert_eq!(messages(&alice).len(), count);
+    assert_eq!(alice.view().members[0].presence, api::Presence::Unknown);
+}

@@ -205,3 +205,84 @@ impl ChannelLog {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use gcoms_crypto::IdentityKeypair;
+    use gcoms_mls::hosted::{HostedSession, JoinPermit, PreparedHostedJoin};
+
+    #[test]
+    fn receipt_log_recovers_only_torn_tail_and_preserves_dedup_quota_and_write_failure() {
+        let dir = tempfile::tempdir().unwrap();
+        gcoms_private_fs::make_private(dir.path(), true).unwrap();
+        let mut owner =
+            HostedSession::create(&IdentityKeypair::generate(), "owner", 500, true).unwrap();
+        let channel = owner.policy().channel_id();
+        let limits = Limits {
+            bytes: 1024 * 1024,
+            records: 100,
+        };
+        let mut log = ChannelLog::create(
+            &dir.path().join("channel"),
+            owner.policy().clone(),
+            channel,
+            &owner.export_group_info().unwrap(),
+            limits,
+        )
+        .unwrap();
+        let (mut peer, commit) = PreparedHostedJoin::new("peer")
+            .unwrap()
+            .join(log.observer(), &JoinPermit::public(), 100)
+            .unwrap();
+        log.append_join(&commit, peer.proposed_group_info().unwrap(), 100)
+            .unwrap();
+        peer.accept_join(&commit).unwrap();
+        owner.receive(&commit, 100).unwrap();
+        let message = owner.send_hosted(b"retained").unwrap();
+        let accepted = log.append_message(&message, 101).unwrap();
+        peer.receive_hosted(&message).unwrap();
+        let receipt = peer
+            .receipt(owner.member_id(), accepted.id, accepted.sequence)
+            .unwrap();
+        log.validate_receipt(&receipt).unwrap();
+        let path = dir.path().join("receipts");
+        let mut ledger = ReceiptLog::open(&path, channel, limits, &mut log).unwrap();
+        assert!(matches!(
+            ReceiptLog::open(&path, channel, limits, &mut log),
+            Err(Error::Busy)
+        ));
+        ledger.append(&receipt).unwrap();
+        let before = std::fs::read(&path).unwrap();
+        ledger.limits.bytes = ledger.bytes;
+        ledger.append(&receipt).unwrap();
+        assert_eq!(std::fs::read(&path).unwrap(), before);
+        assert_eq!(ledger.read(owner.member_id(), 0, 32).unwrap().len(), 1);
+        assert!(ledger.read(peer.member_id(), 0, 32).unwrap().is_empty());
+        drop(ledger);
+        let mut file = OpenOptions::new().append(true).open(&path).unwrap();
+        file.write_all(&100u32.to_be_bytes()).unwrap();
+        file.write_all(&[1, 2, 3]).unwrap();
+        drop(file);
+        let mut ledger = ReceiptLog::open(&path, channel, limits, &mut log).unwrap();
+        assert_eq!(std::fs::read(&path).unwrap(), before);
+        let message = owner.send_hosted(b"second").unwrap();
+        let accepted = log.append_message(&message, 102).unwrap();
+        let second = peer
+            .receipt(owner.member_id(), accepted.id, accepted.sequence)
+            .unwrap();
+        ledger.limits.bytes = ledger.bytes;
+        assert!(matches!(ledger.append(&second), Err(Error::Full)));
+        ledger.limits = limits;
+        ledger.file = File::open(&path).unwrap();
+        assert!(matches!(ledger.append(&second), Err(Error::Io(_))));
+        assert!(matches!(ledger.append(&second), Err(Error::Poisoned)));
+        assert_eq!(std::fs::read(&path).unwrap(), before);
+        drop(ledger);
+        let mut corrupted = before;
+        *corrupted.last_mut().unwrap() ^= 1;
+        std::fs::write(&path, &corrupted).unwrap();
+        assert!(ReceiptLog::open(&path, channel, limits, &mut log).is_err());
+        assert_eq!(std::fs::read(&path).unwrap(), corrupted);
+    }
+}
