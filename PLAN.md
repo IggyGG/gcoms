@@ -706,3 +706,19 @@ The preceding full seven-package suite passed 690 tests (seven explicit ignores)
 Current hosted regressions, three poll-specific cases, five service API cases
 and strict checks pass; evidence is docs/evidence/irc-covered-poll-20260930.
 A new paired build/deployment and live timing check remain required.
+
+### IRC-8 durable capacity baseline and hosted rollout — 2026-09-30
+
+The durable 500-client baseline on64632fd timed out at its unchanged two-hour
+bound (exit124). The last admission marker was476; the run did not produce a
+completed send/recovery/churn result. Retained process samples show5.60GiB peak
+RSS and261.65GB cumulative writes. This failed baseline motivates bounded replay
+checkpointing; see `docs/evidence/irc-durable-capacity-20260930/baseline-01.json`.
+The source changes and replacement campaign are not yet qualified at500.
+
+The installed HEL ciphertext service now runs8687749 and advertises combined
+covered polling. All four pre-existing state files were unchanged across its
+restart; the old255f9cd binary remains available for rollback. The WebPKI probe
+and deployment receipt are `docs/evidence/irc-hosted-service-20260930/poll-rollout.json`.
+GChat live05 passes correctness through the installed network, while small-room
+ACK6.146s and16MiB resume285.756s still fail the latency targets.

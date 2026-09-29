@@ -1,0 +1,10 @@
+{
+  "revision": "8687749",
+  "binary_sha256": "387c39f6121751b939455fc24c87c211dd3eaf05f87022050f16be050336aabe",
+  "previous": "255f9cd",
+  "service_active": true,
+  "covered_poll_advertised": true,
+  "state_files": 4,
+  "retained_state_unchanged": true,
+  "transport_probe": "WebPKI HTTPS readiness only; protected application journey still required"
+}

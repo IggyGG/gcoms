@@ -1,0 +1,21 @@
+{
+  "scope": "500 independent durable runtime clients with in-process ciphertext service; not protected-network qualification",
+  "revision": "64632fd",
+  "status": "timed_out",
+  "exit_code": 124,
+  "deadline_seconds": 7200,
+  "members_target": 500,
+  "last_admission_progress": {
+    "members": 476,
+    "seconds": 654.18
+  },
+  "completed_send_recovery_churn": false,
+  "resource_samples": 672,
+  "max_rss_kib": 5869544,
+  "last_write_bytes": 261647015936,
+  "retained": {
+    "test-evidence/irc-parity/runtime-capacity-500-01.log": "0ea574866ddf67cb1617691b11c8e1c5091417907c51001ef0b13693860b8bda",
+    "test-evidence/irc-parity/runtime-capacity-500-01.exit": "ca2ebdf97d7469496b1f4b78958f9dc8447efdcb623953fee7b6996b762f6fff",
+    "test-evidence/irc-parity/runtime-capacity-500-01-resources.jsonl": "7b7ed5040fea0c3851c987bdfc73f6462645c688bd24c94163e2dc6f7920f89b"
+  }
+}
