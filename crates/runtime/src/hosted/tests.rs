@@ -558,3 +558,100 @@ async fn ciphertext_piece_operations_are_scoped_bounded_and_do_not_create_chat_r
         api::Reply::Blob(ciphertext)
     );
 }
+
+#[tokio::test]
+async fn file_inbox_survives_chat_commit_and_restart_and_identified_send_retries() {
+    let server = private_dir();
+    let a = private_dir();
+    let b = private_dir();
+    let transport = service(server.path());
+    let mut alice = owner(a.path(), transport.clone()).await;
+    let channel = alice.archive.channel;
+    let mut bob = joining(channel, "bob", b.path(), transport.clone()).await;
+    pump(&mut bob).await;
+    pump(&mut alice).await;
+    let content = api::Content::File {
+        content_type: gcoms_sdk::sharing_v2::OFFER_TYPE.into(),
+        body: b"encrypted transport descriptor".to_vec(),
+    };
+    let id = [77; 32];
+    alice.queue_send_identified(id, content.clone()).unwrap();
+    transport.lose_acceptance.store(true, Ordering::SeqCst);
+    assert!(alice.flush_one().await.is_err());
+    alice.queue_send_identified(id, content.clone()).unwrap();
+    assert!(alice
+        .queue_send_identified(id, api::Content::Text("changed".into()))
+        .is_err());
+    pump(&mut alice).await;
+    pump(&mut bob).await;
+    assert_eq!(alice.file_events(256).unwrap().len(), 1);
+    let events = bob.events(0, 256).unwrap();
+    bob.commit_events(events.last().unwrap().sequence).unwrap();
+    assert!(bob.events(0, 256).unwrap().is_empty());
+    assert_eq!(bob.file_events(256).unwrap().len(), 1);
+    drop(bob);
+    let (storage, data) =
+        storage::Storage::open(&b.path().join(filename(channel)), [99; 32], channel).unwrap();
+    let mut bob = Client::restore(&data.unwrap(), channel, storage, [99; 32], transport).unwrap();
+    let files = bob.file_events(256).unwrap();
+    assert_eq!(files.len(), 1);
+    assert!(
+        matches!(&files[0].kind, api::EventKind::Message { id: actual, content: body, .. } if *actual == id && *body == content)
+    );
+    assert!(bob.commit_file_events(bob.archive.cursor + 1).is_err());
+    bob.commit_file_events(files[0].sequence).unwrap();
+    assert!(bob.file_events(256).unwrap().is_empty());
+    alice.queue_send_identified(id, content).unwrap();
+    pump(&mut alice).await;
+    pump(&mut bob).await;
+    assert!(bob.file_events(256).unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn file_completion_is_covered_authenticated_and_allowed_without_voice() {
+    let server = private_dir();
+    let a = private_dir();
+    let b = private_dir();
+    let transport = service(server.path());
+    let mut alice = owner(a.path(), transport.clone()).await;
+    let mut bob = joining(alice.archive.channel, "bob", b.path(), transport).await;
+    pump(&mut bob).await;
+    pump(&mut alice).await;
+    alice
+        .queue_control(HostedPolicyChange::Mode(HostedMode::Moderated, 1), "")
+        .unwrap();
+    pump(&mut alice).await;
+    pump(&mut bob).await;
+    assert!(bob
+        .queue_send(api::Content::Text("not voiced".into()))
+        .is_err());
+    let completion = gcoms_sdk::sharing_v2::Completion {
+        publisher: alice.session.member_id(),
+        file: [9; 16],
+        sha256: [8; 32],
+    };
+    let content = api::Content::File {
+        content_type: gcoms_sdk::sharing_v2::COMPLETION_TYPE.into(),
+        body: postcard::to_allocvec(&completion).unwrap(),
+    };
+    assert_eq!(state::kind(&content), HostedMessageKind::Receipt);
+    let mut invalid = content.clone();
+    if let api::Content::File { body, .. } = &mut invalid {
+        body.push(0);
+    }
+    assert!(bob.queue_send(invalid).is_err());
+    bob.queue_send(content).unwrap();
+    pump(&mut bob).await;
+    pump(&mut alice).await;
+    assert_eq!(alice.file_events(256).unwrap().len(), 1);
+    let before = alice.archive.cursor;
+    let events = alice.events(0, 256).unwrap();
+    alice
+        .commit_events(events.last().unwrap().sequence)
+        .unwrap();
+    pump(&mut alice).await;
+    assert_eq!(
+        before, alice.archive.cursor,
+        "completion creates no receipt fanout"
+    );
+}

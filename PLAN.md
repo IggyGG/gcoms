@@ -563,3 +563,15 @@ opt-in durable runtime client are connected; four real-service recovery/storage
 tests and strict runtime/SDK/application checks pass on the initial client
 source. GChat, recipient receipt aggregation and the remaining parity/release
 ledger remain open. See docs/IRC_PARITY.md for evidence and current limits.
+
+## IRC-4 file integration checkpoint — 2026-09-29
+
+The typed hosted/contact file profile, IPC23 capability, encrypted cache worker,
+independent hosted file-event cursor and GChat routing are implemented on the task
+branch and remain under qualification. The hosted inbox tests pass, including
+uncertain publication, restart, chat-consumer independence and moderated completion.
+`test-evidence/irc-parity/files-inbox-02.log` records 18 selected passes. The first
+contact-file fixture runs failed because the bare runtime did not enable durable
+applications; the corrected fixture now follows the application's explicit opt-in.
+Do not claim verified end-to-end files or release readiness until that gate and
+the GChat journeys pass. Current 500-member network and native gates remain open.

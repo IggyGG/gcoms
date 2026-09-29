@@ -32,6 +32,8 @@ struct Inner {
     #[cfg(feature = "files")]
     files: tokio::sync::Mutex<Option<Arc<crate::files::FileService>>>,
     #[cfg(feature = "files")]
+    modern_files: tokio::sync::Mutex<Option<Arc<crate::modern_files::ModernFileService>>>,
+    #[cfg(feature = "files")]
     file_default: (std::path::PathBuf, zeroize::Zeroizing<[u8; 32]>),
     _store: std::sync::Mutex<Option<Arc<dyn ProfileStorage>>>,
     persistence: PersistenceCounters,
@@ -159,6 +161,26 @@ impl ProtocolRuntime {
             );
         }
         Ok(files.as_ref().unwrap().clone())
+    }
+    #[cfg(feature = "files")]
+    pub(crate) async fn modern_files(
+        &self,
+    ) -> Result<Arc<crate::modern_files::ModernFileService>, SdkError> {
+        let mut modern = self.0.modern_files.lock().await;
+        if self.0.closing.load(std::sync::atomic::Ordering::Acquire) {
+            return Err(SdkError::ConnectionClosed);
+        }
+        if modern.is_none() {
+            let (path, key) = self.files().await?.modern_location();
+            let weak = Arc::downgrade(&self.0);
+            let factory: crate::modern_files::ClientFactory = Arc::new(move || {
+                weak.upgrade()
+                    .map(|inner| Arc::new(ProtocolRuntime(inner).sdk_client()) as Arc<dyn GcClient>)
+            });
+            *modern =
+                Some(crate::modern_files::ModernFileService::open(&path, key, factory).await?);
+        }
+        Ok(modern.as_ref().unwrap().clone())
     }
     pub async fn from_storage(
         store: Arc<dyn ProfileStorage>,
@@ -696,6 +718,8 @@ impl ProtocolRuntime {
             #[cfg(feature = "files")]
             files: tokio::sync::Mutex::new(None),
             #[cfg(feature = "files")]
+            modern_files: tokio::sync::Mutex::new(None),
+            #[cfg(feature = "files")]
             file_default,
             node,
             #[cfg(feature = "component-services")]
@@ -814,6 +838,10 @@ impl ProtocolRuntime {
         self.0
             .closing
             .store(true, std::sync::atomic::Ordering::Release);
+        #[cfg(feature = "files")]
+        if let Some(files) = self.0.modern_files.lock().await.take() {
+            files.shutdown().await;
+        }
         #[cfg(feature = "hosted-channels")]
         self.0.hosted.lock().await.take();
         #[cfg(feature = "files")]
@@ -1186,6 +1214,14 @@ impl GcClient for ProtocolClient {
         self.runtime.files().await?.request(request).await
     }
 
+    #[cfg(feature = "files")]
+    async fn sharing_v2(
+        &self,
+        request: gcoms_sdk::sharing_v2::Request,
+    ) -> Result<gcoms_sdk::sharing_v2::Reply, SdkError> {
+        request.validate()?;
+        self.runtime.modern_files().await?.request(request).await
+    }
     async fn network_status(&self) -> Result<gcoms_sdk::NetworkStatus, SdkError> {
         Ok(self.runtime.network_status())
     }

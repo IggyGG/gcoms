@@ -50,6 +50,7 @@ pub mod local_rpc;
 
 mod network_status;
 pub mod sharing;
+pub mod sharing_v2;
 pub use network_status::{NetworkState, NetworkStatus};
 
 /// Explicit hosted-channel profile and ciphertext service contract.

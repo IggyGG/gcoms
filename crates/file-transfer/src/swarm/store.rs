@@ -391,7 +391,7 @@ impl Cache {
         if state.completed_by.contains(&member) {
             return Ok(());
         }
-        if state.completed_by.len() < 64 {
+        if state.completed_by.len() < 500 {
             state.completed_by.push(member);
             self.replace(state)?;
         }

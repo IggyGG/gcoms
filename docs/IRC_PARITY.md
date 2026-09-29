@@ -296,3 +296,21 @@ application checks. `blobs-03.log` passes runtime authorization/no-receipt-fanou
 and IPC version/bounds checks; its final test-style Clippy warning is corrected
 and `blobs-04.log` passes strict checks. This is a storage primitive, not completed
 file offer/download/resume or network capacity qualification. Those remain next.
+
+### File integration checkpoint (under qualification)
+
+`sharing_v2` uses explicit hosted/contact scopes and a separate encrypted cache,
+with a distinct IPC23 capability. Hosted file offers have a durable consumer inbox
+independent of ordinary chat commits. Retried publication uses immutable IDs.
+Only verified whole-file completion produces the covered completion statement;
+manifest acceptance is not download completion. Contact piece data is classified
+as bulk in retained direct records; contact control/receipts stay interactive.
+GChat's existing binary file controls now route through the selected conversation
+profile without converting contacts into legacy channel identities.
+
+`files-inbox-02.log` passes the new restart/idempotence/moderation cases and selected
+existing file regressions. Full GChat `contacts-full-01.log` passes on GComs4c651a1
+and GChatd6c0235; that receipt predates the new file worker. Contact transfer,
+hosted whole-file transfer, quota/lifecycle audit, scale and release gates remain
+open. The user chose covered receipts with slower large-channel delivery status
+and “Topic pending” for newcomers while existing authorized writers are offline.

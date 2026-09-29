@@ -114,9 +114,34 @@ struct TopicState {
     source: u64,
     share_after: u64,
 }
-fn decode_archive(bytes: &[u8]) -> Result<(Archive, Receipts, TopicState), String> {
+#[derive(Default, Serialize, Deserialize)]
+struct FileInbox {
+    events: Vec<api::Event>,
+    committed: u64,
+}
+fn file_protocol(content: &api::Content) -> bool {
+    matches!(content, api::Content::File { content_type, .. }
+        if content_type == gcoms_sdk::sharing_v2::OFFER_TYPE
+            || content_type == gcoms_sdk::sharing_v2::COMPLETION_TYPE)
+}
+fn receipt_required(content: &api::Content) -> bool {
+    !matches!(
+        content,
+        api::Content::Presence { .. } | api::Content::TopicState { .. }
+    ) && !matches!(content, api::Content::File { content_type, .. }
+            if content_type == gcoms_sdk::sharing_v2::COMPLETION_TYPE)
+}
+fn content_digest(content: &api::Content) -> Result<[u8; 32], String> {
+    use sha2::{Digest, Sha256};
+    Ok(
+        Sha256::digest(postcard::to_allocvec(content).map_err(|_| "encode application digest")?)
+            .into(),
+    )
+}
+fn decode_archive(bytes: &[u8]) -> Result<(Archive, Receipts, TopicState, FileInbox), String> {
     let (archive, tail): (Archive, _) =
         postcard::take_from_bytes(bytes).map_err(|_| "invalid hosted client archive")?;
+    let mut files = FileInbox::default();
     let (receipts, topic) = match archive.version {
         1 if tail.is_empty() => (
             Receipts::default(),
@@ -134,21 +159,28 @@ fn decode_archive(bytes: &[u8]) -> Result<(Archive, Receipts, TopicState), Strin
                 ..TopicState::default()
             },
         ),
-        3 => {
+        3 | 4 => {
             let (receipts, tail) =
                 postcard::take_from_bytes(tail).map_err(|_| "invalid hosted receipt archive")?;
-            let topic = postcard::from_bytes(tail).map_err(|_| "invalid hosted topic archive")?;
+            let (topic, tail) =
+                postcard::take_from_bytes(tail).map_err(|_| "invalid hosted topic archive")?;
+            if archive.version == 4 {
+                files = postcard::from_bytes(tail).map_err(|_| "invalid hosted file inbox")?;
+            } else if !tail.is_empty() {
+                return Err("invalid hosted topic archive tail".into());
+            }
             (receipts, topic)
         }
         _ => return Err("unsupported hosted client archive".into()),
     };
-    Ok((archive, receipts, topic))
+    Ok((archive, receipts, topic, files))
 }
 
 pub(super) struct Client {
     pub session: HostedSession,
     receipts: Receipts,
     topic: TopicState,
+    files: FileInbox,
     pub archive: Archive,
     pub transport: Arc<dyn Transport>,
     storage: Storage,
@@ -165,6 +197,11 @@ pub(super) fn kind(content: &api::Content) -> HostedMessageKind {
         api::Content::Topic(_) | api::Content::TopicState { .. } => HostedMessageKind::Topic,
         api::Content::Nickname(_) => HostedMessageKind::Nickname,
         api::Content::Presence { .. } => HostedMessageKind::Presence,
+        api::Content::File { content_type, .. }
+            if content_type == gcoms_sdk::sharing_v2::COMPLETION_TYPE =>
+        {
+            HostedMessageKind::Receipt
+        }
         api::Content::File { .. } => HostedMessageKind::File,
     }
 }
@@ -208,6 +245,15 @@ pub(super) fn validate(content: &api::Content) -> Result<(), String> {
                 && content_type.is_ascii()
                 && !content_type.chars().any(char::is_control)
                 && body.len() <= 512 * 1024
+                && (content_type != gcoms_sdk::sharing_v2::OFFER_TYPE || body.len() <= 2048)
+                && (content_type != gcoms_sdk::sharing_v2::COMPLETION_TYPE
+                    || postcard::take_from_bytes::<gcoms_sdk::sharing_v2::Completion>(body)
+                        .is_ok_and(|(c, tail)| {
+                            tail.is_empty()
+                                && c.publisher != [0; 32]
+                                && c.file != [0; 16]
+                                && c.sha256 != [0; 32]
+                        }))
         }
     };
     if valid {
@@ -237,6 +283,7 @@ impl Client {
         let mut client = Self {
             session,
             receipts: Receipts::default(),
+            files: FileInbox::default(),
             topic: TopicState {
                 known: matches!(phase, Phase::Creating),
                 ..TopicState::default()
@@ -245,7 +292,7 @@ impl Client {
             storage,
             wrapping_key: Zeroizing::new(key),
             archive: Archive {
-                version: 3,
+                version: 4,
                 channel,
                 alias,
                 endpoint,
@@ -273,7 +320,7 @@ impl Client {
         Ok(client)
     }
     pub fn stored_endpoint(bytes: &[u8]) -> Result<String, String> {
-        let (archive, _, _) = decode_archive(bytes)?;
+        let (archive, _, _, _) = decode_archive(bytes)?;
         Ok(archive.endpoint)
     }
     pub fn register_invite(
@@ -375,8 +422,12 @@ impl Client {
         key: [u8; 32],
         transport: Arc<dyn Transport>,
     ) -> Result<Self, String> {
-        let (archive, receipts, topic) = decode_archive(bytes)?;
-        if !matches!(archive.version, 1..=3)
+        let (archive, receipts, topic, files) = decode_archive(bytes)?;
+        if !matches!(archive.version, 1..=4)
+            || files.events.len() > MAX_EVENTS
+            || files.committed > archive.cursor
+            || files.events.iter().any(|e| e.channel != channel || e.sequence <= files.committed || e.sequence > archive.cursor || !matches!(&e.kind, api::EventKind::Message { content, .. } if file_protocol(content)))
+            || files.events.windows(2).any(|e| e[0].sequence >= e[1].sequence)
             || receipts.outbox.len() > MAX_EVENTS
             || receipts.received.len() > MAX_EVENTS
             || receipts.received.values().any(|r| r.len() > 500)
@@ -394,6 +445,7 @@ impl Client {
             archive,
             receipts,
             topic,
+            files,
             storage,
             wrapping_key: Zeroizing::new(key),
             transport,
@@ -409,7 +461,7 @@ impl Client {
     fn checkpoint(&mut self) -> Result<(), String> {
         let result = (|| {
             self.archive.session = self.session.persist(&self.wrapping_key).map_err(mls)?;
-            self.archive.version = 3;
+            self.archive.version = 4;
             let mut bytes = Zeroizing::new(
                 postcard::to_allocvec(&self.archive).map_err(|_| "encode hosted client archive")?,
             );
@@ -418,6 +470,9 @@ impl Client {
             );
             bytes.extend_from_slice(
                 &postcard::to_allocvec(&self.topic).map_err(|_| "encode hosted topic")?,
+            );
+            bytes.extend_from_slice(
+                &postcard::to_allocvec(&self.files).map_err(|_| "encode hosted file inbox")?,
             );
             self.storage.save(&bytes)
         })();
@@ -428,7 +483,10 @@ impl Client {
     }
     fn receive_room(&self) -> Result<(), String> {
         self.healthy()?;
-        if self.archive.events.len() > MAX_EVENTS - 2 || self.receipts.outbox.len() >= MAX_EVENTS {
+        if self.archive.events.len() > MAX_EVENTS - 2
+            || self.receipts.outbox.len() >= MAX_EVENTS
+            || self.files.events.len() >= MAX_EVENTS
+        {
             return Err("archive pending channel events before continuing".into());
         }
         Ok(())
@@ -454,13 +512,44 @@ impl Client {
         });
     }
     pub fn queue_send(&mut self, content: api::Content) -> Result<[u8; 32], String> {
-        self.room()?;
+        let mut id = [0; 32];
+        rand::thread_rng().fill_bytes(&mut id);
+        self.queue_send_identified(id, content)
+    }
+    pub fn queue_send_identified(
+        &mut self,
+        id: [u8; 32],
+        content: api::Content,
+    ) -> Result<[u8; 32], String> {
+        self.healthy()?;
         validate(&content)?;
+        if id == [0; 32] {
+            return Err("empty hosted message identity".into());
+        }
+        let digest = content_digest(&content)?;
+        let previous = self
+            .archive
+            .sent
+            .get(&id)
+            .map(|sent| content_digest(&sent.application.content))
+            .transpose()?
+            .or_else(|| {
+                self.archive
+                    .seen
+                    .get(&(self.session.member_id(), id))
+                    .copied()
+            });
+        if let Some(previous) = previous {
+            return if previous == digest {
+                Ok(id)
+            } else {
+                Err("message identity reused with different content".into())
+            };
+        }
+        self.room()?;
         if !matches!(self.archive.phase, Phase::Ready) {
             return Err("channel admission is not complete".into());
         }
-        let mut id = [0; 32];
-        rand::thread_rng().fill_bytes(&mut id);
         let application = Application {
             version: 1,
             id,
@@ -480,11 +569,7 @@ impl Client {
             .into_iter()
             .map(|member| member.pseudonym)
             .filter(|member| {
-                *member != self.session.member_id()
-                    && !matches!(
-                        application.content,
-                        api::Content::Presence { .. } | api::Content::TopicState { .. }
-                    )
+                *member != self.session.member_id() && receipt_required(&application.content)
             })
             .collect();
         self.session = candidate;
@@ -749,11 +834,7 @@ impl Client {
                         .into_iter()
                         .map(|m| m.pseudonym)
                         .filter(|id| {
-                            *id != candidate.member_id()
-                                && !matches!(
-                                    application.content,
-                                    api::Content::Presence { .. } | api::Content::TopicState { .. }
-                                )
+                            *id != candidate.member_id() && receipt_required(&application.content)
                         })
                         .collect();
                 }
@@ -800,6 +881,28 @@ impl Client {
             .take(limit as usize)
             .cloned()
             .collect())
+    }
+    pub fn file_events(&self, limit: u16) -> Result<Vec<api::Event>, String> {
+        self.healthy()?;
+        if limit == 0 || limit > 256 {
+            return Err("invalid hosted file page".into());
+        }
+        Ok(self
+            .files
+            .events
+            .iter()
+            .take(usize::from(limit))
+            .cloned()
+            .collect())
+    }
+    pub fn commit_file_events(&mut self, through: u64) -> Result<(), String> {
+        self.healthy()?;
+        if through > self.archive.cursor {
+            return Err("cannot commit unseen file events".into());
+        }
+        self.files.events.retain(|event| event.sequence > through);
+        self.files.committed = self.files.committed.max(through);
+        self.checkpoint()
     }
     pub fn commit_events(&mut self, through: u64) -> Result<(), String> {
         self.healthy()?;
@@ -984,6 +1087,19 @@ impl Client {
         accepted_at: u64,
         sequence: u64,
     ) {
+        if file_protocol(&application.content) {
+            self.files.events.push(api::Event {
+                sequence,
+                channel: self.archive.channel,
+                accepted_at,
+                kind: api::EventKind::Message {
+                    id: application.id,
+                    sender,
+                    content: application.content.clone(),
+                    delivery: api::Delivery::ServiceAccepted { sequence },
+                },
+            });
+        }
         match &application.content {
             api::Content::Topic(topic) => {
                 self.archive.topic = topic.clone();
@@ -1155,17 +1271,9 @@ impl Client {
                             },
                         );
                     }
-                    use sha2::{Digest, Sha256};
-                    let digest: [u8; 32] = Sha256::digest(
-                        postcard::to_allocvec(&application.content)
-                            .map_err(|_| "encode application digest")?,
-                    )
-                    .into();
+                    let digest = content_digest(&application.content)?;
                     let key = (sender, application.id);
-                    let needs_receipt = !matches!(
-                        application.content,
-                        api::Content::Presence { .. } | api::Content::TopicState { .. }
-                    );
+                    let needs_receipt = receipt_required(&application.content);
                     let receipt_valid = self
                         .archive
                         .seen

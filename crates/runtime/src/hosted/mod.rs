@@ -334,6 +334,20 @@ impl HostedChannels {
             } => Ok(api::Reply::Events(
                 self.channel(channel)?.events(after, limit)?,
             )),
+            FileEvents { channel, limit } => Ok(api::Reply::FileEvents(
+                self.channel(channel)?.file_events(limit)?,
+            )),
+            CommitFileEvents { channel, through } => {
+                self.channel(channel)?.commit_file_events(through)?;
+                Ok(api::Reply::Done)
+            }
+            SendIdentified {
+                channel,
+                id,
+                content,
+            } => Ok(api::Reply::Queued(
+                self.channel(channel)?.queue_send_identified(id, content)?,
+            )),
             CommitEvents { channel, through } => {
                 self.channel(channel)?.commit_events(through)?;
                 Ok(api::Reply::Done)

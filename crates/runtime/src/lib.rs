@@ -24,6 +24,8 @@ pub mod network_status;
 
 #[cfg(feature = "files")]
 pub mod files;
+#[cfg(feature = "files")]
+pub mod modern_files;
 
 pub use gcoms_node::metrics;
 #[cfg(feature = "push-notifications")]

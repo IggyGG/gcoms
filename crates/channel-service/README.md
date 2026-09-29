@@ -69,5 +69,5 @@ Piece logs are separately locked, chained, checksummed and fsynced, count agains
 service/channel limits, recover only torn tails and preserve accepted pieces.
 The client remains responsible for AEAD, Merkle and whole-file verification.
 Service info also advertises global and source request rates; behind a proxy the
-source rate refers to the authenticated upstream connection, not a forwarded IP.
+source rate refers to the upstream socket address, not a forwarded IP.
 This storage primitive does not by itself implement file offers or GChat transfers.

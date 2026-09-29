@@ -126,6 +126,15 @@ impl FileService {
         use subtle::ConstantTimeEq;
         self.path == path && bool::from(self.key.ct_eq(key))
     }
+    pub(crate) fn modern_location(&self) -> (PathBuf, [u8; 32]) {
+        use sha2::{Digest, Sha256};
+        let mut name = self.path.file_name().unwrap_or_default().to_os_string();
+        name.push(".v2");
+        let mut hash = Sha256::new();
+        hash.update(b"gcoms.file-cache.v2\0");
+        hash.update(self.key.as_slice());
+        (self.path.with_file_name(name), hash.finalize().into())
+    }
     pub fn is_enabled(&self) -> bool {
         self.enabled.load(Ordering::Acquire)
     }

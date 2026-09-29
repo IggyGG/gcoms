@@ -245,6 +245,22 @@ pub enum Request {
         channel: ChannelId,
         reference: crate::hosted::BlobRef,
     },
+    /// IPC23: independent durable file-consumer cursor. Event sequences here
+    /// are service record sequences, not the ordinary local event sequence.
+    FileEvents {
+        channel: ChannelId,
+        limit: u16,
+    },
+    CommitFileEvents {
+        channel: ChannelId,
+        through: u64,
+    },
+    /// Retry an immutable application identity after an uncertain response.
+    SendIdentified {
+        channel: ChannelId,
+        id: MessageId,
+        content: Content,
+    },
 }
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Reply {
@@ -256,4 +272,5 @@ pub enum Reply {
     Events(Vec<Event>),
     Done,
     Blob(Vec<u8>),
+    FileEvents(Vec<Event>),
 }

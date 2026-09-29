@@ -2582,12 +2582,18 @@ pub(crate) fn direct_traffic_class(record: &[u8]) -> gcoms_core::TrafficClass {
         ) => body,
         _ => return gcoms_core::TrafficClass::Interactive,
     };
+    if gcoms_core::component::application_parts(&body)
+        .is_some_and(|(kind, _)| kind == gcoms_core::CONTACT_PIECE_CONTENT_TYPE)
+    {
+        return gcoms_core::TrafficClass::Bulk;
+    }
     let Some(application) = gcoms_core::component::RoutedApplication::decode(&body).ok() else {
         return gcoms_core::TrafficClass::Interactive;
     };
     match gcoms_core::component::application_parts(&application.application) {
         Some((kind, _))
             if kind == gcoms_core::FILE_RECORD_CONTENT_TYPE
+                || kind == gcoms_core::CONTACT_PIECE_CONTENT_TYPE
                 || kind == gcoms_core::VOLATILE_FILE_CONTENT_TYPE =>
         {
             gcoms_core::TrafficClass::Bulk

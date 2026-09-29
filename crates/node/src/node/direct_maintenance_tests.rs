@@ -65,6 +65,31 @@ fn file_records_are_bulk_while_chat_control_and_acknowledgements_stay_interactiv
     );
     for (kind, expected) in [
         (
+            gcoms_core::CONTACT_PIECE_CONTENT_TYPE,
+            gcoms_core::TrafficClass::Bulk,
+        ),
+        (
+            "application/vnd.gcoms.file-control.v2",
+            gcoms_core::TrafficClass::Interactive,
+        ),
+    ] {
+        let mut plain = b"GCAPP1".to_vec();
+        plain.extend((kind.len() as u16).to_be_bytes());
+        plain.extend(kind.as_bytes());
+        plain.extend(b"record");
+        let wire = crate::proto::encode_direct_durable_data([8; 16], 1, &plain);
+        assert_eq!(direct_traffic_class(&wire), expected);
+    }
+    for (kind, expected) in [
+        (
+            gcoms_core::CONTACT_PIECE_CONTENT_TYPE,
+            gcoms_core::TrafficClass::Bulk,
+        ),
+        (
+            "application/vnd.gcoms.file-control.v2",
+            gcoms_core::TrafficClass::Interactive,
+        ),
+        (
             gcoms_core::VOLATILE_FILE_CONTENT_TYPE,
             gcoms_core::TrafficClass::Bulk,
         ),

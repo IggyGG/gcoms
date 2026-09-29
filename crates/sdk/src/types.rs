@@ -502,6 +502,15 @@ pub trait GcClient: Send + Sync {
             "host does not support network status".into(),
         ))
     }
+    async fn sharing_v2(
+        &self,
+        request: crate::sharing_v2::Request,
+    ) -> Result<crate::sharing_v2::Reply, SdkError> {
+        request.validate()?;
+        Err(SdkError::Protocol(
+            "host does not support hosted/contact file sharing".into(),
+        ))
+    }
     async fn sharing(
         &self,
         request: crate::sharing::Request,
@@ -860,6 +869,12 @@ pub trait GcClient: Send + Sync {
 // Preserve the complete interface when sharing either backend as a trait object.
 #[async_trait]
 impl<T: GcClient + ?Sized> GcClient for std::sync::Arc<T> {
+    async fn sharing_v2(
+        &self,
+        request: crate::sharing_v2::Request,
+    ) -> Result<crate::sharing_v2::Reply, SdkError> {
+        (**self).sharing_v2(request).await
+    }
     async fn sharing(
         &self,
         request: crate::sharing::Request,

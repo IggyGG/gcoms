@@ -40,6 +40,7 @@ pub const VOLATILE_CONTACT_CONTENT_TYPE: &str = "application/vnd.ghost.payload-c
 pub const VOLATILE_FILE_CONTENT_TYPE: &str = "application/vnd.ghost.file-attempt-record.v1";
 pub const VOLATILE_FILE_ACK_CONTENT_TYPE: &str = "application/vnd.ghost.file-attempt-ack.v1";
 /// Durable file transfer record; the bulk scheduling producer.
+pub const CONTACT_PIECE_CONTENT_TYPE: &str = "application/vnd.gcoms.file-direct.v2";
 pub const FILE_RECORD_CONTENT_TYPE: &str = "application/vnd.ghost.file-record.v1";
 /// Durable file acknowledgement; interactive, not bulk.
 pub const FILE_ACK_CONTENT_TYPE: &str = "application/vnd.ghost.file-ack.v1";

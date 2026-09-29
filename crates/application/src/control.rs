@@ -256,6 +256,7 @@ pub(crate) fn capabilities() -> Vec<gcoms_sdk::ipc::Capability> {
     use gcoms_sdk::ipc::Capability::*;
     vec![
         FileSharing,
+        ModernFileSharing,
         IdentityRead,
         DirectMessage,
         ChannelMember,

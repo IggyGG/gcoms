@@ -595,3 +595,16 @@ alone must neither verify pieces nor complete the local download.
   requires HostedChannels for both service exchange and client-owned operations.
 - Receipt aggregation, GChat user flows and 500-member network/latency tests remain
   required. A service acceptance response is not a recipient acknowledgement.
+
+## IRC hosted/contact file profile
+
+Run `cargo test --locked -p gcoms-runtime --all-features modern_` for a real
+channel-independent contact file: verified progress, pause, authorization removal,
+restart, explicit registration, resumption, exact export and authenticated
+completion. Run `hosted::tests::file_` for separate durable file consumption,
+immutable identified-send retries and covered completion in moderated channels.
+`gcoms-sdk` `modern_files_require_separate_authority_and_zeroize_uploads` checks
+IPC23 capability/version requirements and upload zeroization. Node's
+`file_records_are_bulk_while_chat_control_and_acknowledgements_stay_interactive`
+checks both root-contact and component-wrapped scheduling, including retry records.
+Strict affected-package Clippy and actual GChat/500-member flows remain required.

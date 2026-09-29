@@ -60,6 +60,7 @@ pub enum Capability {
     BootstrapApplication,
     FileSharing,
     HostedChannels,
+    ModernFileSharing,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -272,14 +273,19 @@ pub enum Request {
         code: Option<String>,
     },
     HostedChannels(crate::hosted_client::Request),
+    SharingV2(crate::sharing_v2::Request),
 }
 
 impl Request {
     pub fn minimum_version(&self) -> u16 {
         match self {
+            Self::SharingV2(_) => 23,
             Self::HostedChannels(
                 crate::hosted_client::Request::PutBlob { .. }
-                | crate::hosted_client::Request::GetBlob { .. },
+                | crate::hosted_client::Request::GetBlob { .. }
+                | crate::hosted_client::Request::FileEvents { .. }
+                | crate::hosted_client::Request::CommitFileEvents { .. }
+                | crate::hosted_client::Request::SendIdentified { .. },
             ) => 23,
             Self::HostedChannels(_) => 22,
             Self::CatalogHttp(request) if request.is_hosted() => 22,
@@ -309,6 +315,7 @@ impl Request {
     }
     pub fn required_capability(&self) -> Capability {
         match self {
+            Self::SharingV2(_) => Capability::ModernFileSharing,
             Self::HostedChannels(_) => Capability::HostedChannels,
             Self::CatalogHttp(request) if request.is_hosted() => Capability::HostedChannels,
             Self::ChannelReconnect { .. } => Capability::ChannelMember,
@@ -375,6 +382,7 @@ impl Request {
 
     fn validate_application_payload(&self) -> Result<(), SdkError> {
         match self {
+            Self::SharingV2(request) => request.validate(),
             Self::HostedChannels(crate::hosted_client::Request::PutBlob {
                 reference,
                 bytes,
@@ -456,6 +464,7 @@ pub enum Response {
     NetworkStatus(crate::NetworkStatus),
     ChannelTopic(String),
     HostedChannels(crate::hosted_client::Reply),
+    SharingV2(crate::sharing_v2::Reply),
 }
 
 #[cfg(all(any(unix, windows), feature = "ipc"))]
@@ -516,7 +525,8 @@ pub fn encode(frame: &Frame) -> Result<Vec<u8>, SdkError> {
 impl Zeroize for Request {
     fn zeroize(&mut self) {
         match self {
-            Self::Sharing(crate::sharing::Request::WritePiece { bytes, .. }) => {
+            Self::Sharing(crate::sharing::Request::WritePiece { bytes, .. })
+            | Self::SharingV2(crate::sharing_v2::Request::WritePiece { bytes, .. }) => {
                 bytes.as_mut_slice().zeroize()
             }
             Self::ChannelReconnect { code, .. } => code.zeroize(),
@@ -1005,6 +1015,15 @@ impl GcClient for IpcClient {
         match self.request(Request::NetworkStatus).await? {
             Response::NetworkStatus(value) => Ok(value),
             _ => Err(SdkError::Protocol("invalid network status reply".into())),
+        }
+    }
+    async fn sharing_v2(
+        &self,
+        request: crate::sharing_v2::Request,
+    ) -> Result<crate::sharing_v2::Reply, SdkError> {
+        match self.request(Request::SharingV2(request)).await? {
+            Response::SharingV2(reply) => Ok(reply),
+            _ => Err(SdkError::Protocol("unexpected modern file reply".into())),
         }
     }
     async fn sharing(
@@ -1784,10 +1803,14 @@ where
     }
     // Tag 12 meant BootstrapApplication in the unreleased bootstrap-v13 fork.
     // Never downgrade/filter that Hello: tags 30/31 now mean network sends.
-    if (version < 22
+    if (version < 23
         && hello
             .requested_capabilities
-            .contains(&Capability::HostedChannels))
+            .contains(&Capability::ModernFileSharing))
+        || (version < 22
+            && hello
+                .requested_capabilities
+                .contains(&Capability::HostedChannels))
         || (version < 18
             && hello
                 .requested_capabilities
@@ -1833,6 +1856,7 @@ where
                 && (version >= 11 || *capability != Capability::HostShell)
                 && (version >= 12 || *capability != Capability::VolatileApplication)
                 && (version >= 15 || *capability != Capability::CatalogAccess)
+                && (version >= 23 || *capability != Capability::ModernFileSharing)
                 && (version >= 22 || *capability != Capability::HostedChannels)
                 && (version >= 16 || *capability != Capability::BootstrapApplication)
                 && (version >= 18 || *capability != Capability::FileSharing)
@@ -2135,6 +2159,7 @@ pub(crate) async fn dispatch<C: GcClient>(
             client.configure_catalog_origins(origins).await?;
             Ok(Response::Empty)
         }
+        Request::SharingV2(request) => client.sharing_v2(request).await.map(Response::SharingV2),
         Request::HostedChannels(request) => client
             .hosted_channels(request)
             .await
@@ -2627,6 +2652,39 @@ mod tests {
             code: Some("x".repeat(8193)),
         };
         assert!(oversized.validate_application_payload().is_err());
+    }
+
+    #[test]
+    fn modern_files_require_separate_authority_and_zeroize_uploads() {
+        use crate::sharing_v2 as files;
+        let mut request = Request::SharingV2(files::Request::WritePiece {
+            id: [1; 16],
+            piece: 0,
+            bytes: vec![42; 256],
+        });
+        assert_eq!(request.minimum_version(), 23);
+        assert_eq!(request.required_capability(), Capability::ModernFileSharing);
+        request.zeroize();
+        assert!(
+            matches!(request, Request::SharingV2(files::Request::WritePiece { bytes, .. }) if bytes.iter().all(|b| *b == 0))
+        );
+        for operation in [
+            crate::hosted_client::Request::FileEvents {
+                channel: [1; 32],
+                limit: 256,
+            },
+            crate::hosted_client::Request::CommitFileEvents {
+                channel: [1; 32],
+                through: 1,
+            },
+            crate::hosted_client::Request::SendIdentified {
+                channel: [1; 32],
+                id: [2; 32],
+                content: crate::hosted_client::Content::Text("test".into()),
+            },
+        ] {
+            assert_eq!(Request::HostedChannels(operation).minimum_version(), 23);
+        }
     }
 
     #[test]
