@@ -513,3 +513,48 @@ async fn offline_join_shows_pending_topic_until_authorized_encrypted_handoff() {
     .unwrap();
     assert!(!stored.windows(21).any(|w| w == b"private current topic"));
 }
+
+#[tokio::test]
+async fn ciphertext_piece_operations_are_scoped_bounded_and_do_not_create_chat_receipts() {
+    let server = private_dir();
+    let a = private_dir();
+    let b = private_dir();
+    let transport = service(server.path());
+    let mut alice = owner(a.path(), transport.clone()).await;
+    let mut bob = joining(alice.archive.channel, "bob", b.path(), transport).await;
+    pump(&mut bob).await;
+    pump(&mut alice).await;
+    let reference = wire::BlobRef {
+        owner: alice.session.member_id(),
+        file: [31; 16],
+        piece: 0,
+    };
+    let ciphertext = vec![47; 128 * 1024];
+    let before = alice.events(0, 256).unwrap();
+    assert!(matches!(
+        alice
+            .blob(reference, Some(ciphertext.clone()))
+            .await
+            .unwrap(),
+        api::Reply::Done
+    ));
+    assert!(bob.blob(reference, Some(ciphertext.clone())).await.is_err());
+    assert_eq!(
+        bob.blob(reference, None).await.unwrap(),
+        api::Reply::Blob(ciphertext.clone())
+    );
+    assert_eq!(alice.events(0, 256).unwrap(), before);
+    assert!(alice
+        .blob(reference, Some(vec![0; wire::MAX_BLOB_BYTES + 1]))
+        .await
+        .is_err());
+    alice
+        .queue_control(HostedPolicyChange::Kick(bob.session.member_id()), "removed")
+        .unwrap();
+    alice.flush_one().await.unwrap();
+    assert!(bob.blob(reference, None).await.is_err());
+    assert_eq!(
+        alice.blob(reference, None).await.unwrap(),
+        api::Reply::Blob(ciphertext)
+    );
+}

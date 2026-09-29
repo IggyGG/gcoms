@@ -235,6 +235,16 @@ pub enum Request {
         channel: ChannelId,
         through: u64,
     },
+    /// IPC23: ciphertext-only bulk piece storage; these calls do not ACK chat.
+    PutBlob {
+        channel: ChannelId,
+        reference: crate::hosted::BlobRef,
+        bytes: Vec<u8>,
+    },
+    GetBlob {
+        channel: ChannelId,
+        reference: crate::hosted::BlobRef,
+    },
 }
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Reply {
@@ -245,4 +255,5 @@ pub enum Reply {
     Links(Vec<InviteLink>),
     Events(Vec<Event>),
     Done,
+    Blob(Vec<u8>),
 }

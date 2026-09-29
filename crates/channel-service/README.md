@@ -53,7 +53,21 @@ write poisons the instance until reopening. Exclusive locks prevent concurrent
 writers. Quotas reject new writes without evicting accepted data; memory holds
 indexes rather than all ciphertext bodies. Members perform authorized rekeys.
 
-This checkpoint does not provide replication, compaction, recipient receipt
-aggregation or complete GChat/native/500-member network qualification. Run the
+Recipient signatures use separate sender-scoped covered receipt logs. This
+checkpoint does not provide replication, compaction or complete
+GChat/native/500-member network qualification. Run the
 MLS/service suites and strict all-target Clippy when changing the storage or API
 contract; see the repository's IRC parity ledger for evidence and remaining work.
+
+
+The `ciphertext-pieces-v1` service extension adds immutable pieces on the explicit
+bulk endpoint. Signed proofs bind channel, read/write purpose, publisher, file,
+piece index and (for upload) ciphertext digest. A publisher can write only its own
+namespace and must satisfy current posting policy. Current members may download;
+a pending kick revokes this access immediately. No content keys enter this API.
+Piece logs are separately locked, chained, checksummed and fsynced, count against
+service/channel limits, recover only torn tails and preserve accepted pieces.
+The client remains responsible for AEAD, Merkle and whole-file verification.
+Service info also advertises global and source request rates; behind a proxy the
+source rate refers to the authenticated upstream connection, not a forwarded IP.
+This storage primitive does not by itself implement file offers or GChat transfers.

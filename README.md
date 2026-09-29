@@ -1,5 +1,5 @@
 The experimental `hosted-channels` application/runtime feature exposes
-`GcClient::hosted_channels` through embedded hosts and IPC22. Its encrypted
+`GcClient::hosted_channels` through embedded hosts and IPC23 (base hosted operations retain IPC22 support). Its encrypted
 sidecars preserve pending sends and unarchived events across restart. Applications
 must persist events before committing them. `gcoms-channel-service` supplies the
 ciphertext-only HTTP upstream (default `http` feature); an installed HTTPS origin

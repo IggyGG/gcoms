@@ -1234,6 +1234,72 @@ impl Client {
         // Events become visible to consumers only after this durable boundary.
         self.checkpoint()
     }
+    pub async fn blob(
+        &self,
+        reference: wire::BlobRef,
+        bytes: Option<Vec<u8>>,
+    ) -> Result<api::Reply, String> {
+        use sha2::{Digest, Sha256};
+        self.healthy()?;
+        if !matches!(self.archive.phase, Phase::Ready)
+            || !self.session.active()
+            || !reference.valid()
+        {
+            return Err(
+                "Active channel membership and a valid piece reference are required".into(),
+            );
+        }
+        if let Some(bytes) = &bytes {
+            if reference.owner != self.session.member_id()
+                || !self.session.rules().may_post(reference.owner)
+                || bytes.is_empty()
+                || bytes.len() > wire::MAX_BLOB_BYTES
+            {
+                return Err(
+                    "Ciphertext piece upload is outside channel authority or bounds".into(),
+                );
+            }
+        }
+        let digest = bytes.as_ref().map(|b| Sha256::digest(b).into());
+        let query = Sha256::digest(reference.authentication_bytes(digest)).into();
+        let scope = if bytes.is_some() {
+            HostedReadScope::BlobWrite
+        } else {
+            HostedReadScope::BlobRead
+        };
+        let proof = encode(
+            &self
+                .session
+                .read_proof(scope, query, now() + 120)
+                .map_err(mls)?
+                .encode()
+                .map_err(mls)?,
+        );
+        let uploading = bytes.is_some();
+        let operation = match bytes {
+            Some(bytes) => wire::Operation::PutBlob {
+                reference,
+                body: encode(&bytes),
+                proof,
+            },
+            None => wire::Operation::GetBlob { reference, proof },
+        };
+        match self
+            .transport
+            .exchange(self.archive.channel, operation)
+            .await?
+        {
+            wire::Reply::BlobStored if uploading => Ok(api::Reply::Done),
+            wire::Reply::Blob { body } if !uploading => {
+                let bytes = decode(&body)?;
+                if bytes.is_empty() || bytes.len() > wire::MAX_BLOB_BYTES {
+                    return Err("Ciphertext piece reply exceeds bounds".into());
+                }
+                Ok(api::Reply::Blob(bytes))
+            }
+            other => Err(format!("Ciphertext piece operation refused: {other:?}")),
+        }
+    }
     pub async fn sync_page(&mut self) -> Result<bool, String> {
         self.receive_room()?;
         if !matches!(self.archive.phase, Phase::Ready | Phase::Removed) {

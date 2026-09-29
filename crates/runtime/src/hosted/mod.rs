@@ -256,6 +256,12 @@ impl HostedChannels {
                 self.channels.insert(decoded.channel, client);
                 Ok(api::Reply::Channel(Box::new(view)))
             }
+            PutBlob {
+                channel,
+                reference,
+                bytes,
+            } => self.channel(channel)?.blob(reference, Some(bytes)).await,
+            GetBlob { channel, reference } => self.channel(channel)?.blob(reference, None).await,
             Send { channel, content } => Ok(api::Reply::Queued(
                 self.channel(channel)?.queue_send(content)?,
             )),

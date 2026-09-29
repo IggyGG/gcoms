@@ -447,3 +447,183 @@ async fn actual_http_contract_is_bounded_versioned_and_rate_limited() {
     let _ = task.await;
 }
 use std::future::IntoFuture;
+
+#[test]
+fn ciphertext_pieces_bind_writer_body_scope_and_current_membership_across_restart() {
+    let dir = tempfile::tempdir().unwrap();
+    gcoms_private_fs::make_private(dir.path(), true).unwrap();
+    let cfg = config(dir.path());
+    let service = Service::open(cfg.clone()).unwrap();
+    let root = IdentityKeypair::from_seed([118; 32]);
+    let mut owner = HostedSession::create(&root, "owner", 500, true).unwrap();
+    let channel = owner.policy().channel_id();
+    create(&service, &owner);
+    let public = HostedObserver::new(
+        owner.policy().clone(),
+        channel,
+        &owner.export_group_info().unwrap(),
+    )
+    .unwrap();
+    let (mut alice, commit) = PreparedHostedJoin::new("alice")
+        .unwrap()
+        .join(&public, &JoinPermit::public(), NOW)
+        .unwrap();
+    append(
+        &service,
+        channel,
+        Append::Membership {
+            commit: encode(&commit),
+            info: encode(alice.proposed_group_info().unwrap()),
+        },
+    );
+    alice.accept_join(&commit).unwrap();
+    owner.receive(&commit, NOW).unwrap();
+    let reference = BlobRef {
+        owner: owner.member_id(),
+        file: [7; 16],
+        piece: 0,
+    };
+    let bytes = vec![19; 128 * 1024];
+    let proof = |member: &HostedSession, reference: BlobRef, body: Option<&[u8]>| {
+        encode(
+            &member
+                .read_proof(
+                    if body.is_some() {
+                        HostedReadScope::BlobWrite
+                    } else {
+                        HostedReadScope::BlobRead
+                    },
+                    Sha256::digest(
+                        reference.authentication_bytes(body.map(|b| Sha256::digest(b).into())),
+                    )
+                    .into(),
+                    NOW + 60,
+                )
+                .unwrap()
+                .encode()
+                .unwrap(),
+        )
+    };
+    let upload = Operation::PutBlob {
+        reference,
+        body: encode(&bytes),
+        proof: proof(&owner, reference, Some(&bytes)),
+    };
+    assert!(upload.requires_bulk());
+    assert!(matches!(
+        request(&service, channel, upload.clone()),
+        Reply::BlobStored
+    ));
+    assert!(matches!(
+        request(&service, channel, upload),
+        Reply::BlobStored
+    ));
+    let attack = Operation::PutBlob {
+        reference,
+        body: encode(&bytes),
+        proof: proof(&alice, reference, Some(&bytes)),
+    };
+    assert!(matches!(
+        request(&service, channel, attack),
+        Reply::Fault(Fault {
+            code: FaultCode::Unauthorized,
+            ..
+        })
+    ));
+    let attack = Operation::PutBlob {
+        reference,
+        body: encode(b"changed"),
+        proof: proof(&owner, reference, Some(&bytes)),
+    };
+    assert!(matches!(
+        request(&service, channel, attack),
+        Reply::Fault(Fault {
+            code: FaultCode::Unauthorized,
+            ..
+        })
+    ));
+    let attack = Operation::PutBlob {
+        reference,
+        body: encode(b"changed"),
+        proof: proof(&owner, reference, Some(b"changed")),
+    };
+    assert!(matches!(
+        request(&service, channel, attack),
+        Reply::Fault(Fault {
+            code: FaultCode::Invalid,
+            ..
+        })
+    ));
+    let get = Operation::GetBlob {
+        reference,
+        proof: proof(&alice, reference, None),
+    };
+    assert!(get.requires_bulk());
+    let Reply::Blob { body } = request(&service, channel, get.clone()) else {
+        panic!("member read");
+    };
+    assert_eq!(decode(&body).unwrap(), bytes);
+    let mode = owner
+        .create_control(
+            HostedPolicyChange::Mode(HostedMode::Moderated, 1),
+            "moderation",
+        )
+        .unwrap();
+    append(
+        &service,
+        channel,
+        Append::Control(encode(&mode.encode().unwrap())),
+    );
+    owner.apply_control(&mode).unwrap();
+    let alice_ref = BlobRef {
+        owner: alice.member_id(),
+        ..reference
+    };
+    assert!(matches!(
+        request(
+            &service,
+            channel,
+            Operation::PutBlob {
+                reference: alice_ref,
+                body: encode(&bytes),
+                proof: proof(&alice, alice_ref, Some(&bytes))
+            }
+        ),
+        Reply::Fault(Fault {
+            code: FaultCode::Unauthorized,
+            ..
+        })
+    ));
+    let kick = owner
+        .create_control(HostedPolicyChange::Kick(alice.member_id()), "removed")
+        .unwrap();
+    append(
+        &service,
+        channel,
+        Append::Control(encode(&kick.encode().unwrap())),
+    );
+    assert!(
+        matches!(
+            request(&service, channel, get),
+            Reply::Fault(Fault {
+                code: FaultCode::Unauthorized,
+                ..
+            })
+        ),
+        "pending removals revoke blob reads before rekey"
+    );
+    drop(service);
+    let service = Service::open(cfg).unwrap();
+    let Reply::Blob { body } = request(
+        &service,
+        channel,
+        Operation::GetBlob {
+            reference,
+            proof: proof(&owner, reference, None),
+        },
+    ) else {
+        panic!("retained piece");
+    };
+    assert_eq!(decode(&body).unwrap(), bytes);
+    assert_eq!(service.info().requests_per_second, Some(100));
+}

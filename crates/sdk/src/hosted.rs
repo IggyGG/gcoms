@@ -52,12 +52,24 @@ pub enum Operation {
     Acknowledge {
         receipts: Vec<String>,
     },
+    /// Authenticated ciphertext pieces use the explicit bulk class.
+    PutBlob {
+        reference: BlobRef,
+        body: String,
+        proof: String,
+    },
+    GetBlob {
+        reference: BlobRef,
+        proof: String,
+    },
 }
 
 impl Operation {
     pub fn requires_bulk(&self) -> bool {
         match self {
-            Self::Create { .. }
+            Self::PutBlob { .. }
+            | Self::GetBlob { .. }
+            | Self::Create { .. }
             | Self::Snapshot { .. }
             | Self::Fetch { .. }
             | Self::Append(Append::Membership { .. }) => true,
@@ -66,6 +78,31 @@ impl Operation {
             }
             _ => false,
         }
+    }
+}
+/// Piece namespace is owned by the authenticated channel-scoped publisher.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct BlobRef {
+    pub owner: [u8; 32],
+    pub file: [u8; 16],
+    pub piece: u32,
+}
+pub const MAX_BLOB_BYTES: usize = 256 * 1024 + 2048;
+impl BlobRef {
+    pub fn authentication_bytes(&self, digest: Option<[u8; 32]>) -> Vec<u8> {
+        let mut bytes = b"gcoms/hosted/blob/v1".to_vec();
+        bytes.extend(self.owner);
+        bytes.extend(self.file);
+        bytes.extend(self.piece.to_be_bytes());
+        bytes.push(u8::from(digest.is_some()));
+        if let Some(digest) = digest {
+            bytes.extend(digest);
+        }
+        bytes
+    }
+    pub fn valid(&self) -> bool {
+        self.owner != [0; 32] && self.file != [0; 16] && self.piece < 40_960
     }
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -116,10 +153,20 @@ pub enum Reply {
         receipts: Vec<String>,
     },
     Acknowledged,
+    Blob {
+        body: String,
+    },
+    BlobStored,
     Fault(Fault),
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ServiceInfo {
+    #[serde(default)]
+    pub extensions: Vec<String>,
+    #[serde(default)]
+    pub requests_per_second: Option<u32>,
+    #[serde(default)]
+    pub source_requests_per_second: Option<u32>,
     pub version: u16,
     pub profiles: Vec<String>,
     pub public_creation: bool,

@@ -277,3 +277,22 @@ That run subsequently found a GComs Clippy range-pattern warning; the corrected
 GComs strict all-target/all-feature application check passes in `contacts-07.log`,
 including the new scoped hosted bot example. Updated contact/preferences checks
 are still running. This is not independent-file or installed-network qualification.
+
+
+### Ciphertext piece storage checkpoint (file integration remains open)
+
+Hosted API bulk upload/download now use immutable per-publisher piece namespaces.
+Proofs bind channel, owner, file, index, read/write purpose and upload digest;
+current policy authorizes uploads and current membership authorizes downloads.
+Pending removal immediately denies downloads. Service piece logs have exclusive
+locks, bounded indexes, hash chains/checksums, fsynced acceptance, exact retry,
+write poisoning, torn-tail-only recovery and aggregate quota accounting. Keys
+and plaintext never enter this interface. Existing receipts stay covered.
+
+SDK/runtime IPC23 exposes bounded piece operations separately from IPC22 base
+hosted operations. Service info advertises the extension and configured rates.
+`blobs-02.log` passes all 17 service tests and strict MLS/service/runtime/SDK/
+application checks. `blobs-03.log` passes runtime authorization/no-receipt-fanout
+and IPC version/bounds checks; its final test-style Clippy warning is corrected
+and `blobs-04.log` passes strict checks. This is a storage primitive, not completed
+file offer/download/resume or network capacity qualification. Those remain next.

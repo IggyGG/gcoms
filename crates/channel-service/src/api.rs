@@ -1,6 +1,7 @@
 //! Bounded hosted-profile API. Deploy behind the installed network's HTTPS
 //! origin; clients reach that origin over their existing protected route.
 use super::*;
+use crate::blobs::BlobLog;
 use crate::receipts::ReceiptLog;
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD as B64, Engine};
 use gcoms_mls::hosted::{HostedReadProof, HostedReadScope, HostedReceipt};
@@ -116,6 +117,7 @@ struct Inner {
     config: Config,
     channels: Mutex<HashMap<[u8; 32], ChannelLog>>,
     receipts: Mutex<HashMap<[u8; 32], ReceiptLog>>,
+    blobs: Mutex<HashMap<[u8; 32], BlobLog>>,
     rate: Mutex<Rate>,
     permits: Arc<tokio::sync::Semaphore>,
 }
@@ -213,10 +215,34 @@ impl Service {
             }
             receipts.insert(channel, ledger);
         }
+        let mut blobs = HashMap::new();
+        for entry in std::fs::read_dir(&config.directory)? {
+            let entry = entry?;
+            let Some(name) = entry
+                .file_name()
+                .to_str()
+                .and_then(|s| s.strip_suffix(".gblob"))
+                .map(str::to_owned)
+            else {
+                continue;
+            };
+            let channel = channel_from_name(&format!("{name}.gch"))
+                .ok_or_else(|| Error::Invalid("invalid piece filename".into()))?;
+            if !channels.contains_key(&channel) {
+                return Err(Error::Invalid("orphaned piece log".into()));
+            }
+            let ledger = BlobLog::open(&entry.path(), channel, config.limits())?;
+            total = total.checked_add(ledger.bytes).ok_or(Error::Full)?;
+            if total > config.max_total_bytes {
+                return Err(Error::Full);
+            }
+            blobs.insert(channel, ledger);
+        }
         Ok(Self(Arc::new(Inner {
             config,
             channels: Mutex::new(channels),
             receipts: Mutex::new(receipts),
+            blobs: Mutex::new(blobs),
             rate: Mutex::new(Rate {
                 second: 0,
                 count: 0,
@@ -227,6 +253,9 @@ impl Service {
     }
     pub fn info(&self) -> ServiceInfo {
         ServiceInfo {
+            extensions: vec!["ciphertext-pieces-v1".into()],
+            requests_per_second: Some(self.0.config.requests_per_second),
+            source_requests_per_second: Some(self.0.config.source_requests_per_second),
             version: VERSION,
             profiles: vec![PROFILE.into()],
             public_creation: matches!(self.0.config.creation, CreationPolicy::Public),
@@ -277,7 +306,10 @@ impl Service {
         if self.0.config.blocked_channels.contains(&channel)
             && matches!(
                 request.operation,
-                Operation::Create { .. } | Operation::Append(_) | Operation::Acknowledge { .. }
+                Operation::Create { .. }
+                    | Operation::Append(_)
+                    | Operation::Acknowledge { .. }
+                    | Operation::PutBlob { .. }
             )
         {
             return fault(
@@ -287,8 +319,10 @@ impl Service {
         }
         let result = (|| -> Result<Reply, Error> {
             let mut ledgers = self.0.receipts.lock().map_err(|_| Error::Poisoned)?;
+            let mut blobs = self.0.blobs.lock().map_err(|_| Error::Poisoned)?;
             let total: u64 = channels.values().map(|log| log.bytes).sum::<u64>()
-                + ledgers.values().map(|log| log.bytes).sum::<u64>();
+                + ledgers.values().map(|log| log.bytes).sum::<u64>()
+                + blobs.values().map(|log| log.bytes).sum::<u64>();
             if let Operation::Create { policy, genesis } = request.operation {
                 let policy = HostedPolicy::decode(&decode(&policy)?, channel)?;
                 let genesis = decode(&genesis)?;
@@ -339,6 +373,88 @@ impl Service {
                 return Ok(fault(FaultCode::NotFound, "channel unavailable"));
             };
             match request.operation {
+                Operation::GetBlob { reference, proof } => {
+                    if !reference.valid() {
+                        return Err(Error::Invalid("piece reference bounds".into()));
+                    }
+                    let proof = HostedReadProof::decode(&decode(&proof)?)?;
+                    log.observer.verify_read(
+                        &proof,
+                        HostedReadScope::BlobRead,
+                        checksum(&reference.authentication_bytes(None)),
+                        now,
+                    )?;
+                    let reader = proof
+                        .member_id()
+                        .ok_or(Error::Mls(MlsError::Unauthorized))?;
+                    if log.observer.rules().closed()
+                        || log.observer.rules().pending_removals().contains(&reader)
+                    {
+                        return Err(Error::Mls(MlsError::Unauthorized));
+                    }
+                    match blobs
+                        .get_mut(&channel)
+                        .map(|ledger| ledger.read(reference))
+                        .transpose()?
+                        .flatten()
+                    {
+                        Some(body) => Ok(Reply::Blob {
+                            body: encode(&body),
+                        }),
+                        None => Ok(fault(FaultCode::NotFound, "ciphertext piece unavailable")),
+                    }
+                }
+                Operation::PutBlob {
+                    reference,
+                    body,
+                    proof,
+                } => {
+                    if !reference.valid() || body.len() > MAX_BLOB_BYTES.div_ceil(3) * 4 {
+                        return Err(Error::Invalid("piece bounds".into()));
+                    }
+                    let body = decode(&body)?;
+                    if body.is_empty() || body.len() > MAX_BLOB_BYTES {
+                        return Err(Error::Invalid("piece bounds".into()));
+                    }
+                    let proof = HostedReadProof::decode(&decode(&proof)?)?;
+                    log.observer.verify_read(
+                        &proof,
+                        HostedReadScope::BlobWrite,
+                        checksum(&reference.authentication_bytes(Some(checksum(&body)))),
+                        now,
+                    )?;
+                    if proof.member_id() != Some(reference.owner)
+                        || !log.observer.rules().may_post(reference.owner)
+                    {
+                        return Err(Error::Mls(MlsError::Unauthorized));
+                    }
+                    let missing = !blobs
+                        .get(&channel)
+                        .is_some_and(|ledger| ledger.contains(&reference));
+                    if missing
+                        && body.len() as u64 + 256
+                            > self.0.config.max_total_bytes.saturating_sub(total)
+                    {
+                        return Err(Error::Full);
+                    }
+                    if let std::collections::hash_map::Entry::Vacant(entry) = blobs.entry(channel) {
+                        entry.insert(BlobLog::open(
+                            &self
+                                .0
+                                .config
+                                .directory
+                                .join(file_name(channel))
+                                .with_extension("gblob"),
+                            channel,
+                            self.0.config.limits(),
+                        )?);
+                    }
+                    blobs
+                        .get_mut(&channel)
+                        .expect("opened")
+                        .append(reference, &body)?;
+                    Ok(Reply::BlobStored)
+                }
                 Operation::Acknowledge { receipts } => {
                     if receipts.is_empty() || receipts.len() > 16 {
                         return Err(Error::Invalid("receipt batch bound".into()));

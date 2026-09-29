@@ -29,7 +29,8 @@ use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 #[cfg(all(any(unix, windows), feature = "ipc"))]
 use tokio::sync::{broadcast, mpsc, oneshot, watch, Mutex};
 
-pub const VERSION: u16 = 22;
+pub const VERSION: u16 = 23;
+// IPC23 appends explicitly bulk hosted ciphertext-piece operations.
 // IPC22 adds separately authorized routed hosted-profile requests.
 
 #[cfg(test)]
@@ -276,6 +277,10 @@ pub enum Request {
 impl Request {
     pub fn minimum_version(&self) -> u16 {
         match self {
+            Self::HostedChannels(
+                crate::hosted_client::Request::PutBlob { .. }
+                | crate::hosted_client::Request::GetBlob { .. },
+            ) => 23,
             Self::HostedChannels(_) => 22,
             Self::CatalogHttp(request) if request.is_hosted() => 22,
             Self::Sharing(crate::sharing::Request::Inspect { .. })
@@ -370,6 +375,23 @@ impl Request {
 
     fn validate_application_payload(&self) -> Result<(), SdkError> {
         match self {
+            Self::HostedChannels(crate::hosted_client::Request::PutBlob {
+                reference,
+                bytes,
+                ..
+            }) if !reference.valid()
+                || bytes.is_empty()
+                || bytes.len() > crate::hosted::MAX_BLOB_BYTES =>
+            {
+                Err(SdkError::Protocol("ciphertext piece bounds".into()))
+            }
+            Self::HostedChannels(crate::hosted_client::Request::GetBlob { reference, .. })
+                if !reference.valid() =>
+            {
+                Err(SdkError::Protocol(
+                    "ciphertext piece reference bounds".into(),
+                ))
+            }
             Self::ChannelReconnect { channel, code }
                 if channel.len() > 256 || code.as_ref().is_some_and(|v| v.len() > 8 * 1024) =>
             {
@@ -2608,8 +2630,48 @@ mod tests {
     }
 
     #[test]
+    fn ciphertext_piece_requests_require_ipc23_and_hosted_authority() {
+        let reference = crate::hosted::BlobRef {
+            owner: [1; 32],
+            file: [2; 16],
+            piece: 0,
+        };
+        for operation in [
+            crate::hosted_client::Request::GetBlob {
+                channel: [3; 32],
+                reference,
+            },
+            crate::hosted_client::Request::PutBlob {
+                channel: [3; 32],
+                reference,
+                bytes: vec![4; 128],
+            },
+        ] {
+            let request = Request::HostedChannels(operation);
+            assert_eq!(request.minimum_version(), 23);
+            assert_eq!(request.required_capability(), Capability::HostedChannels);
+            let frame = Frame::Request(RequestEnvelope {
+                version: VERSION,
+                request_id: 12,
+                request,
+            });
+            assert_eq!(decode(&encode(&frame).unwrap()).unwrap(), frame);
+        }
+        let oversized = Request::HostedChannels(crate::hosted_client::Request::PutBlob {
+            channel: [3; 32],
+            reference,
+            bytes: vec![0; crate::hosted::MAX_BLOB_BYTES + 1],
+        });
+        assert!(oversized.validate_application_payload().is_err());
+        assert_eq!(
+            Request::HostedChannels(crate::hosted_client::Request::List).minimum_version(),
+            22
+        );
+    }
+
+    #[test]
     fn requests_declare_required_capability() {
-        assert_eq!(VERSION, 22);
+        assert_eq!(VERSION, 23);
         for request in [
             Request::SubmitDurableOpaque {
                 recipient: ContactCard(Vec::new()),

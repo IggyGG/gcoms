@@ -11,6 +11,8 @@ pub enum HostedReadScope {
     Snapshot = 1,
     Records = 2,
     Receipts = 3,
+    BlobRead = 4,
+    BlobWrite = 5,
 }
 
 #[derive(Clone, TlsSerialize, TlsDeserialize, TlsSize)]
