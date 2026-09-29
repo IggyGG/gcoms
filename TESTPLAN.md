@@ -494,3 +494,15 @@ clients. Keep production expiry, source limits, the twelve retained connections
 and the twenty-four circuit assertion unchanged. Run the complete routing
 `circuits` integration target and strict all-target/all-feature routing Clippy.
 The original 2026-09-27 21:00 UTC expiry-boundary failure remains retained.
+
+## Completed discovery retry (2026-09-29)
+
+Run the complete `gcoms-file-transfer` package and strict all-target/all-feature
+Clippy, then the `gcoms-runtime` `files::tests` with `files,gc2-carrier` enabled.
+`discovery_completion` covers failed real-send completion, the existing 30-second
+retry bound, no duplicate while queued/in flight, stale completions, healthy
+60-second cadence, and membership removal/restoration. Preserve the original red
+test against 8cdfd3f. Runtime checks retain incoming progress with stalled outbound
+receipts and retry completion across locking. These are component checks, not
+proof of Mac installed 16 MiB completion within 180 seconds; the separately bound
+native artifact must still pass that gate and rollback qualification.

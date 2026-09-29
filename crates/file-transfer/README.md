@@ -19,3 +19,11 @@ For accepted retained downloads, a newly authenticated source among the first fo
 is queried immediately when the periodic inventory poll is not yet due. Duplicate
 offers do not accelerate polling; later sources retain periodic rotation. This does
 not accept new offers automatically or resume an explicit pause/cancellation.
+
+Hosts must retain each action's opaque `send_token()` and call `send_finished`
+when its actual transport attempt completes or when unsent work is discarded.
+This applies to initial discovery as well as piece requests. A wrapper timeout
+is not completion. Failed initial discovery retries after the existing 30-second
+request bound; successful discovery keeps its normal 60-second cadence. Pending
+attempts are not duplicated, and old completions cannot release a newer attempt
+or a request created after membership removal and restoration.
