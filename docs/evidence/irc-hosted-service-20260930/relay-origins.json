@@ -1,0 +1,175 @@
+{
+  "schema": 1,
+  "scope": "exact signed-provider HTTPS origin configuration; serial process/listener checks only",
+  "relays": {
+    "r1": {
+      "before": {
+        "MainPID": "2532866",
+        "NRestarts": "0",
+        "ActiveState": "active"
+      },
+      "previous_origins": "",
+      "origins": [
+        "bootstrap-fsn.gchat.boo",
+        "bootstrap-hel.gchat.boo"
+      ],
+      "dropin": "/etc/systemd/system/ghost-relay.service.d/60-hosted-origins.conf",
+      "configuration": "[Service]\nEnvironment=GC_CATALOG_ORIGINS=bootstrap-fsn.gchat.boo,bootstrap-hel.gchat.boo\n",
+      "applied": true,
+      "after": {
+        "MainPID": "2573165",
+        "NRestarts": "0",
+        "ActiveState": "active"
+      },
+      "qualification": "unit/listener only; protected application journey still required"
+    },
+    "r2": {
+      "before": {
+        "MainPID": "2229185",
+        "NRestarts": "0",
+        "ActiveState": "active"
+      },
+      "previous_origins": "",
+      "origins": [
+        "bootstrap-fsn.gchat.boo",
+        "bootstrap-hel.gchat.boo"
+      ],
+      "dropin": "/etc/systemd/system/ghost-relay.service.d/60-hosted-origins.conf",
+      "configuration": "[Service]\nEnvironment=GC_CATALOG_ORIGINS=bootstrap-fsn.gchat.boo,bootstrap-hel.gchat.boo\n",
+      "applied": true,
+      "after": {
+        "MainPID": "1194356",
+        "NRestarts": "0",
+        "ActiveState": "active"
+      },
+      "qualification": "unit/listener only; protected application journey still required"
+    },
+    "r3": {
+      "before": {
+        "MainPID": "642669",
+        "NRestarts": "0",
+        "ActiveState": "active"
+      },
+      "previous_origins": "",
+      "origins": [
+        "bootstrap-fsn.gchat.boo",
+        "bootstrap-hel.gchat.boo"
+      ],
+      "dropin": "/etc/systemd/system/ghost-relay.service.d/60-hosted-origins.conf",
+      "configuration": "[Service]\nEnvironment=GC_CATALOG_ORIGINS=bootstrap-fsn.gchat.boo,bootstrap-hel.gchat.boo\n",
+      "applied": true,
+      "after": {
+        "MainPID": "783351",
+        "NRestarts": "0",
+        "ActiveState": "active"
+      },
+      "qualification": "unit/listener only; protected application journey still required"
+    },
+    "r4": {
+      "before": {
+        "MainPID": "4077837",
+        "NRestarts": "0",
+        "ActiveState": "active"
+      },
+      "previous_origins": "",
+      "origins": [
+        "bootstrap-fsn.gchat.boo",
+        "bootstrap-hel.gchat.boo"
+      ],
+      "dropin": "/etc/systemd/system/ghost-relay.service.d/60-hosted-origins.conf",
+      "configuration": "[Service]\nEnvironment=GC_CATALOG_ORIGINS=bootstrap-fsn.gchat.boo,bootstrap-hel.gchat.boo\n",
+      "applied": true,
+      "after": {
+        "MainPID": "1120202",
+        "NRestarts": "0",
+        "ActiveState": "active"
+      },
+      "qualification": "unit/listener only; protected application journey still required"
+    },
+    "r5": {
+      "before": {
+        "MainPID": "1495129",
+        "NRestarts": "0",
+        "ActiveState": "active"
+      },
+      "previous_origins": "",
+      "origins": [
+        "bootstrap-fsn.gchat.boo",
+        "bootstrap-hel.gchat.boo"
+      ],
+      "dropin": "/etc/systemd/system/ghost-relay.service.d/60-hosted-origins.conf",
+      "configuration": "[Service]\nEnvironment=GC_CATALOG_ORIGINS=bootstrap-fsn.gchat.boo,bootstrap-hel.gchat.boo\n",
+      "applied": true,
+      "after": {
+        "MainPID": "2615279",
+        "NRestarts": "0",
+        "ActiveState": "active"
+      },
+      "qualification": "unit/listener only; protected application journey still required"
+    },
+    "r6": {
+      "before": {
+        "MainPID": "1105690",
+        "NRestarts": "0",
+        "ActiveState": "active"
+      },
+      "previous_origins": "",
+      "origins": [
+        "bootstrap-fsn.gchat.boo",
+        "bootstrap-hel.gchat.boo"
+      ],
+      "dropin": "/etc/systemd/system/ghost-relay.service.d/60-hosted-origins.conf",
+      "configuration": "[Service]\nEnvironment=GC_CATALOG_ORIGINS=bootstrap-fsn.gchat.boo,bootstrap-hel.gchat.boo\n",
+      "applied": true,
+      "after": {
+        "MainPID": "1130216",
+        "NRestarts": "0",
+        "ActiveState": "active"
+      },
+      "qualification": "unit/listener only; protected application journey still required"
+    },
+    "r7": {
+      "before": {
+        "MainPID": "3257414",
+        "NRestarts": "0",
+        "ActiveState": "active"
+      },
+      "previous_origins": "",
+      "origins": [
+        "bootstrap-fsn.gchat.boo",
+        "bootstrap-hel.gchat.boo"
+      ],
+      "dropin": "/etc/systemd/system/ghost-relay.service.d/60-hosted-origins.conf",
+      "configuration": "[Service]\nEnvironment=GC_CATALOG_ORIGINS=bootstrap-fsn.gchat.boo,bootstrap-hel.gchat.boo\n",
+      "applied": true,
+      "after": {
+        "MainPID": "3445149",
+        "NRestarts": "0",
+        "ActiveState": "active"
+      },
+      "qualification": "unit/listener only; protected application journey still required"
+    },
+    "r8": {
+      "before": {
+        "MainPID": "2005031",
+        "NRestarts": "0",
+        "ActiveState": "active"
+      },
+      "previous_origins": "",
+      "origins": [
+        "bootstrap-fsn.gchat.boo",
+        "bootstrap-hel.gchat.boo"
+      ],
+      "dropin": "/etc/systemd/system/ghost-relay.service.d/60-hosted-origins.conf",
+      "configuration": "[Service]\nEnvironment=GC_CATALOG_ORIGINS=bootstrap-fsn.gchat.boo,bootstrap-hel.gchat.boo\n",
+      "applied": true,
+      "after": {
+        "MainPID": "2186109",
+        "NRestarts": "0",
+        "ActiveState": "active"
+      },
+      "qualification": "unit/listener only; protected application journey still required"
+    }
+  },
+  "application_qualification": "pending corrected live journey"
+}

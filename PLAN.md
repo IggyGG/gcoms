@@ -659,3 +659,9 @@ well as the client. Added a bounded single-host rolling configuration helper:
 reviewable dry run, preserve prior origins, refuse an existing task drop-in,
 validate the unit and restore the prior configuration on failed restart. The
 first dry run is correct; serial rollout and protected application checks follow.
+
+Relay egress rollout completed serially on r1–r8: only the two signed provider
+hosts were added, every unit/listener returned and restart counters remain zero.
+No relay executable, key or retained state changed. Receipts are retained in
+docs/evidence/irc-hosted-service-20260930/relay-origins.json; application routing
+qualification is still pending the corrected live GChat journey.
