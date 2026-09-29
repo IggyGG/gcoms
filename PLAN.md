@@ -541,3 +541,13 @@ exclusion; strict routing Clippy, legacy feature check, formatting and source
 audit passed. [Receipt](docs/evidence/authenticated-referral-retry-20260928/summary.json).
 The first green harness invocation reused a stale red binary from equal archive
 mtimes; that invalid result is retained separately from the rebuilt passing run.
+
+## Inbox recovery at the retained-cleanup bound (2026-09-29)
+
+The live channel repair uncovered an independent recovery loop: after retained
+attempts failed, every later round requested a replacement even when six retained
+cleanup groups made installation impossible. At that bound, a still-live retained
+inbox now gets the existing authenticated restoration path again, inside the same
+outer deadline/backoff. Normal replacement remains available below the bound.
+No queue or message is discarded; sealed authority, expiry, cleanup bounds and
+failed-checkpoint refusal remain unchanged. `codematch=unreachable`.

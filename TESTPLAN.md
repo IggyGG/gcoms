@@ -518,3 +518,13 @@ only missing pieces after inventory. Negative cases preserve private scope,
 digest checks, pause/cancel/unaccepted intent, duplicate suppression, the first
 four immediate source queries, revocation and source backoff. A completion claim
 alone must neither verify pieces nor complete the local download.
+
+## Retained inbox recovery when replacement is full
+
+With a pinned TLS fixture, populate the six retained cleanup roles and allow
+replacement as after repeated failed recovery rounds. Require actual retained
+admission responses and queue probes, durable restoration, identical queue IDs,
+capabilities and original deadlines, and no application delivery event. The old
+replacement-only branch must fail this case. Retain the capacity-refusal test,
+failed-checkpoint refusal and existing owner-alias restoration/expiry tests.
+The personal-profile invitation/send/kick check is a separate live receipt.

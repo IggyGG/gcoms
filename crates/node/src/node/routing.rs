@@ -944,18 +944,23 @@ async fn recover_channels(
     Ok(())
 }
 
-async fn recover_owner(
+pub(super) async fn recover_owner(
     state: &Arc<Mutex<NodeState>>,
     scheduler: &RelayScheduler,
     events: &broadcast::Sender<Ev>,
     runtime: &RoutingRuntime,
     allow_replacement: bool,
 ) -> Result<(), String> {
-    let current = state
-        .lock()
-        .unwrap_or_else(|p| p.into_inner())
-        .client_relay
-        .clone();
+    let (current, replacement_full) = {
+        let st = state.lock().unwrap_or_else(|p| p.into_inner());
+        if st.owner_transition_failed {
+            return Err("owner transition requires recovery".into());
+        }
+        (
+            st.client_relay.clone(),
+            aliases::inbox_replacement_at_capacity(&st),
+        )
+    };
     let own = runtime.own_introduction();
     let live = !current.aliases.is_empty()
         && current.aliases.iter().all(|a| {
@@ -967,7 +972,10 @@ async fn recover_owner(
     // The caller grants replacement only after the retained recovery rounds
     // failed. Repeating a hung retained attempt here can consume every outer
     // deadline forever, preventing the already-authorized failover entirely.
-    if live && !allow_replacement {
+    // A full cleanup set cannot accept replacement. Keep the existing
+    // authenticated resume path reachable, within the caller's same deadline,
+    // rather than provisioning replacements which installation must refuse.
+    if live && (!allow_replacement || replacement_full) {
         return resume_owner(state, scheduler, events, runtime, &current)
             .await
             .map_err(|error| format!("retained inbox recovery: {error}"));

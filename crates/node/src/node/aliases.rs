@@ -1055,6 +1055,21 @@ struct InboxReplacement {
     staged_abandon_at: std::time::Instant,
 }
 
+/// Replacement reserves a new draining group. Re-authenticating the retained
+/// owner needs no additional slot and must remain possible at this limit.
+pub(super) fn inbox_replacement_at_capacity(st: &NodeState) -> bool {
+    let now = std::time::Instant::now();
+    st.routing.is_some()
+        && st
+            .draining_contact_aliases
+            .iter()
+            .filter(|g| g.abandon_at > now)
+            .count()
+            + usize::from(st.unannounced_old_contact_aliases.is_some())
+            + usize::from(st.staged_contact_aliases.is_some())
+            > 5
+}
+
 fn preflight_inbox_replacement(st: &NodeState) -> Result<InboxReplacement, String> {
     if st.owner_transition_failed {
         return Err("owner transition requires recovery".into());
@@ -1066,14 +1081,7 @@ fn preflight_inbox_replacement(st: &NodeState) -> Result<InboxReplacement, Strin
     }
     let activated = std::time::Instant::now();
     if st.routing.is_some() {
-        let retained = st
-            .draining_contact_aliases
-            .iter()
-            .filter(|group| group.abandon_at > activated)
-            .count()
-            + usize::from(st.unannounced_old_contact_aliases.is_some())
-            + usize::from(st.staged_contact_aliases.is_some());
-        if retained > 5 {
+        if inbox_replacement_at_capacity(st) {
             return Err("retained inbox cleanup capacity reached".into());
         }
         if st.unannounced_old_contact_aliases.is_some()

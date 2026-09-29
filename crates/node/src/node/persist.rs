@@ -6256,6 +6256,8 @@ pub(in crate::node) mod tests {
         );
     }
 
+    include!("persist/inbox_capacity_recovery_tests.rs");
+
     #[tokio::test]
     async fn inbox_replacement_capacity_refusal_keeps_the_owner_available() {
         let mut node = state();
