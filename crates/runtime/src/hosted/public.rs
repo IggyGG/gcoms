@@ -90,15 +90,37 @@ pub(super) async fn snapshot(
             through: head.as_ref().map(|h| h.sequence),
             limit: wire::MAX_PAGE_RECORDS,
         };
-        let response = transport
-            .exchange(
-                channel,
-                wire::Operation::Snapshot {
-                    query,
-                    proof: authority.proof(channel, query)?,
-                },
+        // A join has no admitted local channel worker yet. Retry this read-only
+        // page across transient circuit failures using the same prepared leaf
+        // and pinned transcript head; no membership write is retried here.
+        let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(30);
+        let mut retries = 0;
+        let response = loop {
+            let result = tokio::time::timeout_at(
+                deadline,
+                transport.exchange(
+                    channel,
+                    wire::Operation::Snapshot {
+                        query,
+                        proof: authority.proof(channel, query)?,
+                    },
+                ),
             )
-            .await?;
+            .await
+            .map_err(|_| "hosted snapshot read deadline elapsed")?;
+            match result {
+                Ok(reply) => break reply,
+                Err(_) if retries < 3 => {
+                    retries += 1;
+                    tokio::time::sleep_until(deadline.min(
+                        tokio::time::Instant::now()
+                            + std::time::Duration::from_millis(100 * retries),
+                    ))
+                    .await;
+                }
+                Err(error) => return Err(error),
+            }
+        };
         let wire::Reply::Snapshot(page) = response else {
             return Err(format!("hosted snapshot refused: {response:?}"));
         };

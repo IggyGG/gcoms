@@ -673,3 +673,11 @@ The native relay rollout must preserve existing catalog hosts and configure only
 approved signed-provider HTTPS destinations. Retain each host's pre/post PID,
 active state and restart count, and stop the rollout on any failure. Process and
 listener readiness alone never substitute for protected GChat delivery checks.
+
+## Hosted admission snapshot recovery
+
+Run runtime `snapshot_recovery` tests: lose two responses after authenticated
+service reads and require one eventual membership change; return Unauthorized
+and require one attempt; fail every transport read and require exactly four
+attempts. Keep prepared identity and pinned pagination authority unchanged.
+Repeat the offline-owner real-network GChat journey without bypassing TLS.

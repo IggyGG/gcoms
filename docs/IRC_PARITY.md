@@ -344,3 +344,15 @@ messages, two measured PQ refreshes and every logical recipient acknowledgment.
 The fixture now consumes its durable inbox and drives deferred ACK maintenance,
 matching production instead of hitting the intentional 32-unconsumed-item quota.
 Publication is not a capacity/deployment claim.
+
+### Protected-network admission recovery follow-up
+
+The third live GChat attempt reached creator admission (4.026s after provisioning)
+and topic acceptance (5.043s), then failed on a TLS circuit EOF while the newcomer
+read the public admission snapshot. It is retained as a failure, not a delivery
+pass. Snapshot transport retries now retain the prepared joining identity and
+pinned transcript, stop after four attempts/30 seconds per page, and do not retry
+authenticated policy refusals or membership writes. Three focused cases and
+strict seven-package Clippy pass in `snapshot-recovery-03.log`; the first two logs
+cover the earlier two-case fixture and are retained. Full live completion remains
+open.

@@ -727,3 +727,5 @@ async fn hosted_directory_publication_is_operator_authenticated_and_receivers_ap
 
 mod capacity;
 mod responsiveness;
+
+mod snapshot_recovery;

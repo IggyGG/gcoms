@@ -665,3 +665,15 @@ hosts were added, every unit/listener returned and restart counters remain zero.
 No relay executable, key or retained state changed. Receipts are retained in
 docs/evidence/irc-hosted-service-20260930/relay-origins.json; application routing
 qualification is still pending the corrected live GChat journey.
+
+### IRC-2 hosted snapshot transport recovery — 2026-09-30
+
+The protected-network GChat run created a channel and accepted its encrypted
+topic, then lost a TLS circuit while an offline-owner newcomer read admission
+state. Read-only snapshot pages now allow four transport attempts within a
+30-second page deadline, retaining the prepared identity and pinned transcript.
+Authenticated service refusals are not retried. Membership writes keep their
+existing durable retry semantics. `snapshot-recovery-03.log` passes recovery
+after two lost authenticated reads, one membership change, immediate authority
+refusal and bounded exhaustion; strict seven-package Clippy passes. The earlier
+network failure remains retained; the updated live journey remains to be run.

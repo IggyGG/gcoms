@@ -21,3 +21,8 @@ defaults, merged with the host's explicit catalog allowlist. Configuring ordinar
 catalogs does not drop hosted origins. Unsigned invitation destinations remain
 refused; local history and durable queue admission do not refresh network trust.
 The origin regression uses the existing workspace network crate as a test dependency.
+
+Admission snapshot reads tolerate transient protected-circuit disconnects with
+at most four attempts and a 30-second deadline per page. The same prepared
+identity and pinned transcript remain authoritative. Service policy refusals
+are final; this read retry does not repeat membership mutations.
