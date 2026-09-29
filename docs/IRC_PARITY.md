@@ -22,7 +22,7 @@ The GComs task also preserves the canonical checkout's `0c2c704` bootstrap fix.
 | --- | --- | --- | --- |
 | IRC-1 | Versioned hosted MLS admission and ciphertext coordination | In progress | Real PQ-suite external joins with owner offline; forged/expired/replayed authority denied; service has no decryption state; legacy policy isolation |
 | IRC-2 | Ordered persistent recovery and service integration | In progress | Concurrent joins and crash/reopen converge; offline recipients do not block admission; no false delivery or loss of accepted records |
-| IRC-3 | Channel policy, operators, voice, moderation, bans/exceptions, keys, limits, discovery | Pending | All admission and message paths enforce policy against modified clients; grant/revoke and rekey persist |
+| IRC-3 | Channel policy, operators, voice, moderation, bans/exceptions, keys, limits, discovery | In progress | All admission and message paths enforce policy against modified clients; grant/revoke and rekey persist |
 | IRC-4 | Contacts and independent direct conversations/files | Pending | No shared channel required; leaving a former shared channel preserves the contact conversation; block and identity continuity |
 | IRC-5 | Authenticated activity and richer presence | Pending | Actor/target/reason ordering; away/back/unknown/invisible; optional sharing; snapshot polling loses no events |
 | IRC-6 | Notices, blocking/muting, highlights, formatting and client workflows | Pending | Same actual service-backed behavior through desktop/TUI/shared mobile UI; no automatic notice loops |
@@ -104,6 +104,18 @@ A separate 500-real-identity/ten-concurrent-sender MLS test has been added for
 explicit release execution. It is not application, network or native-platform
 qualification. Remaining: service transport/reader authorization, shared client
 integration, dynamic policy, contacts and all outstanding ledger rows above.
+
+### Reusable private admission
+
+`HostedAccessCode` keeps the reusable signing secret exclusively in clients;
+policy publishes only its verifier. The proof is specific to an epoch, policy,
+leaf, name and expiry. A captured proof is not a reusable bearer secret for the
+service. Private joins work with the creator absent, and a concurrent refused
+join can retry at the next epoch with the same signing identity. Secret imports
+validate that the public/private key halves match and temporary exported bytes
+are zeroized. `access-code-01.log`: 41 passes, two explicit scale-test ignores,
+strict Clippy for MLS and storage. Ordered key rotation and remaining policies
+are still pending; GChat has not been changed yet.
 
 Both components are siblings under GComs `.worktrees/irc-parity/`. Work only in
 those checkouts. GChat's original canonical lockfile and `.cargo/` are preserved.

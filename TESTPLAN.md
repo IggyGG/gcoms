@@ -35,6 +35,15 @@ senders, 4,990 authenticated receives, overflow rejection and retained duration 
 wire-size measurements. Keep network/UI/ACK timing and file/churn qualification
 separate; this component gate cannot close IRC-8 by itself.
 
+## Reusable hosted admission codes — IRC-3
+
+The MLS suite must import a protected reusable secret, admit private members
+with the owner absent, refuse reuse of its public verifier as a secret, reject
+wrong-code proofs and retry a concurrent refused join with the same leaf
+identity. Accepted members cannot invoke the pending-join reset API. A code's
+private serialization must not appear in public policy. Ordered key rotation
+and revocation require separate policy-change regressions before being enabled.
+
 ## Bounded file recovery latency
 
 Run `cargo test --locked -p gcoms-file-transfer` and

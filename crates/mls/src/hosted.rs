@@ -18,6 +18,9 @@ use openmls_traits::{crypto::OpenMlsCrypto, signatures::Signer};
 use sha2::{Digest, Sha256};
 use tls_codec::{Deserialize, Serialize, Size, TlsDeserialize, TlsSerialize, TlsSize, VLBytes};
 
+mod access;
+pub use access::HostedAccessCode;
+
 const VERSION: u16 = 1;
 const MAX_NAME: usize = 128;
 const MAX_AUTHORITY: usize = 16 * 1024;
@@ -132,6 +135,7 @@ pub struct HostedPolicy {
     owner: [u8; 32],
     capacity: u32,
     public_join: u8,
+    access_key: Option<[u8; 32]>,
     signature: VLBytes,
 }
 
@@ -143,6 +147,13 @@ impl HostedPolicy {
         bytes.extend_from_slice(&self.owner);
         bytes.extend_from_slice(&self.capacity.to_be_bytes());
         bytes.push(self.public_join);
+        match self.access_key {
+            Some(key) => {
+                bytes.push(1);
+                bytes.extend_from_slice(&key);
+            }
+            None => bytes.push(0),
+        }
         bytes
     }
 
@@ -209,6 +220,7 @@ impl HostedPolicy {
             return Err(MlsError::Unauthorized);
         }
         Ok(JoinPermit {
+            authority: 0,
             expiry,
             signature: root
                 .sign(&self.join_payload(epoch, &leaf, name.as_bytes(), expiry))
@@ -228,17 +240,33 @@ impl HostedPolicy {
             return Err(MlsError::Encoding);
         }
         let permit = JoinPermit::tls_deserialize_exact(aad)?;
-        if self.public_join == 1 && permit.expiry == 0 && permit.signature.as_slice().is_empty() {
+        if self.public_join == 1
+            && permit.authority == 0
+            && permit.expiry == 0
+            && permit.signature.as_slice().is_empty()
+        {
             return Ok(());
         }
         if permit.expiry <= now {
             return Err(MlsError::Expired);
         }
-        if !verify_signature(
-            self.root.as_slice(),
-            &self.join_payload(epoch, leaf, name, permit.expiry),
-            permit.signature.as_slice(),
-        ) {
+        let payload = self.join_payload(epoch, leaf, name, permit.expiry);
+        let authorized = match permit.authority {
+            0 => verify_signature(self.root.as_slice(), &payload, permit.signature.as_slice()),
+            1 => self.access_key.is_some_and(|key| {
+                OpenMlsRustCrypto::default()
+                    .crypto()
+                    .verify_signature(
+                        CIPHERSUITE.signature_algorithm(),
+                        &payload,
+                        &key,
+                        permit.signature.as_slice(),
+                    )
+                    .is_ok()
+            }),
+            _ => false,
+        };
+        if !authorized {
             return Err(MlsError::Unauthorized);
         }
         Ok(())
@@ -249,6 +277,7 @@ impl HostedPolicy {
 /// secret. OpenMLS binds it to the joiner's signature through commit AAD.
 #[derive(Clone, Debug, TlsSerialize, TlsDeserialize, TlsSize)]
 pub struct JoinPermit {
+    authority: u8,
     expiry: u64,
     signature: VLBytes,
 }
@@ -257,6 +286,7 @@ impl JoinPermit {
     /// Only accepted by an explicitly public-join policy.
     pub fn public() -> Self {
         Self {
+            authority: 0,
             expiry: 0,
             signature: Vec::new().into(),
         }
@@ -437,6 +467,45 @@ struct HostedArchive {
 }
 
 impl HostedSession {
+    /// Rebuild a refused speculative join at a newer epoch while preserving
+    /// its scoped signing identity. Never use this to reset an accepted member.
+    pub fn prepare_join_retry(self) -> Result<PreparedHostedJoin, MlsError> {
+        if self.pending_join.is_none() {
+            return Err(MlsError::Unauthorized);
+        }
+        let encoded = zeroize::Zeroizing::new(self.ctx.signer.tls_serialize_detached()?);
+        let signer = SignatureKeyPair::tls_deserialize_exact(encoded.as_slice())?;
+        let leaf = self.ctx.group.own_leaf_node().ok_or(MlsError::Encoding)?;
+        let prepared = PreparedHostedJoin {
+            backend: OpenMlsRustCrypto::default(),
+            credential: CredentialWithKey {
+                credential: leaf.credential().clone(),
+                signature_key: SignaturePublicKey::from(signer.to_public_vec()),
+            },
+            signer: Some(signer),
+        };
+        prepared
+            .signer
+            .as_ref()
+            .expect("prepared signer")
+            .store(prepared.backend.storage())
+            .map_err(mls)?;
+        Ok(prepared)
+    }
+
+    /// Create a private channel with a reusable client-held admission code.
+    /// Only its verification key appears in service-visible policy.
+    pub fn create_keyed(
+        root: &IdentityKeypair,
+        name: &str,
+        capacity: u32,
+        code: &HostedAccessCode,
+    ) -> Result<Self, MlsError> {
+        let mut session = Self::create(root, name, capacity, false)?;
+        session.policy.access_key = Some(code.verification_key());
+        session.policy.signature = root.sign(&session.policy.payload()).into();
+        Ok(session)
+    }
     /// Prepare an exact signed ciphertext for durable outgoing storage/retry.
     /// The caller must checkpoint the advanced sender state before publishing.
     pub fn send_hosted(&mut self, payload: &[u8]) -> Result<HostedMessage, MlsError> {
@@ -610,6 +679,7 @@ impl HostedSession {
             owner: prepared.member_id(),
             capacity,
             public_join: u8::from(public_join),
+            access_key: None,
             signature: Vec::new().into(),
         };
         policy.signature = root.sign(&policy.payload()).into();

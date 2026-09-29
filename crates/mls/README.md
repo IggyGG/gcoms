@@ -26,6 +26,13 @@ let the service validate append authority. Receiving clients also authenticate
 the encrypted sender before advancing their state. The separate
 `gcoms-channel-service` library supplies bounded durable append/replay storage.
 
+`HostedAccessCode` supplies reusable private admission while existing members
+are offline. Clients keep its high-entropy signing secret; public policy stores
+only the verification key. Each proof binds the channel policy, epoch, leaf,
+name and expiry. Refused concurrent joins can rebuild at the new epoch while
+preserving their scoped signing identity. Code rotation/revocation still awaits
+the ordered policy-change work; these primitives remain experimental.
+
 With `client-persist`, hosted clients seal their membership state and pending
 acceptance together using a distinct archive kind. Legacy groups explicitly
 reject external commits and cannot be silently converted to this profile.

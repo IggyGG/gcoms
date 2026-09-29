@@ -251,6 +251,74 @@ fn duplicate_display_name_is_rejected_by_service_and_member() {
     assert_eq!(owner.epoch(), HOSTED_GENESIS_EPOCH);
 }
 
+#[test]
+fn reusable_code_joins_privately_with_owner_offline_and_retries_same_identity() {
+    let root = IdentityKeypair::from_seed([84; 32]);
+    let code = HostedAccessCode::generate().unwrap();
+    let secret = code.export_secret().unwrap();
+    let owner = HostedSession::create_keyed(&root, "owner", 500, &code).unwrap();
+    let policy = owner.policy().clone();
+    let mut observer = HostedObserver::new(
+        policy.clone(),
+        policy.channel_id(),
+        &owner.export_group_info().unwrap(),
+    )
+    .unwrap();
+    drop(root);
+    drop(owner);
+    assert!(HostedAccessCode::import_secret(&code.verification_key()).is_err());
+    let exported_policy = policy.encode().unwrap();
+    assert!(!exported_policy
+        .windows(secret.len())
+        .any(|w| w == secret.as_slice()));
+    let second_code = HostedAccessCode::import_secret(&secret).unwrap();
+    let alice = PreparedHostedJoin::new("alice").unwrap();
+    let permit = code
+        .permit(&policy, observer.epoch(), alice.member_id(), "alice", 200)
+        .unwrap();
+    let (mut alice, first) = alice.join(&observer, &permit, 100).unwrap();
+    let bob = PreparedHostedJoin::new("bob").unwrap();
+    let bob_id = bob.member_id();
+    let permit = second_code
+        .permit(&policy, observer.epoch(), bob_id, "bob", 200)
+        .unwrap();
+    let (bob, stale) = bob.join(&observer, &permit, 100).unwrap();
+    observer = observer
+        .stage_join(&first, alice.proposed_group_info().unwrap(), 100)
+        .unwrap();
+    alice.accept_join(&first).unwrap();
+    assert!(observer
+        .stage_join(&stale, bob.proposed_group_info().unwrap(), 100)
+        .is_err());
+    let bob = bob.prepare_join_retry().unwrap();
+    assert_eq!(bob.member_id(), bob_id);
+    let permit = second_code
+        .permit(&policy, observer.epoch(), bob_id, "bob", 200)
+        .unwrap();
+    let (mut bob, commit) = bob.join(&observer, &permit, 101).unwrap();
+    observer = observer
+        .stage_join(&commit, bob.proposed_group_info().unwrap(), 101)
+        .unwrap();
+    bob.accept_join(&commit).unwrap();
+    alice.receive(&commit, 101).unwrap();
+    let message = bob
+        .send_hosted(b"private admission without an online owner")
+        .unwrap();
+    observer.verify_message(&message).unwrap();
+    assert_eq!(
+        alice.receive_hosted(&message).unwrap(),
+        b"private admission without an online owner"
+    );
+    assert!(
+        alice.prepare_join_retry().is_err(),
+        "accepted members cannot reset their epoch"
+    );
+    let other = HostedAccessCode::generate().unwrap();
+    assert!(other
+        .permit(&policy, observer.epoch(), bob_id, "bob", 200)
+        .is_err());
+}
+
 #[cfg(feature = "client-persist")]
 #[test]
 fn restart_preserves_pending_acceptance_and_encrypts_the_member_state() {
