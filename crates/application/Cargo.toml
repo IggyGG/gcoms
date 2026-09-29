@@ -66,3 +66,7 @@ required-features = ["embedded", "ipc", "rpc", "launch"]
 [[test]]
 name = "backends"
 required-features = ["embedded", "ipc", "rpc", "launch", "daemon"]
+
+[[example]]
+name = "hosted_bot"
+required-features = ["network-client", "hosted-channels", "daemon"]

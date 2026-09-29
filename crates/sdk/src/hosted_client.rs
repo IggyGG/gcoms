@@ -93,6 +93,13 @@ pub enum Content {
         content_type: String,
         body: Vec<u8>,
     },
+    /// Encrypted handoff from a currently authorized topic writer. Only fills
+    /// unknown state; it never overwrites a topic already observed by this client.
+    TopicState {
+        topic: String,
+        through: u64,
+        source: u64,
+    },
 }
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Delivery {
@@ -120,6 +127,8 @@ pub struct Channel {
     pub revision: u64,
     pub active: bool,
     pub topic: String,
+    #[serde(default)]
+    pub topic_pending: bool,
     pub members: Vec<Member>,
     pub capacity: u32,
     pub bans: Vec<MemberId>,
@@ -230,7 +239,7 @@ pub enum Request {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Reply {
     Channels(Vec<Channel>),
-    Channel(Channel),
+    Channel(Box<Channel>),
     Queued(MessageId),
     Link(InviteLink),
     Links(Vec<InviteLink>),

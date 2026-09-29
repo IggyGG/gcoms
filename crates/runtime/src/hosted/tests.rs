@@ -452,3 +452,64 @@ async fn presence_renews_only_after_opt_in_and_off_persists_without_receipt_fano
     assert_eq!(messages(&alice).len(), count);
     assert_eq!(alice.view().members[0].presence, api::Presence::Unknown);
 }
+
+#[tokio::test]
+async fn offline_join_shows_pending_topic_until_authorized_encrypted_handoff() {
+    let server_dir = private_dir();
+    let alice_dir = private_dir();
+    let bob_dir = private_dir();
+    let transport = service(server_dir.path());
+    let mut alice = owner(alice_dir.path(), transport.clone()).await;
+    alice
+        .queue_send(api::Content::Topic("private current topic".into()))
+        .unwrap();
+    pump(&mut alice).await;
+    let channel = alice.archive.channel;
+    let mut bob = joining(channel, "bob", bob_dir.path(), transport.clone()).await;
+    pump(&mut bob).await;
+    assert!(bob.view().topic_pending);
+    assert!(bob.view().topic.is_empty());
+    drop(bob);
+    let (storage, bytes) =
+        storage::Storage::open(&bob_dir.path().join(filename(channel)), [99; 32], channel).unwrap();
+    let mut bob = Client::restore(&bytes.unwrap(), channel, storage, [99; 32], transport).unwrap();
+    assert!(bob.view().topic_pending);
+    assert!(bob
+        .queue_send(api::Content::TopicState {
+            topic: "forged".into(),
+            through: bob.archive.cursor,
+            source: 1
+        })
+        .is_err());
+    pump(&mut alice).await;
+    pump(&mut bob).await;
+    assert!(!bob.view().topic_pending);
+    assert_eq!(bob.view().topic, "private current topic");
+    alice
+        .queue_send(api::Content::Topic("new topic".into()))
+        .unwrap();
+    pump(&mut alice).await;
+    pump(&mut bob).await;
+    alice
+        .queue_send(api::Content::TopicState {
+            topic: "stale handoff".into(),
+            through: alice.archive.cursor,
+            source: 1,
+        })
+        .unwrap();
+    pump(&mut alice).await;
+    pump(&mut bob).await;
+    assert_eq!(
+        bob.view().topic,
+        "new topic",
+        "a handoff cannot overwrite an observed topic update"
+    );
+    let stored = std::fs::read(
+        server_dir
+            .path()
+            .join(filename(channel))
+            .with_extension("gch"),
+    )
+    .unwrap();
+    assert!(!stored.windows(21).any(|w| w == b"private current topic"));
+}

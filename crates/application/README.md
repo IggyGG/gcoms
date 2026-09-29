@@ -238,3 +238,22 @@ support for `gc2-carrier`; compiling the feature does not change a profile silen
 ## Scoped local component hosts
 
 `ApplicationBuilder::central_components(policy, primary, safety_number)` explicitly partitions one in-process profile between its normal application and separately authenticated local components. The identity pin is checked before changing ownership; a mismatched pin fails closed. The returned primary client cannot consume scoped inbox work. Reopening requires the same retained partition. Ordinary applications keep the personal-profile ownership guard. Validation: `central_host` integration test.
+
+### Hosted channel bot example
+
+`cargo run -p gcoms --features network-client,hosted-channels,daemon --example
+hosted_bot -- PRIVATE_PROFILE INSTALLED_NETWORK_JSON` runs an outbound-only bot.
+Set `GCOMS_UNLOCK_SECRET`; for its first join, also set
+`GCOMS_HOSTED_INVITATION` to an invitation supplied by the channel operator. Use a
+private, disposable bot profile. The installed network file supplies the pinned
+network identity and protected routes; there is no direct service fallback.
+
+The bot joins as an ordinary member. It responds only to exact `!ping` text with a
+notice, at most once every two seconds. It never answers notices and cannot
+moderate the channel without a separate explicit role grant. In a moderated
+channel, an operator must grant it voice to send responses. Its durable runtime
+queue survives outages; it commits incoming events only after any response is
+queued. A crash between response admission and event commit can repeat a response;
+applications requiring exactly-once external effects must add their own durable
+operation ledger. Ctrl-C closes the runtime. This example is compile-checked by
+the all-features/all-targets gate; it is not a live-provider qualification claim.

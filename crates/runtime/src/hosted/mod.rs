@@ -217,7 +217,7 @@ impl HostedChannels {
                 )?;
                 let view = client.view();
                 self.channels.insert(channel, client);
-                Ok(api::Reply::Channel(view))
+                Ok(api::Reply::Channel(Box::new(view)))
             }
             Join {
                 link,
@@ -254,7 +254,7 @@ impl HostedChannels {
                 )?;
                 let view = client.view();
                 self.channels.insert(decoded.channel, client);
-                Ok(api::Reply::Channel(view))
+                Ok(api::Reply::Channel(Box::new(view)))
             }
             Send { channel, content } => Ok(api::Reply::Queued(
                 self.channel(channel)?.queue_send(content)?,
@@ -319,7 +319,7 @@ impl HostedChannels {
                 let client = self.channel(channel)?;
                 client.flush_one().await?;
                 client.sync_page().await?;
-                Ok(api::Reply::Channel(client.view()))
+                Ok(api::Reply::Channel(Box::new(client.view())))
             }
             Events {
                 channel,

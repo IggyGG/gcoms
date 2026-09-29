@@ -107,20 +107,48 @@ struct Receipts {
     desired_presence: Option<api::Presence>,
     renew_presence_at: u64,
 }
-fn decode_archive(bytes: &[u8]) -> Result<(Archive, Receipts), String> {
+#[derive(Default, Serialize, Deserialize)]
+struct TopicState {
+    known: bool,
+    joined_at: u64,
+    source: u64,
+    share_after: u64,
+}
+fn decode_archive(bytes: &[u8]) -> Result<(Archive, Receipts, TopicState), String> {
     let (archive, tail): (Archive, _) =
         postcard::take_from_bytes(bytes).map_err(|_| "invalid hosted client archive")?;
-    let receipts = match archive.version {
-        1 if tail.is_empty() => Receipts::default(),
-        2 => postcard::from_bytes(tail).map_err(|_| "invalid hosted receipt archive")?,
+    let (receipts, topic) = match archive.version {
+        1 if tail.is_empty() => (
+            Receipts::default(),
+            TopicState {
+                known: !archive.topic.is_empty(),
+                joined_at: archive.cursor,
+                ..TopicState::default()
+            },
+        ),
+        2 => (
+            postcard::from_bytes(tail).map_err(|_| "invalid hosted receipt archive")?,
+            TopicState {
+                known: !archive.topic.is_empty(),
+                joined_at: archive.cursor,
+                ..TopicState::default()
+            },
+        ),
+        3 => {
+            let (receipts, tail) =
+                postcard::take_from_bytes(tail).map_err(|_| "invalid hosted receipt archive")?;
+            let topic = postcard::from_bytes(tail).map_err(|_| "invalid hosted topic archive")?;
+            (receipts, topic)
+        }
         _ => return Err("unsupported hosted client archive".into()),
     };
-    Ok((archive, receipts))
+    Ok((archive, receipts, topic))
 }
 
 pub(super) struct Client {
     pub session: HostedSession,
     receipts: Receipts,
+    topic: TopicState,
     pub archive: Archive,
     pub transport: Arc<dyn Transport>,
     storage: Storage,
@@ -134,7 +162,7 @@ pub(super) fn kind(content: &api::Content) -> HostedMessageKind {
         api::Content::Text(_) => HostedMessageKind::Text,
         api::Content::Action(_) => HostedMessageKind::Action,
         api::Content::Notice(_) => HostedMessageKind::Notice,
-        api::Content::Topic(_) => HostedMessageKind::Topic,
+        api::Content::Topic(_) | api::Content::TopicState { .. } => HostedMessageKind::Topic,
         api::Content::Nickname(_) => HostedMessageKind::Nickname,
         api::Content::Presence { .. } => HostedMessageKind::Presence,
         api::Content::File { .. } => HostedMessageKind::File,
@@ -157,6 +185,11 @@ pub(super) fn validate(content: &api::Content) -> Result<(), String> {
             ordinary(s, 8192)
         }
         api::Content::Topic(s) => s.is_empty() || ordinary(s, 2048),
+        api::Content::TopicState {
+            topic,
+            through,
+            source,
+        } => *through > 0 && source <= through && (topic.is_empty() || ordinary(topic, 2048)),
         api::Content::Nickname(s) => {
             !s.is_empty() && s.len() <= 128 && s.trim() == s && !s.chars().any(char::is_control)
         }
@@ -204,11 +237,15 @@ impl Client {
         let mut client = Self {
             session,
             receipts: Receipts::default(),
+            topic: TopicState {
+                known: matches!(phase, Phase::Creating),
+                ..TopicState::default()
+            },
             transport,
             storage,
             wrapping_key: Zeroizing::new(key),
             archive: Archive {
-                version: 2,
+                version: 3,
                 channel,
                 alias,
                 endpoint,
@@ -236,7 +273,7 @@ impl Client {
         Ok(client)
     }
     pub fn stored_endpoint(bytes: &[u8]) -> Result<String, String> {
-        let (archive, _) = decode_archive(bytes)?;
+        let (archive, _, _) = decode_archive(bytes)?;
         Ok(archive.endpoint)
     }
     pub fn register_invite(
@@ -338,8 +375,8 @@ impl Client {
         key: [u8; 32],
         transport: Arc<dyn Transport>,
     ) -> Result<Self, String> {
-        let (archive, receipts) = decode_archive(bytes)?;
-        if !matches!(archive.version, 1 | 2)
+        let (archive, receipts, topic) = decode_archive(bytes)?;
+        if !matches!(archive.version, 1..=3)
             || receipts.outbox.len() > MAX_EVENTS
             || receipts.received.len() > MAX_EVENTS
             || receipts.received.values().any(|r| r.len() > 500)
@@ -356,6 +393,7 @@ impl Client {
             session,
             archive,
             receipts,
+            topic,
             storage,
             wrapping_key: Zeroizing::new(key),
             transport,
@@ -371,12 +409,15 @@ impl Client {
     fn checkpoint(&mut self) -> Result<(), String> {
         let result = (|| {
             self.archive.session = self.session.persist(&self.wrapping_key).map_err(mls)?;
-            self.archive.version = 2;
+            self.archive.version = 3;
             let mut bytes = Zeroizing::new(
                 postcard::to_allocvec(&self.archive).map_err(|_| "encode hosted client archive")?,
             );
             bytes.extend_from_slice(
                 &postcard::to_allocvec(&self.receipts).map_err(|_| "encode hosted receipts")?,
+            );
+            bytes.extend_from_slice(
+                &postcard::to_allocvec(&self.topic).map_err(|_| "encode hosted topic")?,
             );
             self.storage.save(&bytes)
         })();
@@ -440,7 +481,10 @@ impl Client {
             .map(|member| member.pseudonym)
             .filter(|member| {
                 *member != self.session.member_id()
-                    && !matches!(application.content, api::Content::Presence { .. })
+                    && !matches!(
+                        application.content,
+                        api::Content::Presence { .. } | api::Content::TopicState { .. }
+                    )
             })
             .collect();
         self.session = candidate;
@@ -457,15 +501,17 @@ impl Client {
             wire,
             application: application.clone(),
         });
-        self.emit(
-            now(),
-            api::EventKind::Message {
-                id,
-                sender: self.session.member_id(),
-                content: application.content,
-                delivery: api::Delivery::Pending,
-            },
-        );
+        if !matches!(application.content, api::Content::TopicState { .. }) {
+            self.emit(
+                now(),
+                api::EventKind::Message {
+                    id,
+                    sender: self.session.member_id(),
+                    content: application.content,
+                    delivery: api::Delivery::Pending,
+                },
+            );
+        }
         self.checkpoint()?;
         Ok(id)
     }
@@ -571,6 +617,7 @@ impl Client {
                 self.archive.refused = None;
                 // The newcomer cannot decrypt messages before this admission.
                 self.archive.cursor = receipt.sequence;
+                self.topic.joined_at = receipt.sequence;
                 self.archive.head = receipt.record_hash;
                 self.archive.pending.remove(0);
                 self.checkpoint()?;
@@ -703,7 +750,10 @@ impl Client {
                         .map(|m| m.pseudonym)
                         .filter(|id| {
                             *id != candidate.member_id()
-                                && !matches!(application.content, api::Content::Presence { .. })
+                                && !matches!(
+                                    application.content,
+                                    api::Content::Presence { .. } | api::Content::TopicState { .. }
+                                )
                         })
                         .collect();
                 }
@@ -912,6 +962,7 @@ impl Client {
             revision: rules.revision(),
             active: matches!(self.archive.phase, Phase::Ready) && self.session.active(),
             topic: self.archive.topic.clone(),
+            topic_pending: !self.topic.known,
             members,
             capacity: rules.capacity(),
             bans: rules.list(HostedAccessList::Ban).to_vec(),
@@ -926,9 +977,37 @@ impl Client {
             presence_opt_in: self.archive.presence_opt_in,
         }
     }
-    fn accept_content(&mut self, sender: [u8; 32], application: &Application, accepted_at: u64) {
+    fn accept_content(
+        &mut self,
+        sender: [u8; 32],
+        application: &Application,
+        accepted_at: u64,
+        sequence: u64,
+    ) {
         match &application.content {
-            api::Content::Topic(topic) => self.archive.topic = topic.clone(),
+            api::Content::Topic(topic) => {
+                self.archive.topic = topic.clone();
+                self.topic.known = true;
+                self.topic.source = sequence;
+                self.topic.share_after = 0;
+            }
+            api::Content::TopicState {
+                topic,
+                through,
+                source,
+            } => {
+                if *through >= sequence {
+                    return;
+                }
+                if !self.topic.known && *through >= self.topic.joined_at {
+                    self.archive.topic = topic.clone();
+                    self.topic.known = true;
+                    self.topic.source = *source;
+                }
+                if *through >= self.topic.share_after {
+                    self.topic.share_after = 0;
+                }
+            }
             api::Content::Nickname(name) => {
                 self.archive.nicknames.insert(sender, name.clone());
             }
@@ -989,6 +1068,9 @@ impl Client {
             }
             for member in self.session.roster() {
                 if !before.iter().any(|old| old.pseudonym == member.pseudonym) {
+                    if self.topic.known {
+                        self.topic.share_after = record.sequence;
+                    }
                     self.emit(
                         record.accepted_at,
                         api::EventKind::Joined {
@@ -1080,8 +1162,10 @@ impl Client {
                     )
                     .into();
                     let key = (sender, application.id);
-                    let needs_receipt =
-                        !matches!(application.content, api::Content::Presence { .. });
+                    let needs_receipt = !matches!(
+                        application.content,
+                        api::Content::Presence { .. } | api::Content::TopicState { .. }
+                    );
                     let receipt_valid = self
                         .archive
                         .seen
@@ -1101,8 +1185,15 @@ impl Client {
                             if self.archive.seen.len() > 10_000 {
                                 self.archive.seen.pop_first();
                             }
-                            self.accept_content(sender, &application, record.accepted_at);
-                            if sender != self.session.member_id() {
+                            self.accept_content(
+                                sender,
+                                &application,
+                                record.accepted_at,
+                                record.sequence,
+                            );
+                            if sender != self.session.member_id()
+                                && !matches!(application.content, api::Content::TopicState { .. })
+                            {
                                 self.emit(
                                     record.accepted_at,
                                     api::EventKind::Message {
@@ -1217,6 +1308,9 @@ impl Client {
         }
         self.sync_receipts().await?;
         self.renew_presence(now())?;
+        if self.archive.cursor == page.head.sequence {
+            self.share_topic()?;
+        }
         Ok(progressed)
     }
 }
@@ -1339,5 +1433,22 @@ impl Client {
             self.checkpoint()?;
         }
         Ok(())
+    }
+}
+
+impl Client {
+    fn share_topic(&mut self) -> Result<(), String> {
+        if !self.topic.known || self.topic.share_after == 0 || !self.session.active()
+            || !self.session.rules().may_change_topic(self.session.member_id())
+            || self.archive.pending.iter().any(|p| matches!(p, Pending::Message { application, .. } if matches!(application.content, api::Content::Topic(_) | api::Content::TopicState { .. }))) {
+            return Ok(());
+        }
+        self.queue_send(api::Content::TopicState {
+            topic: self.archive.topic.clone(),
+            through: self.archive.cursor,
+            source: self.topic.source,
+        })?;
+        self.topic.share_after = 0;
+        self.checkpoint()
     }
 }

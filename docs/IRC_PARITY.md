@@ -23,10 +23,10 @@ The GComs task also preserves the canonical checkout's `0c2c704` bootstrap fix.
 | IRC-1 | Versioned hosted MLS admission and ciphertext coordination | In progress | Real PQ-suite external joins with owner offline; forged/expired/replayed authority denied; service has no decryption state; legacy policy isolation |
 | IRC-2 | Ordered persistent recovery and service integration | In progress | Concurrent joins and crash/reopen converge; offline recipients do not block admission; no false delivery or loss of accepted records |
 | IRC-3 | Channel policy, operators, voice, moderation, bans/exceptions, keys, limits, discovery | In progress | All admission and message paths enforce policy against modified clients; grant/revoke and rekey persist |
-| IRC-4 | Contacts and independent direct conversations/files | Pending | No shared channel required; leaving a former shared channel preserves the contact conversation; block and identity continuity |
-| IRC-5 | Authenticated activity and richer presence | Pending | Actor/target/reason ordering; away/back/unknown/invisible; optional sharing; snapshot polling loses no events |
-| IRC-6 | Notices, blocking/muting, highlights, formatting and client workflows | Pending | Same actual service-backed behavior through desktop/TUI/shared mobile UI; no automatic notice loops |
-| IRC-7 | Operator workflows and supported bot integration | Pending | Scoped authorization, rate control, network/channel authority separation, executable bot example |
+| IRC-4 | Contacts and independent direct conversations/files | In progress | No shared channel required; leaving a former shared channel preserves the contact conversation; block and identity continuity |
+| IRC-5 | Authenticated activity and richer presence | In progress | Actor/target/reason ordering; away/back/unknown/invisible; optional sharing; snapshot polling loses no events |
+| IRC-6 | Notices, blocking/muting, highlights, formatting and client workflows | In progress | Same actual service-backed behavior through desktop/TUI/shared mobile UI; no automatic notice loops |
+| IRC-7 | Operator workflows and supported bot integration | In progress | Scoped authorization, rate control, network/channel authority separation, executable bot example |
 | IRC-8 | Capacity, compatibility and release qualification | Pending | 500 real identities; ten concurrent senders; churn/offline/file traffic; timing/resource evidence; profile-preserving upgrade |
 
 The classical mode equivalents include +o/+v/+m/+b/+e/+I/+i/+k/+l/+t and
@@ -244,3 +244,36 @@ before sending and retries its invisible update after pending work clears.
 Available/away is an advertised state, not proof of an active connection.
 Further receipt-log corruption/quota checks and the full updated GChat suite are
 running separately; end-to-end network latency remains unqualified.
+
+User decision: newcomers show **Topic pending** when all existing members are
+offline; invitation links carry no extra metadata key. The encrypted topic
+handoff is sent by a member currently allowed to change topics after replaying
+through the new admission. It only fills unknown topic state and cannot overwrite
+an already observed topic update. With operator-only topics, an authorized
+operator must return before that handoff is available. The service retains only
+ciphertext. Runtime archive v3 retains the v1/v2 decode path and persists this
+explicit pending state. New handoff/restart/authorization/race checks are pending.
+
+
+### Topic handoff and independent-contact checkpoint
+
+`topic-01.log` passes seven hosted runtime recovery tests and three GChat archive
+checks. The offline newcomer remains pending through restart; an unauthorized
+member cannot hand off an operator-only topic, and a stale handoff cannot replace
+an observed topic update. `receipt-04.log` passes strict GComs checks and the full
+pre-contact GChat Rust suite (176 passed, three existing explicit ignores).
+
+GChat independent contacts use explicit signed-card exchange, local aliases and
+fingerprint verification. Stable application IDs, exact-content receipts and a
+separate encrypted `.contacts` archive preserve retries without linking legacy
+channel identities. Receiver storage precedes durable-inbox commit and receipt
+publication. Blocking stops new submissions and suppresses inbound application
+replies; already admitted transport copies cannot be recalled. Card imports have
+a separate 192 KiB bound; ordinary chat input limits remain unchanged.
+
+The actual two-instance, no-shared-channel test passes in `contacts-06.log`, with
+receipt/deduplication and rollback-isolation unit checks and strict GChat Clippy.
+That run subsequently found a GComs Clippy range-pattern warning; the corrected
+GComs strict all-target/all-feature application check passes in `contacts-07.log`,
+including the new scoped hosted bot example. Updated contact/preferences checks
+are still running. This is not independent-file or installed-network qualification.
