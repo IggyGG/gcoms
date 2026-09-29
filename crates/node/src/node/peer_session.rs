@@ -426,20 +426,6 @@ impl PeerSession {
             _ => Err(CryptoError::StaleTransaction.into()),
         }
     }
-    pub fn provide_local_secrets(&mut self, secrets: &LocalSecrets) {
-        match self {
-            Self::Legacy(s) => s.provide_local_kem(secrets.kem_decapsulation_key()),
-            #[cfg(feature = "experimental-gc2")]
-            Self::Credited(s) => s.provide_local_secrets(secrets),
-        }
-    }
-    pub fn provide_peer_kem(&mut self, key: Vec<u8>) -> Result<(), Error> {
-        match self {
-            Self::Legacy(s) => Ok(s.provide_peer_kem(key)?),
-            #[cfg(feature = "experimental-gc2")]
-            Self::Credited(s) => Ok(s.provide_peer_kem(key)?),
-        }
-    }
     #[cfg(all(test, feature = "client-persist"))]
     pub fn send_ctr(&self) -> u64 {
         match self {

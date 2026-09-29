@@ -652,13 +652,10 @@ pub(crate) fn accept_reliable_direct(
         .ok_or("missing direct session")?
         .stage_received(&received, wrapping_key, context)
         .map_err(|error| error.to_string())?;
-    if let Some(bundle) = Bundle::decode(&peer.bundle) {
-        if bundle.verify_fresh(sender_pk, now_unix()) {
-            staged
-                .provide_peer_kem(bundle.kem_pub)
-                .map_err(|e| e.to_string())?;
-        }
-    }
+    // Contact bundles authorize future first moves, not replacement of an
+    // established session's KEM key. In-flight epochs and restored sessions
+    // retain the private key negotiated by their authenticated handshake.
+    // PQ refreshes continue against that key until session re-establishment.
     let ack_record = encode_direct_ack(message_id, st.direct_presence_opt_in.contains(sender_pk));
     #[cfg(feature = "experimental-gc2")]
     if staged.tag().is_some() && !staged.can_send(&ack_record) {

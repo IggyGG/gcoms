@@ -531,3 +531,56 @@ async fn gc2_prepared_receive_keeps_its_logical_receipt_when_flow_deadline_passe
     alice.lock().unwrap().scheduler.shutdown();
     b.scheduler.shutdown();
 }
+
+fn gc2_drain_fixture_acks(a: &mut NodeState, b: &mut NodeState, events: &broadcast::Sender<Ev>) {
+    for _ in 0..16 {
+        if a.direct_ack_outbox.is_empty() && b.direct_ack_outbox.is_empty() { return; }
+        for delivery in std::mem::take(&mut a.direct_ack_outbox) {
+            for cell in delivery.cells { gc2_direct::incoming(b, &cell.payload, events).unwrap(); }
+        }
+        for delivery in std::mem::take(&mut b.direct_ack_outbox) {
+            for cell in delivery.cells { gc2_direct::incoming(a, &cell.payload, events).unwrap(); }
+        }
+    }
+    panic!("ACK loop did not quiesce");
+}
+
+#[tokio::test]
+async fn gc2_contact_renewal_keeps_pq_refresh_and_logical_receipts_working() {
+    let (alice, mut bob, _) = gc2_recovery_pair(91, 92).await;
+    let (events, _) = broadcast::channel(32);
+    let (scheduler, peer, tag) = {
+        let mut a = alice.lock().unwrap();
+        gc2_drain_fixture_acks(&mut a, &mut bob, &events);
+        (a.scheduler.clone(), bob.info.clone(), *a.sessions[&bob.info.identity_pk].tag().unwrap())
+    };
+    let now = now_unix();
+    let (aged, secrets) = IdentityKeypair::from_seed(bob.identity_seed)
+        .issue_bundle_with_rng(&mut rand::thread_rng(), now - crate::proto::MAX_BUNDLE_AGE_SECS / 2 - 1).unwrap();
+    bob.info.bundle = aged.encode();
+    bob.secrets = Arc::new(secrets);
+    for alias in &mut bob.info.aliases { alias.expiry = now + 3600; }
+    let updates = queue_contact_updates(&mut bob).unwrap();
+    {
+        let mut a = alice.lock().unwrap();
+        for delivery in updates {
+            for cell in delivery.cells { gc2_direct::incoming(&mut a, &cell.payload, &events).unwrap(); }
+        }
+        gc2_drain_fixture_acks(&mut a, &mut bob, &events);
+        assert_eq!(a.peer_routes[&bob.info.identity_pk].bundle, bob.info.bundle);
+    }
+    // Exceed the actual 32-message PQ-refresh cadence in both directions.
+    for n in 0u8..65 {
+        send_durable_1to1(&alice, &scheduler, &peer, &[n; 4], None).await.unwrap();
+        let mut a = alice.lock().unwrap();
+        let cells: Vec<_> = a.pending_1to1.values().flat_map(|p| p.delivery.cells.clone()).collect();
+        assert!(!cells.is_empty());
+        for cell in cells { gc2_direct::incoming(&mut bob, &cell.payload, &events).unwrap(); }
+        gc2_drain_fixture_acks(&mut a, &mut bob, &events);
+        assert!(a.pending_1to1.is_empty(), "recipient logical ACK required");
+        assert_eq!(a.sessions[&bob.info.identity_pk].tag(), Some(&tag));
+        assert_eq!(bob.application_inbox.entries.len(), n as usize + 2);
+        assert_eq!(bob.application_inbox.entries.back().unwrap().body, vec![n; 4]);
+    }
+    scheduler.shutdown(); bob.scheduler.shutdown();
+}

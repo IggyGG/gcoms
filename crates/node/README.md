@@ -1,3 +1,12 @@
+## Established sessions and renewed contacts
+
+Contact announcements replace routes and advertise bundles for new handshakes.
+Existing direct sessions retain their negotiated ML-KEM key pairs across renewals
+and restart; regular PQ encapsulation and DH ratchet refresh continue. A new
+contact bundle cannot replace the key used by already queued session frames.
+The IRC file-recovery regression exercises this boundary with forced PQ refresh,
+then requires verified resumed content and a recipient completion acknowledgment.
+
 # gcoms-node
 
 Part of **GComs**, a developer-preview encrypted communication platform.

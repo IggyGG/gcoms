@@ -529,6 +529,16 @@ impl Zeroize for Request {
             | Self::SharingV2(crate::sharing_v2::Request::WritePiece { bytes, .. }) => {
                 bytes.as_mut_slice().zeroize()
             }
+            Self::HostedChannels(
+                crate::hosted_client::Request::Send {
+                    content: crate::hosted_client::Content::File { body, .. },
+                    ..
+                }
+                | crate::hosted_client::Request::SendIdentified {
+                    content: crate::hosted_client::Content::File { body, .. },
+                    ..
+                },
+            ) => body.as_mut_slice().zeroize(),
             Self::ChannelReconnect { code, .. } => code.zeroize(),
             Self::ImportNetworkInvitation { invitation } => invitation.zeroize(),
             Self::JoinChannelInvitation { link, .. } | Self::InspectChannelInvitation { link } => {
@@ -2667,6 +2677,20 @@ mod tests {
         request.zeroize();
         assert!(
             matches!(request, Request::SharingV2(files::Request::WritePiece { bytes, .. }) if bytes.iter().all(|b| *b == 0))
+        );
+        let mut hosted = Request::HostedChannels(crate::hosted_client::Request::SendIdentified {
+            channel: [1; 32],
+            id: [2; 32],
+            content: crate::hosted_client::Content::File {
+                content_type: files::OFFER_TYPE.into(),
+                body: vec![42; 128],
+            },
+        });
+        hosted.zeroize();
+        assert!(
+            matches!(hosted, Request::HostedChannels(crate::hosted_client::Request::SendIdentified {
+            content: crate::hosted_client::Content::File { body, .. }, ..
+        }) if body.iter().all(|b| *b == 0))
         );
         for operation in [
             crate::hosted_client::Request::FileEvents {

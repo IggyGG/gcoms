@@ -4106,6 +4106,9 @@ pub(in crate::node) mod tests {
                 now - crate::proto::MAX_BUNDLE_AGE_SECS / 2 - 1,
             )
             .unwrap();
+        for alias in &mut node.info.aliases {
+            alias.expiry = now + 3600;
+        }
         node.info.bundle = aged.encode();
         node.secrets = Arc::new(secrets);
         let updates = queue_contact_updates(&mut node).unwrap();

@@ -63,6 +63,13 @@ state with bounded skipped-key retention. Contact and direct-record codecs are i
 `crates/protocol`. Do not substitute an algorithm or accept a key based only on an
 unauthenticated display name.
 
+A contact-route renewal updates reachability and the bundle for future first
+moves. Established sessions retain their handshake-bound ML-KEM keys, including
+across restart; periodic fresh encapsulations and DH ratchet epochs continue.
+Replacing a contact bundle cannot retire keys needed by in-flight session frames.
+A newly authenticated session negotiates the new bundle. This does not change
+wire or retained-session formats.
+
 Group messaging uses the MLS implementation in `crates/mls`, including the draft
 post-quantum suite profile `0x004F`. Group authentication remains classical Ed25519.
 The preview must not be described as standardized, universally post-quantum MLS.

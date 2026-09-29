@@ -985,9 +985,8 @@ pub(crate) fn queue_contact_updates(st: &mut NodeState) -> Result<Vec<DirectDeli
         let (bundle, secrets) = identity.issue_bundle();
         st.info.bundle = bundle.encode();
         st.secrets = Arc::new(secrets);
-        for session in st.sessions.values_mut() {
-            session.provide_local_secrets(&st.secrets);
-        }
+        // Existing sessions retain their negotiated KEM keys. Publishing this
+        // first-move bundle does not acknowledge retirement of old-key frames.
     }
     let expires_at = st
         .info

@@ -589,3 +589,11 @@ The larger direct-contact restart case retains verified pieces but fails to fini
 frame decryption failures; transport admission is not counted as download success.
 The focused PQ renewal regression and archive-v1/v2/v3 migration tests are pending.
 Contact permission separation and a full GChat regression are running.
+
+The focused node regression reproduces a pre-existing renewed-bundle/retained-session
+KEM mismatch (`files-pq-red-01.log`). Established sessions now retain their
+handshake-bound keys when routing/first-move bundles change; PQ refresh and DH
+ratcheting continue. Its forced-refresh case and old hosted archive migration pass
+in `files-modern-12.log`. That run was evicted for exceeding the pod's 5 GiB
+emptyDir limit during the larger file test, so completion is unqualified. The
+fresh `files-modern-13.log` run uses one package feature graph and library tests.
