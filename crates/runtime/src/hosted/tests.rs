@@ -724,3 +724,5 @@ async fn hosted_directory_publication_is_operator_authenticated_and_receivers_ap
     assert!(entries.is_empty());
     assert_eq!(bob.view().discovery, api::Discovery::Private);
 }
+
+mod capacity;

@@ -608,3 +608,13 @@ separate GC2 fixture failure is retained; the corrected inbox-consuming regressi
 passes 65 authenticated messages and two measured PQ refreshes in
 `files-gc2-renewal-04.log`. Broader current regression, protected-network capacity
 and release qualification remain open. See `docs/IRC_PARITY.md`.
+
+### IRC-8 durable capacity campaign — 2026-09-29
+
+Added a source-bound durable client/service campaign beyond the earlier MLS-only
+gate. The twelve-client release smoke passes (`runtime-capacity-03.log`): ten
+concurrent senders, every recipient receipt, withheld offline completion, reopen,
+AEAD piece storage, kick/rekey and replacement admission. It records covered/bulk
+JSON volume and local timings. The explicit 500-client campaign is running;
+transport is in-process, so neither result qualifies protected-network latency.
+The detailed classic feature mapping is `docs/IRC_FEATURE_MATRIX.md`.

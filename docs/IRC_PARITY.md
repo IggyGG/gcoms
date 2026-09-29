@@ -16,6 +16,8 @@ The GComs task also preserves the canonical checkout's `0c2c704` bootstrap fix.
 - Preserve service acceptance versus recipient acknowledgment, durable operation
   recovery, exact-source receipts and state-compatible upgrade/rollback checks.
 
+See the [command-by-command feature mapping](IRC_FEATURE_MATRIX.md) for the source audit.
+
 ## Work and acceptance ledger
 
 | ID | Deliverable | Status | Decisive acceptance |

@@ -632,3 +632,14 @@ ordinary contact-only unlock/file behavior. Topics remain encrypted.
 The GC2 contact-renewal regression must consume durable inbox entries and drive
 logical-ACK maintenance, authenticate at least two actual periodic PQ frames,
 and retain the same session tag. Unconsumed inbox quota is not a crypto failure.
+
+### Durable hosted client capacity
+
+`durable_hosted_capacity_smoke` exercises twelve actual encrypted client states
+against the ciphertext service. The explicit ignored
+`five_hundred_durable_hosted_clients_ten_senders_offline_and_churn` runs the same
+500-identity campaign in release mode: ten concurrent senders, withheld offline
+ACKs, reopen and exact recipient completion, encrypted piece storage, kick/rekey
+and replacement admission. Keep covered and bulk JSON byte counters and timing.
+This uses in-process transport and cannot qualify protected-network latency or the
+separate whole-file engine. Run the smoke before the large campaign.
