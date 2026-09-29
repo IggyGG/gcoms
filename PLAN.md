@@ -551,3 +551,8 @@ IRC-2/IRC-3 checkpoint: ordered policy enforcement passes component tests and
 strict Clippy. IRC-8 has one source-bound 500-member MLS capacity pass, with
 4,990 authenticated receives from ten concurrent senders; full client/network
 qualification remains open. See the parity ledger and its evidence receipt.
+
+IRC-3 lifecycle checkpoint: departure, kick, member-assisted rekey and sealed
+pending recovery pass, along with dual service/client message-class authorization.
+IRC-4 through IRC-8 application and transport integration remains in progress;
+no UI/release completion is claimed.

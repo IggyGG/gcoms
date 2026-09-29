@@ -3,8 +3,7 @@
 //! The observer holds only OpenMLS public state. Admission is checked both by
 //! that observer and by members, independent of the delivery service. This is a
 //! separate profile: a legacy channel cannot opt in by receiving an external
-//! commit. Transport, durable sequencing and policy updates are not supplied by
-//! this module yet.
+//! commit. Transport and durable sequencing are supplied by the embedding application.
 
 use crate::session::{CIPHERSUITE, MAX_WIRE_BYTES};
 use crate::{MlsError, RosterMember};
@@ -19,10 +18,14 @@ use sha2::{Digest, Sha256};
 use tls_codec::{Deserialize, Serialize, Size, TlsDeserialize, TlsSerialize, TlsSize, VLBytes};
 
 mod access;
+mod application;
 mod control;
+mod membership;
+pub use application::HostedMessageKind;
 mod rules;
 pub use access::HostedAccessCode;
 pub use control::{HostedControl, HostedControlEvent};
+use membership::validate_membership;
 pub use rules::{
     HostedAccessList, HostedDiscovery, HostedMode, HostedPolicyChange, HostedRole, HostedRules,
 };
@@ -32,6 +35,7 @@ const MAX_NAME: usize = 128;
 const MAX_AUTHORITY: usize = 16 * 1024;
 const POLICY_DOMAIN: &[u8] = b"gcoms/hosted/policy/v1";
 const JOIN_DOMAIN: &[u8] = b"gcoms/hosted/join/v1";
+const CONTENT_DOMAIN: &[u8] = b"gcoms/hosted/content/v1";
 const MESSAGE_DOMAIN: &[u8] = b"gcoms/hosted/message/v1";
 /// Genesis follows one owner self-update: no expiring KeyPackage leaf remains
 /// in the public replay anchor of a long-lived channel.
@@ -46,6 +50,7 @@ pub struct HostedMessage {
     channel: [u8; 32],
     epoch: u64,
     member: [u8; 32],
+    kind: HostedMessageKind,
     ciphertext: VLBytes,
     signature: VLBytes,
 }
@@ -56,6 +61,7 @@ impl HostedMessage {
         bytes.extend_from_slice(&self.channel);
         bytes.extend_from_slice(&self.epoch.to_be_bytes());
         bytes.extend_from_slice(&self.member);
+        bytes.push(self.kind as u8);
         bytes.extend_from_slice(&Sha256::digest(self.ciphertext.as_slice()));
         bytes
     }
@@ -69,6 +75,10 @@ impl HostedMessage {
             return Err(MlsError::Encoding);
         }
         Ok(Self::tls_deserialize_exact(bytes)?)
+    }
+
+    pub fn kind(&self) -> HostedMessageKind {
+        self.kind
     }
 
     pub fn member_id(&self) -> [u8; 32] {
@@ -91,7 +101,9 @@ impl HostedMessage {
         if self.epoch != epoch || !members.any(|m| m.signature_key.as_slice() == self.member) {
             return Err(MlsError::Unauthorized);
         }
-        if self.tls_serialized_len() > MAX_HOSTED_MESSAGE || self.signature.as_slice().len() != 64 {
+        if self.tls_serialized_len() > self.kind.wire_limit()
+            || self.signature.as_slice().len() != 64
+        {
             return Err(MlsError::Encoding);
         }
         let wire = protocol(self.ciphertext.as_slice())?;
@@ -341,6 +353,7 @@ impl HostedPolicy {
             }),
             2 => permit.issuer.is_some_and(|key| {
                 rules.operator(key)
+                    && !rules.departing(key)
                     && !rules.banned(key)
                     && OpenMlsRustCrypto::default()
                         .crypto()
@@ -500,7 +513,9 @@ impl PreparedHostedJoin {
             &aad,
             now,
         )?;
-        if public.group.members().count() >= public.rules.capacity() as usize {
+        if public.member_count() >= public.rules.capacity() as usize
+            || public.group.members().count() >= 1000
+        {
             return Err(MlsError::GroupFull);
         }
         let (group, bundle) = MlsGroup::external_commit_builder()
@@ -527,6 +542,11 @@ impl PreparedHostedJoin {
         let commit = commit.tls_serialize_detached()?;
         let info: MlsMessageOut = info.ok_or(MlsError::Encoding)?.into();
         let info = info.tls_serialize_detached()?;
+        let rules = if public.rules.departing(self.member_id()) {
+            public.stage_join(&commit, &info, now)?.rules
+        } else {
+            public.rules.clone()
+        };
         let session = HostedSession {
             ctx: crate::session::Ctx {
                 backend: std::mem::take(&mut self.backend),
@@ -536,7 +556,8 @@ impl PreparedHostedJoin {
                 admin_pseudonyms: Vec::new(),
             },
             policy: public.policy.clone(),
-            rules: public.rules.clone(),
+            rules,
+            pending_rekey: None,
             pending_join: Some(PendingJoin {
                 hash: Sha256::digest(&commit).into(),
                 info,
@@ -553,6 +574,7 @@ pub struct HostedSession {
     policy: HostedPolicy,
     rules: HostedRules,
     pending_join: Option<PendingJoin>,
+    pending_rekey: Option<PendingJoin>,
 }
 
 #[derive(Clone, TlsSerialize, TlsDeserialize, TlsSize)]
@@ -567,6 +589,7 @@ struct HostedArchive {
     policy: HostedPolicy,
     rules: HostedRules,
     pending: Option<PendingJoin>,
+    rekey: Option<PendingJoin>,
 }
 
 impl HostedSession {
@@ -588,6 +611,8 @@ impl HostedSession {
             || self.rules.closed()
             || !self.rules.operator(issuer)
             || self.rules.banned(issuer)
+            || self.rules.departing(issuer)
+            || !self.ctx.group.is_active()
             || !valid_name(name.as_bytes())
         {
             return Err(MlsError::Unauthorized);
@@ -657,11 +682,31 @@ impl HostedSession {
     /// Prepare an exact signed ciphertext for durable outgoing storage/retry.
     /// The caller must checkpoint the advanced sender state before publishing.
     pub fn send_hosted(&mut self, payload: &[u8]) -> Result<HostedMessage, MlsError> {
-        // Leave room for MLS padding, headers, sender data and the outer proof.
-        if payload.len() > MAX_HOSTED_MESSAGE - 1024 {
+        self.send_kind(HostedMessageKind::Text, payload)
+    }
+
+    /// Kind is authenticated both outside and inside MLS. Receivers must use
+    /// this classification when dispatching content, especially topics/notices.
+    pub fn send_kind(
+        &mut self,
+        kind: HostedMessageKind,
+        payload: &[u8],
+    ) -> Result<HostedMessage, MlsError> {
+        if payload.len() > kind.wire_limit() - 1024 {
             return Err(MlsError::Encoding);
         }
-        let ciphertext = self.send(payload)?;
+        if self.pending_join.is_some() || !kind.allowed(&self.rules, self.member_id()) {
+            return Err(MlsError::Unauthorized);
+        }
+        let mut content = CONTENT_DOMAIN.to_vec();
+        content.push(kind as u8);
+        content.extend_from_slice(payload);
+        let ciphertext = self
+            .ctx
+            .group
+            .create_message(&self.ctx.backend, &self.ctx.signer, &content)
+            .map_err(mls)?
+            .tls_serialize_detached()?;
         let mut message = HostedMessage {
             channel: self.policy.channel_id(),
             epoch: self.epoch(),
@@ -671,6 +716,7 @@ impl HostedSession {
                 .to_public_vec()
                 .try_into()
                 .map_err(|_| MlsError::Encoding)?,
+            kind,
             ciphertext: ciphertext.into(),
             signature: Vec::new().into(),
         };
@@ -689,7 +735,7 @@ impl HostedSession {
         if self.pending_join.is_some() {
             return Err(MlsError::Unauthorized);
         }
-        if !self.rules.may_post(message.member) {
+        if !message.kind.allowed(&self.rules, message.member) {
             return Err(MlsError::Unauthorized);
         }
         message.verify(
@@ -723,8 +769,17 @@ impl HostedSession {
         else {
             return Err(MlsError::Unauthorized);
         };
+        let content = application.into_bytes();
+        let payload = content
+            .strip_prefix(CONTENT_DOMAIN)
+            .ok_or(MlsError::Encoding)?;
+        let (kind, payload) = payload.split_first().ok_or(MlsError::Encoding)?;
+        if *kind != message.kind as u8 {
+            return Err(MlsError::Unauthorized);
+        }
+        let payload = payload.to_vec();
         *self = candidate;
-        Ok(application.into_bytes())
+        Ok(payload)
     }
 
     fn fork(&self) -> Result<Self, MlsError> {
@@ -771,6 +826,7 @@ impl HostedSession {
             policy: self.policy.clone(),
             rules: self.rules.clone(),
             pending_join: self.pending_join.clone(),
+            pending_rekey: self.pending_rekey.clone(),
         })
     }
     /// Seal member secrets and pending acceptance together. The wrapping key
@@ -781,6 +837,7 @@ impl HostedSession {
             policy: self.policy.clone(),
             rules: self.rules.clone(),
             pending: self.pending_join.clone(),
+            rekey: self.pending_rekey.clone(),
         }
         .tls_serialize_detached()?;
         crate::session::persist::seal_hosted(&self.ctx, wrapping_key, &metadata)
@@ -805,6 +862,7 @@ impl HostedSession {
             policy: archive.policy,
             rules: archive.rules,
             pending_join: archive.pending,
+            pending_rekey: archive.rekey,
         })
     }
     pub fn create(
@@ -864,6 +922,7 @@ impl HostedSession {
             rules: HostedRules::genesis(&policy),
             policy,
             pending_join: None,
+            pending_rekey: None,
         })
     }
 
@@ -886,6 +945,7 @@ impl HostedSession {
     pub fn proposed_group_info(&self) -> Result<&[u8], MlsError> {
         self.pending_join
             .as_ref()
+            .or(self.pending_rekey.as_ref())
             .map(|p| p.info.as_slice())
             .ok_or(MlsError::Unauthorized)
     }
@@ -938,33 +998,56 @@ impl HostedSession {
     }
 
     pub fn receive(&mut self, wire: &[u8], now: u64) -> Result<crate::ReceiveOutcome, MlsError> {
+        let mut candidate = self.fork()?;
+        let result = candidate.receive_inner(wire, now);
+        if result.is_ok() || matches!(result, Err(MlsError::Removed)) {
+            *self = candidate;
+        }
+        result
+    }
+
+    fn receive_inner(&mut self, wire: &[u8], now: u64) -> Result<crate::ReceiveOutcome, MlsError> {
         if self.pending_join.is_some() {
             return Err(MlsError::Unauthorized);
+        }
+        if self.pending_rekey.is_some() {
+            self.ctx
+                .group
+                .clear_pending_commit(self.ctx.backend.storage())
+                .map_err(mls)?;
+            self.pending_rekey = None;
         }
         let processed = self
             .ctx
             .group
             .process_message(&self.ctx.backend, protocol(wire)?)
             .map_err(mls)?;
-        if let ProcessedMessageContent::StagedCommitMessage(_) = processed.content() {
-            validate_join(
+        let removed = if let ProcessedMessageContent::StagedCommitMessage(_) = processed.content() {
+            validate_membership(
                 &self.policy,
                 &self.rules,
                 self.ctx.group.members(),
                 &processed,
                 now,
-            )?;
-        }
+            )?
+        } else {
+            Vec::new()
+        };
         let sender_index = match processed.sender() {
             Sender::Member(i) => i.u32(),
             _ => u32::MAX,
         };
         match processed.into_content() {
             ProcessedMessageContent::StagedCommitMessage(commit) => {
+                let self_removed = commit.self_removed();
                 self.ctx
                     .group
                     .merge_staged_commit(&self.ctx.backend, *commit)
                     .map_err(mls)?;
+                self.rules.finish_removals(&removed);
+                if self_removed {
+                    return Err(MlsError::Removed);
+                }
                 Ok(crate::ReceiveOutcome::CommitMerged { sender_index })
             }
             ProcessedMessageContent::ApplicationMessage(message) => {
@@ -992,51 +1075,6 @@ impl HostedSession {
         }
     }
 }
-
-fn validate_join(
-    policy: &HostedPolicy,
-    rules: &HostedRules,
-    members: impl Iterator<Item = Member>,
-    processed: &ProcessedMessage,
-    now: u64,
-) -> Result<(), MlsError> {
-    if !matches!(processed.sender(), Sender::NewMemberCommit) {
-        return Err(MlsError::Unauthorized);
-    }
-    let ProcessedMessageContent::StagedCommitMessage(commit) = processed.content() else {
-        return Err(MlsError::Unauthorized);
-    };
-    // Reject replacement/removal, PSKs and configuration changes hidden in a
-    // joining commit. Admission authorizes one added member only.
-    if commit
-        .queued_proposals()
-        .any(|p| !matches!(p.proposal(), Proposal::ExternalInit(_)))
-    {
-        return Err(MlsError::Unauthorized);
-    }
-    let leaf = commit
-        .update_path_leaf_node()
-        .ok_or(MlsError::Unauthorized)?;
-    let mut count = 0;
-    for member in members {
-        count += 1;
-        if member.credential.serialized_content() == leaf.credential().serialized_content() {
-            return Err(MlsError::BadInvite);
-        }
-    }
-    if count >= rules.capacity() as usize {
-        return Err(MlsError::GroupFull);
-    }
-    policy.authorize(
-        rules,
-        processed.epoch().as_u64(),
-        leaf.signature_key().as_slice(),
-        leaf.credential().serialized_content(),
-        processed.aad(),
-        now,
-    )
-}
-
 /// Delivery-service state: public ratchet tree, signed public policy and group
 /// context only. No MLS member, signer, epoch secret or application decryption
 /// method. Rebuild by replaying the accepted ordered commit log from genesis.
@@ -1054,7 +1092,7 @@ impl HostedObserver {
     }
     /// Verify append authority without possession of any decryption key.
     pub fn verify_message(&self, message: &HostedMessage) -> Result<(), MlsError> {
-        if !self.rules.may_post(message.member) {
+        if !message.kind.allowed(&self.rules, message.member) {
             return Err(MlsError::Unauthorized);
         }
         message.verify(
@@ -1117,7 +1155,14 @@ impl HostedObserver {
         self.group.group_context().epoch().as_u64()
     }
     pub fn member_count(&self) -> usize {
-        self.group.members().count()
+        self.group
+            .members()
+            .filter(|m| {
+                !self
+                    .rules
+                    .departing(m.signature_key.as_slice().try_into().expect("Ed25519 key"))
+            })
+            .count()
     }
 
     /// Validate a complete next epoch without mutating this observer. Persist
@@ -1139,7 +1184,7 @@ impl HostedObserver {
             .group
             .process_message(self.backend.crypto(), protocol(wire)?)
             .map_err(mls)?;
-        validate_join(
+        let removed = validate_membership(
             &self.policy,
             &self.rules,
             self.group.members(),
@@ -1152,6 +1197,7 @@ impl HostedObserver {
         self.group
             .merge_commit(self.backend.storage(), *commit)
             .map_err(mls)?;
+        self.rules.finish_removals(&removed);
         // Do not advertise the previous epoch's GroupInfo after advancing.
         self.info.clear();
         Ok(())

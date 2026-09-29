@@ -53,6 +53,8 @@ pub enum HostedPolicyChange {
     Close,
     Operator([u8; 32], u8),
     Voice([u8; 32], u8),
+    Kick([u8; 32]),
+    Leave,
 }
 
 /// Effective policy derived from the signed genesis and accepted control log.
@@ -72,6 +74,7 @@ pub struct HostedRules {
     bans: Vec<[u8; 32]>,
     exemptions: Vec<[u8; 32]>,
     invite_exceptions: Vec<[u8; 32]>,
+    pending_removals: Vec<[u8; 32]>,
 }
 
 fn set_entry(list: &mut Vec<[u8; 32]>, key: [u8; 32], enabled: bool) -> Result<(), MlsError> {
@@ -110,9 +113,21 @@ impl HostedRules {
             bans: Vec::new(),
             exemptions: Vec::new(),
             invite_exceptions: Vec::new(),
+            pending_removals: Vec::new(),
         }
     }
 
+    pub fn pending_removals(&self) -> &[[u8; 32]] {
+        &self.pending_removals
+    }
+    pub fn departing(&self, key: [u8; 32]) -> bool {
+        self.pending_removals.binary_search(&key).is_ok()
+    }
+    pub(super) fn finish_removals(&mut self, removed: &[[u8; 32]]) {
+        self.pending_removals.retain(|key| !removed.contains(key));
+        self.operators.retain(|key| !removed.contains(key));
+        self.voices.retain(|key| !removed.contains(key));
+    }
     pub fn revision(&self) -> u64 {
         self.revision
     }
@@ -167,11 +182,13 @@ impl HostedRules {
     /// Caller must separately verify that the key is in the current MLS roster.
     pub fn may_post(&self, key: [u8; 32]) -> bool {
         !self.closed()
+            && self.pending_removals.is_empty()
             && !self.banned(key)
             && (!self.mode(HostedMode::Moderated) || self.role(key) != HostedRole::Member)
     }
     pub fn may_change_topic(&self, key: [u8; 32]) -> bool {
         !self.closed()
+            && self.pending_removals.is_empty()
             && !self.banned(key)
             && (!self.mode(HostedMode::TopicOperators) || self.operator(key))
     }
@@ -190,11 +207,28 @@ impl HostedRules {
         members: &[Member],
     ) -> Result<Self, MlsError> {
         let contains = |key: &[u8; 32]| members.iter().any(|m| m.signature_key.as_slice() == key);
-        if self.closed() || self.banned(actor) || !contains(&actor) || !self.operator(actor) {
+        if self.closed()
+            || !self.pending_removals.is_empty()
+            || !contains(&actor)
+            || (!matches!(change, HostedPolicyChange::Leave)
+                && (self.banned(actor) || !self.operator(actor)))
+        {
             return Err(MlsError::Unauthorized);
         }
         let mut next = self.clone();
         match change {
+            HostedPolicyChange::Kick(target) => {
+                if *target == self.owner || !contains(target) {
+                    return Err(MlsError::Unauthorized);
+                }
+                set_entry(&mut next.pending_removals, *target, true)?;
+            }
+            HostedPolicyChange::Leave => {
+                if actor == self.owner {
+                    return Err(MlsError::Unauthorized);
+                }
+                set_entry(&mut next.pending_removals, actor, true)?;
+            }
             HostedPolicyChange::Operator(target, enabled)
             | HostedPolicyChange::Voice(target, enabled) => {
                 if *enabled > 1 {

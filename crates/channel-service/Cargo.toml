@@ -16,6 +16,7 @@ sha2 = "0.10"
 tls_codec = { version = "0.5", features = ["derive", "mls"] }
 
 [dev-dependencies]
+gcoms-mls = { version = "0.1.0", path = "../mls", features = ["hosted-channels", "client-persist"] }
 gcoms-crypto = { version = "0.1.0", path = "../crypto" }
 tempfile = "3"
 

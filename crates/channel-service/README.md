@@ -16,8 +16,10 @@ The containing directory and log must pass shared private-filesystem checks.
 
 Storage has explicit byte and record quotas; reaching them refuses new appends.
 No accepted record is silently evicted. Memory retains indexes rather than all
-ciphertext bodies. This does not yet supply replication, log compaction, policy
-updates, network negotiation or latency/capacity qualification.
+ciphertext bodies. Signed policy changes are ordered in the same log. Member
+rekeys complete authorized departures without service-held MLS keys. This does
+not yet supply replication, log compaction, network negotiation or application
+latency/capacity qualification.
 
 Dependencies reuse the workspace's `sha2`, `tls_codec`, `gcoms-mls` and
 `gcoms-private-fs`; tests use existing `gcoms-crypto` and `tempfile`. No new

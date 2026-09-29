@@ -140,3 +140,27 @@ real members, ten concurrent senders and 4,990 authenticated receives. Sequentia
 admission took 1,837.441 seconds; total execution took 1,985.29 seconds. Maximum
 GroupInfo was 1,327,768 bytes and commit 21,816 bytes. This is component capacity
 evidence, not network, application, latency or current-policy qualification.
+
+### Departure, rekey and message classes
+
+Kick/leave controls now block all new encrypted content until a member commits
+the authorized removal set. Any remaining member can finish the rekey, including
+an authorized newcomer while existing members are offline. Member and public
+validators reject invented removals and stale policy AAD. Pending rekeys survive
+sealed restart, exact acceptance gates merging, and competing accepted admission
+clears speculative work safely. Rejoining preserves scoped identity and bans,
+clears old roles, and counts only active members against capacity. Internal
+unclean leaves have a separate bound. Removed clients become inactive.
+
+Signed message classes distinguish text/action/notice, topic, nickname, presence,
+receipt, file and contact offer. Kind is bound inside and outside MLS; relabeling
+cannot bypass receiving-client permissions or consume a valid chat ratchet.
+Topic permissions are independent of moderation, and unvoiced members can ACK.
+Application rendering, typed payload interpretation and automatic receipt logic
+still belong to the remaining client integration.
+
+`application-01.log` passes 51 tests with two explicit scale exclusions plus
+strict all-target/all-feature MLS and channel-service Clippy. The earlier removal
+run's duplicate-name fixture failure is retained: the honest join helper had
+started refusing the attack before the negative service/member checks could run.
+The service/member negative-control coverage is preserved in the corrected suite.

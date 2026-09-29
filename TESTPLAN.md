@@ -1,3 +1,12 @@
+## Hosted removal and application permissions — IRC-3/IRC-5/IRC-6
+
+`channel-service/tests/removal.rs` checks pending-rekey restart, kick confidentiality,
+owner-offline and all-members-offline progress, same-identity rejoin, role reset,
+retained bans and competing commits. MLS adversarial tests forge removals and stale
+policy commits, unauthorized topics and false message classes. Verify the original
+chat still decrypts after a rejected forged classification. Run full MLS/service
+tests and strict Clippy; scale/network/GChat qualification remains separate.
+
 ## Ordered hosted policy — IRC-3
 
 Run all-feature MLS and channel-service tests and strict all-target Clippy.

@@ -1,0 +1,15 @@
+{
+  "date": "2026-09-29",
+  "source_sha256": {
+    "crates/mls/src/hosted.rs": "9ac8255943cd39ee7a9be8c46b133eb5bb81d7df255b1bf1b01d0baa8f2bfb3c",
+    "crates/mls/src/hosted/rules.rs": "4e70be6fe019f1fa1786b6b684206f8db7234c1c403d1d3d7167930711fa8334",
+    "crates/mls/src/hosted/membership.rs": "31fca1d1d4128385f47a6f42f2e93131992bd4e05dec83f85070c987372952c3",
+    "crates/mls/src/hosted/application.rs": "33439c2347446c4c6924c84e9a8b0565c65925658986a3187e989ec5e83509ea",
+    "crates/channel-service/tests/removal.rs": "789b7b796ac0a9becc459cc12f682bcb3bf61ae9a437470d7d0f4851518b4560"
+  },
+  "passed": 51,
+  "failed": 0,
+  "explicit_scale_ignores": 2,
+  "strict_clippy": "passed",
+  "scope": "MLS and ordered store components; not network, GChat or native qualification"
+}
