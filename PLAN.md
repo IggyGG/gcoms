@@ -677,3 +677,11 @@ existing durable retry semantics. `snapshot-recovery-03.log` passes recovery
 after two lost authenticated reads, one membership change, immediate authority
 refusal and bounded exhaustion; strict seven-package Clippy passes. The earlier
 network failure remains retained; the updated live journey remains to be run.
+
+### IRC-8 vendored package qualification — 2026-09-30
+
+The isolated archive gate stopped before packaging because Cargo requires an
+explicit registry when dependencies come from a directory replacement. Name
+crates-io as the package destination while retaining the runner's vendor source
+for dependency resolution. The first failure remains in packages-b6f0b60-01.log;
+archive/consumer validation of the corrected invocation is pending.

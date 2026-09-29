@@ -74,7 +74,7 @@ def qualify(root, chat, args, out, env, report):
     report.update(rust_packages=[p['name'] for p in packages],
                   rust_external_alias_consumer='not_run', npm_archive_consumer='not_run',
                   gchat_rust='not_run', gchat_frontend='not_run', gchat_desktop='not_run')
-    command = ['cargo', 'package', '--locked', '--no-verify', '--target-dir', out]
+    command = ['cargo', 'package', '--registry', 'crates-io', '--locked', '--no-verify', '--target-dir', out]
     if not args.release:
         command += ['--allow-dirty']
     for package in packages:
