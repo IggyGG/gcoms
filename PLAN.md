@@ -333,6 +333,15 @@ verification remains open; Android 1015 is building on `15be948` / `48ccdfb`.
 No phone-delivery or full-rollout pass is claimed.
 [Receipt](docs/evidence/inbox-install-20260923/summary.json).
 
+## IRC parity — 2026-09-29, Codex
+
+Implementing the user-approved classic IRC parity plan in the contained
+`irc-parity` component worktrees. The first gate is ciphertext-only hosted MLS
+admission, with legacy channel permissions preserved. Contacts-only identity,
+500-member qualification and no service decryption are fixed requirements.
+[Feature and acceptance ledger](docs/IRC_PARITY.md). No parity feature or new
+release is qualified by this planning checkpoint.
+
 # Windows concurrent membership fixture
 
 Windows17 again passed GChat native CI, then failed the GComs command-loop load

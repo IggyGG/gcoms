@@ -23,6 +23,8 @@ zeroize = "1"
 aes-gcm = "0.10"
 
 [features]
+# Experimental, separate wire profile; not enabled by production clients yet.
+hosted-channels = []
 # Opt-in group-state export/import for clients that persist state
 # encrypted-at-rest (SPEC §1: clients MAY archive locally).
 client-persist = ["gcoms-crypto/client-persist"]

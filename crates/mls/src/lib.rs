@@ -49,6 +49,8 @@ impl From<tls_codec::Error> for MlsError {
     }
 }
 
+#[cfg(feature = "hosted-channels")]
+pub mod hosted;
 pub mod invite;
 pub mod session;
 

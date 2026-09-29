@@ -155,7 +155,7 @@ fn join_config() -> MlsGroupJoinConfig {
         .build()
 }
 
-fn fresh_leaf(
+pub(crate) fn fresh_leaf(
     backend: &OpenMlsRustCrypto,
     display_name: &str,
 ) -> Result<(CredentialWithKey, SignatureKeyPair), MlsError> {
@@ -174,17 +174,17 @@ fn fresh_leaf(
     ))
 }
 
-struct Ctx {
-    backend: OpenMlsRustCrypto,
-    signer: SignatureKeyPair,
-    group: MlsGroup,
+pub(crate) struct Ctx {
+    pub(crate) backend: OpenMlsRustCrypto,
+    pub(crate) signer: SignatureKeyPair,
+    pub(crate) group: MlsGroup,
     /// Leaf pseudonym of the channel owner. Only this leaf may commit
     /// removals (SPEC §8.4 "removal = the revocation mechanism, issued by the
     /// owner or delegated administrators"). `None` until learned from the
     /// Welcome's roster.
-    owner_pseudonym: Option<[u8; 32]>,
+    pub(crate) owner_pseudonym: Option<[u8; 32]>,
     /// Leaves delegated administration through the authenticated directory.
-    admin_pseudonyms: Vec<[u8; 32]>,
+    pub(crate) admin_pseudonyms: Vec<[u8; 32]>,
 }
 
 fn zeroize_storage(backend: &OpenMlsRustCrypto) {
@@ -326,7 +326,7 @@ impl Ctx {
             .collect()
     }
 
-    fn roster_members(&self) -> Vec<RosterMember> {
+    pub(crate) fn roster_members(&self) -> Vec<RosterMember> {
         self.group
             .members()
             .filter_map(|member: Member| {
@@ -1346,6 +1346,43 @@ impl Ctx {
 #[cfg(test)]
 mod zeroize_tests {
     use super::*;
+
+    #[test]
+    fn legacy_channel_rejects_external_join_without_owner_admission() {
+        let mut owner =
+            OwnerSession::create(IdentityKeypair::from_seed([91; 32]), "owner", 64).unwrap();
+        let info = owner
+            .ctx
+            .group
+            .export_group_info(owner.ctx.backend.crypto(), &owner.ctx.signer, true)
+            .unwrap()
+            .tls_serialize_detached()
+            .unwrap();
+        let backend = OpenMlsRustCrypto::default();
+        let (credential, signer) = fresh_leaf(&backend, "uninvited").unwrap();
+        let info = MlsMessageIn::tls_deserialize_exact(info)
+            .unwrap()
+            .into_verifiable_group_info()
+            .unwrap();
+        let (_, bundle) = MlsGroup::external_commit_builder()
+            .with_config(join_config())
+            .build_group(&backend, info, credential)
+            .unwrap()
+            .load_psks(backend.storage())
+            .unwrap()
+            .build(backend.rand(), backend.crypto(), &signer, |_| true)
+            .unwrap()
+            .finalize(&backend)
+            .unwrap();
+        let commit = bundle.into_commit().tls_serialize_detached().unwrap();
+        let epoch = owner.epoch();
+        assert!(matches!(
+            owner.receive_outcome(&commit),
+            Err(MlsError::Unauthorized)
+        ));
+        assert_eq!(owner.epoch(), epoch);
+        assert_eq!(owner.roster().len(), 1);
+    }
 
     #[test]
     fn memory_storage_wipe_removes_serialized_secrets() {
