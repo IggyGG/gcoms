@@ -7,7 +7,7 @@ mod storage;
 
 use gcoms_crypto::IdentityKeypair;
 use gcoms_mls::hosted::*;
-use gcoms_sdk::{hosted_client as api, GcClient};
+use gcoms_sdk::{hosted as wire, hosted_client as api, GcClient};
 use public::{decode, encode, now, snapshot, Routed, SnapshotAuthority, Transport};
 use serde::{Deserialize, Serialize};
 use state::{Client, Pending, Phase};
@@ -165,6 +165,67 @@ impl HostedChannels {
     pub async fn request(&mut self, request: api::Request) -> Result<api::Reply, String> {
         use api::Request::*;
         match request {
+            Directory {
+                endpoint: target,
+                after,
+                limit,
+            } => {
+                endpoint(&target)?;
+                if limit == 0 || limit > 16 {
+                    return Err("Directory page limit must be 1..16".into());
+                }
+                let wire::Reply::Directory { entries, next } = self
+                    .route(&target)
+                    .exchange([0; 32], wire::Operation::Directory { after, limit })
+                    .await?
+                else {
+                    return Err("Hosted service does not support public discovery".into());
+                };
+                if entries.len() > usize::from(limit)
+                    || entries.windows(2).any(|w| w[0].channel >= w[1].channel)
+                    || entries.iter().any(|e| {
+                        e.channel == [0; 32]
+                            || after.is_some_and(|after| e.channel <= after)
+                            || e.name.is_empty()
+                            || e.name.len() > 64
+                            || e.name.chars().any(|c| c.is_control() || c.is_whitespace())
+                            || !(2..=500).contains(&e.capacity)
+                            || !(1..=500).contains(&e.members)
+                    })
+                    || next.is_some_and(|next| {
+                        entries.len() != usize::from(limit)
+                            || entries.last().is_none_or(|e| e.channel != next)
+                    })
+                {
+                    return Err("Invalid hosted directory response".into());
+                }
+                let entries = entries
+                    .into_iter()
+                    .map(|entry| {
+                        let link = entry
+                            .public_join
+                            .then(|| {
+                                Link {
+                                    channel: entry.channel,
+                                    endpoint: target.clone(),
+                                    secret: vec![],
+                                    single_use: false,
+                                    expires_at: 0,
+                                }
+                                .export()
+                            })
+                            .transpose()?;
+                        Ok(api::DirectoryEntry {
+                            channel: entry.channel,
+                            name: entry.name,
+                            members: entry.members,
+                            capacity: entry.capacity,
+                            link,
+                        })
+                    })
+                    .collect::<Result<_, String>>()?;
+                Ok(api::Reply::Directory { entries, next })
+            }
             List => Ok(api::Reply::Channels(
                 self.channels.values().map(Client::view).collect(),
             )),
@@ -416,6 +477,7 @@ fn policy_change(change: api::Change) -> HostedPolicyChange {
             id,
             u8::from(on),
         ),
+        api::Change::Listing(name) => HostedPolicyChange::Listing(name.into_bytes().into()),
         api::Change::Capacity(n) => HostedPolicyChange::Capacity(n),
         api::Change::Discovery(d) => HostedPolicyChange::Discovery(match d {
             api::Discovery::Public => HostedDiscovery::Public,

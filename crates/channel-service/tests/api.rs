@@ -627,3 +627,107 @@ fn ciphertext_pieces_bind_writer_body_scope_and_current_membership_across_restar
     assert_eq!(decode(&body).unwrap(), bytes);
     assert_eq!(service.info().requests_per_second, Some(100));
 }
+
+#[test]
+fn hosted_directory_requires_explicit_publication_and_tracks_privacy_after_restart() {
+    fn publish(service: &Service, owner: &mut HostedSession, change: HostedPolicyChange) {
+        let control = owner
+            .create_control(change, "encrypted operator reason")
+            .unwrap();
+        append(
+            service,
+            owner.policy().channel_id(),
+            Append::Control(encode(&control.encode().unwrap())),
+        );
+        owner.apply_control(&control).unwrap();
+    }
+    fn page(
+        service: &Service,
+        after: Option<[u8; 32]>,
+        limit: u16,
+    ) -> (Vec<DirectoryEntry>, Option<[u8; 32]>) {
+        let Reply::Directory { entries, next } =
+            request(service, [0; 32], Operation::Directory { after, limit })
+        else {
+            panic!("directory")
+        };
+        (entries, next)
+    }
+    let dir = tempfile::tempdir().unwrap();
+    gcoms_private_fs::make_private(dir.path(), true).unwrap();
+    let service = Service::open(config(dir.path())).unwrap();
+    let mut owners: Vec<_> = (0..3)
+        .map(|_| HostedSession::create(&IdentityKeypair::generate(), "owner", 500, true).unwrap())
+        .collect();
+    for owner in &owners {
+        create(&service, owner);
+    }
+    assert!(page(&service, None, 16).0.is_empty());
+    // A discovery flag alone does not publish a local alias or encrypted topic.
+    publish(
+        &service,
+        &mut owners[0],
+        HostedPolicyChange::Discovery(HostedDiscovery::Public),
+    );
+    assert!(page(&service, None, 16).0.is_empty());
+    for (n, owner) in owners.iter_mut().enumerate() {
+        publish(
+            &service,
+            owner,
+            HostedPolicyChange::Listing(format!("#public-{n}").into_bytes().into()),
+        );
+    }
+    let (first, next) = page(&service, None, 2);
+    assert_eq!(first.len(), 2);
+    assert_eq!(next, first.last().map(|e| e.channel));
+    assert!(first.iter().all(|e| e.public_join && e.members == 1));
+    let (last, next) = page(&service, next, 2);
+    assert_eq!(last.len(), 1);
+    assert!(next.is_none());
+    assert!(first.iter().all(|e| e.channel < last[0].channel));
+    publish(
+        &service,
+        &mut owners[0],
+        HostedPolicyChange::Discovery(HostedDiscovery::Secret),
+    );
+    publish(
+        &service,
+        &mut owners[1],
+        HostedPolicyChange::Mode(HostedMode::InviteOnly, 1),
+    );
+    let visible = page(&service, None, 16).0;
+    assert_eq!(visible.len(), 2);
+    assert!(
+        !visible
+            .iter()
+            .find(|e| e.channel == owners[1].policy().channel_id())
+            .unwrap()
+            .public_join
+    );
+    drop(service);
+    let service = Service::open(config(dir.path())).unwrap();
+    assert_eq!(page(&service, None, 16).0, visible);
+    publish(
+        &service,
+        &mut owners[1],
+        HostedPolicyChange::Listing(Vec::new().into()),
+    );
+    publish(&service, &mut owners[2], HostedPolicyChange::Close);
+    assert!(page(&service, None, 16).0.is_empty());
+    assert!(matches!(
+        request(
+            &service,
+            [0; 32],
+            Operation::Directory {
+                after: None,
+                limit: 17
+            }
+        ),
+        Reply::Fault(_)
+    ));
+    assert!(!Operation::Directory {
+        after: None,
+        limit: 16
+    }
+    .requires_bulk());
+}

@@ -57,6 +57,8 @@ pub enum HostedPolicyChange {
     Leave,
     /// Register a one-use invitation verifier; zero expiry revokes it.
     Invitation([u8; 32], u64),
+    /// Explicit public directory name; empty withdraws publication.
+    Listing(VLBytes),
 }
 
 /// Effective policy derived from the signed genesis and accepted control log.
@@ -238,6 +240,17 @@ impl HostedRules {
         }
         let mut next = self.clone();
         match change {
+            HostedPolicyChange::Listing(bytes) => {
+                let name = std::str::from_utf8(bytes.as_slice()).map_err(|_| MlsError::Encoding)?;
+                if name.len() > 64 || name.chars().any(|c| c.is_control() || c.is_whitespace()) {
+                    return Err(MlsError::Encoding);
+                }
+                next.discovery = if name.is_empty() {
+                    HostedDiscovery::Private
+                } else {
+                    HostedDiscovery::Public
+                };
+            }
             HostedPolicyChange::Invitation(verifier, expiry) => {
                 match next
                     .invitations

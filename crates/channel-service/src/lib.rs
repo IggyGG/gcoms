@@ -1,7 +1,9 @@
 //! Ciphertext-only ordered storage. Transport and reader authorization are the
 //! embedding service's responsibility; these APIs must not be exposed unauthenticated.
 
-use gcoms_mls::hosted::{HostedControl, HostedMessage, HostedObserver, HostedPolicy};
+use gcoms_mls::hosted::{
+    HostedControl, HostedMessage, HostedObserver, HostedPolicy, HostedPolicyChange,
+};
 use gcoms_mls::{MlsError, MAX_WIRE_BYTES};
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
@@ -188,6 +190,7 @@ struct Index {
 pub struct ChannelLog {
     file: File,
     observer: HostedObserver,
+    listing: Option<String>,
     genesis: Vec<u8>,
     read_until: HashMap<[u8; 32], u64>,
     header_hash: [u8; 32],
@@ -292,6 +295,7 @@ impl ChannelLog {
         Ok(Self {
             file,
             observer,
+            listing: None,
             genesis: genesis.to_vec(),
             read_until: HashMap::new(),
             header_hash: checksum(&header),
@@ -331,6 +335,7 @@ impl ChannelLog {
         let mut store = Self {
             file,
             observer,
+            listing: None,
             genesis: header.genesis.as_slice().to_vec(),
             read_until: HashMap::new(),
             header_hash: checksum(&header_bytes),
@@ -365,6 +370,7 @@ impl ChannelLog {
                 store.track_departures(&next, record.sequence);
                 store.observer = next;
             }
+            store.track_listing(&record)?;
             let receipt = Acceptance {
                 sequence: record.sequence,
                 id,
@@ -389,6 +395,19 @@ impl ChannelLog {
 
     pub fn genesis(&self) -> &[u8] {
         &self.genesis
+    }
+    fn track_listing(&mut self, record: &Record) -> Result<(), Error> {
+        if let Some(control) = record.control()? {
+            if let HostedPolicyChange::Listing(name) = control.change() {
+                let name = std::str::from_utf8(name.as_slice())
+                    .map_err(|_| Error::Invalid("directory name".into()))?;
+                self.listing = (!name.is_empty()).then(|| name.to_owned());
+            }
+        }
+        Ok(())
+    }
+    pub fn listing(&self) -> Option<&str> {
+        self.listing.as_deref()
     }
     pub fn observer(&self) -> &HostedObserver {
         &self.observer
@@ -514,6 +533,7 @@ impl ChannelLog {
             self.track_departures(&next, record.sequence);
             self.observer = next;
         }
+        self.track_listing(&record)?;
         self.poisoned = false;
         Ok(receipt)
     }

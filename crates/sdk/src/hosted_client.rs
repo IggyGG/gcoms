@@ -68,6 +68,7 @@ pub enum Change {
     Role(MemberId, Role),
     Invitation { verifier: [u8; 32], expires_at: u64 },
     AccessCode { verifier: Option<[u8; 32]> },
+    Listing(String),
 }
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Presence {
@@ -261,6 +262,12 @@ pub enum Request {
         id: MessageId,
         content: Content,
     },
+    /// IPC24: browse opt-in public channel names through the protected route.
+    Directory {
+        endpoint: String,
+        after: Option<ChannelId>,
+        limit: u16,
+    },
 }
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Reply {
@@ -273,4 +280,17 @@ pub enum Reply {
     Done,
     Blob(Vec<u8>),
     FileEvents(Vec<Event>),
+    Directory {
+        entries: Vec<DirectoryEntry>,
+        next: Option<ChannelId>,
+    },
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DirectoryEntry {
+    pub channel: ChannelId,
+    pub name: String,
+    pub members: u32,
+    pub capacity: u32,
+    pub link: Option<InviteLink>,
 }

@@ -658,3 +658,69 @@ async fn file_completion_is_covered_authenticated_and_allowed_without_voice() {
 
 #[cfg(feature = "files")]
 mod modern_files;
+
+#[tokio::test]
+async fn hosted_directory_publication_is_operator_authenticated_and_receivers_apply_privacy() {
+    let server = private_dir();
+    let a = private_dir();
+    let b = private_dir();
+    let transport = service(server.path());
+    let mut alice = owner(a.path(), transport.clone()).await;
+    let channel = alice.archive.channel;
+    let mut bob = joining(channel, "bob", b.path(), transport.clone()).await;
+    pump(&mut bob).await;
+    pump(&mut alice).await;
+    assert!(bob
+        .queue_control(HostedPolicyChange::Listing(b"#forged".to_vec().into()), "")
+        .is_err());
+    for invalid in ["bad name", "bad\nname", &"a".repeat(65)] {
+        assert!(alice
+            .queue_control(
+                HostedPolicyChange::Listing(invalid.as_bytes().to_vec().into()),
+                ""
+            )
+            .is_err());
+    }
+    alice
+        .queue_control(HostedPolicyChange::Listing(b"#public".to_vec().into()), "")
+        .unwrap();
+    pump(&mut alice).await;
+    pump(&mut bob).await;
+    assert_eq!(bob.view().discovery, api::Discovery::Public);
+    assert!(bob.events(0, 256).unwrap().iter().any(|event| matches!(&event.kind, api::EventKind::Activity { change: api::Change::Listing(name), .. } if name == "#public")));
+    let wire::Reply::Directory { entries, .. } = transport
+        .exchange(
+            [0; 32],
+            wire::Operation::Directory {
+                after: None,
+                limit: 16,
+            },
+        )
+        .await
+        .unwrap()
+    else {
+        panic!("directory")
+    };
+    assert_eq!(entries.len(), 1);
+    assert_eq!(entries[0].channel, channel);
+    alice
+        .queue_control(HostedPolicyChange::Discovery(HostedDiscovery::Private), "")
+        .unwrap();
+    pump(&mut alice).await;
+    pump(&mut bob).await;
+    let wire::Reply::Directory { entries, .. } = transport
+        .exchange(
+            [0; 32],
+            wire::Operation::Directory {
+                after: None,
+                limit: 16,
+            },
+        )
+        .await
+        .unwrap()
+    else {
+        panic!("directory")
+    };
+    assert!(entries.is_empty());
+    assert_eq!(bob.view().discovery, api::Discovery::Private);
+}

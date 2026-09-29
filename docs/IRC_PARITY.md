@@ -314,3 +314,31 @@ and GChatd6c0235; that receipt predates the new file worker. Contact transfer,
 hosted whole-file transfer, quota/lifecycle audit, scale and release gates remain
 open. The user chose covered receipts with slower large-channel delivery status
 and “Topic pending” for newcomers while existing authorized writers are offline.
+
+### Verified file recovery and public directory follow-up
+
+`files-modern-13.log` passes a real independent-contact partial file restart,
+revocation/re-authorization, exact whole-file export and authenticated completion.
+The same run passes hosted tamper rejection with an offline publisher, migration
+from all three older hosted archive layouts, IPC file capability checks and the
+forced PQ renewal regression. A contact-bundle renewal previously substituted a
+key into an established session whose peer retained the old private key. Sessions
+now retain their negotiated KEM pair while their ordinary PQ/DH refresh continues.
+Earlier failures and the storage-evicted run remain retained. Full current network,
+capacity and installed/native qualification remains open.
+
+The audit found that discovery modes had no browsable hosted directory. The new
+opt-in signed Listing control publishes a public name without disclosing topics.
+Names are labels, while the channel ID pins the admission transcript. The service
+rebuilds its listing index from the validated log and filters private, secret,
+closed, suspended and unannounced rooms. Pages contain at most 16 entries and
+stable ID cursors. Public admission links contain no metadata secret; all joins
+still replay and validate current policy. IPC24 gates typed browsing/publication.
+GChat uses `/hosted list [cursor]`, or `/list` in a hosted room, and operators use
+`/publish name` or `/publish --remove`. The three service/runtime/SDK directory tests and strict seven-package Clippy pass
+in `directory-02.log` (its combined command retains the separate GC2 fixture
+failure). The corrected `files-gc2-renewal-04.log` passes 65 actual encrypted
+messages, two measured PQ refreshes and every logical recipient acknowledgment.
+The fixture now consumes its durable inbox and drives deferred ACK maintenance,
+matching production instead of hitting the intentional 32-unconsumed-item quota.
+Publication is not a capacity/deployment claim.

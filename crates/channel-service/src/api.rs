@@ -253,7 +253,7 @@ impl Service {
     }
     pub fn info(&self) -> ServiceInfo {
         ServiceInfo {
-            extensions: vec!["ciphertext-pieces-v1".into()],
+            extensions: vec!["ciphertext-pieces-v1".into(), "public-directory-v1".into()],
             requests_per_second: Some(self.0.config.requests_per_second),
             source_requests_per_second: Some(self.0.config.source_requests_per_second),
             version: VERSION,
@@ -302,6 +302,38 @@ impl Service {
         let Ok(mut channels) = self.0.channels.lock() else {
             return fault(FaultCode::Unavailable, "storage lock unavailable");
         };
+        if let Operation::Directory { after, limit } = request.operation {
+            if limit == 0 || limit > 16 {
+                return fault(FaultCode::Invalid, "directory page bound");
+            }
+            let mut entries: Vec<_> = channels
+                .iter()
+                .filter_map(|(id, log)| {
+                    let rules = log.observer.rules();
+                    if after.is_some_and(|after| *id <= after)
+                        || log.poisoned
+                        || rules.closed()
+                        || rules.discovery() != gcoms_mls::hosted::HostedDiscovery::Public
+                        || self.0.config.blocked_channels.contains(id)
+                    {
+                        return None;
+                    }
+                    Some(gcoms_sdk::hosted::DirectoryEntry {
+                        channel: *id,
+                        name: log.listing()?.into(),
+                        members: log.observer.member_count() as u32,
+                        capacity: rules.capacity(),
+                        public_join: !rules.mode(gcoms_mls::hosted::HostedMode::InviteOnly)
+                            && rules.access_key().is_none(),
+                    })
+                })
+                .collect();
+            entries.sort_by_key(|entry| entry.channel);
+            let next = (entries.len() > usize::from(limit))
+                .then(|| entries[usize::from(limit) - 1].channel);
+            entries.truncate(usize::from(limit));
+            return Reply::Directory { entries, next };
+        }
         let channel = request.channel;
         if self.0.config.blocked_channels.contains(&channel)
             && matches!(

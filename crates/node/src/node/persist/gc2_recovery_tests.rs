@@ -532,14 +532,51 @@ async fn gc2_prepared_receive_keeps_its_logical_receipt_when_flow_deadline_passe
     b.scheduler.shutdown();
 }
 
+fn gc2_deliver_fixture(st: &mut NodeState, bytes: &[u8], events: &broadcast::Sender<Ev>) {
+    use gcoms_protocol::gc2_session::{Kind, Packet};
+    let packet = Packet::decode(bytes).unwrap();
+    if packet.kind() == Kind::Frame {
+        let (peer, session) = st
+            .sessions
+            .iter()
+            .find(|(_, s)| s.tag() == Some(packet.tag()))
+            .unwrap();
+        let key = direct_session_wrapping_key(&st.identity_seed);
+        let context = direct_session_context(st, peer).unwrap();
+        let frame = packet.frame().unwrap();
+        session
+            .prepare_receive(&frame, &key, &context)
+            .unwrap_or_else(|e| {
+                panic!(
+                    "fixture receive counter={} pq={}: {e}",
+                    frame.ctr,
+                    frame.pq_ct.is_some()
+                )
+            });
+    }
+    gc2_direct::incoming(st, bytes, events).unwrap();
+}
+
 fn gc2_drain_fixture_acks(a: &mut NodeState, b: &mut NodeState, events: &broadcast::Sender<Ev>) {
+    let mut last_a = None;
+    let mut last_b = None;
     for _ in 0..16 {
-        if a.direct_ack_outbox.is_empty() && b.direct_ack_outbox.is_empty() { return; }
+        // Production maintenance prepares logical ACKs after transport credit
+        // frees the send window; this fixture has no background maintenance.
+        gc2_acks::materialize(a, &mut last_a).unwrap();
+        gc2_acks::materialize(b, &mut last_b).unwrap();
+        if a.direct_ack_outbox.is_empty() && b.direct_ack_outbox.is_empty() {
+            return;
+        }
         for delivery in std::mem::take(&mut a.direct_ack_outbox) {
-            for cell in delivery.cells { gc2_direct::incoming(b, &cell.payload, events).unwrap(); }
+            for cell in &delivery.cells {
+                gc2_deliver_fixture(b, &cell.payload, events);
+            }
         }
         for delivery in std::mem::take(&mut b.direct_ack_outbox) {
-            for cell in delivery.cells { gc2_direct::incoming(a, &cell.payload, events).unwrap(); }
+            for cell in &delivery.cells {
+                gc2_deliver_fixture(a, &cell.payload, events);
+            }
         }
     }
     panic!("ACK loop did not quiesce");
@@ -548,39 +585,94 @@ fn gc2_drain_fixture_acks(a: &mut NodeState, b: &mut NodeState, events: &broadca
 #[tokio::test]
 async fn gc2_contact_renewal_keeps_pq_refresh_and_logical_receipts_working() {
     let (alice, mut bob, _) = gc2_recovery_pair(91, 92).await;
+    // The pair fixture already delivered setup credits but intentionally kept
+    // copies in its ACK outbox for other lost-ACK tests.
+    for delivery in &mut bob.direct_ack_outbox {
+        delivery
+            .cells
+            .retain(|cell| !cell.payload.starts_with(b"GCA2"));
+    }
+    bob.direct_ack_outbox
+        .retain(|delivery| !delivery.cells.is_empty());
     let (events, _) = broadcast::channel(32);
     let (scheduler, peer, tag) = {
         let mut a = alice.lock().unwrap();
         gc2_drain_fixture_acks(&mut a, &mut bob, &events);
-        (a.scheduler.clone(), bob.info.clone(), *a.sessions[&bob.info.identity_pk].tag().unwrap())
+        (
+            a.scheduler.clone(),
+            bob.info.clone(),
+            *a.sessions[&bob.info.identity_pk].tag().unwrap(),
+        )
     };
     let now = now_unix();
     let (aged, secrets) = IdentityKeypair::from_seed(bob.identity_seed)
-        .issue_bundle_with_rng(&mut rand::thread_rng(), now - crate::proto::MAX_BUNDLE_AGE_SECS / 2 - 1).unwrap();
+        .issue_bundle_with_rng(
+            &mut rand::thread_rng(),
+            now - crate::proto::MAX_BUNDLE_AGE_SECS / 2 - 1,
+        )
+        .unwrap();
     bob.info.bundle = aged.encode();
     bob.secrets = Arc::new(secrets);
-    for alias in &mut bob.info.aliases { alias.expiry = now + 3600; }
+    for alias in &mut bob.info.aliases {
+        alias.expiry = now + 3600;
+    }
     let updates = queue_contact_updates(&mut bob).unwrap();
     {
         let mut a = alice.lock().unwrap();
         for delivery in updates {
-            for cell in delivery.cells { gc2_direct::incoming(&mut a, &cell.payload, &events).unwrap(); }
+            for cell in &delivery.cells {
+                gc2_direct::incoming(&mut a, &cell.payload, &events).unwrap();
+            }
         }
         gc2_drain_fixture_acks(&mut a, &mut bob, &events);
         assert_eq!(a.peer_routes[&bob.info.identity_pk].bundle, bob.info.bundle);
     }
+    // Consume each durable inbox item as the application would; the peer quota
+    // intentionally stops delivery at 32 unconsumed items.
+    let first = bob.application_inbox.entries.front().unwrap().clone();
+    bob.application_inbox
+        .consume(first.sequence, first.digest())
+        .unwrap();
+    persist_current_direct_state(&bob).unwrap();
+    let mut pq_frames = 0;
     // Exceed the actual 32-message PQ-refresh cadence in both directions.
     for n in 0u8..65 {
-        send_durable_1to1(&alice, &scheduler, &peer, &[n; 4], None).await.unwrap();
+        send_durable_1to1(&alice, &scheduler, &peer, &[n; 4], None)
+            .await
+            .unwrap();
         let mut a = alice.lock().unwrap();
-        let cells: Vec<_> = a.pending_1to1.values().flat_map(|p| p.delivery.cells.clone()).collect();
+        let cells: Vec<_> = a
+            .pending_1to1
+            .values()
+            .flat_map(|p| p.delivery.cells.clone())
+            .collect();
         assert!(!cells.is_empty());
-        for cell in cells { gc2_direct::incoming(&mut bob, &cell.payload, &events).unwrap(); }
+        for cell in cells {
+            let packet = gcoms_protocol::gc2_session::Packet::decode(&cell.payload).unwrap();
+            if packet.frame().is_ok_and(|frame| frame.pq_ct.is_some()) {
+                pq_frames += 1;
+            }
+            gc2_deliver_fixture(&mut bob, &cell.payload, &events);
+        }
         gc2_drain_fixture_acks(&mut a, &mut bob, &events);
-        assert!(a.pending_1to1.is_empty(), "recipient logical ACK required");
+        assert!(
+            a.pending_1to1.is_empty(),
+            "recipient logical ACK required at message {n}"
+        );
         assert_eq!(a.sessions[&bob.info.identity_pk].tag(), Some(&tag));
-        assert_eq!(bob.application_inbox.entries.len(), n as usize + 2);
-        assert_eq!(bob.application_inbox.entries.back().unwrap().body, vec![n; 4]);
+        assert_eq!(bob.application_inbox.entries.len(), 1);
+        let delivery = bob.application_inbox.entries.back().unwrap().clone();
+        assert_eq!(delivery.body, vec![n; 4]);
+        assert_eq!(delivery.sequence, n as u64 + 2);
+        bob.application_inbox
+            .consume(delivery.sequence, delivery.digest())
+            .unwrap();
+        persist_current_direct_state(&bob).unwrap();
     }
-    scheduler.shutdown(); bob.scheduler.shutdown();
+    assert!(
+        pq_frames >= 2,
+        "must authenticate at least two actual PQ refreshes"
+    );
+    scheduler.shutdown();
+    bob.scheduler.shutdown();
 }

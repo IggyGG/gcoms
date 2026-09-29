@@ -29,8 +29,8 @@ use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 #[cfg(all(any(unix, windows), feature = "ipc"))]
 use tokio::sync::{broadcast, mpsc, oneshot, watch, Mutex};
 
-pub const VERSION: u16 = 23;
-// IPC23 appends explicitly bulk hosted ciphertext-piece operations.
+pub const VERSION: u16 = 24;
+// IPC24 appends public hosted directory browsing and publication.
 // IPC22 adds separately authorized routed hosted-profile requests.
 
 #[cfg(test)]
@@ -279,6 +279,13 @@ pub enum Request {
 impl Request {
     pub fn minimum_version(&self) -> u16 {
         match self {
+            Self::HostedChannels(
+                crate::hosted_client::Request::Directory { .. }
+                | crate::hosted_client::Request::Change {
+                    change: crate::hosted_client::Change::Listing(_),
+                    ..
+                },
+            ) => 24,
             Self::SharingV2(_) => 23,
             Self::HostedChannels(
                 crate::hosted_client::Request::PutBlob { .. }
@@ -2712,6 +2719,26 @@ mod tests {
     }
 
     #[test]
+    fn hosted_directory_requires_ipc24_and_hosted_authority() {
+        for operation in [
+            crate::hosted_client::Request::Directory {
+                endpoint: "https://example.invalid/v1/hosted".into(),
+                after: None,
+                limit: 16,
+            },
+            crate::hosted_client::Request::Change {
+                channel: [1; 32],
+                change: crate::hosted_client::Change::Listing("#public".into()),
+                reason: String::new(),
+            },
+        ] {
+            let request = Request::HostedChannels(operation);
+            assert_eq!(request.minimum_version(), 24);
+            assert_eq!(request.required_capability(), Capability::HostedChannels);
+        }
+    }
+
+    #[test]
     fn ciphertext_piece_requests_require_ipc23_and_hosted_authority() {
         let reference = crate::hosted::BlobRef {
             owner: [1; 32],
@@ -2753,7 +2780,7 @@ mod tests {
 
     #[test]
     fn requests_declare_required_capability() {
-        assert_eq!(VERSION, 23);
+        assert_eq!(VERSION, 24);
         for request in [
             Request::SubmitDurableOpaque {
                 recipient: ContactCard(Vec::new()),

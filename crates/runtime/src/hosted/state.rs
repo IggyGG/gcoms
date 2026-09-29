@@ -1001,6 +1001,9 @@ pub(super) fn change(change: &HostedPolicyChange) -> api::Change {
         HostedPolicyChange::Kick(id) => api::Change::Kick(*id),
         HostedPolicyChange::Leave => api::Change::Leave,
         HostedPolicyChange::Close => api::Change::Close,
+        HostedPolicyChange::Listing(name) => {
+            api::Change::Listing(String::from_utf8_lossy(name.as_slice()).into_owned())
+        }
         HostedPolicyChange::Invitation(verifier, expiry) => api::Change::Invitation {
             verifier: *verifier,
             expires_at: *expiry,

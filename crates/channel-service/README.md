@@ -71,3 +71,10 @@ The client remains responsible for AEAD, Merkle and whole-file verification.
 Service info also advertises global and source request rates; behind a proxy the
 source rate refers to the upstream socket address, not a forwarded IP.
 This storage primitive does not by itself implement file offers or GChat transfers.
+
+`public-directory-v1` lists only explicitly named Public channels, in bounded
+ID-ordered pages. A signed operator Listing control publishes the chosen name;
+empty publication withdraws it. Private/secret/closed/suspended rooms are omitted.
+The index is rebuilt from validated controls after restart. Encrypted topics and
+member identities are never directory fields. Advertised public admission still
+requires the client's normal proof and current policy verification.

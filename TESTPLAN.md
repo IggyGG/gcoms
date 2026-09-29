@@ -619,3 +619,16 @@ authenticated completion. Retain failing network/error diagnostics. The hosted
 case must reject changed ciphertext and finish with the publisher offline. Run
 GChat's full workspace suite, including the contact-only permission file journey.
 Archive migration exercises each prior hosted layout before writing/reopening v4.
+
+### Opt-in hosted directory
+
+Run the `hosted_directory` tests across service/runtime/SDK. Require default
+nonpublication, rejected nonoperator publication, public paging bounds, retained
+listing reconstruction, private/secret/closed omission and invitation-only labels.
+Clients apply the same signed control and require IPC24 for typed publication and
+browsing. GChat verifies scoped `/list`, global `/hosted list`, bounded cursors and
+ordinary contact-only unlock/file behavior. Topics remain encrypted.
+
+The GC2 contact-renewal regression must consume durable inbox entries and drive
+logical-ACK maintenance, authenticate at least two actual periodic PQ frames,
+and retain the same session tag. Unconsumed inbox quota is not a crypto failure.

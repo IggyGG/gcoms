@@ -597,3 +597,14 @@ ratcheting continue. Its forced-refresh case and old hosted archive migration pa
 in `files-modern-12.log`. That run was evicted for exceeding the pod's 5 GiB
 emptyDir limit during the larger file test, so completion is unqualified. The
 fresh `files-modern-13.log` run uses one package feature graph and library tests.
+
+### IRC-3 opt-in directory checkpoint — 2026-09-29
+
+Explicit operator-signed publication now connects persistent service discovery,
+validated runtime results, IPC24 and GChat browsing. Private/secret/closed and
+unpublished rooms are omitted; topics remain encrypted. Three directory tests
+and strict seven-package Clippy pass in `directory-02.log`. That combined run's
+separate GC2 fixture failure is retained; the corrected inbox-consuming regression
+passes 65 authenticated messages and two measured PQ refreshes in
+`files-gc2-renewal-04.log`. Broader current regression, protected-network capacity
+and release qualification remain open. See `docs/IRC_PARITY.md`.

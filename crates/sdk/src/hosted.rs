@@ -62,6 +62,11 @@ pub enum Operation {
         reference: BlobRef,
         proof: String,
     },
+    /// Only explicitly published public channels; never member/user discovery.
+    Directory {
+        after: Option<[u8; 32]>,
+        limit: u16,
+    },
 }
 
 impl Operation {
@@ -158,6 +163,19 @@ pub enum Reply {
     },
     BlobStored,
     Fault(Fault),
+    Directory {
+        entries: Vec<DirectoryEntry>,
+        next: Option<[u8; 32]>,
+    },
+}
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DirectoryEntry {
+    pub channel: [u8; 32],
+    pub name: String,
+    pub members: u32,
+    pub capacity: u32,
+    pub public_join: bool,
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ServiceInfo {
