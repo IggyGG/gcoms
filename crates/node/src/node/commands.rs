@@ -960,6 +960,21 @@ pub(crate) fn spawn_command_loop(ctx: CommandLoopContext) -> tokio::task::JoinHa
                         }
                     );
                 }
+                Cmd::MembershipRecoveryStatus { channel, done } => {
+                    let st = state.lock().unwrap_or_else(|p| p.into_inner());
+                    let _ = done.send(super::membership_recovery::status(&st, &channel));
+                }
+                Cmd::RecoverMembership {
+                    channel,
+                    request,
+                    done,
+                } => {
+                    let key = CmdKey::Channel(channel.clone());
+                    dispatch!(key, done, |state, scheduler, events_tx| {
+                        let mut st = state.lock().unwrap_or_else(|p| p.into_inner());
+                        super::membership_recovery::recover(&mut st, &channel, &request, &events_tx)
+                    });
+                }
                 Cmd::RemoveChannelMember {
                     channel,
                     member_id,

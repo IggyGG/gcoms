@@ -239,6 +239,19 @@ pub enum Cmd {
         text: Vec<u8>,
         done: tokio::sync::oneshot::Sender<Result<[u8; 16], String>>,
     },
+    MembershipRecoveryStatus {
+        channel: String,
+        done: tokio::sync::oneshot::Sender<
+            Result<super::membership_recovery::MembershipRecoveryStatus, String>,
+        >,
+    },
+    RecoverMembership {
+        channel: String,
+        request: super::membership_recovery::MembershipRecoveryRequest,
+        done: tokio::sync::oneshot::Sender<
+            Result<super::membership_recovery::MembershipRecoveryStatus, String>,
+        >,
+    },
     RemoveChannelMember {
         channel: String,
         member_id: [u8; 32],
@@ -1538,6 +1551,38 @@ impl NodeHandle {
             .await
             .map_err(|error| error.to_string())?;
         done_rx.await.map_err(|error| error.to_string())?
+    }
+
+    pub async fn membership_recovery_status(
+        &self,
+        channel: &str,
+    ) -> Result<super::membership_recovery::MembershipRecoveryStatus, String> {
+        let (done, receive) = tokio::sync::oneshot::channel();
+        self.cmd_tx
+            .send(Cmd::MembershipRecoveryStatus {
+                channel: channel.into(),
+                done,
+            })
+            .await
+            .map_err(|e| e.to_string())?;
+        receive.await.map_err(|e| e.to_string())?
+    }
+
+    pub async fn recover_membership(
+        &self,
+        channel: &str,
+        request: super::membership_recovery::MembershipRecoveryRequest,
+    ) -> Result<super::membership_recovery::MembershipRecoveryStatus, String> {
+        let (done, receive) = tokio::sync::oneshot::channel();
+        self.cmd_tx
+            .send(Cmd::RecoverMembership {
+                channel: channel.into(),
+                request,
+                done,
+            })
+            .await
+            .map_err(|e| e.to_string())?;
+        receive.await.map_err(|e| e.to_string())?
     }
 
     pub async fn remove_channel_member(

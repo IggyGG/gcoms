@@ -922,6 +922,9 @@ fn encode_state_inner(
             v.extend_from_slice(&admission.pseudonym);
             put32(&mut v, &admission.welcome)?;
         }
+        if channel.completed_removals.len() > MAX_CHANNEL_ITEMS {
+            return Err("channel removal history is full".into());
+        }
         put_count(&mut v, channel.completed_removals.len())?;
         for member in &channel.completed_removals {
             if !valid_completed_removal_key(member) {

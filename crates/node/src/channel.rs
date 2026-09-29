@@ -452,6 +452,15 @@ impl ChannelRole {
             Self::Member(m) => m.stage_remove_current(member),
         }
     }
+    pub(crate) fn stage_remove_members(
+        &mut self,
+        members: &[[u8; 32]],
+    ) -> Result<gcoms_mls::StagedRemoval, gcoms_mls::MlsError> {
+        match self {
+            Self::Owner(owner) => owner.stage_remove_members(members),
+            Self::Member(member) => member.stage_remove_members(members),
+        }
+    }
     pub(crate) fn merge_pending(&mut self) -> Result<(), gcoms_mls::MlsError> {
         match self {
             Self::Owner(o) => o.merge_pending(),

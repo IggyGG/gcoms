@@ -29,10 +29,11 @@ use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 #[cfg(all(any(unix, windows), feature = "ipc"))]
 use tokio::sync::{broadcast, mpsc, oneshot, watch, Mutex};
 
-pub const VERSION: u16 = 21;
+pub const VERSION: u16 = 22;
 
 #[cfg(test)]
 mod metadata_compat;
+// IPC22 appends owner-only membership recovery; previous discriminants are unchanged.
 // IPC21 appends opt-in immutable file metadata and authenticated channel reconnect.
 // IPC20 adds same-scope file reuse; existing request layouts are unchanged.
 // new operations/capabilities/events are never admitted under an older version.
@@ -268,11 +269,16 @@ pub enum Request {
         channel: String,
         code: Option<String>,
     },
+    ChannelRecovery {
+        channel: String,
+        request: Option<crate::MembershipRecoveryRequest>,
+    },
 }
 
 impl Request {
     pub fn minimum_version(&self) -> u16 {
         match self {
+            Self::ChannelRecovery { .. } => 22,
             Self::Sharing(crate::sharing::Request::Inspect { .. })
             | Self::ChannelReconnect { .. } => 21,
             Self::Sharing(crate::sharing::Request::CommitReusing { .. }) => 20,
@@ -299,6 +305,7 @@ impl Request {
     }
     pub fn required_capability(&self) -> Capability {
         match self {
+            Self::ChannelRecovery { .. } => Capability::ChannelAdmin,
             Self::ChannelReconnect { .. } => Capability::ChannelMember,
             Self::Sharing(_) => Capability::FileSharing,
             Self::NetworkStatus => Capability::IdentityRead,
@@ -363,6 +370,14 @@ impl Request {
 
     fn validate_application_payload(&self) -> Result<(), SdkError> {
         match self {
+            Self::ChannelRecovery { channel, request }
+                if channel.len() > 256
+                    || request.as_ref().is_some_and(|r| {
+                        r.remove_members.is_empty() || r.remove_members.len() > 256
+                    }) =>
+            {
+                Err(SdkError::Protocol("channel recovery exceeds limit".into()))
+            }
             Self::ChannelReconnect { channel, code }
                 if channel.len() > 256 || code.as_ref().is_some_and(|v| v.len() > 8 * 1024) =>
             {
@@ -426,6 +441,7 @@ pub enum Response {
     Sharing(crate::sharing::Reply),
     NetworkStatus(crate::NetworkStatus),
     ChannelTopic(String),
+    ChannelRecovery(crate::MembershipRecoveryStatus),
 }
 
 #[cfg(all(any(unix, windows), feature = "ipc"))]
@@ -1530,6 +1546,25 @@ impl GcClient for IpcClient {
         }
     }
 
+    async fn channel_recovery(
+        &self,
+        channel: &str,
+        request: Option<&crate::MembershipRecoveryRequest>,
+    ) -> Result<crate::MembershipRecoveryStatus, SdkError> {
+        match self
+            .request(Request::ChannelRecovery {
+                channel: channel.into(),
+                request: request.cloned(),
+            })
+            .await?
+        {
+            Response::ChannelRecovery(status) => Ok(status),
+            _ => Err(SdkError::Protocol(
+                "unexpected channel recovery response".into(),
+            )),
+        }
+    }
+
     async fn remove_channel_member(
         &self,
         channel: &str,
@@ -2291,6 +2326,10 @@ pub(crate) async fn dispatch<C: GcClient>(
                 .await
                 .map(Response::MessageId)
         }
+        Request::ChannelRecovery { channel, request } => client
+            .channel_recovery(&channel, request.as_ref())
+            .await
+            .map(Response::ChannelRecovery),
         Request::RemoveChannelMember { channel, member_id } => {
             client.remove_channel_member(&channel, member_id).await?;
             Ok(Response::Empty)
@@ -2581,8 +2620,35 @@ mod tests {
     }
 
     #[test]
+    fn recovery_is_owner_capability_bounded_and_versioned() {
+        let request = Request::ChannelRecovery {
+            channel: "room".into(),
+            request: None,
+        };
+        assert_eq!(request.minimum_version(), 22);
+        assert_eq!(request.required_capability(), Capability::ChannelAdmin);
+        let frame = Frame::Request(RequestEnvelope {
+            version: VERSION,
+            request_id: 1,
+            request,
+        });
+        assert_eq!(decode(&encode(&frame).unwrap()).unwrap(), frame);
+        let request = Request::ChannelRecovery {
+            channel: "room".into(),
+            request: Some(crate::MembershipRecoveryRequest {
+                channel_id: [1; 32],
+                epoch: 2,
+                pending_commit: None,
+                revision: [2; 32],
+                remove_members: vec![[3; 32]; 257],
+            }),
+        };
+        assert!(request.validate_application_payload().is_err());
+    }
+
+    #[test]
     fn requests_declare_required_capability() {
-        assert_eq!(VERSION, 21);
+        assert_eq!(VERSION, 22);
         for request in [
             Request::SubmitDurableOpaque {
                 recipient: ContactCard(Vec::new()),
@@ -3459,9 +3525,25 @@ mod route_recovery_compatibility_tests {
     }
     #[tokio::test]
     async fn route_recovery_preserves_v13_identity_and_requires_v14_owner_capability() {
-        for (version, cap) in [
-            (13, Capability::ChannelAdmin),
-            (14, Capability::ChannelMember),
+        for (version, cap, request) in [
+            (13, Capability::ChannelAdmin, recovery()),
+            (14, Capability::ChannelMember, recovery()),
+            (
+                21,
+                Capability::ChannelAdmin,
+                Request::ChannelRecovery {
+                    channel: "room".into(),
+                    request: None,
+                },
+            ),
+            (
+                22,
+                Capability::ChannelMember,
+                Request::ChannelRecovery {
+                    channel: "room".into(),
+                    request: None,
+                },
+            ),
         ] {
             let node = gcoms_node::node::start(gcoms_node::node::NodeConfig {
                 seed: [77; 32],
@@ -3518,7 +3600,7 @@ mod route_recovery_compatibility_tests {
                 &Frame::Request(RequestEnvelope {
                     version,
                     request_id: 2,
-                    request: recovery(),
+                    request,
                 }),
             )
             .await

@@ -1654,6 +1654,18 @@ impl GcClient for ProtocolClient {
         Ok(message_id)
     }
 
+    async fn channel_recovery(
+        &self,
+        channel: &str,
+        request: Option<&gcoms_sdk::MembershipRecoveryRequest>,
+    ) -> Result<gcoms_sdk::MembershipRecoveryStatus, SdkError> {
+        let result = self.embedded.channel_recovery(channel, request).await?;
+        if request.is_some() {
+            self.persist().await?;
+        }
+        Ok(result)
+    }
+
     async fn remove_channel_member(
         &self,
         channel: &str,

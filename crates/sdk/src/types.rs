@@ -133,6 +133,34 @@ pub struct ApplicationDelivery {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct JoinRequest(pub u64);
 
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RecoveryMember {
+    pub member_id: [u8; 32],
+    pub display_name: String,
+    pub is_self: bool,
+    pub missing_commit: bool,
+    pub pending_messages: u32,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MembershipRecoveryStatus {
+    pub channel_id: [u8; 32],
+    pub epoch: u64,
+    pub pending_commit: Option<[u8; 16]>,
+    pub revision: [u8; 32],
+    pub members: Vec<RecoveryMember>,
+    pub retained_messages: u32,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MembershipRecoveryRequest {
+    pub channel_id: [u8; 32],
+    pub epoch: u64,
+    pub pending_commit: Option<[u8; 16]>,
+    pub revision: [u8; 32],
+    pub remove_members: Vec<[u8; 32]>,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MessageId(pub [u8; 16]);
 
@@ -832,6 +860,17 @@ pub trait GcClient: Send + Sync {
         body: &[u8],
     ) -> Result<MessageId, SdkError>;
 
+    /// Owner-only recovery; None is a read-only preview. Old hosts fail closed.
+    async fn channel_recovery(
+        &self,
+        _channel: &str,
+        _request: Option<&MembershipRecoveryRequest>,
+    ) -> Result<MembershipRecoveryStatus, SdkError> {
+        Err(SdkError::Protocol(
+            "channel recovery is unsupported by this host".into(),
+        ))
+    }
+
     async fn remove_channel_member(
         &self,
         channel: &str,
@@ -1155,6 +1194,14 @@ impl<T: GcClient + ?Sized> GcClient for std::sync::Arc<T> {
             .send_channel_direct(channel, recipient_member_id, body)
             .await
     }
+    async fn channel_recovery(
+        &self,
+        channel: &str,
+        request: Option<&MembershipRecoveryRequest>,
+    ) -> Result<MembershipRecoveryStatus, SdkError> {
+        (**self).channel_recovery(channel, request).await
+    }
+
     async fn remove_channel_member(
         &self,
         channel: &str,

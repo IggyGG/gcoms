@@ -30,8 +30,9 @@ pub use types::{
     AutomaticJoinEndpoint, Blob, CarrierProfile, CatalogRequest, CatalogResponse, ChannelChange,
     ChannelId, ChannelInvitation, ChannelMemberSummary, ChannelRole, ChannelStatus,
     ChannelVisibility, ClientEvent, ConnectionState, ContactCard, GcClient, Identity, JoinRequest,
-    JoinedChannel, MessageId, NetworkNameStatus, Peer, PresenceMode, PublicChannelDescriptor,
-    Reachability, RelayCard, RelayState, RuntimeStatus, SdkError,
+    JoinedChannel, MembershipRecoveryRequest, MembershipRecoveryStatus, MessageId,
+    NetworkNameStatus, Peer, PresenceMode, PublicChannelDescriptor, Reachability, RecoveryMember,
+    RelayCard, RelayState, RuntimeStatus, SdkError,
 };
 
 pub use gcoms_core::component;

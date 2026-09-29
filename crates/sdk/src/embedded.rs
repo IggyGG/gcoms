@@ -856,6 +856,48 @@ impl GcClient for EmbeddedClient {
             .map_err(SdkError::Runtime)
     }
 
+    async fn channel_recovery(
+        &self,
+        channel: &str,
+        request: Option<&crate::MembershipRecoveryRequest>,
+    ) -> Result<crate::MembershipRecoveryStatus, SdkError> {
+        let status = if let Some(r) = request {
+            self.node
+                .recover_membership(
+                    channel,
+                    gcoms_node::node::membership_recovery::MembershipRecoveryRequest {
+                        channel_id: r.channel_id,
+                        epoch: r.epoch,
+                        pending_commit: r.pending_commit,
+                        revision: r.revision,
+                        remove_members: r.remove_members.clone(),
+                    },
+                )
+                .await
+        } else {
+            self.node.membership_recovery_status(channel).await
+        }
+        .map_err(SdkError::Runtime)?;
+        Ok(crate::MembershipRecoveryStatus {
+            channel_id: status.channel_id,
+            epoch: status.epoch,
+            pending_commit: status.pending_commit,
+            revision: status.revision,
+            retained_messages: status.retained_messages,
+            members: status
+                .members
+                .into_iter()
+                .map(|m| crate::RecoveryMember {
+                    member_id: m.member_id,
+                    display_name: m.display_name,
+                    is_self: m.is_self,
+                    missing_commit: m.missing_commit,
+                    pending_messages: m.pending_messages,
+                })
+                .collect(),
+        })
+    }
+
     async fn remove_channel_member(
         &self,
         channel: &str,

@@ -1,3 +1,7 @@
+## Owner-controlled membership recovery
+
+Run node `membership_recovery::tests`, channel maintenance revocation accounting, MLS and SDK library suites with all features. Require stale/partial/owner refusal, durable-save rollback, original wire/ACK retention through reopen, old-leaf exclusion, fresh same-name admission, removal-history bounds and IPC21/22 capability enforcement. Paired GChat `membership_recovery_invitation_delivery_kick_and_reopen` must exercise real mint/join/redeem, delivery ACK, normal kick and restart.
+
 ## Bounded file recovery latency
 
 Run `cargo test --locked -p gcoms-file-transfer` and

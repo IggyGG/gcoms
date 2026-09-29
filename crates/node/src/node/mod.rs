@@ -63,6 +63,7 @@ mod gc2_forward;
 mod gc2_gate;
 #[cfg(feature = "experimental-gc2")]
 mod gc2_receipts;
+pub mod membership_recovery;
 mod peer_session;
 #[cfg(feature = "push-notifications")]
 mod push_notifications;

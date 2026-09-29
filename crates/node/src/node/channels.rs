@@ -1554,6 +1554,12 @@ fn stage_admission_locked(
     if crate::channel::metadata::Metadata::read(&cs.role)?.closed() {
         return Err("This channel is closed".into());
     }
+    if cs
+        .completed_removals
+        .contains(&completed_member_removal_key(&member_route.pseudonym))
+    {
+        return Err("member was removed; use a fresh invitation and join identity".into());
+    }
     let request_id: [u8; 32] = Sha256::digest(mls_key_package).into();
     if let Some(cached) = cs.admission_cache.get(&request_id) {
         if cached.name == member_name && cached.pseudonym == member_route.pseudonym {

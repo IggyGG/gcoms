@@ -75,6 +75,43 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn revoked_message_targets_stop_without_forged_receipts() {
+        let (state, scheduler) = fixture(&["revoked"]);
+        let id = message(&state, "revoked", 81, 64 * 1024);
+        let mut maintenance = ChannelMaintenance::default();
+        maintenance.stage(&state, &scheduler);
+        assert!(maintenance
+            .plans
+            .iter()
+            .any(|p| p.work == Work::Message(id)));
+        state
+            .lock()
+            .unwrap()
+            .channels
+            .get_mut("revoked")
+            .unwrap()
+            .completed_removals
+            .insert(super::super::completed_member_removal_key(&[81; 32]));
+        maintenance.stage(&state, &scheduler);
+        maintenance.admit_with(|peer, _| {
+            assert_ne!(
+                peer.pseudonym, [81; 32],
+                "revoked message must not be retried"
+            );
+            Err(EnqueueError::Full)
+        });
+        maintenance.settle(&state);
+        let st = state.lock().unwrap();
+        let outbox = &st.channels["revoked"].message_outbox[&id];
+        assert_eq!(outbox.wire, vec![81; 64 * 1024]);
+        assert!(outbox.acknowledged.is_empty());
+        assert_eq!(outbox.expected.len(), 1);
+        drop(st);
+        drop(maintenance);
+        scheduler.shutdown();
+    }
+
+    #[tokio::test]
     async fn empty_control_rounds_remain_idle() {
         let (state, scheduler) = fixture(&["idle"]);
         let mut maintenance = ChannelMaintenance::control();
@@ -544,7 +581,20 @@ impl ChannelMaintenance {
             return;
         }
         for plan in &mut self.plans {
-            if !st.channels.contains_key(&plan.channel) {
+            if let Some(cs) = st.channels.get(&plan.channel) {
+                if matches!(plan.work, Work::Message(_)) {
+                    for (target, peer) in plan.targets.iter().enumerate() {
+                        if cs
+                            .completed_removals
+                            .contains(&super::completed_member_removal_key(&peer.pseudonym))
+                        {
+                            // Stop unadmitted retries without manufacturing a receipt
+                            // or changing the original expected-recipient accounting.
+                            plan.next[target] = plan.cells.len();
+                        }
+                    }
+                }
+            } else {
                 plan.next.fill(plan.cells.len());
             }
         }
@@ -724,7 +774,12 @@ impl ChannelMaintenance {
                         outbox
                             .expected
                             .iter()
-                            .filter(|(id, _)| !outbox.acknowledged.contains(*id))
+                            .filter(|(id, _)| {
+                                !outbox.acknowledged.contains(*id)
+                                    && !cs
+                                        .completed_removals
+                                        .contains(&super::completed_member_removal_key(id))
+                            })
                             .map(|(_, peer)| crate::channel::PeerRef::from_route(peer))
                             .collect(),
                     )

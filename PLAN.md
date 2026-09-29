@@ -1,3 +1,7 @@
+## Owner-controlled membership recovery (2026-09-29)
+
+Implemented explicit, durable batch MLS revocation for stuck membership; original message/ACK journals remain. SDK and IPC22 expose a bound preview. Paired GChat recovery and focused protocol validation are recorded in the membership-recovery receipt; installed profile repair is a separate result. See [contract](docs/MEMBERSHIP_RECOVERY.md).
+
 ## Bounded file recovery latency (2026-09-28)
 
 A reopened, already accepted download queries a newly authenticated source without

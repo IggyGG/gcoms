@@ -258,6 +258,14 @@ impl ChannelMember {
     pub fn stage_remove_current(&mut self, member: [u8; 32]) -> Result<StagedRemoval, MlsError> {
         self.ctx.stage_remove(member)
     }
+    /// Batch removal is authorized by the current signed owner delegation,
+    /// including when that owner originally joined as a member.
+    pub fn stage_remove_members(
+        &mut self,
+        members: &[[u8; 32]],
+    ) -> Result<StagedRemoval, MlsError> {
+        self.ctx.stage_remove_members(members)
+    }
     pub fn merge_pending(&mut self) -> Result<(), MlsError> {
         self.ctx
             .group
@@ -283,6 +291,7 @@ mod tests {
         let original = owner.own_pseudonym();
         let successor = next.own_pseudonym();
         assert!(next.propose_owner(original).is_err());
+        assert!(next.stage_remove_members(&[original]).is_err());
         let delegation = owner.propose_owner(successor).unwrap();
         let mut forged = delegation.clone();
         *forged.last_mut().unwrap() ^= 1;
@@ -292,7 +301,7 @@ mod tests {
         next.install_owner(&delegation).unwrap();
         assert_eq!(owner.channel_owner(), Some(successor));
         assert!(owner.stage_remove(successor).is_err());
-        let staged = next.stage_remove_current(original).unwrap();
+        let staged = next.stage_remove_members(&[original]).unwrap();
         next.merge_pending().unwrap();
         assert!(matches!(
             owner.receive_outcome(&staged.commit),
