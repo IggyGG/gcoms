@@ -685,3 +685,9 @@ explicit registry when dependencies come from a directory replacement. Name
 crates-io as the package destination while retaining the runner's vendor source
 for dependency resolution. The first failure remains in packages-b6f0b60-01.log;
 archive/consumer validation of the corrected invocation is pending.
+
+The vendored destination correction reaches all twenty Rust package archives.
+The archive-content gate then caught missing license texts in the new channel
+service crate. Include the repository's existing MIT and Apache texts, matching
+the other crates. This adds no new licensing terms or dependency. The failed
+archive gate is retained as packages-4df1c06-11.log; corrected consumers are next.
