@@ -546,3 +546,8 @@ exclusion; strict routing Clippy, legacy feature check, formatting and source
 audit passed. [Receipt](docs/evidence/authenticated-referral-retry-20260928/summary.json).
 The first green harness invocation reused a stale red binary from equal archive
 mtimes; that invalid result is retained separately from the rebuilt passing run.
+
+IRC-2/IRC-3 checkpoint: ordered policy enforcement passes component tests and
+strict Clippy. IRC-8 has one source-bound 500-member MLS capacity pass, with
+4,990 authenticated receives from ten concurrent senders; full client/network
+qualification remains open. See the parity ledger and its evidence receipt.

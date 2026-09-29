@@ -9,6 +9,8 @@ pub enum MlsError {
     LeafMismatch,
     GroupFull,
     MemberNotFound,
+    /// Hosted admission was prepared against an older policy or epoch.
+    StaleState,
     OpenMls(String),
     Encoding,
     Removed,
@@ -27,6 +29,9 @@ impl fmt::Display for MlsError {
             MlsError::LeafMismatch => write!(f, "key package does not match invite leaf"),
             MlsError::GroupFull => write!(f, "group at capacity"),
             MlsError::MemberNotFound => write!(f, "member not found"),
+            MlsError::StaleState => {
+                write!(f, "channel state changed; refresh and retry authorization")
+            }
             MlsError::OpenMls(e) => write!(f, "openmls: {e}"),
             MlsError::Encoding => write!(f, "malformed encoding"),
             MlsError::Removed => write!(f, "removed from group"),

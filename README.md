@@ -1,5 +1,7 @@
 Classic IRC parity implementation is tracked in [the coverage ledger](docs/IRC_PARITY.md).
-Experimental hosted MLS primitives are opt-in and are not yet a GChat feature.
+Experimental hosted MLS and ciphertext storage primitives are opt-in and are not
+yet a GChat feature. Signed channel policy is checked by the service and members;
+the service has no member decryption keys.
 Legacy owner-admitted channels now reject external membership commits explicitly.
 
 Retained file downloads query newly authenticated sources immediately and use a

@@ -122,3 +122,21 @@ those checkouts. GChat's original canonical lockfile and `.cargo/` are preserved
 Use the configured `origin` remote (the local Forgejo) for branch checkpoints.
 Run CPU-heavy gates through `workstation-batch`/the Cargo shim and retain decisive
 evidence on SSD. Update this ledger at each implementation/validation checkpoint.
+
+### Ordered policy and component capacity checkpoint
+
+Signed controls now enforce independent operator/voice flags, moderated posting,
+bans/exemptions/invite exceptions, rotated access codes, capacity, discovery and
+ownership transfer in both the public service and member receivers. Encrypted
+reasons cannot change authority or consume an unrelated sender ratchet. Permits
+bind the policy revision, preventing a prepared join from bypassing a later ban.
+The former owner's root cannot issue admission after transfer; current operators
+can issue leaf-bound invitations. Departure and rekey implementation follows.
+
+`policy-05.log` passed 46 tests with two explicit scale exclusions and strict
+Clippy; `policy-06.log` adds independent operator/voice checks (three policy tests
+and strict Clippy pass). The release component test on bca003b passed with 500
+real members, ten concurrent senders and 4,990 authenticated receives. Sequential
+admission took 1,837.441 seconds; total execution took 1,985.29 seconds. Maximum
+GroupInfo was 1,327,768 bytes and commit 21,816 bytes. This is component capacity
+evidence, not network, application, latency or current-policy qualification.

@@ -1,0 +1,28 @@
+{
+  "date": "2026-09-29",
+  "source_sha256": {
+    "crates/mls/src/hosted.rs": "529640f2d1a357792b63836ea8ddfac77d32b2788d6948c2801e6ad815b587f0",
+    "crates/mls/src/hosted/rules.rs": "f8b18137d25086c18508bf9179b6414c64fdbbe941cd8f2d22e88cec18562325",
+    "crates/mls/src/hosted/control.rs": "7acf6b40e65d3d0553876208e08ba8848caa08b19123f47d8c0dcc54a7521b10",
+    "crates/mls/src/hosted/access.rs": "7f7fef24df3a53ee5da465b093cfbd89f20a9ee4772fe1d280946ca1e9e70232",
+    "crates/channel-service/src/lib.rs": "4916827831282feac1bb048c345558fc92392479ba73ce8f70e1b7c30af558be",
+    "crates/channel-service/tests/policy.rs": "8d37d666fb21f54fff6103b40d5987a376a9d171ce0681f7103aada586ed262a"
+  },
+  "policy": {
+    "tests": 46,
+    "explicit_ignores": 2,
+    "strict_clippy": "passed",
+    "additional_policy_flag_tests": 3
+  },
+  "scale": {
+    "source_commit": "bca003b",
+    "members": 500,
+    "senders": 10,
+    "authenticated_receives": 4990,
+    "admission_seconds": 1837.441,
+    "test_seconds": 1985.29,
+    "max_commit_bytes": 21816,
+    "max_info_bytes": 1327768
+  },
+  "scope": "Component evidence only; no production GChat, network latency or native qualification."
+}

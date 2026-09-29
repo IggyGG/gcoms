@@ -1,7 +1,7 @@
 //! Ciphertext-only ordered storage. Transport and reader authorization are the
 //! embedding service's responsibility; these APIs must not be exposed unauthenticated.
 
-use gcoms_mls::hosted::{HostedMessage, HostedObserver, HostedPolicy};
+use gcoms_mls::hosted::{HostedControl, HostedMessage, HostedObserver, HostedPolicy};
 use gcoms_mls::{MlsError, MAX_WIRE_BYTES};
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
@@ -14,6 +14,7 @@ const MAGIC: &[u8; 8] = b"GCHLOG01";
 const MAX_FRAME: usize = 2 * MAX_WIRE_BYTES + 64 * 1024;
 const JOIN: u8 = 1;
 const MESSAGE: u8 = 2;
+const CONTROL: u8 = 3;
 
 #[derive(Debug)]
 pub enum Error {
@@ -99,6 +100,13 @@ pub struct Record {
     second: VLBytes,
 }
 impl Record {
+    pub fn control(&self) -> Result<Option<HostedControl>, Error> {
+        if self.kind == CONTROL {
+            Ok(Some(HostedControl::decode(self.first.as_slice())?))
+        } else {
+            Ok(None)
+        }
+    }
     pub fn membership(&self) -> Option<(&[u8], &[u8])> {
         (self.kind == JOIN).then_some((self.first.as_slice(), self.second.as_slice()))
     }
@@ -341,6 +349,10 @@ impl ChannelLog {
     }
     fn validate(&self, record: &Record) -> Result<Option<HostedObserver>, Error> {
         match record.kind {
+            CONTROL if record.second.as_slice().is_empty() => Ok(Some(
+                self.observer
+                    .stage_control(&HostedControl::decode(record.first.as_slice())?)?,
+            )),
             JOIN => Ok(Some(self.observer.stage_join(
                 record.first.as_slice(),
                 record.second.as_slice(),
@@ -372,6 +384,13 @@ impl ChannelLog {
         now: u64,
     ) -> Result<Acceptance, Error> {
         self.append(MESSAGE, message.encode()?, Vec::new(), now)
+    }
+    pub fn append_control(
+        &mut self,
+        control: &HostedControl,
+        now: u64,
+    ) -> Result<Acceptance, Error> {
+        self.append(CONTROL, control.encode()?, Vec::new(), now)
     }
     fn append(
         &mut self,

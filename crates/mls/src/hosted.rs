@@ -19,7 +19,13 @@ use sha2::{Digest, Sha256};
 use tls_codec::{Deserialize, Serialize, Size, TlsDeserialize, TlsSerialize, TlsSize, VLBytes};
 
 mod access;
+mod control;
+mod rules;
 pub use access::HostedAccessCode;
+pub use control::{HostedControl, HostedControlEvent};
+pub use rules::{
+    HostedAccessList, HostedDiscovery, HostedMode, HostedPolicyChange, HostedRole, HostedRules,
+};
 
 const VERSION: u16 = 1;
 const MAX_NAME: usize = 128;
@@ -195,9 +201,19 @@ impl HostedPolicy {
         Ok(())
     }
 
-    fn join_payload(&self, epoch: u64, leaf: &[u8], name: &[u8], expiry: u64) -> Vec<u8> {
+    fn join_payload(
+        &self,
+        epoch: u64,
+        leaf: &[u8],
+        name: &[u8],
+        expiry: u64,
+        revision: u64,
+        authority: u8,
+    ) -> Vec<u8> {
         let mut bytes = JOIN_DOMAIN.to_vec();
         bytes.extend_from_slice(&Sha256::digest(self.payload()));
+        bytes.push(authority);
+        bytes.extend_from_slice(&revision.to_be_bytes());
         bytes.extend_from_slice(&epoch.to_be_bytes());
         bytes.extend_from_slice(leaf);
         bytes.extend_from_slice(&(name.len() as u32).to_be_bytes());
@@ -221,15 +237,54 @@ impl HostedPolicy {
         }
         Ok(JoinPermit {
             authority: 0,
+            issuer: None,
+            revision: 0,
             expiry,
             signature: root
-                .sign(&self.join_payload(epoch, &leaf, name.as_bytes(), expiry))
+                .sign(&self.join_payload(epoch, &leaf, name.as_bytes(), expiry, 0, 0))
+                .into(),
+        })
+    }
+
+    /// Authorize against the current verified policy revision, not a stale
+    /// genesis snapshot. The root is no longer authoritative after transfer.
+    pub fn permit_for(
+        &self,
+        root: &IdentityKeypair,
+        public: &HostedObserver,
+        leaf: [u8; 32],
+        name: &str,
+        expiry: u64,
+    ) -> Result<JoinPermit, MlsError> {
+        if self.payload() != public.policy.payload()
+            || root.public_bytes() != self.root.as_slice()
+            || !valid_name(name.as_bytes())
+            || public.rules.owner() != self.owner
+        {
+            return Err(MlsError::Unauthorized);
+        }
+        let revision = public.rules.revision();
+        Ok(JoinPermit {
+            authority: 0,
+            issuer: None,
+            revision,
+            expiry,
+            signature: root
+                .sign(&self.join_payload(
+                    public.epoch(),
+                    &leaf,
+                    name.as_bytes(),
+                    expiry,
+                    revision,
+                    0,
+                ))
                 .into(),
         })
     }
 
     fn authorize(
         &self,
+        rules: &HostedRules,
         epoch: u64,
         leaf: &[u8],
         name: &[u8],
@@ -239,8 +294,18 @@ impl HostedPolicy {
         if leaf.len() != 32 || !valid_name(name) || aad.len() > MAX_AUTHORITY {
             return Err(MlsError::Encoding);
         }
+        let key = leaf.try_into().map_err(|_| MlsError::Encoding)?;
+        if rules.closed() || rules.banned(key) {
+            return Err(MlsError::Unauthorized);
+        }
         let permit = JoinPermit::tls_deserialize_exact(aad)?;
-        if self.public_join == 1
+        if (permit.authority == 2) != permit.issuer.is_some() {
+            return Err(MlsError::Encoding);
+        }
+        if permit.revision != rules.revision() {
+            return Err(MlsError::StaleState);
+        }
+        if (!rules.mode(HostedMode::InviteOnly) || rules.invite_exception(key))
             && permit.authority == 0
             && permit.expiry == 0
             && permit.signature.as_slice().is_empty()
@@ -250,10 +315,20 @@ impl HostedPolicy {
         if permit.expiry <= now {
             return Err(MlsError::Expired);
         }
-        let payload = self.join_payload(epoch, leaf, name, permit.expiry);
+        let payload = self.join_payload(
+            epoch,
+            leaf,
+            name,
+            permit.expiry,
+            permit.revision,
+            permit.authority,
+        );
         let authorized = match permit.authority {
-            0 => verify_signature(self.root.as_slice(), &payload, permit.signature.as_slice()),
-            1 => self.access_key.is_some_and(|key| {
+            0 => {
+                rules.owner() == self.owner
+                    && verify_signature(self.root.as_slice(), &payload, permit.signature.as_slice())
+            }
+            1 => rules.access_key().is_some_and(|key| {
                 OpenMlsRustCrypto::default()
                     .crypto()
                     .verify_signature(
@@ -263,6 +338,19 @@ impl HostedPolicy {
                         permit.signature.as_slice(),
                     )
                     .is_ok()
+            }),
+            2 => permit.issuer.is_some_and(|key| {
+                rules.operator(key)
+                    && !rules.banned(key)
+                    && OpenMlsRustCrypto::default()
+                        .crypto()
+                        .verify_signature(
+                            CIPHERSUITE.signature_algorithm(),
+                            &payload,
+                            &key,
+                            permit.signature.as_slice(),
+                        )
+                        .is_ok()
             }),
             _ => false,
         };
@@ -278,6 +366,8 @@ impl HostedPolicy {
 #[derive(Clone, Debug, TlsSerialize, TlsDeserialize, TlsSize)]
 pub struct JoinPermit {
     authority: u8,
+    issuer: Option<[u8; 32]>,
+    revision: u64,
     expiry: u64,
     signature: VLBytes,
 }
@@ -287,8 +377,17 @@ impl JoinPermit {
     pub fn public() -> Self {
         Self {
             authority: 0,
+            issuer: None,
+            revision: 0,
             expiry: 0,
             signature: Vec::new().into(),
+        }
+    }
+
+    pub fn public_for(public: &HostedObserver) -> Self {
+        Self {
+            revision: public.rules.revision(),
+            ..Self::public()
         }
     }
 
@@ -394,13 +493,14 @@ impl PreparedHostedJoin {
     ) -> Result<(HostedSession, Vec<u8>), MlsError> {
         let aad = permit.encode()?;
         public.policy.authorize(
+            &public.rules,
             public.epoch(),
             &self.member_id(),
             self.credential.credential.serialized_content(),
             &aad,
             now,
         )?;
-        if public.group.members().count() >= public.policy.capacity as usize {
+        if public.group.members().count() >= public.rules.capacity() as usize {
             return Err(MlsError::GroupFull);
         }
         let (group, bundle) = MlsGroup::external_commit_builder()
@@ -436,6 +536,7 @@ impl PreparedHostedJoin {
                 admin_pseudonyms: Vec::new(),
             },
             policy: public.policy.clone(),
+            rules: public.rules.clone(),
             pending_join: Some(PendingJoin {
                 hash: Sha256::digest(&commit).into(),
                 info,
@@ -450,6 +551,7 @@ impl PreparedHostedJoin {
 pub struct HostedSession {
     ctx: crate::session::Ctx,
     policy: HostedPolicy,
+    rules: HostedRules,
     pending_join: Option<PendingJoin>,
 }
 
@@ -463,10 +565,55 @@ struct PendingJoin {
 #[derive(TlsSerialize, TlsDeserialize, TlsSize)]
 struct HostedArchive {
     policy: HostedPolicy,
+    rules: HostedRules,
     pending: Option<PendingJoin>,
 }
 
 impl HostedSession {
+    /// Current owners/operators can issue one-leaf admission without the
+    /// creator's root key. Revocation and transfer are enforced on receipt.
+    pub fn permit_join(
+        &self,
+        leaf: [u8; 32],
+        name: &str,
+        expiry: u64,
+    ) -> Result<JoinPermit, MlsError> {
+        let issuer = self
+            .ctx
+            .signer
+            .public()
+            .try_into()
+            .map_err(|_| MlsError::Encoding)?;
+        if self.pending_join.is_some()
+            || self.rules.closed()
+            || !self.rules.operator(issuer)
+            || self.rules.banned(issuer)
+            || !valid_name(name.as_bytes())
+        {
+            return Err(MlsError::Unauthorized);
+        }
+        let revision = self.rules.revision();
+        Ok(JoinPermit {
+            authority: 2,
+            issuer: Some(issuer),
+            revision,
+            expiry,
+            signature: self
+                .ctx
+                .signer
+                .sign(&self.policy.join_payload(
+                    self.epoch(),
+                    &leaf,
+                    name.as_bytes(),
+                    expiry,
+                    revision,
+                    2,
+                ))
+                .map_err(mls)?
+                .into(),
+        })
+    }
+
     /// Rebuild a refused speculative join at a newer epoch while preserving
     /// its scoped signing identity. Never use this to reset an accepted member.
     pub fn prepare_join_retry(self) -> Result<PreparedHostedJoin, MlsError> {
@@ -504,6 +651,7 @@ impl HostedSession {
         let mut session = Self::create(root, name, capacity, false)?;
         session.policy.access_key = Some(code.verification_key());
         session.policy.signature = root.sign(&session.policy.payload()).into();
+        session.rules = HostedRules::genesis(&session.policy);
         Ok(session)
     }
     /// Prepare an exact signed ciphertext for durable outgoing storage/retry.
@@ -539,6 +687,9 @@ impl HostedSession {
     /// sender. A false outer identity must not consume another sender's ratchet.
     pub fn receive_hosted(&mut self, message: &HostedMessage) -> Result<Vec<u8>, MlsError> {
         if self.pending_join.is_some() {
+            return Err(MlsError::Unauthorized);
+        }
+        if !self.rules.may_post(message.member) {
             return Err(MlsError::Unauthorized);
         }
         message.verify(
@@ -618,6 +769,7 @@ impl HostedSession {
                 admin_pseudonyms: self.ctx.admin_pseudonyms.clone(),
             },
             policy: self.policy.clone(),
+            rules: self.rules.clone(),
             pending_join: self.pending_join.clone(),
         })
     }
@@ -627,6 +779,7 @@ impl HostedSession {
     pub fn persist(&self, wrapping_key: &[u8; 32]) -> Result<Vec<u8>, MlsError> {
         let metadata = HostedArchive {
             policy: self.policy.clone(),
+            rules: self.rules.clone(),
             pending: self.pending_join.clone(),
         }
         .tls_serialize_detached()?;
@@ -650,6 +803,7 @@ impl HostedSession {
         Ok(Self {
             ctx,
             policy: archive.policy,
+            rules: archive.rules,
             pending_join: archive.pending,
         })
     }
@@ -707,9 +861,14 @@ impl HostedSession {
                 owner_pseudonym: Some(policy.owner),
                 admin_pseudonyms: Vec::new(),
             },
+            rules: HostedRules::genesis(&policy),
             policy,
             pending_join: None,
         })
+    }
+
+    pub fn rules(&self) -> &HostedRules {
+        &self.rules
     }
 
     pub fn policy(&self) -> &HostedPolicy {
@@ -758,6 +917,15 @@ impl HostedSession {
     }
 
     pub fn send(&mut self, payload: &[u8]) -> Result<Vec<u8>, MlsError> {
+        let actor = self
+            .ctx
+            .signer
+            .public()
+            .try_into()
+            .map_err(|_| MlsError::Encoding)?;
+        if !self.rules.may_post(actor) {
+            return Err(MlsError::Unauthorized);
+        }
         if self.pending_join.is_some() {
             return Err(MlsError::Unauthorized);
         }
@@ -779,7 +947,13 @@ impl HostedSession {
             .process_message(&self.ctx.backend, protocol(wire)?)
             .map_err(mls)?;
         if let ProcessedMessageContent::StagedCommitMessage(_) = processed.content() {
-            validate_join(&self.policy, self.ctx.group.members(), &processed, now)?;
+            validate_join(
+                &self.policy,
+                &self.rules,
+                self.ctx.group.members(),
+                &processed,
+                now,
+            )?;
         }
         let sender_index = match processed.sender() {
             Sender::Member(i) => i.u32(),
@@ -794,6 +968,21 @@ impl HostedSession {
                 Ok(crate::ReceiveOutcome::CommitMerged { sender_index })
             }
             ProcessedMessageContent::ApplicationMessage(message) => {
+                let member = self
+                    .ctx
+                    .group
+                    .members()
+                    .find(|m| m.index.u32() == sender_index)
+                    .ok_or(MlsError::Unauthorized)?;
+                if !self.rules.may_post(
+                    member
+                        .signature_key
+                        .as_slice()
+                        .try_into()
+                        .map_err(|_| MlsError::Encoding)?,
+                ) {
+                    return Err(MlsError::Unauthorized);
+                }
                 Ok(crate::ReceiveOutcome::Application {
                     sender_index,
                     payload: message.into_bytes(),
@@ -806,6 +995,7 @@ impl HostedSession {
 
 fn validate_join(
     policy: &HostedPolicy,
+    rules: &HostedRules,
     members: impl Iterator<Item = Member>,
     processed: &ProcessedMessage,
     now: u64,
@@ -834,10 +1024,11 @@ fn validate_join(
             return Err(MlsError::BadInvite);
         }
     }
-    if count >= policy.capacity as usize {
+    if count >= rules.capacity() as usize {
         return Err(MlsError::GroupFull);
     }
     policy.authorize(
+        rules,
         processed.epoch().as_u64(),
         leaf.signature_key().as_slice(),
         leaf.credential().serialized_content(),
@@ -853,12 +1044,19 @@ pub struct HostedObserver {
     backend: OpenMlsRustCrypto,
     group: PublicGroup,
     policy: HostedPolicy,
+    rules: HostedRules,
     info: Vec<u8>,
 }
 
 impl HostedObserver {
+    pub fn rules(&self) -> &HostedRules {
+        &self.rules
+    }
     /// Verify append authority without possession of any decryption key.
     pub fn verify_message(&self, message: &HostedMessage) -> Result<(), MlsError> {
+        if !self.rules.may_post(message.member) {
+            return Err(MlsError::Unauthorized);
+        }
         message.verify(
             self.policy.channel_id(),
             self.epoch(),
@@ -909,6 +1107,7 @@ impl HostedObserver {
         Ok(Self {
             backend,
             group,
+            rules: HostedRules::genesis(&policy),
             policy,
             info: bytes.to_vec(),
         })
@@ -926,6 +1125,7 @@ impl HostedObserver {
     /// and returning acceptance. A malformed snapshot cannot strand admission.
     pub fn stage_join(&self, wire: &[u8], next_info: &[u8], now: u64) -> Result<Self, MlsError> {
         let mut candidate = Self::from_info(self.policy.clone(), &self.info)?;
+        candidate.rules = self.rules.clone();
         candidate.accept(wire, now)?;
         candidate.publish_group_info(next_info)?;
         Ok(candidate)
@@ -939,7 +1139,13 @@ impl HostedObserver {
             .group
             .process_message(self.backend.crypto(), protocol(wire)?)
             .map_err(mls)?;
-        validate_join(&self.policy, self.group.members(), &processed, now)?;
+        validate_join(
+            &self.policy,
+            &self.rules,
+            self.group.members(),
+            &processed,
+            now,
+        )?;
         let ProcessedMessageContent::StagedCommitMessage(commit) = processed.into_content() else {
             return Err(MlsError::Unauthorized);
         };

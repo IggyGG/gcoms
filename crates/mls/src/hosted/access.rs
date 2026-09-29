@@ -67,10 +67,45 @@ impl HostedAccessCode {
         }
         Ok(JoinPermit {
             authority: 1,
+            issuer: None,
+            revision: 0,
             expiry,
             signature: self
                 .signer
-                .sign(&policy.join_payload(epoch, &leaf, name.as_bytes(), expiry))
+                .sign(&policy.join_payload(epoch, &leaf, name.as_bytes(), expiry, 0, 1))
+                .map_err(mls)?
+                .into(),
+        })
+    }
+
+    pub fn permit_for(
+        &self,
+        public: &HostedObserver,
+        leaf: [u8; 32],
+        name: &str,
+        expiry: u64,
+    ) -> Result<JoinPermit, MlsError> {
+        if public.rules.access_key() != Some(self.verification_key())
+            || !valid_name(name.as_bytes())
+        {
+            return Err(MlsError::Unauthorized);
+        }
+        let revision = public.rules.revision();
+        Ok(JoinPermit {
+            authority: 1,
+            issuer: None,
+            revision,
+            expiry,
+            signature: self
+                .signer
+                .sign(&public.policy.join_payload(
+                    public.epoch(),
+                    &leaf,
+                    name.as_bytes(),
+                    expiry,
+                    revision,
+                    1,
+                ))
                 .map_err(mls)?
                 .into(),
         })

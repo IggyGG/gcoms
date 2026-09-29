@@ -1,3 +1,12 @@
+## Ordered hosted policy — IRC-3
+
+Run all-feature MLS and channel-service tests and strict all-target Clippy.
+`tests/policy.rs` covers durable role/mode updates, independent +o/+v, bans and
+exemptions, key rotation, invite exceptions, stale admission revision, ownership
+transfer and admission by the new owner. Internal adversarial controls attempt
+self-promotion, impersonation and consumption of another sender's ratchet.
+Human-readable reasons must remain absent from the service log.
+
 ## Hosted admission and legacy isolation — IRC-1
 
 Run `cargo test --locked -p gcoms-mls --all-features`, strict all-target/all-feature
