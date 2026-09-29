@@ -1,0 +1,253 @@
+#![cfg(feature = "hosted-channels")]
+
+use gcoms_crypto::IdentityKeypair;
+use gcoms_mls::{hosted::*, MlsError, ReceiveOutcome};
+
+fn fixture(public: bool, capacity: u32) -> (IdentityKeypair, HostedSession, HostedObserver) {
+    let root = IdentityKeypair::from_seed([73; 32]);
+    let owner = HostedSession::create(&root, "owner", capacity, public).unwrap();
+    let policy = HostedPolicy::decode(
+        &owner.policy().encode().unwrap(),
+        owner.policy().channel_id(),
+    )
+    .unwrap();
+    let service = HostedObserver::new(
+        policy,
+        owner.policy().channel_id(),
+        &owner.export_group_info().unwrap(),
+    )
+    .unwrap();
+    (root, owner, service)
+}
+
+#[test]
+fn public_joins_while_all_existing_members_are_offline_then_replay_and_chat() {
+    let (_, mut owner, mut service) = fixture(true, 500);
+    let (mut alice, first) = PreparedHostedJoin::new("alice")
+        .unwrap()
+        .join(&service, &JoinPermit::public(), 100)
+        .unwrap();
+    assert!(alice.send(b"too early").is_err());
+    assert!(alice.accept_join(b"different commit").is_err());
+    service.accept(&first, 100).unwrap();
+    alice.accept_join(&first).unwrap();
+    service
+        .publish_group_info(&alice.export_group_info().unwrap())
+        .unwrap();
+    // Neither owner nor Alice processes any new traffic while Bob joins.
+    let (mut bob, second) = PreparedHostedJoin::new("bob")
+        .unwrap()
+        .join(&service, &JoinPermit::public(), 101)
+        .unwrap();
+    service.accept(&second, 101).unwrap();
+    bob.accept_join(&second).unwrap();
+    service
+        .publish_group_info(&bob.export_group_info().unwrap())
+        .unwrap();
+    assert_eq!(service.member_count(), 3);
+    assert_eq!(owner.epoch(), 0);
+    owner.receive(&first, 100).unwrap();
+    owner.receive(&second, 101).unwrap();
+    alice.receive(&second, 101).unwrap();
+    assert_eq!(owner.roster(), bob.roster());
+    let wire = bob
+        .send(b"encrypted even with public membership commits")
+        .unwrap();
+    assert!(!wire.windows(9).any(|w| w == b"encrypted"));
+    assert!(
+        service.accept(&wire, 102).is_err(),
+        "public observer cannot decrypt application data"
+    );
+    assert!(
+        matches!(owner.receive(&wire, 102).unwrap(), ReceiveOutcome::Application { payload, .. }
+        if payload == b"encrypted even with public membership commits")
+    );
+    assert!(matches!(
+        alice.receive(&wire, 102).unwrap(),
+        ReceiveOutcome::Application { .. }
+    ));
+}
+
+#[test]
+fn private_permit_is_leaf_name_channel_epoch_and_expiry_bound() {
+    let (root, mut owner, mut service) = fixture(false, 3);
+    let prepared = PreparedHostedJoin::new("alice").unwrap();
+    let permit = owner
+        .policy()
+        .permit(&root, 0, prepared.member_id(), "alice", 200)
+        .unwrap();
+    let encoded = permit.encode().unwrap();
+    assert!(JoinPermit::decode(&[encoded.as_slice(), &[0]].concat()).is_err());
+    let wrong_leaf = PreparedHostedJoin::new("alice").unwrap();
+    assert!(wrong_leaf.join(&service, &permit, 100).is_err());
+    let prepared = PreparedHostedJoin::new("alice").unwrap();
+    let wrong_name = owner
+        .policy()
+        .permit(&root, 0, prepared.member_id(), "eve", 200)
+        .unwrap();
+    assert!(prepared.join(&service, &wrong_name, 100).is_err());
+    assert!(PreparedHostedJoin::new("eve")
+        .unwrap()
+        .join(&service, &JoinPermit::public(), 100)
+        .is_err());
+    let prepared = PreparedHostedJoin::new("alice").unwrap();
+    let expired = owner
+        .policy()
+        .permit(&root, 0, prepared.member_id(), "alice", 100)
+        .unwrap();
+    assert!(matches!(
+        prepared.join(&service, &expired, 100),
+        Err(MlsError::Expired)
+    ));
+    let prepared = PreparedHostedJoin::new("alice").unwrap();
+    let permit = owner
+        .policy()
+        .permit(&root, 0, prepared.member_id(), "alice", 200)
+        .unwrap();
+    let (mut alice, commit) = prepared.join(&service, &permit, 100).unwrap();
+    assert!(matches!(
+        service.accept(&commit, 200),
+        Err(MlsError::Expired)
+    ));
+    assert!(matches!(
+        owner.receive(&commit, 200),
+        Err(MlsError::Expired)
+    ));
+    assert_eq!(service.epoch(), 0);
+    assert_eq!(owner.epoch(), 0);
+    service.accept(&commit, 100).unwrap();
+    owner.receive(&commit, 100).unwrap();
+    alice.accept_join(&commit).unwrap();
+    assert!(service.accept(&commit, 100).is_err());
+    assert!(owner.receive(&commit, 100).is_err());
+    service
+        .publish_group_info(&alice.export_group_info().unwrap())
+        .unwrap();
+    let prepared = PreparedHostedJoin::new("bob").unwrap();
+    let stale = owner
+        .policy()
+        .permit(&root, 0, prepared.member_id(), "bob", 200)
+        .unwrap();
+    assert!(prepared.join(&service, &stale, 100).is_err());
+}
+
+#[test]
+fn sequencer_rejects_concurrent_old_epoch_join_and_wrong_snapshot() {
+    let (_, owner, mut service) = fixture(true, 2);
+    let genesis = owner.export_group_info().unwrap();
+    let (mut alice, first) = PreparedHostedJoin::new("alice")
+        .unwrap()
+        .join(&service, &JoinPermit::public(), 100)
+        .unwrap();
+    let (_, second) = PreparedHostedJoin::new("bob")
+        .unwrap()
+        .join(&service, &JoinPermit::public(), 100)
+        .unwrap();
+    service.accept(&first, 100).unwrap();
+    alice.accept_join(&first).unwrap();
+    assert!(service.accept(&second, 100).is_err());
+    assert!(service.publish_group_info(&genesis).is_err());
+    service
+        .publish_group_info(&alice.export_group_info().unwrap())
+        .unwrap();
+    assert!(matches!(
+        PreparedHostedJoin::new("bob")
+            .unwrap()
+            .join(&service, &JoinPermit::public(), 100),
+        Err(MlsError::GroupFull)
+    ));
+    assert!(HostedObserver::new(
+        owner.policy().clone(),
+        owner.policy().channel_id(),
+        &alice.export_group_info().unwrap()
+    )
+    .is_err());
+}
+
+#[test]
+fn policy_and_profile_are_pinned_and_bounded() {
+    let (root, owner, _) = fixture(false, 500);
+    assert!(HostedSession::create(&root, "owner", 501, false).is_err());
+    assert!(PreparedHostedJoin::new("bad\nname").is_err());
+    assert!(PreparedHostedJoin::new(&"x".repeat(129)).is_err());
+    let mut policy = owner.policy().encode().unwrap();
+    assert!(HostedPolicy::decode(&policy, [0; 32]).is_err());
+    policy[1] = 2;
+    assert!(HostedPolicy::decode(&policy, owner.policy().channel_id()).is_err());
+    assert!(HostedPolicy::decode(&vec![0; 16385], owner.policy().channel_id()).is_err());
+}
+
+#[test]
+fn complete_join_bundle_is_validated_without_mutating_current_epoch() {
+    let (_, mut owner, service) = fixture(true, 500);
+    let (mut alice, commit) = PreparedHostedJoin::new("alice")
+        .unwrap()
+        .join(&service, &JoinPermit::public(), 100)
+        .unwrap();
+    assert!(service
+        .stage_join(&commit, &owner.export_group_info().unwrap(), 100)
+        .is_err());
+    assert_eq!(service.epoch(), 0);
+    let next = service
+        .stage_join(&commit, alice.proposed_group_info().unwrap(), 100)
+        .unwrap();
+    assert_eq!(
+        service.epoch(),
+        0,
+        "staging must precede durable installation"
+    );
+    assert_eq!(next.epoch(), 1);
+    alice.accept_join(&commit).unwrap();
+    owner.receive(&commit, 100).unwrap();
+    let (_, second) = PreparedHostedJoin::new("bob")
+        .unwrap()
+        .join(&next, &JoinPermit::public(), 101)
+        .unwrap();
+    owner.receive(&second, 101).unwrap();
+    assert_eq!(owner.roster().len(), 3);
+}
+
+#[test]
+fn duplicate_display_name_is_rejected_by_service_and_member() {
+    let (_, mut owner, service) = fixture(true, 500);
+    let (impostor, commit) = PreparedHostedJoin::new("owner")
+        .unwrap()
+        .join(&service, &JoinPermit::public(), 100)
+        .unwrap();
+    assert!(service
+        .stage_join(&commit, impostor.proposed_group_info().unwrap(), 100)
+        .is_err());
+    assert!(owner.receive(&commit, 100).is_err());
+    assert_eq!(owner.epoch(), 0);
+}
+
+#[cfg(feature = "client-persist")]
+#[test]
+fn restart_preserves_pending_acceptance_and_encrypts_the_member_state() {
+    let (_, mut owner, service) = fixture(true, 500);
+    let channel = owner.policy().channel_id();
+    let (alice, commit) = PreparedHostedJoin::new("alice")
+        .unwrap()
+        .join(&service, &JoinPermit::public(), 100)
+        .unwrap();
+    let sealed = alice.persist(&[19; 32]).unwrap();
+    drop(alice);
+    assert!(HostedSession::restore(&[20; 32], &sealed, channel).is_err());
+    assert!(HostedSession::restore(&[19; 32], &sealed, [0; 32]).is_err());
+    assert!(gcoms_mls::ChannelMember::restore(&[19; 32], &sealed).is_err());
+    let mut alice = HostedSession::restore(&[19; 32], &sealed, channel).unwrap();
+    assert!(alice.send(b"not accepted yet").is_err());
+    let service = service
+        .stage_join(&commit, alice.proposed_group_info().unwrap(), 100)
+        .unwrap();
+    assert_eq!(service.epoch(), 1);
+    alice.accept_join(&commit).unwrap();
+    let sealed = alice.persist(&[19; 32]).unwrap();
+    drop(alice);
+    let mut alice = HostedSession::restore(&[19; 32], &sealed, channel).unwrap();
+    owner.receive(&commit, 100).unwrap();
+    let message = alice.send(b"after reopening").unwrap();
+    assert!(
+        matches!(owner.receive(&message, 100).unwrap(), ReceiveOutcome::Application { payload, .. } if payload == b"after reopening")
+    );
+}

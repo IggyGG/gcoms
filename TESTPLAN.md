@@ -1,3 +1,21 @@
+## Hosted admission and legacy isolation — IRC-1
+
+Run `cargo test --locked -p gcoms-mls --all-features`, strict all-target/all-feature
+MLS Clippy, formatting and the source check. Require actual PQ-hybrid external
+joins while previous members process no traffic, followed by ordered commit
+replay and encrypted bidirectional member traffic. Both an observer and a member
+must reject a modified client's private join, expired proof, duplicate name and
+replayed/stale epoch. Reject mismatched snapshots without advancing the observer.
+Sealed restart must preserve pending acceptance, reject the wrong key/channel and
+reject decoding as a legacy member archive. The public observer cannot process
+application ciphertext. Test the old legacy receiver as a negative control:
+the unauthorized external commit advances its epoch and roster; the fixed
+receiver must reject it before merging. Keep the existing channel/persistence
+regressions and the explicitly separate slow capacity gate.
+
+These are source/component tests. They do not qualify service persistence,
+GChat integration, 500 members, timing, native artifacts or installed releases.
+
 ## Bounded file recovery latency
 
 Run `cargo test --locked -p gcoms-file-transfer` and

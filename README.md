@@ -1,3 +1,7 @@
+Classic IRC parity implementation is tracked in [the coverage ledger](docs/IRC_PARITY.md).
+Experimental hosted MLS primitives are opt-in and are not yet a GChat feature.
+Legacy owner-admitted channels now reject external membership commits explicitly.
+
 Retained file downloads query newly authenticated sources immediately and use a
 bounded eight-send window; see [recovery validation](TESTPLAN.md#bounded-file-recovery-latency).
 Installed platform checks remain separate from the controlled latency model.

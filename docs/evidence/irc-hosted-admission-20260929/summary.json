@@ -1,0 +1,43 @@
+{
+  "schema": 1,
+  "scope": "experimental hosted MLS admission and legacy isolation, not deployed GChat parity",
+  "base_commit": "bf63643",
+  "passed": true,
+  "tests": {
+    "passed": 34,
+    "failed": 0,
+    "ignored": 1,
+    "ignored_scope": "existing 64-member explicit release stress"
+  },
+  "strict_mls_clippy": true,
+  "source_check": true,
+  "negative_control": {
+    "legacy_external_join": "original receiver accepts uninvited external commit: epoch=1, roster=2",
+    "log": "test-evidence/irc-parity/mls-01.log"
+  },
+  "source_sha256": {
+    "crates/mls/src/hosted.rs": "b20f0fb1c76961993b4ddf7051d05bd6ddc57198a60df0dc6787091b231f06ed",
+    "crates/mls/src/session.rs": "6c8c60ca13d71cdef149412c3d0f5d2b6954b5a12f8fa36928d425f9306b8a76",
+    "crates/mls/src/lib.rs": "045c91c6010b87e595b7b35d1d6ee7ba783f803e9b5cb6386c8bd4e2522ad588",
+    "crates/mls/Cargo.toml": "81fe66e30c261505b314acc410caba9891837baefeac4f685a8e80d023c313ea",
+    "crates/mls/tests/hosted.rs": "12ac05b43d9be07c0b0e2a6776214a6180cb36b0013c0422e9cfb9bebba371e9"
+  },
+  "logs_sha256": {
+    "mls-01.log": "1d81fc2ffcb1f9e2008f8de4ece33b66e59fbfd347be39908bd385d703eab53b",
+    "mls-03.log": "d5a40704466585cb8f347eb42a3ad225aa43b8a156af647aae9b6fc5e2ae586f",
+    "clippy-01.log": "3a89b51ea096ee11bed637c62a2cbae316df2be5e77a9b3ca753a7e33dd6701d"
+  },
+  "environment": {
+    "kind": "isolated Linux cluster pod",
+    "image": "registry.triform.cloud/ghost/gcoms-ci@sha256:34e2ee190f086c18d65f626f68a4b4439e67888f33221149e7155bf2bbbd0351",
+    "supplemental_vendor": "futures-macro-0.3.34 cached crate verified against Cargo.lock"
+  },
+  "codematch": "unreachable",
+  "limitations": [
+    "No service persistence or transport yet",
+    "No GChat or SDK integration yet",
+    "No moderation/contact implementation yet",
+    "No 500-member or latency qualification",
+    "No native installer qualification"
+  ]
+}

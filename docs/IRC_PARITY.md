@@ -56,6 +56,30 @@ compiles, a mocked view displays it, or an older artifact passed.
 
 ## Worktrees and continuation
 
+### 2026-09-29 admission checkpoint
+
+Implemented opt-in `gcoms_mls::hosted`: signed genesis policy, public admission,
+private epoch/leaf/name/expiry-bound permits, member and public-observer validation,
+atomic staging of commit plus GroupInfo, and sealed client restart including
+pending service acceptance. GroupInfo is pinned to the public state derived
+from accepted commits. No service-held member secret is used. Configured
+PQ-hybrid suite is preserved.
+
+The regression reproduced a legacy authorization hole: a valid external commit
+had no Add proposal and was accepted without owner invitation (`epoch=1`,
+`roster=2`). Legacy receivers now reject non-member senders. The original red
+result is retained in `test-evidence/irc-parity/mls-01.log`. The subsequent
+`mls-03.log` records 34 passes and one existing explicit slow-test ignore.
+Validation ran in a dedicated cluster pod after local disk reservation refused
+the build. Missing image vendor dependency `futures-macro` was supplied from a
+cached archive verified against the unchanged Cargo.lock checksum. Initial
+compile/setup failures remain retained. `codematch=unreachable` (no tool exposed).
+
+IRC-1 remains in progress. Hosted APIs are not yet enabled in production clients.
+No claim of complete policy, service, contact, GChat or 500-member coverage.
+Next: source-bound strict checks and checkpoint, followed by durable ordered
+service storage and the application-facing integration.
+
 Both components are siblings under GComs `.worktrees/irc-parity/`. Work only in
 those checkouts. GChat's original canonical lockfile and `.cargo/` are preserved.
 Use the configured `origin` remote (the local Forgejo) for branch checkpoints.

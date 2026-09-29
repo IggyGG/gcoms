@@ -187,7 +187,7 @@ pub(crate) struct Ctx {
     pub(crate) admin_pseudonyms: Vec<[u8; 32]>,
 }
 
-fn zeroize_storage(backend: &OpenMlsRustCrypto) {
+pub(crate) fn zeroize_storage(backend: &OpenMlsRustCrypto) {
     if let Ok(mut values) = backend.storage().values.write() {
         for (mut key, mut value) in values.drain() {
             key.zeroize();
@@ -278,7 +278,10 @@ impl Ctx {
             .map_err(|e| MlsError::OpenMls(format!("{e:?}")))?;
         let sender_idx = match processed.sender() {
             openmls::prelude::Sender::Member(i) => i.u32(),
-            _ => u32::MAX,
+            // External commits insert the new leaf through their update path,
+            // without an Add proposal. Legacy owner-admitted channels must
+            // reject them explicitly before examining proposal privileges.
+            _ => return Err(MlsError::Unauthorized),
         };
         // Resolve the sender leaf before the commit is merged: after a merge
         // the removed leaves (possibly the sender's peers) are gone.
@@ -773,6 +776,8 @@ pub mod persist {
     const KIND_OWNER: u8 = 1;
     const KIND_MEMBER: u8 = 2;
     const KIND_PREPARED: u8 = 3;
+    #[cfg(feature = "hosted-channels")]
+    const KIND_HOSTED: u8 = 4;
     /// Sealed archives above this size are rejected before decryption.
     pub const MAX_ARCHIVE_BYTES: usize = 64 * 1024 * 1024;
 
@@ -1018,6 +1023,31 @@ pub mod persist {
             owner_pseudonym: head.owner_pseudonym,
             admin_pseudonyms: head.admin_pseudonyms.clone(),
         })
+    }
+
+    #[cfg(feature = "hosted-channels")]
+    pub(crate) fn seal_hosted(
+        ctx: &Ctx,
+        key: &[u8; 32],
+        metadata: &[u8],
+    ) -> Result<Vec<u8>, MlsError> {
+        seal(
+            key,
+            KIND_HOSTED,
+            ctx.group.group_id().as_slice(),
+            &ctx.signer.to_public_vec(),
+            0,
+            metadata,
+            ctx.owner_pseudonym,
+            &[],
+            &ctx.backend,
+        )
+    }
+
+    #[cfg(feature = "hosted-channels")]
+    pub(crate) fn restore_hosted(key: &[u8; 32], bytes: &[u8]) -> Result<(Ctx, Vec<u8>), MlsError> {
+        let head = open(key, bytes, KIND_HOSTED)?;
+        Ok((ctx_from(&head)?, head.kp.clone()))
     }
 
     impl OwnerSession {
@@ -1360,10 +1390,11 @@ mod zeroize_tests {
             .unwrap();
         let backend = OpenMlsRustCrypto::default();
         let (credential, signer) = fresh_leaf(&backend, "uninvited").unwrap();
-        let info = MlsMessageIn::tls_deserialize_exact(info)
-            .unwrap()
-            .into_verifiable_group_info()
-            .unwrap();
+        let openmls::framing::MlsMessageBodyIn::GroupInfo(info) =
+            MlsMessageIn::tls_deserialize_exact(info).unwrap().extract()
+        else {
+            panic!("expected GroupInfo")
+        };
         let (_, bundle) = MlsGroup::external_commit_builder()
             .with_config(join_config())
             .build_group(&backend, info, credential)
@@ -1376,10 +1407,14 @@ mod zeroize_tests {
             .unwrap();
         let commit = bundle.into_commit().tls_serialize_detached().unwrap();
         let epoch = owner.epoch();
-        assert!(matches!(
-            owner.receive_outcome(&commit),
-            Err(MlsError::Unauthorized)
-        ));
+        let result = owner.receive_outcome(&commit);
+        assert!(
+            matches!(result, Err(MlsError::Unauthorized)),
+            "epoch={}, roster={}, error={:?}",
+            owner.epoch(),
+            owner.roster().len(),
+            result.err()
+        );
         assert_eq!(owner.epoch(), epoch);
         assert_eq!(owner.roster().len(), 1);
     }
