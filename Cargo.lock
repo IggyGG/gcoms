@@ -971,6 +971,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "gcoms-channel-service"
+version = "0.1.0"
+dependencies = [
+ "gcoms-crypto",
+ "gcoms-mls",
+ "gcoms-private-fs",
+ "sha2 0.10.9",
+ "tempfile",
+ "tls_codec",
+]
+
+[[package]]
 name = "gcoms-conformance"
 version = "0.1.0"
 dependencies = [

@@ -14,14 +14,96 @@ use openmls::prelude::*;
 use openmls_basic_credential::SignatureKeyPair;
 use openmls_rust_crypto::OpenMlsRustCrypto;
 use openmls_traits::OpenMlsProvider;
+use openmls_traits::{crypto::OpenMlsCrypto, signatures::Signer};
 use sha2::{Digest, Sha256};
-use tls_codec::{Deserialize, Serialize, TlsDeserialize, TlsSerialize, TlsSize, VLBytes};
+use tls_codec::{Deserialize, Serialize, Size, TlsDeserialize, TlsSerialize, TlsSize, VLBytes};
 
 const VERSION: u16 = 1;
 const MAX_NAME: usize = 128;
 const MAX_AUTHORITY: usize = 16 * 1024;
 const POLICY_DOMAIN: &[u8] = b"gcoms/hosted/policy/v1";
 const JOIN_DOMAIN: &[u8] = b"gcoms/hosted/join/v1";
+const MESSAGE_DOMAIN: &[u8] = b"gcoms/hosted/message/v1";
+/// Genesis follows one owner self-update: no expiring KeyPackage leaf remains
+/// in the public replay anchor of a long-lived channel.
+pub const HOSTED_GENESIS_EPOCH: u64 = 1;
+/// Includes framing overhead; bounds service authentication before MLS parsing.
+pub const MAX_HOSTED_MESSAGE: usize = 1024 * 1024;
+
+/// A member-authenticated ciphertext envelope. The service can authorize the
+/// sender and epoch without decrypting its MLS application message.
+#[derive(Clone, Debug, TlsSerialize, TlsDeserialize, TlsSize)]
+pub struct HostedMessage {
+    channel: [u8; 32],
+    epoch: u64,
+    member: [u8; 32],
+    ciphertext: VLBytes,
+    signature: VLBytes,
+}
+
+impl HostedMessage {
+    fn payload(&self) -> Vec<u8> {
+        let mut bytes = MESSAGE_DOMAIN.to_vec();
+        bytes.extend_from_slice(&self.channel);
+        bytes.extend_from_slice(&self.epoch.to_be_bytes());
+        bytes.extend_from_slice(&self.member);
+        bytes.extend_from_slice(&Sha256::digest(self.ciphertext.as_slice()));
+        bytes
+    }
+
+    pub fn encode(&self) -> Result<Vec<u8>, MlsError> {
+        Ok(self.tls_serialize_detached()?)
+    }
+
+    pub fn decode(bytes: &[u8]) -> Result<Self, MlsError> {
+        if bytes.len() > MAX_HOSTED_MESSAGE {
+            return Err(MlsError::Encoding);
+        }
+        Ok(Self::tls_deserialize_exact(bytes)?)
+    }
+
+    pub fn member_id(&self) -> [u8; 32] {
+        self.member
+    }
+    pub fn epoch(&self) -> u64 {
+        self.epoch
+    }
+
+    fn verify(
+        &self,
+        channel: [u8; 32],
+        epoch: u64,
+        mut members: impl Iterator<Item = Member>,
+        backend: &OpenMlsRustCrypto,
+    ) -> Result<(), MlsError> {
+        if self.channel != channel {
+            return Err(MlsError::WrongChannel);
+        }
+        if self.epoch != epoch || !members.any(|m| m.signature_key.as_slice() == self.member) {
+            return Err(MlsError::Unauthorized);
+        }
+        if self.tls_serialized_len() > MAX_HOSTED_MESSAGE || self.signature.as_slice().len() != 64 {
+            return Err(MlsError::Encoding);
+        }
+        let wire = protocol(self.ciphertext.as_slice())?;
+        if !matches!(wire, ProtocolMessage::PrivateMessage(_))
+            || wire.content_type() != ContentType::Application
+            || wire.epoch().as_u64() != epoch
+            || wire.group_id().as_slice() != channel
+        {
+            return Err(MlsError::Unauthorized);
+        }
+        backend
+            .crypto()
+            .verify_signature(
+                CIPHERSUITE.signature_algorithm(),
+                &self.payload(),
+                &self.member,
+                self.signature.as_slice(),
+            )
+            .map_err(|_| MlsError::Unauthorized)
+    }
+}
 
 fn mls(error: impl std::fmt::Debug) -> MlsError {
     MlsError::OpenMls(format!("{error:?}"))
@@ -355,6 +437,121 @@ struct HostedArchive {
 }
 
 impl HostedSession {
+    /// Prepare an exact signed ciphertext for durable outgoing storage/retry.
+    /// The caller must checkpoint the advanced sender state before publishing.
+    pub fn send_hosted(&mut self, payload: &[u8]) -> Result<HostedMessage, MlsError> {
+        // Leave room for MLS padding, headers, sender data and the outer proof.
+        if payload.len() > MAX_HOSTED_MESSAGE - 1024 {
+            return Err(MlsError::Encoding);
+        }
+        let ciphertext = self.send(payload)?;
+        let mut message = HostedMessage {
+            channel: self.policy.channel_id(),
+            epoch: self.epoch(),
+            member: self
+                .ctx
+                .signer
+                .to_public_vec()
+                .try_into()
+                .map_err(|_| MlsError::Encoding)?,
+            ciphertext: ciphertext.into(),
+            signature: Vec::new().into(),
+        };
+        message.signature = self
+            .ctx
+            .signer
+            .sign(&message.payload())
+            .map_err(mls)?
+            .into();
+        Ok(message)
+    }
+
+    /// Authenticate both the service-visible envelope and the encrypted MLS
+    /// sender. A false outer identity must not consume another sender's ratchet.
+    pub fn receive_hosted(&mut self, message: &HostedMessage) -> Result<Vec<u8>, MlsError> {
+        if self.pending_join.is_some() {
+            return Err(MlsError::Unauthorized);
+        }
+        message.verify(
+            self.policy.channel_id(),
+            self.epoch(),
+            self.ctx.group.members(),
+            &self.ctx.backend,
+        )?;
+        let mut candidate = self.fork()?;
+        let processed = candidate
+            .ctx
+            .group
+            .process_message(
+                &candidate.ctx.backend,
+                protocol(message.ciphertext.as_slice())?,
+            )
+            .map_err(mls)?;
+        let Sender::Member(index) = processed.sender() else {
+            return Err(MlsError::Unauthorized);
+        };
+        let actual = candidate
+            .ctx
+            .group
+            .members()
+            .find(|m| m.index == *index)
+            .ok_or(MlsError::Unauthorized)?;
+        if actual.signature_key.as_slice() != message.member {
+            return Err(MlsError::Unauthorized);
+        }
+        let ProcessedMessageContent::ApplicationMessage(application) = processed.into_content()
+        else {
+            return Err(MlsError::Unauthorized);
+        };
+        *self = candidate;
+        Ok(application.into_bytes())
+    }
+
+    fn fork(&self) -> Result<Self, MlsError> {
+        let backend = OpenMlsRustCrypto::default();
+        *backend
+            .storage()
+            .values
+            .write()
+            .map_err(|_| MlsError::Encoding)? = self
+            .ctx
+            .backend
+            .storage()
+            .values
+            .read()
+            .map_err(|_| MlsError::Encoding)?
+            .clone();
+        let result = (|| {
+            let group = MlsGroup::load(backend.storage(), self.ctx.group.group_id())
+                .map_err(mls)?
+                .ok_or(MlsError::Encoding)?;
+            let signer = SignatureKeyPair::read(
+                backend.storage(),
+                &self.ctx.signer.to_public_vec(),
+                CIPHERSUITE.signature_algorithm(),
+            )
+            .ok_or(MlsError::Encoding)?;
+            Ok((group, signer))
+        })();
+        let (group, signer) = match result {
+            Ok(parts) => parts,
+            Err(error) => {
+                crate::session::zeroize_storage(&backend);
+                return Err(error);
+            }
+        };
+        Ok(Self {
+            ctx: crate::session::Ctx {
+                backend,
+                signer,
+                group,
+                owner_pseudonym: self.ctx.owner_pseudonym,
+                admin_pseudonyms: self.ctx.admin_pseudonyms.clone(),
+            },
+            policy: self.policy.clone(),
+            pending_join: self.pending_join.clone(),
+        })
+    }
     /// Seal member secrets and pending acceptance together. The wrapping key
     /// belongs to the client's encrypted profile, never the channel service.
     #[cfg(feature = "client-persist")]
@@ -393,6 +590,16 @@ impl HostedSession {
         capacity: u32,
         public_join: bool,
     ) -> Result<Self, MlsError> {
+        Self::create_with_config(root, name, capacity, public_join, create_config())
+    }
+
+    fn create_with_config(
+        root: &IdentityKeypair,
+        name: &str,
+        capacity: u32,
+        public_join: bool,
+        config: MlsGroupCreateConfig,
+    ) -> Result<Self, MlsError> {
         if !(2..=500).contains(&capacity) {
             return Err(MlsError::Encoding);
         }
@@ -406,14 +613,22 @@ impl HostedSession {
             signature: Vec::new().into(),
         };
         policy.signature = root.sign(&policy.payload()).into();
-        let group = MlsGroup::new_with_group_id(
+        let mut group = MlsGroup::new_with_group_id(
             &prepared.backend,
             prepared.signer.as_ref().expect("prepared signer"),
-            &create_config(),
+            &config,
             GroupId::from_slice(&policy.channel_id()),
             prepared.credential.clone(),
         )
         .map_err(mls)?;
+        group
+            .self_update(
+                &prepared.backend,
+                prepared.signer.as_ref().expect("prepared signer"),
+                LeafNodeParameters::default(),
+            )
+            .map_err(mls)?;
+        group.merge_pending_commit(&prepared.backend).map_err(mls)?;
         Ok(Self {
             ctx: crate::session::Ctx {
                 backend: std::mem::take(&mut prepared.backend),
@@ -572,7 +787,17 @@ pub struct HostedObserver {
 }
 
 impl HostedObserver {
-    /// Start from owner-signed policy and the owner's epoch-zero GroupInfo.
+    /// Verify append authority without possession of any decryption key.
+    pub fn verify_message(&self, message: &HostedMessage) -> Result<(), MlsError> {
+        message.verify(
+            self.policy.channel_id(),
+            self.epoch(),
+            self.group.members(),
+            &self.backend,
+        )
+    }
+
+    /// Start from owner-signed policy and the owner's genesis GroupInfo.
     /// Later snapshots must be verified by replay, not trusted as new genesis.
     pub fn new(
         policy: HostedPolicy,
@@ -582,7 +807,7 @@ impl HostedObserver {
         policy.verify(expected_channel)?;
         let observer = Self::from_info(policy, info)?;
         let members: Vec<_> = observer.group.members().collect();
-        if observer.epoch() != 0
+        if observer.epoch() != HOSTED_GENESIS_EPOCH
             || members.len() != 1
             || members[0].signature_key.as_slice() != observer.policy.owner
         {
@@ -675,6 +900,104 @@ mod tests {
     use super::*;
 
     #[test]
+    fn public_replay_anchor_does_not_expire_with_the_creators_key_package() {
+        let root = IdentityKeypair::from_seed([26; 32]);
+        let config = MlsGroupCreateConfig::builder()
+            .ciphersuite(CIPHERSUITE)
+            .wire_format_policy(PURE_PLAINTEXT_WIRE_FORMAT_POLICY)
+            .use_ratchet_tree_extension(true)
+            .lifetime(Lifetime::init(0, 1))
+            .build();
+        let owner =
+            HostedSession::create_with_config(&root, "owner", 500, true, config.clone()).unwrap();
+        assert_eq!(owner.epoch(), HOSTED_GENESIS_EPOCH);
+        HostedObserver::new(
+            owner.policy.clone(),
+            owner.policy.channel_id(),
+            &owner.export_group_info().unwrap(),
+        )
+        .unwrap();
+        // Negative control: the un-updated initial tree still has the expired
+        // KeyPackage leaf and cannot be imported as current public state.
+        let prepared = PreparedHostedJoin::new("owner").unwrap();
+        let raw = MlsGroup::new_with_group_id(
+            &prepared.backend,
+            prepared.signer.as_ref().unwrap(),
+            &config,
+            GroupId::from_slice(&owner.policy.channel_id()),
+            prepared.credential.clone(),
+        )
+        .unwrap();
+        let info = raw
+            .export_group_info(
+                prepared.backend.crypto(),
+                prepared.signer.as_ref().unwrap(),
+                true,
+            )
+            .unwrap()
+            .tls_serialize_detached()
+            .unwrap();
+        assert!(HostedObserver::from_info(owner.policy, &info).is_err());
+    }
+
+    #[test]
+    fn false_outer_sender_cannot_consume_another_members_ratchet() {
+        let root = IdentityKeypair::from_seed([25; 32]);
+        let mut owner = HostedSession::create(&root, "owner", 500, true).unwrap();
+        let mut observer = HostedObserver::new(
+            owner.policy.clone(),
+            owner.policy.channel_id(),
+            &owner.export_group_info().unwrap(),
+        )
+        .unwrap();
+        let (mut alice, first) = PreparedHostedJoin::new("alice")
+            .unwrap()
+            .join(&observer, &JoinPermit::public(), 100)
+            .unwrap();
+        observer = observer
+            .stage_join(&first, alice.proposed_group_info().unwrap(), 100)
+            .unwrap();
+        alice.accept_join(&first).unwrap();
+        owner.receive(&first, 100).unwrap();
+        let (mut bob, second) = PreparedHostedJoin::new("bob")
+            .unwrap()
+            .join(&observer, &JoinPermit::public(), 101)
+            .unwrap();
+        observer = observer
+            .stage_join(&second, bob.proposed_group_info().unwrap(), 101)
+            .unwrap();
+        bob.accept_join(&second).unwrap();
+        owner.receive(&second, 101).unwrap();
+        alice.receive(&second, 101).unwrap();
+        let original = owner.send_hosted(b"real owner message").unwrap();
+        let mut forged = original.clone();
+        forged.member = bob.ctx.signer.to_public_vec().try_into().unwrap();
+        forged.signature = bob.ctx.signer.sign(&forged.payload()).unwrap().into();
+        // The service only verifies outer authority. It cannot inspect the
+        // encrypted MLS sender; every receiving client must check that too.
+        observer.verify_message(&forged).unwrap();
+        assert!(matches!(
+            alice.receive_hosted(&forged),
+            Err(MlsError::Unauthorized)
+        ));
+        assert_eq!(
+            alice.receive_hosted(&original).unwrap(),
+            b"real owner message"
+        );
+        assert!(
+            alice.receive_hosted(&original).is_err(),
+            "MLS replay must still fail"
+        );
+        let mut signature = forged.signature.as_slice().to_vec();
+        signature[0] ^= 1;
+        forged.signature = signature.into();
+        assert!(observer.verify_message(&forged).is_err());
+        let bytes = original.encode().unwrap();
+        assert!(HostedMessage::decode(&[bytes.as_slice(), &[0]].concat()).is_err());
+        assert!(HostedMessage::decode(&vec![0; MAX_HOSTED_MESSAGE + 1]).is_err());
+    }
+
+    #[test]
     fn modified_client_cannot_bypass_private_admission() {
         let root = IdentityKeypair::from_seed([24; 32]);
         let mut owner = HostedSession::create(&root, "owner", 500, false).unwrap();
@@ -709,8 +1032,8 @@ mod tests {
         let wire = bundle.into_commit().tls_serialize_detached().unwrap();
         assert!(observer.accept(&wire, 100).is_err());
         assert!(owner.receive(&wire, 100).is_err());
-        assert_eq!(observer.epoch(), 0);
-        assert_eq!(owner.epoch(), 0);
+        assert_eq!(observer.epoch(), HOSTED_GENESIS_EPOCH);
+        assert_eq!(owner.epoch(), HOSTED_GENESIS_EPOCH);
         assert_eq!(observer.member_count(), 1);
         assert_eq!(owner.roster().len(), 1);
     }

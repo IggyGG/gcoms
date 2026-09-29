@@ -1,0 +1,21 @@
+[package]
+name = "gcoms-channel-service"
+readme = "README.md"
+description = "Ciphertext-only ordered storage for experimental hosted GComs channels"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+version.workspace = true
+publish.workspace = true
+
+[dependencies]
+gcoms-mls = { version = "0.1.0", path = "../mls", features = ["hosted-channels"] }
+gcoms-private-fs = { version = "0.1.0", path = "../private-fs" }
+sha2 = "0.10"
+tls_codec = { version = "0.5", features = ["derive", "mls"] }
+
+[dev-dependencies]
+gcoms-crypto = { version = "0.1.0", path = "../crypto" }
+tempfile = "3"
+

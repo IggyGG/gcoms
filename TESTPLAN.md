@@ -16,6 +16,25 @@ regressions and the explicitly separate slow capacity gate.
 These are source/component tests. They do not qualify service persistence,
 GChat integration, 500 members, timing, native artifacts or installed releases.
 
+## Ordered hosted storage — IRC-2
+
+Run `cargo test --locked -p gcoms-channel-service -p gcoms-mls --all-features`
+and strict all-target/all-feature Clippy for both packages. Require an offline
+owner to replay joins/messages across service restart, exact retry receipts,
+exclusive writer locking, full-record corruption refusal, partial-tail recovery,
+quota refusal without mutation and a real failed write followed by poisoned
+refusal and correct reopen. Verify application plaintext and test identity seeds
+are absent from the service log. A forged outer sender must not consume the
+correct MLS sender's ratchet. Genesis replay must remain valid with an expired
+original KeyPackage lifetime; the un-updated negative control must fail.
+
+Explicit MLS scale gate:
+`cargo test --locked --release -p gcoms-mls --all-features --test hosted five_hundred_real_members_and_ten_concurrent_senders -- --ignored --nocapture`.
+Require 500 distinct actual leaves, 499 membership changes, ten concurrent
+senders, 4,990 authenticated receives, overflow rejection and retained duration /
+wire-size measurements. Keep network/UI/ACK timing and file/churn qualification
+separate; this component gate cannot close IRC-8 by itself.
+
 ## Bounded file recovery latency
 
 Run `cargo test --locked -p gcoms-file-transfer` and

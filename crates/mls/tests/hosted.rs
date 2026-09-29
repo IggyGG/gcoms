@@ -45,7 +45,7 @@ fn public_joins_while_all_existing_members_are_offline_then_replay_and_chat() {
         .publish_group_info(&bob.export_group_info().unwrap())
         .unwrap();
     assert_eq!(service.member_count(), 3);
-    assert_eq!(owner.epoch(), 0);
+    assert_eq!(owner.epoch(), HOSTED_GENESIS_EPOCH);
     owner.receive(&first, 100).unwrap();
     owner.receive(&second, 101).unwrap();
     alice.receive(&second, 101).unwrap();
@@ -74,7 +74,13 @@ fn private_permit_is_leaf_name_channel_epoch_and_expiry_bound() {
     let prepared = PreparedHostedJoin::new("alice").unwrap();
     let permit = owner
         .policy()
-        .permit(&root, 0, prepared.member_id(), "alice", 200)
+        .permit(
+            &root,
+            HOSTED_GENESIS_EPOCH,
+            prepared.member_id(),
+            "alice",
+            200,
+        )
         .unwrap();
     let encoded = permit.encode().unwrap();
     assert!(JoinPermit::decode(&[encoded.as_slice(), &[0]].concat()).is_err());
@@ -83,7 +89,13 @@ fn private_permit_is_leaf_name_channel_epoch_and_expiry_bound() {
     let prepared = PreparedHostedJoin::new("alice").unwrap();
     let wrong_name = owner
         .policy()
-        .permit(&root, 0, prepared.member_id(), "eve", 200)
+        .permit(
+            &root,
+            HOSTED_GENESIS_EPOCH,
+            prepared.member_id(),
+            "eve",
+            200,
+        )
         .unwrap();
     assert!(prepared.join(&service, &wrong_name, 100).is_err());
     assert!(PreparedHostedJoin::new("eve")
@@ -93,7 +105,13 @@ fn private_permit_is_leaf_name_channel_epoch_and_expiry_bound() {
     let prepared = PreparedHostedJoin::new("alice").unwrap();
     let expired = owner
         .policy()
-        .permit(&root, 0, prepared.member_id(), "alice", 100)
+        .permit(
+            &root,
+            HOSTED_GENESIS_EPOCH,
+            prepared.member_id(),
+            "alice",
+            100,
+        )
         .unwrap();
     assert!(matches!(
         prepared.join(&service, &expired, 100),
@@ -102,7 +120,13 @@ fn private_permit_is_leaf_name_channel_epoch_and_expiry_bound() {
     let prepared = PreparedHostedJoin::new("alice").unwrap();
     let permit = owner
         .policy()
-        .permit(&root, 0, prepared.member_id(), "alice", 200)
+        .permit(
+            &root,
+            HOSTED_GENESIS_EPOCH,
+            prepared.member_id(),
+            "alice",
+            200,
+        )
         .unwrap();
     let (mut alice, commit) = prepared.join(&service, &permit, 100).unwrap();
     assert!(matches!(
@@ -113,8 +137,8 @@ fn private_permit_is_leaf_name_channel_epoch_and_expiry_bound() {
         owner.receive(&commit, 200),
         Err(MlsError::Expired)
     ));
-    assert_eq!(service.epoch(), 0);
-    assert_eq!(owner.epoch(), 0);
+    assert_eq!(service.epoch(), HOSTED_GENESIS_EPOCH);
+    assert_eq!(owner.epoch(), HOSTED_GENESIS_EPOCH);
     service.accept(&commit, 100).unwrap();
     owner.receive(&commit, 100).unwrap();
     alice.accept_join(&commit).unwrap();
@@ -126,7 +150,13 @@ fn private_permit_is_leaf_name_channel_epoch_and_expiry_bound() {
     let prepared = PreparedHostedJoin::new("bob").unwrap();
     let stale = owner
         .policy()
-        .permit(&root, 0, prepared.member_id(), "bob", 200)
+        .permit(
+            &root,
+            HOSTED_GENESIS_EPOCH,
+            prepared.member_id(),
+            "bob",
+            200,
+        )
         .unwrap();
     assert!(prepared.join(&service, &stale, 100).is_err());
 }
@@ -187,16 +217,16 @@ fn complete_join_bundle_is_validated_without_mutating_current_epoch() {
     assert!(service
         .stage_join(&commit, &owner.export_group_info().unwrap(), 100)
         .is_err());
-    assert_eq!(service.epoch(), 0);
+    assert_eq!(service.epoch(), HOSTED_GENESIS_EPOCH);
     let next = service
         .stage_join(&commit, alice.proposed_group_info().unwrap(), 100)
         .unwrap();
     assert_eq!(
         service.epoch(),
-        0,
+        HOSTED_GENESIS_EPOCH,
         "staging must precede durable installation"
     );
-    assert_eq!(next.epoch(), 1);
+    assert_eq!(next.epoch(), HOSTED_GENESIS_EPOCH + 1);
     alice.accept_join(&commit).unwrap();
     owner.receive(&commit, 100).unwrap();
     let (_, second) = PreparedHostedJoin::new("bob")
@@ -218,7 +248,7 @@ fn duplicate_display_name_is_rejected_by_service_and_member() {
         .stage_join(&commit, impostor.proposed_group_info().unwrap(), 100)
         .is_err());
     assert!(owner.receive(&commit, 100).is_err());
-    assert_eq!(owner.epoch(), 0);
+    assert_eq!(owner.epoch(), HOSTED_GENESIS_EPOCH);
 }
 
 #[cfg(feature = "client-persist")]
@@ -240,7 +270,7 @@ fn restart_preserves_pending_acceptance_and_encrypts_the_member_state() {
     let service = service
         .stage_join(&commit, alice.proposed_group_info().unwrap(), 100)
         .unwrap();
-    assert_eq!(service.epoch(), 1);
+    assert_eq!(service.epoch(), HOSTED_GENESIS_EPOCH + 1);
     alice.accept_join(&commit).unwrap();
     let sealed = alice.persist(&[19; 32]).unwrap();
     drop(alice);
@@ -250,4 +280,88 @@ fn restart_preserves_pending_acceptance_and_encrypts_the_member_state() {
     assert!(
         matches!(owner.receive(&message, 100).unwrap(), ReceiveOutcome::Application { payload, .. } if payload == b"after reopening")
     );
+}
+
+#[test]
+#[ignore = "explicit release-mode 500-identity MLS scale gate; not an application/network qualification"]
+fn five_hundred_real_members_and_ten_concurrent_senders() {
+    let started = std::time::Instant::now();
+    let (_, owner, mut service) = fixture(true, 500);
+    let mut members = vec![owner];
+    let mut max_commit = 0;
+    let mut max_info = 0;
+    for index in 1..500 {
+        let (mut joining, commit) = PreparedHostedJoin::new(&format!("member-{index}"))
+            .unwrap()
+            .join(&service, &JoinPermit::public(), 100 + index as u64)
+            .unwrap();
+        let info = joining.proposed_group_info().unwrap();
+        max_commit = max_commit.max(commit.len());
+        max_info = max_info.max(info.len());
+        service = service
+            .stage_join(&commit, info, 100 + index as u64)
+            .unwrap();
+        joining.accept_join(&commit).unwrap();
+        // Acceptance precedes all existing member processing/acknowledgment.
+        for member in &mut members {
+            member.receive(&commit, 100 + index as u64).unwrap();
+        }
+        members.push(joining);
+        if index % 50 == 0 {
+            eprintln!(
+                "hosted scale: {} real members in {:?}",
+                index + 1,
+                started.elapsed()
+            );
+        }
+    }
+    assert_eq!(service.member_count(), 500);
+    for member in &members {
+        assert_eq!(member.roster().len(), 500);
+    }
+    let roster: std::collections::BTreeSet<_> = members[0]
+        .roster()
+        .into_iter()
+        .map(|m| m.pseudonym)
+        .collect();
+    assert_eq!(roster.len(), 500);
+    let admission_seconds = started.elapsed().as_secs_f64();
+    let messages = std::thread::scope(|scope| {
+        let handles: Vec<_> = members
+            .iter_mut()
+            .take(10)
+            .enumerate()
+            .map(|(i, member)| {
+                scope.spawn(move || {
+                    member
+                        .send_hosted(format!("concurrent sender {i}").as_bytes())
+                        .unwrap()
+                })
+            })
+            .collect();
+        handles
+            .into_iter()
+            .map(|handle| handle.join().unwrap())
+            .collect::<Vec<_>>()
+    });
+    let mut delivered = 0;
+    for (sender, message) in messages.iter().enumerate() {
+        service.verify_message(message).unwrap();
+        for (receiver, member) in members.iter_mut().enumerate() {
+            if sender == receiver {
+                continue;
+            }
+            assert_eq!(
+                member.receive_hosted(message).unwrap(),
+                format!("concurrent sender {sender}").as_bytes()
+            );
+            delivered += 1;
+        }
+    }
+    assert_eq!(delivered, 4990);
+    assert!(PreparedHostedJoin::new("overflow")
+        .unwrap()
+        .join(&service, &JoinPermit::public(), 1000)
+        .is_err());
+    eprintln!("hosted_scale_result members=500 senders=10 authenticated_receives={delivered} admission_seconds={admission_seconds:.3} total_seconds={:.3} max_commit_bytes={max_commit} max_info_bytes={max_info}", started.elapsed().as_secs_f64());
 }

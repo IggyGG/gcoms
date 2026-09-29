@@ -21,7 +21,7 @@ The GComs task also preserves the canonical checkout's `0c2c704` bootstrap fix.
 | ID | Deliverable | Status | Decisive acceptance |
 | --- | --- | --- | --- |
 | IRC-1 | Versioned hosted MLS admission and ciphertext coordination | In progress | Real PQ-suite external joins with owner offline; forged/expired/replayed authority denied; service has no decryption state; legacy policy isolation |
-| IRC-2 | Ordered persistent recovery and service integration | Pending | Concurrent joins and crash/reopen converge; offline recipients do not block admission; no false delivery or loss of accepted records |
+| IRC-2 | Ordered persistent recovery and service integration | In progress | Concurrent joins and crash/reopen converge; offline recipients do not block admission; no false delivery or loss of accepted records |
 | IRC-3 | Channel policy, operators, voice, moderation, bans/exceptions, keys, limits, discovery | Pending | All admission and message paths enforce policy against modified clients; grant/revoke and rekey persist |
 | IRC-4 | Contacts and independent direct conversations/files | Pending | No shared channel required; leaving a former shared channel preserves the contact conversation; block and identity continuity |
 | IRC-5 | Authenticated activity and richer presence | Pending | Actor/target/reason ordering; away/back/unknown/invisible; optional sharing; snapshot polling loses no events |
@@ -79,6 +79,31 @@ IRC-1 remains in progress. Hosted APIs are not yet enabled in production clients
 No claim of complete policy, service, contact, GChat or 500-member coverage.
 Next: source-bound strict checks and checkpoint, followed by durable ordered
 service storage and the application-facing integration.
+
+### 2026-09-29 ordered-storage checkpoint
+
+Added `gcoms-channel-service`, a library with an exclusively locked, bounded,
+checksummed append log. Public membership validation and signed ciphertext
+validation precede fsync and acceptance. Restart reconstructs public state,
+checks sequence/predecessor hashes, preserves exact retry receipts, truncates
+only incomplete tails, and fails closed on complete-record corruption. Real
+write failures poison the instance until reopen. Accepted data is never evicted
+to satisfy a quota. The library does not expose a network endpoint.
+
+Hosted messages authenticate their service-visible sender/epoch/ciphertext.
+Clients independently check the encrypted MLS sender on a speculative state
+copy, so a false outer sender cannot consume the real sender's ratchet. Genesis
+now follows one normal owner self-update (epoch one), removing the expiring
+KeyPackage leaf from the long-term replay anchor. The expired-leaf negative
+control rejects the un-updated tree while the updated anchor verifies.
+
+`service-04.log` records 40 passes, one prior explicit slow ignore and strict
+MLS/service Clippy. The first storage run correctly rejected non-private test
+directories; fixtures now explicitly use shared private-filesystem setup.
+A separate 500-real-identity/ten-concurrent-sender MLS test has been added for
+explicit release execution. It is not application, network or native-platform
+qualification. Remaining: service transport/reader authorization, shared client
+integration, dynamic policy, contacts and all outstanding ledger rows above.
 
 Both components are siblings under GComs `.worktrees/irc-parity/`. Work only in
 those checkouts. GChat's original canonical lockfile and `.cargo/` are preserved.
