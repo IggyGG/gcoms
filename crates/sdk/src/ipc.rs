@@ -29,7 +29,8 @@ use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 #[cfg(all(any(unix, windows), feature = "ipc"))]
 use tokio::sync::{broadcast, mpsc, oneshot, watch, Mutex};
 
-pub const VERSION: u16 = 21;
+pub const VERSION: u16 = 22;
+// IPC22 adds separately authorized routed hosted-profile requests.
 
 #[cfg(test)]
 mod metadata_compat;
@@ -57,6 +58,7 @@ pub enum Capability {
     CatalogAccess,
     BootstrapApplication,
     FileSharing,
+    HostedChannels,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -268,11 +270,14 @@ pub enum Request {
         channel: String,
         code: Option<String>,
     },
+    HostedChannels(crate::hosted_client::Request),
 }
 
 impl Request {
     pub fn minimum_version(&self) -> u16 {
         match self {
+            Self::HostedChannels(_) => 22,
+            Self::CatalogHttp(request) if request.is_hosted() => 22,
             Self::Sharing(crate::sharing::Request::Inspect { .. })
             | Self::ChannelReconnect { .. } => 21,
             Self::Sharing(crate::sharing::Request::CommitReusing { .. }) => 20,
@@ -299,6 +304,8 @@ impl Request {
     }
     pub fn required_capability(&self) -> Capability {
         match self {
+            Self::HostedChannels(_) => Capability::HostedChannels,
+            Self::CatalogHttp(request) if request.is_hosted() => Capability::HostedChannels,
             Self::ChannelReconnect { .. } => Capability::ChannelMember,
             Self::Sharing(_) => Capability::FileSharing,
             Self::NetworkStatus => Capability::IdentityRead,
@@ -426,6 +433,7 @@ pub enum Response {
     Sharing(crate::sharing::Reply),
     NetworkStatus(crate::NetworkStatus),
     ChannelTopic(String),
+    HostedChannels(crate::hosted_client::Reply),
 }
 
 #[cfg(all(any(unix, windows), feature = "ipc"))]
@@ -1065,6 +1073,16 @@ impl GcClient for IpcClient {
         match self.request(Request::CatalogHttp(request)).await? {
             Response::CatalogHttp(response) => Ok(response),
             _ => Err(SdkError::Protocol("unexpected catalog response".into())),
+        }
+    }
+
+    async fn hosted_channels(
+        &self,
+        request: crate::hosted_client::Request,
+    ) -> Result<crate::hosted_client::Reply, SdkError> {
+        match self.request(Request::HostedChannels(request)).await? {
+            Response::HostedChannels(reply) => Ok(reply),
+            _ => Err(SdkError::Protocol("unexpected hosted channel reply".into())),
         }
     }
 
@@ -1744,10 +1762,14 @@ where
     }
     // Tag 12 meant BootstrapApplication in the unreleased bootstrap-v13 fork.
     // Never downgrade/filter that Hello: tags 30/31 now mean network sends.
-    if (version < 18
+    if (version < 22
         && hello
             .requested_capabilities
-            .contains(&Capability::FileSharing))
+            .contains(&Capability::HostedChannels))
+        || (version < 18
+            && hello
+                .requested_capabilities
+                .contains(&Capability::FileSharing))
         || (version < 15
             && hello
                 .requested_capabilities
@@ -1789,6 +1811,7 @@ where
                 && (version >= 11 || *capability != Capability::HostShell)
                 && (version >= 12 || *capability != Capability::VolatileApplication)
                 && (version >= 15 || *capability != Capability::CatalogAccess)
+                && (version >= 22 || *capability != Capability::HostedChannels)
                 && (version >= 16 || *capability != Capability::BootstrapApplication)
                 && (version >= 18 || *capability != Capability::FileSharing)
                 && (version >= 17 || *capability != Capability::ProfileAdmin)
@@ -2090,6 +2113,10 @@ pub(crate) async fn dispatch<C: GcClient>(
             client.configure_catalog_origins(origins).await?;
             Ok(Response::Empty)
         }
+        Request::HostedChannels(request) => client
+            .hosted_channels(request)
+            .await
+            .map(Response::HostedChannels),
         Request::CatalogHttp(request) => client
             .catalog_request(request)
             .await
@@ -2582,7 +2609,7 @@ mod tests {
 
     #[test]
     fn requests_declare_required_capability() {
-        assert_eq!(VERSION, 21);
+        assert_eq!(VERSION, 22);
         for request in [
             Request::SubmitDurableOpaque {
                 recipient: ContactCard(Vec::new()),
@@ -3141,6 +3168,7 @@ mod compatible_machine_clients {
         for (version, capability) in [
             (11, Capability::VolatileApplication),
             (12, Capability::BootstrapApplication),
+            (21, Capability::HostedChannels),
         ] {
             let node = gcoms_node::node::start(gcoms_node::node::NodeConfig {
                 seed: [78; 32],
@@ -3186,7 +3214,10 @@ mod compatible_machine_clients {
             )
             .await
             .unwrap();
-            if capability == Capability::BootstrapApplication {
+            if matches!(
+                capability,
+                Capability::BootstrapApplication | Capability::HostedChannels
+            ) {
                 assert!(server.await.unwrap().is_err());
                 assert!(read_frame(&mut peer).await.is_err());
                 node.shutdown().await;

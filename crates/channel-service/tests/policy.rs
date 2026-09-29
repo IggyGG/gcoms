@@ -310,3 +310,72 @@ fn a_prepared_join_cannot_bypass_a_new_ban_but_exemption_restores_admission() {
     assert_eq!(joining.rules().revision(), public.rules().revision());
     assert_eq!(public.member_count(), 2);
 }
+
+#[test]
+fn single_use_invitation_survives_offline_creator_and_is_consumed_atomically() {
+    let dir = tempfile::tempdir().unwrap();
+    gcoms_private_fs::make_private(dir.path(), true).unwrap();
+    let path = dir.path().join("log");
+    let limits = Limits {
+        bytes: 64 * 1024 * 1024,
+        records: 1000,
+    };
+    let root = IdentityKeypair::from_seed([104; 32]);
+    let mut owner = HostedSession::create(&root, "owner", 500, false).unwrap();
+    let channel = owner.policy().channel_id();
+    let mut log = ChannelLog::create(
+        &path,
+        owner.policy().clone(),
+        channel,
+        &owner.export_group_info().unwrap(),
+        limits,
+    )
+    .unwrap();
+    let invitation = HostedAccessCode::generate().unwrap();
+    let verifier = invitation.verification_key();
+    let grant = owner
+        .create_control(HostedPolicyChange::Invitation(verifier, 1000), "single use")
+        .unwrap();
+    log.append_control(&grant, 100).unwrap();
+    owner.apply_control(&grant).unwrap();
+    drop(log);
+    let mut log = ChannelLog::open(&path, channel, limits).unwrap();
+    let alice = PreparedHostedJoin::new("alice").unwrap();
+    let bob = PreparedHostedJoin::new("bob").unwrap();
+    let alice_permit = invitation
+        .invitation_permit(log.observer(), alice.member_id(), "alice", 500)
+        .unwrap();
+    let bob_permit = invitation
+        .invitation_permit(log.observer(), bob.member_id(), "bob", 500)
+        .unwrap();
+    let (mut alice, a) = alice.join(log.observer(), &alice_permit, 101).unwrap();
+    let (bob, b) = bob.join(log.observer(), &bob_permit, 101).unwrap();
+    let info = alice.proposed_group_info().unwrap().to_vec();
+    let receipt = log.append_join(&a, &info, 101).unwrap();
+    alice.accept_join(&a).unwrap();
+    assert_eq!(alice.rules().invitation_expiry(verifier), None);
+    assert!(log
+        .append_join(&b, bob.proposed_group_info().unwrap(), 102)
+        .is_err());
+    let bob = bob.prepare_join_retry().unwrap();
+    assert!(invitation
+        .invitation_permit(log.observer(), bob.member_id(), "bob", 500)
+        .is_err());
+    assert_eq!(log.observer().rules().invitation_expiry(verifier), None);
+    owner.receive(&a, 101).unwrap();
+    assert_eq!(owner.rules().invitation_expiry(verifier), None);
+    drop(log);
+    let mut log = ChannelLog::open(&path, channel, limits).unwrap();
+    assert_eq!(log.observer().rules().invitation_expiry(verifier), None);
+    assert_eq!(log.append_join(&a, &info, 102).unwrap(), receipt);
+    let proof = invitation.read_proof(channel, [7; 32], 150).unwrap();
+    assert!(log
+        .observer()
+        .verify_read(&proof, HostedReadScope::Snapshot, [7; 32], 102)
+        .is_err());
+    let secret = invitation.export_secret().unwrap();
+    assert!(!std::fs::read(path)
+        .unwrap()
+        .windows(secret.len())
+        .any(|part| part == secret.as_slice()));
+}

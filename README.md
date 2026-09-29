@@ -1,5 +1,13 @@
+The experimental `hosted-channels` application/runtime feature exposes
+`GcClient::hosted_channels` through embedded hosts and IPC22. Its encrypted
+sidecars preserve pending sends and unarchived events across restart. Applications
+must persist events before committing them. `gcoms-channel-service` supplies the
+ciphertext-only HTTP upstream (default `http` feature); an installed HTTPS origin
+and explicit creation policy are required. This profile is not yet integrated
+into GChat and does not yet implement recipient receipt aggregation.
+
 Classic IRC parity implementation is tracked in [the coverage ledger](docs/IRC_PARITY.md).
-Experimental hosted MLS and ciphertext storage primitives are opt-in and are not
+Experimental hosted MLS, ciphertext service and durable runtime APIs are opt-in and are not
 yet a GChat feature. Signed channel policy is checked by the service and members;
 the service has no member decryption keys.
 Legacy owner-admitted channels now reject external membership commits explicitly.

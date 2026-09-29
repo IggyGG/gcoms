@@ -8,6 +8,15 @@ fn rekey_aad(revision: u64) -> Vec<u8> {
     aad
 }
 
+pub(super) fn used_invitation(processed: &ProcessedMessage) -> Result<Option<[u8; 32]>, MlsError> {
+    if matches!(processed.sender(), Sender::NewMemberCommit) {
+        let permit = JoinPermit::decode(processed.aad())?;
+        Ok((permit.authority == 3).then_some(permit.issuer).flatten())
+    } else {
+        Ok(None)
+    }
+}
+
 pub(super) fn validate_membership(
     policy: &HostedPolicy,
     rules: &HostedRules,

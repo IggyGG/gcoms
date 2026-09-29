@@ -556,3 +556,10 @@ IRC-3 lifecycle checkpoint: departure, kick, member-assisted rekey and sealed
 pending recovery pass, along with dual service/client message-class authorization.
 IRC-4 through IRC-8 application and transport integration remains in progress;
 no UI/release completion is claimed.
+
+IRC-1/IRC-2/IRC-3 integration checkpoint: bounded service API, scoped readers,
+single-use invitations and protected routing are implemented. IPC22 and the
+opt-in durable runtime client are connected; four real-service recovery/storage
+tests and strict runtime/SDK/application checks pass on the initial client
+source. GChat, recipient receipt aggregation and the remaining parity/release
+ledger remain open. See docs/IRC_PARITY.md for evidence and current limits.

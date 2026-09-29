@@ -974,12 +974,19 @@ dependencies = [
 name = "gcoms-channel-service"
 version = "0.1.0"
 dependencies = [
+ "axum",
+ "base64",
  "gcoms-crypto",
  "gcoms-mls",
  "gcoms-private-fs",
+ "gcoms-sdk",
+ "reqwest",
+ "serde",
+ "serde_json",
  "sha2 0.10.9",
  "tempfile",
  "tls_codec",
+ "tokio",
 ]
 
 [[package]]
@@ -1279,9 +1286,11 @@ dependencies = [
  "axum",
  "base64",
  "fs2",
+ "gcoms-channel-service",
  "gcoms-core",
  "gcoms-crypto",
  "gcoms-file-transfer",
+ "gcoms-mls",
  "gcoms-network-client",
  "gcoms-node",
  "gcoms-private-fs",
@@ -1315,6 +1324,7 @@ dependencies = [
  "postcard",
  "rustix",
  "serde",
+ "serde_json",
  "tempfile",
  "tokio",
  "windows-sys 0.61.2",

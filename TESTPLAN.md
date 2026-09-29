@@ -578,3 +578,20 @@ only missing pieces after inventory. Negative cases preserve private scope,
 digest checks, pause/cancel/unaccepted intent, duplicate suppression, the first
 four immediate source queries, revocation and source backoff. A completion claim
 alone must neither verify pieces nor complete the local download.
+
+## Hosted service API and durable runtime — IRC-1/IRC-2/IRC-3
+
+- `cargo test --locked -p gcoms-channel-service --all-features --test api`:
+  query/scope-bound reads, private snapshots, deferred bulk records, departed
+  readers bounded through removal across restart, HTTP size/version/rate gates.
+- `cargo test --locked -p gcoms-runtime --all-features hosted::tests`:
+  lost post-fsync acceptance plus client restart, offline receive and durable
+  event commit, competing admission identity continuity, stale text/control
+  recovery, revoked sender failure, exclusive/authenticated encrypted profiles
+  and poisoning after an uncertain save.
+- `cargo test --locked -p gcoms-routing --all-features catalog`:
+  protected legacy/GC2 routing, bulk bounds and TLS/origin/no-fallback checks.
+- Existing SDK IPC compatibility fixtures retain old request indices. IPC22
+  requires HostedChannels for both service exchange and client-owned operations.
+- Receipt aggregation, GChat user flows and 500-member network/latency tests remain
+  required. A service acceptance response is not a recipient acknowledgement.

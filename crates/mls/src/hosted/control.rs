@@ -70,9 +70,10 @@ impl HostedControl {
             return Err(MlsError::WrongChannel);
         }
         let epoch = context.epoch().as_u64();
-        if self.epoch != epoch
-            || self.context != <[u8; 32]>::from(Sha256::digest(context.tls_serialize_detached()?))
-            || self.base_revision != rules.revision()
+        if self.epoch != epoch || self.base_revision != rules.revision() {
+            return Err(MlsError::StaleState);
+        }
+        if self.context != <[u8; 32]>::from(Sha256::digest(context.tls_serialize_detached()?))
             || self.tls_serialized_len() > MAX_CONTROL
         {
             return Err(MlsError::Unauthorized);
@@ -218,6 +219,20 @@ impl HostedSession {
 }
 
 impl HostedObserver {
+    /// Replay an authenticated public control between commits without requiring
+    /// an intermediate GroupInfo snapshot at each epoch.
+    pub fn replay_control(&mut self, control: &HostedControl) -> Result<(), MlsError> {
+        let rules = control.validate(
+            &self.policy,
+            &self.rules,
+            self.group.group_context(),
+            &self.group.members().collect::<Vec<_>>(),
+            &self.backend,
+        )?;
+        self.rules = rules;
+        Ok(())
+    }
+
     pub fn stage_control(&self, control: &HostedControl) -> Result<Self, MlsError> {
         let rules = control.validate(
             &self.policy,

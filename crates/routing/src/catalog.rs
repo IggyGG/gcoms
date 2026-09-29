@@ -16,11 +16,21 @@ pub struct Response {
 }
 
 pub fn validate(method: &str, value: &str, body: &[u8]) -> Result<url::Url> {
-    if value.len() > 4096 || body.len() > MAX_REQUEST_BYTES {
+    if value.len() > 4096 {
         return Err("catalog request exceeds limit".into());
     }
     let url = url::Url::parse(value)?;
     let host = url.host_str().ok_or("catalog host is absent")?;
+    let hosted = method == "POST"
+        && (url.path().ends_with("/v1/hosted") || url.path().ends_with("/v1/hosted/bulk"));
+    let limit = if hosted {
+        MAX_RESPONSE_BYTES
+    } else {
+        MAX_REQUEST_BYTES
+    };
+    if body.len() > limit {
+        return Err("request exceeds scoped limit".into());
+    }
     if url.scheme() != "https"
         || !crate::wire::valid_host(host)
         || url.port_or_known_default() != Some(443)
@@ -37,14 +47,15 @@ pub fn validate(method: &str, value: &str, body: &[u8]) -> Result<url::Url> {
         "GET" => url.path().ends_with("/v1/catalog") && body.is_empty(),
         "PUT" => url.path().ends_with("/v1/descriptors") && url.query().is_none(),
         "POST" => {
-            parts.len() >= 5
-                && parts[parts.len() - 4] == "v1"
-                && parts[parts.len() - 3] == "channels"
-                && parts[parts.len() - 1] == "join"
-                && parts[parts.len() - 2].len() == 43
-                && parts[parts.len() - 2]
-                    .bytes()
-                    .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
+            (hosted
+                || (parts.len() >= 5
+                    && parts[parts.len() - 4] == "v1"
+                    && parts[parts.len() - 3] == "channels"
+                    && parts[parts.len() - 1] == "join"
+                    && parts[parts.len() - 2].len() == 43
+                    && parts[parts.len() - 2]
+                        .bytes()
+                        .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')))
                 && url.query().is_none()
         }
         _ => false,
@@ -111,11 +122,25 @@ impl CatalogConnector<'_> {
         &self,
         host: &str,
         origins: &[String],
+        bulk: bool,
     ) -> Result<gcoms_transport::connector::BoxStream> {
+        let _ = bulk;
         match self {
             Self::Legacy(connector) => connector.connect_https(host, origins).await,
             #[cfg(feature = "experimental-gc2")]
-            Self::Gc2(connector) => connector.connect_https(host, origins).await,
+            Self::Gc2(connector) => {
+                connector
+                    .connect_https_with_class(
+                        host,
+                        origins,
+                        if bulk {
+                            gcoms_core::TrafficClass::Bulk
+                        } else {
+                            gcoms_core::TrafficClass::Interactive
+                        },
+                    )
+                    .await
+            }
         }
     }
 }
@@ -148,8 +173,15 @@ async fn request_with_tls(
 ) -> Result<Response> {
     let url = validate(method, value, body)?;
     let host = url.host_str().ok_or("catalog host is absent")?.to_owned();
-    tokio::time::timeout(Duration::from_secs(180), async {
-        let stream = connector.connect_https(&host, origins).await?;
+    let deadline = if url.path().ends_with("/v1/hosted") || url.path().ends_with("/v1/hosted/bulk")
+    {
+        30
+    } else {
+        180
+    };
+    tokio::time::timeout(Duration::from_secs(deadline), async {
+        let bulk = url.path().ends_with("/v1/hosted/bulk");
+        let stream = connector.connect_https(&host, origins, bulk).await?;
         let tls = TlsConnector::from(tls)
             .connect(
                 rustls::pki_types::ServerName::try_from(host.clone())?,
@@ -229,6 +261,25 @@ mod tests {
             assert!(validate(method, url, &[]).is_err(), "{url}");
         }
         assert!(validate(
+            "POST",
+            "https://catalog.example/v1/hosted/bulk",
+            &vec![0; 2 * 1024 * 1024]
+        )
+        .is_ok());
+        for url in [
+            "https://catalog.example/v1/hosted/bulk?limit=1",
+            "https://catalog.example/v1/%68osted/bulk",
+            "https://catalog.example/anything",
+        ] {
+            assert!(validate("POST", url, &vec![0; MAX_REQUEST_BYTES + 1]).is_err());
+        }
+        assert!(validate(
+            "POST",
+            "https://catalog.example/v1/hosted/bulk",
+            &vec![0; MAX_RESPONSE_BYTES + 1]
+        )
+        .is_err());
+        assert!(validate(
             "PUT",
             "https://catalog.example/v1/descriptors",
             &vec![0; MAX_REQUEST_BYTES + 1]
@@ -257,7 +308,7 @@ mod tests {
             net::SocketAddr,
             sync::atomic::{AtomicUsize, Ordering},
         };
-        use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+        use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
         let cert = rcgen::generate_simple_self_signed(vec!["catalog.test".into()]).unwrap();
         let mut server_tls = rustls::ServerConfig::builder_with_provider(Arc::new(
             rustls::crypto::aws_lc_rs::default_provider(),
@@ -277,27 +328,43 @@ mod tests {
         let requests = Arc::new(AtomicUsize::new(0));
         let observed = requests.clone();
         let origin_task = tokio::spawn(async move {
-            for _ in 0..3 {
+            for _ in 0..4 {
                 let (tcp, _) = listener.accept().await.unwrap();
                 if let Ok(tls) = acceptor.accept(tcp).await {
                     let mut io = BufReader::new(tls);
                     let mut line = String::new();
                     io.read_line(&mut line).await.unwrap();
-                    assert_eq!(line, "GET /v1/catalog?limit=1 HTTP/1.1\r\n");
+                    let bulk = line == "POST /v1/hosted/bulk HTTP/1.1\r\n";
+                    assert!(bulk || line == "GET /v1/catalog?limit=1 HTTP/1.1\r\n");
+                    let mut content_length = 0;
                     loop {
                         line.clear();
                         io.read_line(&mut line).await.unwrap();
                         if line == "\r\n" {
                             break;
                         }
+                        if let Some(value) =
+                            line.to_ascii_lowercase().strip_prefix("content-length:")
+                        {
+                            content_length = value.trim().parse::<usize>().unwrap();
+                        }
+                    }
+                    if bulk {
+                        assert_eq!(content_length, 2 * 1024 * 1024);
+                        let mut body = vec![0; content_length];
+                        io.read_exact(&mut body).await.unwrap();
+                        assert!(body.iter().all(|b| *b == 0xa5));
                     }
                     observed.fetch_add(1, Ordering::SeqCst);
-                    io.get_mut()
-                        .write_all(
-                            b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\n{}",
-                        )
-                        .await
-                        .unwrap();
+                    if bulk {
+                        io.get_mut().write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 2097152\r\nConnection: close\r\n\r\n").await.unwrap();
+                        io.get_mut()
+                            .write_all(&vec![0x5a; 2 * 1024 * 1024])
+                            .await
+                            .unwrap();
+                    } else {
+                        io.get_mut().write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\n{}").await.unwrap();
+                    }
                 }
             }
         });
@@ -352,6 +419,22 @@ mod tests {
                     .unwrap();
             }));
             services.push(service);
+        }
+        // This scenario now includes a real multi-megabyte transfer. Qualify
+        // it within a genuinely fresh authority window, as the circuit fixture
+        // does; never extend production credentials to finish a test.
+        let now = now_unix();
+        let remaining = services
+            .iter()
+            .map(|service| service.introduction(now).expires_at.saturating_sub(now))
+            .min()
+            .unwrap();
+        if remaining < 120 {
+            tokio::time::sleep(Duration::from_secs(remaining + 1)).await;
+        }
+        let now = now_unix();
+        for service in &services {
+            directory.install(service.introduction(now), now).unwrap();
         }
         let connector = OnionConnector::new(directory)
             .with_carrier_config(CarrierConfig::fixture())
@@ -435,7 +518,7 @@ mod tests {
             "GET",
             "https://catalog.test/v1/catalog?limit=1",
             &[],
-            tls,
+            tls.clone(),
         )
         .await
         .unwrap();
@@ -443,6 +526,20 @@ mod tests {
         assert_eq!(response.body, b"{}");
         assert_eq!(requests.load(Ordering::SeqCst), 1);
         assert_eq!(resolved.load(Ordering::SeqCst), 3);
+        let bulk = request_with_tls(
+            connector,
+            &origins,
+            "POST",
+            "https://catalog.test/v1/hosted/bulk",
+            &vec![0xa5; 2 * 1024 * 1024],
+            tls,
+        )
+        .await
+        .unwrap();
+        assert_eq!(bulk.status, 200);
+        assert_eq!(bulk.body, vec![0x5a; 2 * 1024 * 1024]);
+        assert_eq!(requests.load(Ordering::SeqCst), 2);
+        assert_eq!(resolved.load(Ordering::SeqCst), 4);
         assert!(request_with_connector(
             connector,
             &[],
@@ -454,7 +551,7 @@ mod tests {
         .is_err());
         assert_eq!(
             resolved.load(Ordering::SeqCst),
-            3,
+            4,
             "unconfigured origin never reaches DNS"
         );
         // A client allowlist cannot override the egress relay's policy.
@@ -469,7 +566,7 @@ mod tests {
         .is_err());
         assert_eq!(
             resolved.load(Ordering::SeqCst),
-            3,
+            4,
             "egress refuses before DNS"
         );
         origin_task.await.unwrap();
@@ -499,7 +596,7 @@ mod tests {
             .is_err());
             assert_eq!(
                 resolved.load(Ordering::SeqCst),
-                3,
+                4,
                 "stopped entries cannot fall back"
             );
         }

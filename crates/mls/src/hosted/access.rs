@@ -9,6 +9,23 @@ pub struct HostedAccessCode {
 }
 
 impl HostedAccessCode {
+    /// The code permits reading public admission state, never member messages.
+    pub fn read_proof(
+        &self,
+        channel: [u8; 32],
+        query: [u8; 32],
+        expiry: u64,
+    ) -> Result<HostedReadProof, MlsError> {
+        HostedReadProof::sign(
+            &self.signer,
+            channel,
+            HostedReadScope::Snapshot,
+            query,
+            expiry,
+            1,
+        )
+    }
+
     pub fn generate() -> Result<Self, MlsError> {
         Ok(Self {
             signer: SignatureKeyPair::new(CIPHERSUITE.signature_algorithm()).map_err(mls)?,
@@ -73,6 +90,45 @@ impl HostedAccessCode {
             signature: self
                 .signer
                 .sign(&policy.join_payload(epoch, &leaf, name.as_bytes(), expiry, 0, 1))
+                .map_err(mls)?
+                .into(),
+        })
+    }
+
+    /// Use a registered single-use invitation instead of the reusable +k key.
+    /// Consumption is part of the accepted membership commit at every verifier.
+    pub fn invitation_permit(
+        &self,
+        public: &HostedObserver,
+        leaf: [u8; 32],
+        name: &str,
+        expiry: u64,
+    ) -> Result<JoinPermit, MlsError> {
+        let key = self.verification_key();
+        if !valid_name(name.as_bytes())
+            || public
+                .rules
+                .invitation_expiry(key)
+                .is_none_or(|until| expiry > until)
+        {
+            return Err(MlsError::Unauthorized);
+        }
+        let revision = public.rules.revision();
+        Ok(JoinPermit {
+            authority: 3,
+            issuer: Some(key),
+            revision,
+            expiry,
+            signature: self
+                .signer
+                .sign(&public.policy.join_payload(
+                    public.epoch(),
+                    &leaf,
+                    name.as_bytes(),
+                    expiry,
+                    revision,
+                    3,
+                ))
                 .map_err(mls)?
                 .into(),
         })

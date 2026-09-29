@@ -22,10 +22,12 @@ mod application;
 mod control;
 mod membership;
 pub use application::HostedMessageKind;
+mod read;
 mod rules;
 pub use access::HostedAccessCode;
 pub use control::{HostedControl, HostedControlEvent};
 use membership::validate_membership;
+pub use read::{HostedReadProof, HostedReadScope};
 pub use rules::{
     HostedAccessList, HostedDiscovery, HostedMode, HostedPolicyChange, HostedRole, HostedRules,
 };
@@ -98,7 +100,10 @@ impl HostedMessage {
         if self.channel != channel {
             return Err(MlsError::WrongChannel);
         }
-        if self.epoch != epoch || !members.any(|m| m.signature_key.as_slice() == self.member) {
+        if self.epoch != epoch {
+            return Err(MlsError::StaleState);
+        }
+        if !members.any(|m| m.signature_key.as_slice() == self.member) {
             return Err(MlsError::Unauthorized);
         }
         if self.tls_serialized_len() > self.kind.wire_limit()
@@ -311,7 +316,7 @@ impl HostedPolicy {
             return Err(MlsError::Unauthorized);
         }
         let permit = JoinPermit::tls_deserialize_exact(aad)?;
-        if (permit.authority == 2) != permit.issuer.is_some() {
+        if matches!(permit.authority, 2 | 3) != permit.issuer.is_some() {
             return Err(MlsError::Encoding);
         }
         if permit.revision != rules.revision() {
@@ -355,6 +360,20 @@ impl HostedPolicy {
                 rules.operator(key)
                     && !rules.departing(key)
                     && !rules.banned(key)
+                    && OpenMlsRustCrypto::default()
+                        .crypto()
+                        .verify_signature(
+                            CIPHERSUITE.signature_algorithm(),
+                            &payload,
+                            &key,
+                            permit.signature.as_slice(),
+                        )
+                        .is_ok()
+            }),
+            3 => permit.issuer.is_some_and(|key| {
+                rules
+                    .invitation_expiry(key)
+                    .is_some_and(|expiry| expiry > now && permit.expiry <= expiry)
                     && OpenMlsRustCrypto::default()
                         .crypto()
                         .verify_signature(
@@ -542,7 +561,7 @@ impl PreparedHostedJoin {
         let commit = commit.tls_serialize_detached()?;
         let info: MlsMessageOut = info.ok_or(MlsError::Encoding)?.into();
         let info = info.tls_serialize_detached()?;
-        let rules = if public.rules.departing(self.member_id()) {
+        let rules = if public.rules.departing(self.member_id()) || permit.authority == 3 {
             public.stage_join(&commit, &info, now)?.rules
         } else {
             public.rules.clone()
@@ -731,6 +750,30 @@ impl HostedSession {
 
     /// Authenticate both the service-visible envelope and the encrypted MLS
     /// sender. A false outer identity must not consume another sender's ratchet.
+    /// Authenticate a service-visible envelope, including our own durable sends,
+    /// without trying to decrypt a sender ratchet with its sending instance.
+    pub fn verify_hosted(&self, message: &HostedMessage) -> Result<(), MlsError> {
+        if !message.kind.allowed(&self.rules, message.member) {
+            return Err(MlsError::Unauthorized);
+        }
+        message.verify(
+            self.policy.channel_id(),
+            self.epoch(),
+            self.ctx.group.members(),
+            &self.ctx.backend,
+        )
+    }
+
+    pub fn verify_group_info(&self, bytes: &[u8]) -> Result<(), MlsError> {
+        let public = HostedObserver::from_info(self.policy.clone(), bytes)?;
+        if public.group.group_context() != self.ctx.group.public_group().group_context()
+            || public.group.export_ratchet_tree() != self.ctx.group.export_ratchet_tree()
+        {
+            return Err(MlsError::Unauthorized);
+        }
+        Ok(())
+    }
+
     pub fn receive_hosted(&mut self, message: &HostedMessage) -> Result<Vec<u8>, MlsError> {
         if self.pending_join.is_some() {
             return Err(MlsError::Unauthorized);
@@ -780,6 +823,12 @@ impl HostedSession {
         let payload = payload.to_vec();
         *self = candidate;
         Ok(payload)
+    }
+
+    /// Speculative copy for an atomic client transaction. Install at most one
+    /// copy as live state; never publish independently from both instances.
+    pub fn try_clone(&self) -> Result<Self, MlsError> {
+        self.fork()
     }
 
     fn fork(&self) -> Result<Self, MlsError> {
@@ -1033,6 +1082,7 @@ impl HostedSession {
         } else {
             Vec::new()
         };
+        let used_invitation = membership::used_invitation(&processed)?;
         let sender_index = match processed.sender() {
             Sender::Member(i) => i.u32(),
             _ => u32::MAX,
@@ -1045,6 +1095,7 @@ impl HostedSession {
                     .merge_staged_commit(&self.ctx.backend, *commit)
                     .map_err(mls)?;
                 self.rules.finish_removals(&removed);
+                self.rules.consume_invitation(used_invitation);
                 if self_removed {
                     return Err(MlsError::Removed);
                 }
@@ -1169,6 +1220,9 @@ impl HostedObserver {
     /// the commit and GroupInfo atomically before installing the returned state
     /// and returning acceptance. A malformed snapshot cannot strand admission.
     pub fn stage_join(&self, wire: &[u8], next_info: &[u8], now: u64) -> Result<Self, MlsError> {
+        if protocol(wire)?.epoch().as_u64() != self.epoch() {
+            return Err(MlsError::StaleState);
+        }
         let mut candidate = Self::from_info(self.policy.clone(), &self.info)?;
         candidate.rules = self.rules.clone();
         candidate.accept(wire, now)?;
@@ -1191,6 +1245,7 @@ impl HostedObserver {
             &processed,
             now,
         )?;
+        let used_invitation = membership::used_invitation(&processed)?;
         let ProcessedMessageContent::StagedCommitMessage(commit) = processed.into_content() else {
             return Err(MlsError::Unauthorized);
         };
@@ -1198,6 +1253,7 @@ impl HostedObserver {
             .merge_commit(self.backend.storage(), *commit)
             .map_err(mls)?;
         self.rules.finish_removals(&removed);
+        self.rules.consume_invitation(used_invitation);
         // Do not advertise the previous epoch's GroupInfo after advancing.
         self.info.clear();
         Ok(())

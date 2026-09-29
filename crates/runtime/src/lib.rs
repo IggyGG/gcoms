@@ -31,3 +31,6 @@ pub use gcoms_node::push_notifications;
 
 #[cfg(feature = "component-services")]
 pub mod components;
+
+#[cfg(feature = "hosted-channels")]
+pub mod hosted;

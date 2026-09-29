@@ -21,6 +21,10 @@ use persistence::{PersistenceCounters, SaveCause};
 pub type ErrorSink = Arc<dyn Fn(String) + Send + Sync>;
 
 struct Inner {
+    #[cfg(feature = "hosted-channels")]
+    hosted: tokio::sync::Mutex<Option<crate::hosted::HostedChannels>>,
+    #[cfg(feature = "hosted-channels")]
+    hosted_default: (std::path::PathBuf, zeroize::Zeroizing<[u8; 32]>),
     node: NodeHandle,
     #[cfg(feature = "component-services")]
     components: tokio::sync::RwLock<Option<Arc<dyn crate::components::ComponentServices>>>,
@@ -672,7 +676,22 @@ impl ProtocolRuntime {
                 zeroize::Zeroizing::new(hash.finalize().into()),
             )
         };
+        #[cfg(feature = "hosted-channels")]
+        let hosted_default = {
+            use sha2::{Digest, Sha256};
+            let mut hash = Sha256::new();
+            hash.update(b"gcoms.hosted-profiles.v1\0");
+            hash.update(identity_seed);
+            (
+                store.network_directory().with_extension("hosted"),
+                zeroize::Zeroizing::new(hash.finalize().into()),
+            )
+        };
         let runtime = Self(Arc::new(Inner {
+            #[cfg(feature = "hosted-channels")]
+            hosted: tokio::sync::Mutex::new(None),
+            #[cfg(feature = "hosted-channels")]
+            hosted_default,
             closing: std::sync::atomic::AtomicBool::new(false),
             #[cfg(feature = "files")]
             files: tokio::sync::Mutex::new(None),
@@ -795,6 +814,8 @@ impl ProtocolRuntime {
         self.0
             .closing
             .store(true, std::sync::atomic::Ordering::Release);
+        #[cfg(feature = "hosted-channels")]
+        self.0.hosted.lock().await.take();
         #[cfg(feature = "files")]
         if let Some(files) = self.0.files.lock().await.take() {
             files.shutdown().await;
@@ -1280,6 +1301,45 @@ impl GcClient for ProtocolClient {
 
     async fn configure_catalog_origins(&self, origins: Vec<String>) -> Result<(), SdkError> {
         self.embedded.configure_catalog_origins(origins).await
+    }
+    #[cfg(feature = "hosted-channels")]
+    async fn hosted_channels(
+        &self,
+        request: gcoms_sdk::hosted_client::Request,
+    ) -> Result<gcoms_sdk::hosted_client::Reply, SdkError> {
+        let mut slot = self.runtime.0.hosted.lock().await;
+        if self
+            .runtime
+            .0
+            .closing
+            .load(std::sync::atomic::Ordering::Acquire)
+        {
+            return Err(SdkError::ConnectionClosed);
+        }
+        if slot.is_none() {
+            let (directory, key) = &self.runtime.0.hosted_default;
+            match std::fs::create_dir(directory) {
+                Ok(()) => {
+                    crate::private_fs::make_private(directory, true).map_err(SdkError::Protocol)?
+                }
+                Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {}
+                Err(error) => return Err(SdkError::Protocol(error.to_string())),
+            }
+            // Embedded route handle prevents an Arc cycle through this runtime.
+            *slot = Some(
+                crate::hosted::HostedChannels::open(
+                    directory,
+                    **key,
+                    Arc::new(self.embedded.clone()),
+                )
+                .map_err(SdkError::Protocol)?,
+            );
+        }
+        slot.as_mut()
+            .ok_or(SdkError::ConnectionClosed)?
+            .request(request)
+            .await
+            .map_err(SdkError::Protocol)
     }
     async fn catalog_request(
         &self,

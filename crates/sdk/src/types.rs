@@ -563,6 +563,24 @@ pub trait GcClient: Send + Sync {
     ) -> Result<crate::CatalogHttpResponse, SdkError> {
         Err(SdkError::PermissionDenied)
     }
+    /// Explicit hosted-profile exchange over the configured protected catalog
+    /// route. IPC22 requires a distinct HostedChannels capability.
+    async fn hosted_request(
+        &self,
+        endpoint: &str,
+        request: crate::hosted::Request,
+    ) -> Result<crate::hosted::Reply, SdkError> {
+        crate::hosted::exchange(self, endpoint, request).await
+    }
+
+    /// Client-owned durable hosted channels; unsupported hosts fail explicitly.
+    async fn hosted_channels(
+        &self,
+        _request: crate::hosted_client::Request,
+    ) -> Result<crate::hosted_client::Reply, SdkError> {
+        Err(SdkError::PermissionDenied)
+    }
+
     async fn component_shell(
         &self,
         _component: [u8; 16],
@@ -903,6 +921,12 @@ impl<T: GcClient + ?Sized> GcClient for std::sync::Arc<T> {
         _request: crate::CatalogHttpRequest,
     ) -> Result<crate::CatalogHttpResponse, SdkError> {
         (**self).catalog_request(_request).await
+    }
+    async fn hosted_channels(
+        &self,
+        request: crate::hosted_client::Request,
+    ) -> Result<crate::hosted_client::Reply, SdkError> {
+        (**self).hosted_channels(request).await
     }
     async fn component_shell(
         &self,

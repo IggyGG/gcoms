@@ -55,6 +55,8 @@ pub enum HostedPolicyChange {
     Voice([u8; 32], u8),
     Kick([u8; 32]),
     Leave,
+    /// Register a one-use invitation verifier; zero expiry revokes it.
+    Invitation([u8; 32], u64),
 }
 
 /// Effective policy derived from the signed genesis and accepted control log.
@@ -75,6 +77,13 @@ pub struct HostedRules {
     exemptions: Vec<[u8; 32]>,
     invite_exceptions: Vec<[u8; 32]>,
     pending_removals: Vec<[u8; 32]>,
+    invitations: Vec<Invitation>,
+}
+
+#[derive(Clone, Debug, TlsSerialize, TlsDeserialize, TlsSize)]
+struct Invitation {
+    verifier: [u8; 32],
+    expiry: u64,
 }
 
 fn set_entry(list: &mut Vec<[u8; 32]>, key: [u8; 32], enabled: bool) -> Result<(), MlsError> {
@@ -114,9 +123,21 @@ impl HostedRules {
             exemptions: Vec::new(),
             invite_exceptions: Vec::new(),
             pending_removals: Vec::new(),
+            invitations: Vec::new(),
         }
     }
 
+    pub fn invitation_expiry(&self, verifier: [u8; 32]) -> Option<u64> {
+        self.invitations
+            .binary_search_by_key(&verifier, |entry| entry.verifier)
+            .ok()
+            .map(|index| self.invitations[index].expiry)
+    }
+    pub(super) fn consume_invitation(&mut self, verifier: Option<[u8; 32]>) {
+        if let Some(verifier) = verifier {
+            self.invitations.retain(|entry| entry.verifier != verifier);
+        }
+    }
     pub fn pending_removals(&self) -> &[[u8; 32]] {
         &self.pending_removals
     }
@@ -217,6 +238,30 @@ impl HostedRules {
         }
         let mut next = self.clone();
         match change {
+            HostedPolicyChange::Invitation(verifier, expiry) => {
+                match next
+                    .invitations
+                    .binary_search_by_key(verifier, |entry| entry.verifier)
+                {
+                    Ok(index) if *expiry == 0 => {
+                        next.invitations.remove(index);
+                    }
+                    Ok(index) => next.invitations[index].expiry = *expiry,
+                    Err(index) if *expiry != 0 => {
+                        if next.invitations.len() >= MAX_LIST {
+                            return Err(MlsError::GroupFull);
+                        }
+                        next.invitations.insert(
+                            index,
+                            Invitation {
+                                verifier: *verifier,
+                                expiry: *expiry,
+                            },
+                        );
+                    }
+                    _ => {}
+                }
+            }
             HostedPolicyChange::Kick(target) => {
                 if *target == self.owner || !contains(target) {
                     return Err(MlsError::Unauthorized);

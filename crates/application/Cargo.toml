@@ -10,6 +10,7 @@ publish.workspace = true
 
 [features]
 default = []
+hosted-channels = ["gcoms-runtime?/hosted-channels"]
 files = ["gcoms-runtime?/files", "tokio/fs"]
 push-notifications = ["gcoms-runtime?/push-notifications"]
 push-gateway = ["push-notifications", "embedded", "gcoms-runtime/push-gateway"]

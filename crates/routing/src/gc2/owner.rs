@@ -97,6 +97,18 @@ impl ReadyConnector {
     /// last relay resolves the hostname; the caller must authenticate WebPKI.
     /// An unavailable route never triggers an entry dial or legacy fallback.
     pub async fn connect_https(&self, host: &str, allowed_origins: &[String]) -> Result<BoxStream> {
+        self.connect_https_with_class(host, allowed_origins, TrafficClass::Interactive)
+            .await
+    }
+
+    /// Same ready-entry ownership and origin policy, with an explicit class for
+    /// large authenticated channel-state transfers. Never dials a new entry.
+    pub async fn connect_https_with_class(
+        &self,
+        host: &str,
+        allowed_origins: &[String],
+        class: TrafficClass,
+    ) -> Result<BoxStream> {
         if !crate::wire::valid_host(host) || !allowed_origins.iter().any(|origin| origin == host) {
             return Err("catalog origin is not configured".into());
         }
@@ -107,7 +119,7 @@ impl ReadyConnector {
         let (entry, middle) = self.select(&target, &[])?;
         timeout(
             Duration::from_secs(45),
-            entry.connect_via(TrafficClass::Interactive, &middle, &target, &[]),
+            entry.connect_via(class, &middle, &target, &[]),
         )
         .await
         .map_err(|_| "catalog circuit construction deadline exceeded")?

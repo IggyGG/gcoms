@@ -10,6 +10,9 @@ use std::io::{self, Read, Seek, SeekFrom, Write};
 use std::path::Path;
 use tls_codec::{Deserialize, Serialize, TlsDeserialize, TlsSerialize, TlsSize, VLBytes};
 
+#[cfg(feature = "http")]
+pub mod api;
+
 const MAGIC: &[u8; 8] = b"GCHLOG01";
 const MAX_FRAME: usize = 2 * MAX_WIRE_BYTES + 64 * 1024;
 const JOIN: u8 = 1;
@@ -89,6 +92,16 @@ struct Header {
     genesis: VLBytes,
 }
 
+/// Canonical transcript anchor, independently reproducible by member clients.
+pub fn genesis_hash(policy: &HostedPolicy, genesis: &[u8]) -> Result<[u8; 32], Error> {
+    let header = Header {
+        channel: policy.channel_id(),
+        policy: policy.encode()?.into(),
+        genesis: genesis.to_vec().into(),
+    };
+    Ok(checksum(&header.tls_serialize_detached()?))
+}
+
 /// An ordered replay item. Membership and application content remain distinct.
 #[derive(Clone, Debug, TlsSerialize, TlsDeserialize, TlsSize)]
 pub struct Record {
@@ -99,7 +112,40 @@ pub struct Record {
     first: VLBytes,
     second: VLBytes,
 }
+/// Reproduce the service content ID before publishing. Header sequence and
+/// acceptance time are excluded so exact retries remain stable.
+pub fn content_id(kind: RecordKind, first: &[u8], second: &[u8]) -> [u8; 32] {
+    let mut h = Sha256::new();
+    h.update(b"gcoms/hosted/record-id/v1");
+    h.update([kind as u8]);
+    h.update((first.len() as u64).to_be_bytes());
+    h.update(first);
+    h.update((second.len() as u64).to_be_bytes());
+    h.update(second);
+    h.finalize().into()
+}
+#[derive(Clone, Copy)]
+#[repr(u8)]
+pub enum RecordKind {
+    Membership = 1,
+    Message = 2,
+    Control = 3,
+}
+
 impl Record {
+    pub fn encode(&self) -> Result<Vec<u8>, Error> {
+        Ok(self.tls_serialize_detached()?)
+    }
+    pub fn decode(bytes: &[u8]) -> Result<Self, Error> {
+        if bytes.len() > MAX_FRAME {
+            return Err(Error::Invalid("record exceeds bound".into()));
+        }
+        Ok(Self::tls_deserialize_exact(bytes)?)
+    }
+    pub fn hash(&self) -> Result<[u8; 32], Error> {
+        Ok(checksum(&self.encode()?))
+    }
+
     pub fn control(&self) -> Result<Option<HostedControl>, Error> {
         if self.kind == CONTROL {
             Ok(Some(HostedControl::decode(self.first.as_slice())?))
@@ -117,7 +163,7 @@ impl Record {
             Ok(None)
         }
     }
-    fn id(&self) -> [u8; 32] {
+    pub fn id(&self) -> [u8; 32] {
         let mut h = Sha256::new();
         h.update(b"gcoms/hosted/record-id/v1");
         h.update([self.kind]);
@@ -138,6 +184,8 @@ struct Index {
 pub struct ChannelLog {
     file: File,
     observer: HostedObserver,
+    genesis: Vec<u8>,
+    read_until: HashMap<[u8; 32], u64>,
     header_hash: [u8; 32],
     index: Vec<Index>,
     ids: HashMap<[u8; 32], usize>,
@@ -240,6 +288,8 @@ impl ChannelLog {
         Ok(Self {
             file,
             observer,
+            genesis: genesis.to_vec(),
+            read_until: HashMap::new(),
             header_hash: checksum(&header),
             index: Vec::new(),
             ids: HashMap::new(),
@@ -277,6 +327,8 @@ impl ChannelLog {
         let mut store = Self {
             file,
             observer,
+            genesis: header.genesis.as_slice().to_vec(),
+            read_until: HashMap::new(),
             header_hash: checksum(&header_bytes),
             index: Vec::new(),
             ids: HashMap::new(),
@@ -306,6 +358,7 @@ impl ChannelLog {
                 return Err(Error::Invalid("duplicate log record".into()));
             }
             if let Some(next) = store.validate(&record)? {
+                store.track_departures(&next, record.sequence);
                 store.observer = next;
             }
             let receipt = Acceptance {
@@ -321,6 +374,18 @@ impl ChannelLog {
         Ok(store)
     }
 
+    fn track_departures(&mut self, next: &HostedObserver, sequence: u64) {
+        let remaining = next.members();
+        for member in self.observer.members() {
+            if !remaining.contains(&member) {
+                self.read_until.insert(member, sequence);
+            }
+        }
+    }
+
+    pub fn genesis(&self) -> &[u8] {
+        &self.genesis
+    }
     pub fn observer(&self) -> &HostedObserver {
         &self.observer
     }
@@ -442,6 +507,7 @@ impl ChannelLog {
         self.bytes += size;
         self.last_time = now;
         if let Some(next) = next {
+            self.track_departures(&next, record.sequence);
             self.observer = next;
         }
         self.poisoned = false;

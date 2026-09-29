@@ -264,6 +264,7 @@ pub(crate) fn capabilities() -> Vec<gcoms_sdk::ipc::Capability> {
         DurableApplication,
         OpaqueTransfer,
         CatalogAccess,
+        HostedChannels,
         ProfileAdmin,
     ]
 }

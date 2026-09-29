@@ -164,3 +164,51 @@ strict all-target/all-feature MLS and channel-service Clippy. The earlier remova
 run's duplicate-name fixture failure is retained: the honest join helper had
 started refusing the attack before the negative service/member checks could run.
 The service/member negative-control coverage is preserved in the corrected suite.
+
+### Hosted service transport and durable client checkpoint
+
+The ciphertext service now has a versioned, bounded HTTP upstream API suitable
+for an installed TLS origin. Creation is denied by default; an operator must
+configure a creator allowlist or explicitly enable public creation. Read proofs
+bind channel, scope, query and expiry. Admission snapshots contain public
+membership/policy only; message records require current or bounded historical
+member authority. Removed clients can read through their removal record after
+restart, never later records. Single-use invitation verifiers are consumed by
+accepted membership commits, separately from reusable admission codes.
+
+SDK IPC22 appends HostedChannels authorization and typed client operations.
+Signed network defaults supply endpoint candidates. Catalog routing retains
+origin restrictions, remote DNS, WebPKI verification and no direct fallback.
+Large public trees/records use the existing observable bulk class; small chat
+and polling retain the covered class. A separate user decision remains pending
+on large receipt-bundle privacy versus the five-second acknowledgement target:
+499 individual 64-byte signatures already exceed eight seconds at 4 KiB/s,
+before framing. No timing requirement is silently considered satisfied.
+
+The opt-in runtime client stores MLS state, exact pending wires, invitation
+secrets, ordered cursor and unarchived application events in a separate encrypted
+sidecar. Uncertain transport responses retry exact wires. Explicitly refused
+stale operations replay current ordered state before being rebuilt. Competing
+admissions retain their signing identity. A failed checkpoint poisons the live
+client until disk state is reopened. Applications must archive events durably
+before CommitEvents. Service acceptance remains distinct from recipient delivery.
+
+Validation retained locally: `shared-api-02.log` routing 3/3 (including 2 MiB in
+both directions through legacy and GC2); `shared-api-03.log` SDK 68 and network
+client 17; `shared-api-clippy-01.log` corrected strict routing/SDK/network/client
+facade check. The initial package-name typo and credential-boundary fixture
+failures are retained. `hosted-api-final-01.log` validates service admission,
+reader boundaries, single-use invites and strict MLS/service checks. Runtime
+`runtime-client-04.log` passes four real-service recovery/storage tests and
+strict runtime/SDK/application checks. Subsequent edits require a fresh gate.
+
+Remaining: GChat integration, generated contracts, actual recipient receipt
+aggregation, all independent-contact/file/block behavior, completed client
+workflows, operator/bot experience, and full application/network/native release
+qualification. The optional runtime API is an implementation checkpoint, not an
+IRC-parity release. There is no automatic migration of legacy channels or PMs.
+
+`runtime-client-05.log` validates the refreshed source, including atomic invite
+secret storage: 127 tests pass, two explicit scale ignores, strict
+MLS/service/runtime/SDK/application checks. The source-bound receipt is
+[retained here](evidence/irc-hosted-client-20260929/summary.json).

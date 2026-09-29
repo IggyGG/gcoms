@@ -274,6 +274,18 @@ impl NetworkClient {
             state.sequence,
         )
     }
+    /// Candidate hosted endpoints are derived only from current signed network
+    /// defaults. Reachability and profile support must be negotiated through the
+    /// application's protected route; this does not issue direct HTTP traffic.
+    pub fn hosted_endpoints(&self) -> Result<Vec<String>> {
+        let defaults = self.current_defaults()?;
+        Ok(defaults
+            .provider_urls
+            .into_iter()
+            .map(|base| format!("{}v1/hosted", base.trim_end_matches('/').to_owned() + "/"))
+            .collect())
+    }
+
     pub fn current_defaults(&self) -> Result<NetworkDefaults> {
         self.transaction(|state| self.selected_defaults(state, now_unix()))
     }

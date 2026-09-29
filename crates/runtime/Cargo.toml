@@ -14,10 +14,14 @@ relay-host = ["gcoms-node/relay-host"]
 push-notifications = ["gcoms-node/push-notifications"]
 push-gateway = ["push-notifications", "relay-host", "gcoms-node/push-gateway"]
 component-services = []
+hosted-channels = ["dep:gcoms-mls", "dep:gcoms-channel-service", "dep:sha2"]
 files = ["dep:gcoms-file-transfer", "dep:sha2"]
 gc2-carrier = ["gcoms-node/experimental-gc2", "gcoms-network-client/experimental-gc2"]
 
 [dependencies]
+gcoms-mls = { version = "0.1.0", path = "../mls", optional = true, features = ["hosted-channels", "client-persist"] }
+gcoms-channel-service = { version = "0.1.0", path = "../channel-service", optional = true, default-features = false }
+
 gcoms-file-transfer = { version = "0.1.0", path = "../file-transfer", optional = true }
 sha2 = { version = "0.10", optional = true }
 gcoms-core = { version = "0.1.0", path = "../core" }
@@ -45,6 +49,7 @@ url = "2"
 base64 = "0.22"
 
 [dev-dependencies]
+gcoms-channel-service = { version = "0.1.0", path = "../channel-service", features = ["http"] }
 gcoms-core = { version = "0.1.0", path = "../core" }
 axum = "0.8"
 rcgen = { version = "0.13", default-features = false, features = ["aws_lc_rs", "pem"] }
