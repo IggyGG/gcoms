@@ -668,3 +668,8 @@ the protected route. Explicit catalog replacement/clearing must preserve current
 provider authority, malformed updates must retain prior configuration, and an
 unsigned host must fail the origin gate. No test installs a direct fallback.
 Repeat the source-bound real GChat network journey after this fix.
+
+The native relay rollout must preserve existing catalog hosts and configure only
+approved signed-provider HTTPS destinations. Retain each host's pre/post PID,
+active state and restart count, and stop the rollout on any failure. Process and
+listener readiness alone never substitute for protected GChat delivery checks.

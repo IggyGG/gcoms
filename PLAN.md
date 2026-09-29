@@ -650,3 +650,12 @@ unsigned destinations. Local queue/history operations remain independent of trus
 refresh. `hosted-origins-02.log` passes the real runtime authority regression and
 strict seven-package all-target Clippy; the initial test-fixture compile failure
 is retained. The corrected release pair and live journey are being rebuilt.
+
+### IRC-2 relay HTTPS egress configuration — 2026-09-30
+
+Read-only preflight found all eight installed relay allowlists empty. The hosted
+service requires the two exact signed provider hosts at the egress boundary as
+well as the client. Added a bounded single-host rolling configuration helper:
+reviewable dry run, preserve prior origins, refuse an existing task drop-in,
+validate the unit and restore the prior configuration on failed restart. The
+first dry run is correct; serial rollout and protected application checks follow.

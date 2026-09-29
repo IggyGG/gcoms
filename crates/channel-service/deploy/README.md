@@ -31,3 +31,12 @@ reload the validated boundary. Preserve the state directory and retained binary;
 never delete channel logs or restore an older log snapshot over accepted writes.
 An older executable may be selected only after its retained-state compatibility
 check passes. This single-writer deployment does not claim replica failover.
+
+The protected routing relays must also permit the signed provider hostnames as
+HTTPS egress destinations. Configure `GC_CATALOG_ORIGINS` with those exact hosts,
+preserving existing explicitly authorized catalog hosts and the eight-host bound.
+`relay-origins.py --origin HOST` prints the proposed addition; `--apply` creates a
+new task-specific systemd drop-in and rolls that one relay, reverting its addition
+if the process/listener fails to return. Run serially and retain every result.
+Its listener check is not application qualification. Ordinary destination, private
+address, port, TLS and circuit authentication checks remain in force.
