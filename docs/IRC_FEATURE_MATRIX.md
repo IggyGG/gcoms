@@ -24,7 +24,7 @@ A source mapping does not imply an installed release or a 500-member network pas
 | Notices | `/notice` in hosted rooms and contacts | Implemented; notice-reply loops forbidden |
 | Actions | `/me` and typed action rendering | Implemented across shared service/UI/TUI |
 | Nicknames | `/nick`; identity remains channel-scoped and stable | Implemented; ambiguous names require an explicit scoped ID |
-| Historical names | `/whowas nickname-or-scoped-id` | New bounded local history; current validation in progress |
+| Historical names | `/whowas nickname-or-scoped-id` | Implemented; bounded archive/rename/departure/reopen/scope checks pass |
 | Topic | `/topic`, `/topic --clear`; encrypted authorized handoff | Implemented; offline newcomer sees Topic pending until an authorized member returns |
 | Operators and voice | `/mode +o/-o/+v/-v member` | Implemented; service and receiver enforce signed policy |
 | Moderated and topic-restricted rooms | `/mode +m/-m`, `/mode +t/-t` | Implemented; roles checked against accepted policy |

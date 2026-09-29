@@ -49,6 +49,7 @@ url = "2"
 base64 = "0.22"
 
 [dev-dependencies]
+gcoms-network = { version = "0.1.0", path = "../network" }
 gcoms-channel-service = { version = "0.1.0", path = "../channel-service", features = ["http"] }
 gcoms-core = { version = "0.1.0", path = "../core" }
 axum = "0.8"

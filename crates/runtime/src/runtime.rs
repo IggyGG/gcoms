@@ -25,6 +25,8 @@ struct Inner {
     hosted: crate::hosted::owner::Owner,
     #[cfg(feature = "hosted-channels")]
     hosted_default: (std::path::PathBuf, zeroize::Zeroizing<[u8; 32]>),
+    #[cfg(feature = "hosted-channels")]
+    catalog_origins: std::sync::Mutex<Vec<String>>,
     node: NodeHandle,
     #[cfg(feature = "component-services")]
     components: tokio::sync::RwLock<Option<Arc<dyn crate::components::ComponentServices>>>,
@@ -79,6 +81,40 @@ pub struct ProtocolClient {
 }
 
 impl ProtocolRuntime {
+    /// Preserve explicitly configured catalog hosts while refreshing hosted
+    /// providers from verified network defaults. Invitation URLs never authorize
+    /// a destination. Keep local queue/history operations independent of trust
+    /// refresh and network I/O.
+    #[cfg(feature = "hosted-channels")]
+    fn configure_hosted_origins(&self, requested: Option<Vec<String>>) -> Result<(), String> {
+        if requested.as_ref().is_some_and(|hosts| {
+            hosts.len() > 8
+                || hosts
+                    .iter()
+                    .any(|host| !gcoms_routing::wire::valid_host(host))
+        }) {
+            return Err("invalid catalog origin allowlist".into());
+        }
+        let mut explicit = self
+            .0
+            .catalog_origins
+            .lock()
+            .map_err(|_| "catalog configuration lock poisoned")?;
+        let mut origins = requested.as_ref().unwrap_or(&explicit).clone();
+        if let Some(network) = &self.0.network {
+            for provider in network.current_defaults()?.provider_urls {
+                let url = url::Url::parse(&provider).map_err(|_| "invalid signed provider")?;
+                origins.push(url.host_str().ok_or("signed provider has no host")?.into());
+            }
+        }
+        origins.sort();
+        origins.dedup();
+        self.0.node.configure_catalog_origins(origins)?;
+        if let Some(requested) = requested {
+            *explicit = requested;
+        }
+        Ok(())
+    }
     /// Opt-in local aggregate diagnostics; no payloads or identities.
     #[cfg(feature = "files")]
     pub async fn enable_file_diagnostics(&self) -> Result<(), SdkError> {
@@ -626,6 +662,12 @@ impl ProtocolRuntime {
                 node_state: Some(node_state),
             })
         });
+        #[cfg(feature = "hosted-channels")]
+        let catalog_origins = if profile.is_production() {
+            gcoms_node::node::RoutingConfig::from_environment()?.catalog_origins
+        } else {
+            Vec::new()
+        };
         let node_config = NodeConfig {
             seed: identity_seed,
             listen,
@@ -714,6 +756,8 @@ impl ProtocolRuntime {
             hosted: crate::hosted::owner::Owner::default(),
             #[cfg(feature = "hosted-channels")]
             hosted_default,
+            #[cfg(feature = "hosted-channels")]
+            catalog_origins: std::sync::Mutex::new(catalog_origins),
             closing: std::sync::atomic::AtomicBool::new(false),
             #[cfg(feature = "files")]
             files: tokio::sync::Mutex::new(None),
@@ -1336,6 +1380,13 @@ impl GcClient for ProtocolClient {
     }
 
     async fn configure_catalog_origins(&self, origins: Vec<String>) -> Result<(), SdkError> {
+        #[cfg(feature = "hosted-channels")]
+        {
+            self.runtime
+                .configure_hosted_origins(Some(origins))
+                .map_err(SdkError::Protocol)
+        }
+        #[cfg(not(feature = "hosted-channels"))]
         self.embedded.configure_catalog_origins(origins).await
     }
     #[cfg(feature = "hosted-channels")]
@@ -1350,6 +1401,19 @@ impl GcClient for ProtocolClient {
             .load(std::sync::atomic::Ordering::Acquire)
         {
             return Err(SdkError::ConnectionClosed);
+        }
+        use gcoms_sdk::hosted_client::Request;
+        if matches!(
+            &request,
+            Request::Join { .. }
+                | Request::Sync { .. }
+                | Request::Directory { .. }
+                | Request::PutBlob { .. }
+                | Request::GetBlob { .. }
+        ) {
+            self.runtime
+                .configure_hosted_origins(None)
+                .map_err(SdkError::Protocol)?;
         }
         self.runtime
             .0
@@ -1824,6 +1888,8 @@ fn central_reserved(ownership: &Option<CentralPartition>, body: &[u8]) -> bool {
     })
 }
 
+#[cfg(all(test, feature = "hosted-channels", feature = "gc2-carrier"))]
+mod hosted_origins_tests;
 #[cfg(test)]
 mod persistence_tests;
 #[cfg(all(test, feature = "files"))]

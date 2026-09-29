@@ -639,3 +639,14 @@ the installed signed origin, with retained-state rollback instructions. The
 source255f9cd release binary builds successfully on the bounded HEL worker; its
 hash is retained in docs/evidence/irc-hosted-service-20260930/build.json. Deployment
 and actual protected-network/GChat qualification remain in progress.
+
+### IRC-2 installed-network origin regression — 2026-09-30
+
+The first connected live GChat run exposed missing hosted-provider authorization:
+endpoints came from signed defaults but the protected route had an empty allowlist.
+The runtime now merges current verified providers with the explicit catalog hosts
+before hosted network operations, preserving the eight-host bound and refusing
+unsigned destinations. Local queue/history operations remain independent of trust
+refresh. `hosted-origins-02.log` passes the real runtime authority regression and
+strict seven-package all-target Clippy; the initial test-fixture compile failure
+is retained. The corrected release pair and live journey are being rebuilt.

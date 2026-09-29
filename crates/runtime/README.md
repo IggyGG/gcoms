@@ -15,3 +15,9 @@ encrypted protocol profile. File completion still requires the file protocol's
 verification and durable cache; a transport receipt is not completion. Ordinary
 private text and stateful events retain their profile-save barriers and errors,
 as do explicit save and shutdown.
+
+Hosted requests authorize only providers from the current verified signed network
+defaults, merged with the host's explicit catalog allowlist. Configuring ordinary
+catalogs does not drop hosted origins. Unsigned invitation destinations remain
+refused; local history and durable queue admission do not refresh network trust.
+The origin regression uses the existing workspace network crate as a test dependency.

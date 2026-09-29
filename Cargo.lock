@@ -1291,6 +1291,7 @@ dependencies = [
  "gcoms-crypto",
  "gcoms-file-transfer",
  "gcoms-mls",
+ "gcoms-network",
  "gcoms-network-client",
  "gcoms-node",
  "gcoms-private-fs",

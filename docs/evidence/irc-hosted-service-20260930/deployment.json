@@ -1,0 +1,58 @@
+{
+  "time_unix": 1790719826,
+  "origin": "https://bootstrap-hel.gchat.boo",
+  "transport": "direct HTTPS readiness only",
+  "source": "255f9cd",
+  "checks": {
+    "/v1/hosted": {
+      "http_status": 200,
+      "bytes": 552,
+      "reply": {
+        "kind": "info",
+        "value": {
+          "extensions": [
+            "ciphertext-pieces-v1",
+            "public-directory-v1"
+          ],
+          "requests_per_second": 1000,
+          "source_requests_per_second": 1000,
+          "version": 1,
+          "profiles": [
+            "hosted-mls-pq-v1"
+          ],
+          "public_creation": false,
+          "max_members": 500,
+          "max_page_records": 128,
+          "max_http_bytes": 4194304,
+          "motd": "Hosted channels are being qualified. Delivery receipts remain covered and can take longer in large rooms.",
+          "rules": "Private channels are the default. Members control admission, moderation and publication.",
+          "operator_contact": "Your installed network administrator"
+        }
+      }
+    },
+    "/v1/hosted/bulk": {
+      "http_status": 400,
+      "bytes": 88,
+      "reply": {
+        "kind": "fault",
+        "value": {
+          "code": "invalid",
+          "message": "incorrect traffic class endpoint"
+        }
+      }
+    },
+    "/healthz": {
+      "http_status": 200,
+      "bytes": 0
+    },
+    "/readyz": {
+      "http_status": 200,
+      "bytes": 0
+    },
+    "/v1/network-defaults": {
+      "http_status": 200,
+      "bytes": 6284
+    }
+  },
+  "first_probe_correction": "Info on bulk returned the required 400 traffic-class rejection; test expectation corrected without changing service."
+}

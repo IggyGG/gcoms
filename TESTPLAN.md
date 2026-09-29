@@ -659,3 +659,12 @@ validate the existing TLS boundary before reload, and probe hosted Info plus the
 pre-existing health/defaults paths. Keep direct HTTPS readiness separate from
 actual installed-network GChat admission, message receipts, recovery and files.
 Require state-preserving restart and rollback without discarding accepted logs.
+
+## Installed hosted origin authority
+
+Run `signed_hosted_origins_preserve_catalog_configuration_and_reject_unsigned_hosts`.
+A hosted Directory operation must authorize the signed provider before attempting
+the protected route. Explicit catalog replacement/clearing must preserve current
+provider authority, malformed updates must retain prior configuration, and an
+unsigned host must fail the origin gate. No test installs a direct fallback.
+Repeat the source-bound real GChat network journey after this fix.
