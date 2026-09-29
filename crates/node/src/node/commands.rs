@@ -902,7 +902,13 @@ pub(crate) fn spawn_command_loop(ctx: CommandLoopContext) -> tokio::task::JoinHa
                                     &channel,
                                     PresenceMode::Invisible,
                                     0,
-                                )?;
+                                )
+                                .map_err(|error| {
+                                    // Local opt-out was already committed above.
+                                    // Preparation can fail during membership recovery
+                                    // just like the later network withdrawal can.
+                                    format!("presence disabled locally; withdrawal failed: {error}")
+                                })?;
                                 let ticket = complete.register();
                                 drop(prepare);
                                 let _ticket = ticket.wait().await;
