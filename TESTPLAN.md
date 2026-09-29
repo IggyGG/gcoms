@@ -528,3 +528,16 @@ capabilities and original deadlines, and no application delivery event. The old
 replacement-only branch must fail this case. Retain the capacity-refusal test,
 failed-checkpoint refusal and existing owner-alias restoration/expiry tests.
 The personal-profile invitation/send/kick check is a separate live receipt.
+
+## Owner announcement backpressure
+
+The pinned-transport retained-inbox fixture now includes a peer and fills the
+shared retained-control allowance. The old runtime must fail with the exact
+live `direct retained payload admission` error. The corrected runtime must
+finish authenticated restoration, keep every role/capability and never extend
+its deadline, while announcement stays pending. Releasing capacity then permits
+normal durable announcement; failed storage must leave retry pending without
+an event or new pending record, and a completed retry must not duplicate it.
+Retain ordinary replacement progress, owner checkpoint refusal, contact-update
+encryption/archive checks and the original invalid millisecond equality result
+(deadline conversion may floor a remainder, never increase authority).

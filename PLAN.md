@@ -551,3 +551,18 @@ inbox now gets the existing authenticated restoration path again, inside the sam
 outer deadline/backoff. Normal replacement remains available below the bound.
 No queue or message is discarded; sealed authority, expiry, cleanup bounds and
 failed-checkpoint refusal remain unchanged. `codematch=unreachable`.
+
+## Keep receiving while owner announcements are backpressured (2026-09-29)
+
+After explicit provider configuration, live recovery still failed with local
+`direct retained payload admission: relay lane queue is full`. Authenticated
+queue restoration and its durable owner checkpoint had already succeeded; peer
+announcement admission then incorrectly kept all inbox subscriptions paused.
+
+Routed owner recovery/replacement now marks announcement pending and resumes
+receiving after its existing durable authority checks. The normal owner loop
+retries announcement admission without blocking inbox or channel recovery;
+admitted control records still belong to durable direct maintenance. Every
+restoration, including after restart, recreates the announcement intent. Full
+outboxes do not silently mark announcements complete. No retained payload,
+capability, authority deadline, queue bound or delivery ACK is discarded.

@@ -6256,6 +6256,7 @@ pub(in crate::node) mod tests {
         );
     }
 
+    #[cfg(feature = "experimental-gc2")]
     include!("persist/inbox_capacity_recovery_tests.rs");
 
     #[tokio::test]

@@ -1015,7 +1015,7 @@ pub(crate) fn queue_contact_updates(st: &mut NodeState) -> Result<Vec<DirectDeli
     let mut deliveries = Vec::new();
     for peer in peers {
         if st.pending_1to1.len() >= 1024 {
-            break;
+            return Err("contact update outbox capacity reached".into());
         }
         if !st.peer_routes.contains_key(&peer) {
             continue;
@@ -1180,11 +1180,17 @@ pub(crate) async fn install_inbox_relay(
             st.unannounced_contact_deadlines = Some((timing.receive_until, timing.abandon_at));
             Ok(())
         })?;
-        // Installation is complete after the owned queues and their exact
-        // peer updates are durable. The bounded direct maintenance owner will
-        // send those updates on their retained retry schedule. Waiting for a
-        // peer here can exhaust recovery after the replacement already committed.
-        queue_contact_updates(&mut st)?;
+        // The owned queues are already durable. Routed owners must resume
+        // receiving before peer-update backpressure can clear. Every recovery
+        // (including restart) reschedules announcement; admitted records use the
+        // existing durable direct-maintenance retry owner.
+        if let Some(runtime) = &st.routing {
+            runtime
+                .owner_announcement_pending
+                .store(true, std::sync::atomic::Ordering::Release);
+        } else {
+            queue_contact_updates(&mut st)?;
+        }
         (st.info.clone(), st.local_contact_generation)
     };
     let _ = events.send(Ev::IdentityUpdated { info, generation });

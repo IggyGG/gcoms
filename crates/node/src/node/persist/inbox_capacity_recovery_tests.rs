@@ -2,6 +2,15 @@
 // durable owner restoration used after repeated recovery failures.
 #[tokio::test]
 async fn full_inbox_cleanup_retains_authenticated_recovery_after_failover_rounds() {
+    retained_inbox_fixture(false).await;
+}
+
+#[tokio::test]
+async fn retained_inbox_recovers_while_peer_announcement_capacity_is_full() {
+    retained_inbox_fixture(true).await;
+}
+
+async fn retained_inbox_fixture(saturated: bool) {
     use std::time::Duration;
     use tokio::time::timeout;
     let identity = TlsIdentity::generate().unwrap();
@@ -46,7 +55,11 @@ async fn full_inbox_cleanup_retains_authenticated_recovery_after_failover_rounds
             });
         }
     });
-    let mut node = state();
+    let mut node = if saturated {
+        direct_fixture().0
+    } else {
+        state()
+    };
     node.scheduler.shutdown();
     let scheduler = RelayScheduler::with_profile(
         Arc::new(Tp1Client::new().unwrap()),
@@ -91,6 +104,24 @@ async fn full_inbox_cleanup_retains_authenticated_recovery_after_failover_rounds
         let wire = owner_aliases::seal_current(st).unwrap();
         owner_aliases::open_unbound(&wire, &st.identity_seed).unwrap()
     };
+    let pressure = scheduler.retained_account();
+    if saturated {
+        node.gc2_sessions = true;
+        if let Some(update) = node.stage_retained(None, true).unwrap() {
+            update.commit();
+        }
+        let usage = node.retained_payload(None).unwrap();
+        pressure
+            .stage(
+                crate::scheduler::PayloadUsage {
+                    items: 2048 - usage.items,
+                    bytes: 4 * 1024 * 1024 - usage.bytes,
+                },
+                crate::scheduler::RetainedPriority::Control,
+            )
+            .unwrap()
+            .commit();
+    }
     let before = record(&node);
     let state = Arc::new(Mutex::new(node));
     let (events, mut event_rx) = broadcast::channel(8);
@@ -134,8 +165,12 @@ async fn full_inbox_cleanup_retains_authenticated_recovery_after_failover_rounds
             old.provision, new.provision,
             "queue identities and authority retained"
         );
-        assert_eq!(old.deadline_ms, new.deadline_ms, "no deadline extension");
-        assert_eq!(old.receive_until_ms, new.receive_until_ms);
+        // Converting retained millisecond deadlines through Instant may floor
+        // a sub-millisecond remainder; it must never add authority.
+        assert!(new.deadline_ms <= old.deadline_ms, "no deadline extension");
+        assert!(old.deadline_ms - new.deadline_ms <= 2);
+        assert!(new.receive_until_ms <= old.receive_until_ms);
+        assert!(old.receive_until_ms - new.receive_until_ms <= 2);
     }
     assert!(
         !saved.lock().unwrap().is_empty(),
@@ -150,6 +185,49 @@ async fn full_inbox_cleanup_retains_authenticated_recovery_after_failover_rounds
         "no message delivery manufactured"
     );
     assert!(!st.owner_transition_failed);
+    drop(st);
+    if saturated {
+        use std::sync::atomic::Ordering;
+        assert!(runtime.owner_announcement_pending.load(Ordering::Acquire));
+        let error = routing::announce_owner(&state, &events, &runtime).unwrap_err();
+        assert!(
+            error.contains("direct retained payload admission"),
+            "{error}"
+        );
+        assert!(state.lock().unwrap().pending_1to1.is_empty());
+        assert!(runtime.owner_announcement_pending.load(Ordering::Acquire));
+        drop(pressure);
+        // A storage failure also retains the pending announcement and cannot
+        // claim publication. Restored receiving authority remains unchanged.
+        let sink = state.lock().unwrap().durable_state_sink.clone();
+        state.lock().unwrap().durable_state_sink =
+            Some(Arc::new(|_| Err("announcement storage failpoint".into())));
+        assert!(routing::announce_owner(&state, &events, &runtime).is_err());
+        assert!(runtime.owner_announcement_pending.load(Ordering::Acquire));
+        assert!(state.lock().unwrap().pending_1to1.is_empty());
+        assert!(event_rx.try_recv().is_err());
+        state.lock().unwrap().durable_state_sink = sink;
+        routing::announce_owner(&state, &events, &runtime).unwrap();
+        assert!(!runtime.owner_announcement_pending.load(Ordering::Acquire));
+        let st = state.lock().unwrap();
+        assert!(!st.pending_1to1.is_empty());
+        assert!(st.pending_1to1.values().all(|p| !p.application_event));
+        let count = st.pending_1to1.len();
+        let archived = decode_v2(&saved.lock().unwrap(), &st.identity_seed).unwrap();
+        assert_eq!(archived.pending_direct.len(), count);
+        drop(st);
+        routing::announce_owner(&state, &events, &runtime).unwrap();
+        assert_eq!(
+            state.lock().unwrap().pending_1to1.len(),
+            count,
+            "completed retry is not duplicated"
+        );
+        assert!(matches!(
+            event_rx.try_recv(),
+            Ok(Ev::IdentityUpdated { .. })
+        ));
+        assert!(event_rx.try_recv().is_err());
+    }
 }
 
 #[tokio::test]
