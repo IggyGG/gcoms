@@ -608,3 +608,14 @@ IPC23 capability/version requirements and upload zeroization. Node's
 `file_records_are_bulk_while_chat_control_and_acknowledgements_stay_interactive`
 checks both root-contact and component-wrapped scheduling, including retry records.
 Strict affected-package Clippy and actual GChat/500-member flows remain required.
+
+### IRC file recovery follow-up
+
+Run `modern_` across runtime/SDK/application with hosted and file features, the
+full `gcoms-file-transfer` suite, and the node
+`contact_route_renewal_preserves_established_pq_refresh_keys` regression. Require
+verified partial-cache retention, renewed-contact recovery, exact full export and
+authenticated completion. Retain failing network/error diagnostics. The hosted
+case must reject changed ciphertext and finish with the publisher offline. Run
+GChat's full workspace suite, including the contact-only permission file journey.
+Archive migration exercises each prior hosted layout before writing/reopening v4.

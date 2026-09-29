@@ -655,3 +655,6 @@ async fn file_completion_is_covered_authenticated_and_allowed_without_voice() {
         "completion creates no receipt fanout"
     );
 }
+
+#[cfg(feature = "files")]
+mod modern_files;

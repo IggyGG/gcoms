@@ -1626,3 +1626,96 @@ impl Client {
         self.checkpoint()
     }
 }
+
+#[cfg(test)]
+mod archive_compatibility {
+    use super::*;
+    struct Offline;
+    #[async_trait::async_trait]
+    impl Transport for Offline {
+        async fn exchange(&self, _: [u8; 32], _: wire::Operation) -> Result<wire::Reply, String> {
+            Err("offline compatibility fixture".into())
+        }
+    }
+
+    #[test]
+    fn modern_file_inbox_reopens_each_prior_hosted_archive() {
+        for version in 1..=3 {
+            let dir = tempfile::tempdir().unwrap();
+            crate::private_fs::make_private(dir.path(), true).unwrap();
+            let session = HostedSession::create(
+                &gcoms_crypto::IdentityKeypair::generate(),
+                "owner",
+                500,
+                true,
+            )
+            .unwrap();
+            let channel = session.policy().channel_id();
+            let path = dir.path().join("profile");
+            let (storage, _) = Storage::open(&path, [99; 32], channel).unwrap();
+            let mut client = Client::new(
+                session,
+                NewClient {
+                    alias: "retained".into(),
+                    endpoint: "https://example.invalid/v1/hosted".into(),
+                    phase: Phase::Ready,
+                    pending: Pending::Create {
+                        policy: String::new(),
+                        genesis: String::new(),
+                    },
+                    access_code: None,
+                    join_link: None,
+                },
+                storage,
+                [99; 32],
+                Arc::new(Offline),
+            )
+            .unwrap();
+            client.archive.topic = "retained topic".into();
+            client.archive.cursor = 7;
+            client.topic.known = true;
+            client.topic.joined_at = 2;
+            client.receipts.committed = 3;
+            client.archive.version = version;
+            let mut old = postcard::to_allocvec(&client.archive).unwrap();
+            if version >= 2 {
+                old.extend(postcard::to_allocvec(&client.receipts).unwrap());
+            }
+            if version >= 3 {
+                old.extend(postcard::to_allocvec(&client.topic).unwrap());
+            }
+            client.storage.save(&old).unwrap();
+            drop(client);
+            let (storage, bytes) = Storage::open(&path, [99; 32], channel).unwrap();
+            let mut restored = Client::restore(
+                &bytes.unwrap(),
+                channel,
+                storage,
+                [99; 32],
+                Arc::new(Offline),
+            )
+            .unwrap();
+            assert_eq!(restored.archive.topic, "retained topic");
+            assert!(restored.topic.known);
+            assert_eq!(
+                restored.receipts.committed,
+                if version >= 2 { 3 } else { 0 }
+            );
+            assert_eq!(restored.topic.joined_at, if version >= 3 { 2 } else { 7 });
+            assert!(restored.files.events.is_empty());
+            restored.checkpoint().unwrap();
+            drop(restored);
+            let (storage, bytes) = Storage::open(&path, [99; 32], channel).unwrap();
+            let restored = Client::restore(
+                &bytes.unwrap(),
+                channel,
+                storage,
+                [99; 32],
+                Arc::new(Offline),
+            )
+            .unwrap();
+            assert_eq!(restored.archive.version, 4);
+            assert_eq!(restored.archive.topic, "retained topic");
+        }
+    }
+}

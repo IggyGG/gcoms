@@ -4064,6 +4064,80 @@ pub(in crate::node) mod tests {
     }
 
     #[tokio::test]
+    async fn contact_route_renewal_preserves_established_pq_refresh_keys() {
+        let (mut node, alice_pk, mut alice) = direct_fixture();
+        let identity = IdentityKeypair::from_seed([0xD1; 32]);
+        let (bundle, secrets) = identity.issue_bundle();
+        alice.provide_local_kem(secrets.kem_decapsulation_key());
+        alice.set_pq_policy(1, std::time::Duration::ZERO);
+        let PeerSession::Legacy(bob) = node.sessions.get_mut(&alice_pk).unwrap() else {
+            panic!("legacy fixture")
+        };
+        bob.provide_peer_kem(bundle.kem_pub).unwrap();
+        bob.set_pq_policy(1, std::time::Duration::ZERO);
+        // Reopening/renewing a contact publishes a new first-move bundle. The
+        // existing session still owns its previously negotiated decapsulation key.
+        let mut route = node.peer_routes[&alice_pk].clone();
+        route.bundle = identity.issue_bundle().0.encode();
+        let now = now_unix();
+        for alias in &mut route.aliases {
+            alias.expiry = now + 3600;
+        }
+        let update = ContactUpdate::sign(9, now, now + 3600, route.clone(), &identity).unwrap();
+        let frame = alice
+            .send(&encode_contact_update([0x91; 16], &update).unwrap())
+            .unwrap();
+        let (events, _) = broadcast::channel(32);
+        process_frame(&mut node, alice_pk.clone(), frame, &events);
+        assert_eq!(node.peer_routes[&alice_pk], route);
+        let ack = node.direct_ack_outbox.pop_front().unwrap();
+        let Some(NodePayload::Frame(_, frame)) = decode_payload(&ack.cells[0]) else {
+            panic!("ACK")
+        };
+        assert!(frame.pq_ct.is_some(), "exercise real PQ refresh");
+        alice
+            .receive(&frame)
+            .expect("renewed route must not substitute an established session key");
+        // Local prekey rotation likewise affects future handshakes. Pending
+        // frames addressed to the existing session's old key remain valid.
+        let (aged, secrets) = IdentityKeypair::from_seed(node.identity_seed)
+            .issue_bundle_with_rng(
+                &mut rand::thread_rng(),
+                now - crate::proto::MAX_BUNDLE_AGE_SECS / 2 - 1,
+            )
+            .unwrap();
+        node.info.bundle = aged.encode();
+        node.secrets = Arc::new(secrets);
+        let updates = queue_contact_updates(&mut node).unwrap();
+        for delivery in updates {
+            let Some(NodePayload::Frame(_, frame)) = decode_payload(&delivery.cells[0]) else {
+                panic!("update")
+            };
+            alice.receive(&frame).unwrap();
+        }
+        for n in 1..=4 {
+            let frame = alice
+                .send(&encode_direct_data(
+                    [n; 16],
+                    n as u64,
+                    false,
+                    b"after renewal",
+                ))
+                .unwrap();
+            assert!(frame.pq_ct.is_some());
+            process_frame(&mut node, alice_pk.clone(), frame, &events);
+            let ack = node
+                .direct_ack_outbox
+                .pop_front()
+                .expect("authenticated message ACK");
+            let Some(NodePayload::Frame(_, frame)) = decode_payload(&ack.cells[0]) else {
+                panic!("ACK")
+            };
+            alice.receive(&frame).unwrap();
+        }
+    }
+
+    #[tokio::test]
     async fn accepted_contact_update_is_idempotent_and_rejects_tamper() {
         let (mut node, alice_pk, mut alice_session) = direct_fixture();
         let alice_identity = IdentityKeypair::from_seed([0xD1; 32]);

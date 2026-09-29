@@ -76,3 +76,34 @@ fn revoked_and_readded_membership_cannot_reuse_discovery_completions() {
     assert!(engine.tick(330).unwrap().is_empty());
     assert_eq!(engine.tick(331).unwrap().len(), 1);
 }
+
+#[test]
+fn contact_discovery_covers_256_independent_conversations_without_raising_legacy_limit() {
+    for (contact, expected) in [(true, 256), (false, 64)] {
+        let home = tempfile::tempdir().unwrap();
+        gcoms_private_fs::make_private(home.path(), true).unwrap();
+        let cache = Cache::open(home.path(), [9; 32], Default::default()).unwrap();
+        let mut engine = if contact {
+            Engine::for_contacts(cache)
+        } else {
+            Engine::new(cache)
+        };
+        for n in 0u16..256 {
+            let mut channel = [0; 32];
+            channel[..2].copy_from_slice(&n.to_be_bytes());
+            engine.set_members(channel, [1; 32], [[1; 32], [2; 32]]);
+        }
+        let mut discovered = std::collections::BTreeSet::new();
+        // Same timestamp keeps maintenance retries out of this bounded discovery pass.
+        for _ in 0..40 {
+            let actions = engine.tick(100).unwrap();
+            assert!(actions.len() <= 8);
+            for action in actions {
+                assert!(engine.action_allowed(&action));
+                assert!(discovered.insert(action.peer.channel));
+                engine.send_finished(action.send_token(), SendOutcome::HopAccepted, 100);
+            }
+        }
+        assert_eq!(discovered.len(), expected);
+    }
+}

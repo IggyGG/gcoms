@@ -575,3 +575,17 @@ contact-file fixture runs failed because the bare runtime did not enable durable
 applications; the corrected fixture now follows the application's explicit opt-in.
 Do not claim verified end-to-end files or release readiness until that gate and
 the GChat journeys pass. Current 500-member network and native gates remain open.
+
+### IRC-4 recovery qualification checkpoint — 2026-09-29
+
+Hosted whole-file verification rejects modified ciphertext and resumes from an
+encrypted cache with the publisher offline (`files-modern-08/09/10.log`). The
+public GChat contact file journey, shared quota/activity/error handling and strict
+workspace checks pass in `files-routing-05/06.log`. These are bounded library/local
+fixture results, not the 500-member protected-network or installed-app gate.
+
+The larger direct-contact restart case retains verified pieces but fails to finish.
+`files-modern-10.log` captures accepted contact renewal followed by authenticated
+frame decryption failures; transport admission is not counted as download success.
+The focused PQ renewal regression and archive-v1/v2/v3 migration tests are pending.
+Contact permission separation and a full GChat regression are running.

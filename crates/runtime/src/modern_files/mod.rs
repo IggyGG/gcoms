@@ -125,7 +125,7 @@ impl ModernFileService {
             key_bytes.extend(key);
             let (store, metadata) =
                 storage::Store::open(path.join("profile.v2"), hash(&key_bytes))?;
-            let mut engine = Engine::new(cache);
+            let mut engine = Engine::for_contacts(cache);
             engine.cache.config = swarm::CacheConfig {
                 quota_bytes: metadata.config.quota_bytes,
                 retention_secs: metadata.config.retention_secs,
@@ -229,7 +229,7 @@ impl ModernFileService {
         } else {
             None
         };
-        self.interrupt.notify_one();
+        self.interrupt.notify_waiters();
         let mut backend = self.backend.lock().await;
         let b = backend.as_mut().ok_or(SdkError::ConnectionClosed)?;
         b.store.check()?;
@@ -498,6 +498,18 @@ impl Backend {
         let contact_error = self.receive_contacts(sdk).await.err();
         self.error = hosted_error.or(contact_error).map(|e| e.to_string());
         self.store.check()?;
+        for (id, entry) in &self.metadata.entries {
+            if let api::Scope::Contact { peer } = entry.scope {
+                if entry.own && entry.publish && !entry.published && self.contacts.contains_key(&peer)
+                    && self.pending.len() < 128 && !self.pending.iter().any(|a| matches!(&a.message, swarm::Message::Offers { manifests, .. } if manifests.iter().any(|m| m.id == *id))) {
+                    if let Ok(state) = self.engine.cache.get(*id) {
+                        if state.status == swarm::Status::Complete {
+                            self.pending.push_back(Action::offer(Peer { channel: state.manifest.scope.channel, member: peer }, state.manifest.clone()));
+                        }
+                    }
+                }
+            }
+        }
         let actions = self.engine.tick(now()).map_err(error)?;
         for action in actions {
             if self.pending.len() < 128 {
@@ -536,7 +548,25 @@ impl Backend {
                 Err(SdkError::PermissionDenied)
             };
             if let Err(e) = &result {
+                #[cfg(test)]
+                eprintln!("modern contact send failure: {e}");
                 self.error = Some(e.to_string());
+            }
+            if result.is_ok() {
+                if let swarm::Message::Offers { manifests, .. } = &action.message {
+                    let mut changed = false;
+                    for manifest in manifests {
+                        if let Some(entry) = self.metadata.entries.get_mut(&manifest.id) {
+                            if entry.own && entry.publish && !entry.published {
+                                entry.published = true;
+                                changed = true;
+                            }
+                        }
+                    }
+                    if changed {
+                        self.save()?;
+                    }
+                }
             }
             self.engine.send_finished(
                 action.send_token(),
@@ -615,10 +645,19 @@ impl Backend {
                                 {
                                     break;
                                 }
-                                self.engine
-                                    .cache
-                                    .offer(manifest.clone(), now())
-                                    .map_err(error)?;
+                                match self.engine.cache.offer(manifest.clone(), now()) {
+                                    Ok(()) => {}
+                                    Err(swarm::Error::Quota) => break,
+                                    Err(swarm::Error::Conflict) => {
+                                        sdk.hosted_channels(h::Request::CommitFileEvents {
+                                            channel,
+                                            through: event.sequence,
+                                        })
+                                        .await?;
+                                        continue;
+                                    }
+                                    Err(e) => return Err(error(e)),
+                                }
                                 let entry =
                                     self.metadata.entries.entry(manifest.id).or_insert_with(|| {
                                         Entry {
@@ -714,6 +753,15 @@ impl Backend {
                             }) {
                                 sdk.commit_application(delivery.sequence, delivery.receipt_digest)
                                     .await?;
+                                continue;
+                            }
+                        }
+                        if let swarm::Message::Offers { manifests, .. } = &message {
+                            let fresh = manifests
+                                .iter()
+                                .filter(|m| !self.metadata.entries.contains_key(&m.id))
+                                .count();
+                            if self.metadata.entries.len().saturating_add(fresh) > 256 {
                                 continue;
                             }
                         }

@@ -189,6 +189,8 @@ struct Served {
 /// roster, never from an incoming application record.
 pub struct Engine {
     pub cache: Cache,
+    peer_limit: usize,
+    pipeline: usize,
     members: BTreeMap<[u8; 32], (Member, BTreeSet<Member>)>,
     sources: BTreeMap<ShareId, BTreeSet<Peer>>,
     verified_sources: BTreeMap<ShareId, BTreeSet<Peer>>,
@@ -208,6 +210,8 @@ impl Engine {
     pub fn new(cache: Cache) -> Self {
         Self {
             cache,
+            peer_limit: MAX_PEERS,
+            pipeline: PIPELINE,
             members: BTreeMap::new(),
             sources: BTreeMap::new(),
             verified_sources: BTreeMap::new(),
@@ -223,6 +227,14 @@ impl Engine {
             diagnostics: Diagnostics::default(),
             payload_reserved: Arc::new(AtomicUsize::new(0)),
         }
+    }
+    /// Durable direct conversations share one per-peer outbox with their
+    /// receipts. Keep one piece in flight while supporting all explicit contacts.
+    pub fn for_contacts(cache: Cache) -> Self {
+        let mut engine = Self::new(cache);
+        engine.peer_limit = 256;
+        engine.pipeline = 1;
+        engine
     }
     pub fn set_members(
         &mut self,
@@ -345,7 +357,7 @@ impl Engine {
     }
     fn source(&mut self, id: ShareId, peer: Peer) -> bool {
         let sources = self.sources.entry(id).or_default();
-        sources.len() < MAX_PEERS && sources.insert(peer)
+        sources.len() < self.peer_limit && sources.insert(peer)
     }
     fn query_new_source(
         &mut self,
@@ -693,7 +705,7 @@ impl Engine {
                     };
                     if retained {
                         let sources = self.verified_sources.entry(id).or_default();
-                        if sources.len() < MAX_PEERS {
+                        if sources.len() < self.peer_limit {
                             sources.insert(peer);
                         }
                         self.diagnostics.verified_pieces =
@@ -773,12 +785,12 @@ impl Engine {
         });
         let mut out = Vec::new();
         for (channel, (own, members)) in &self.members {
-            for member in members.iter().filter(|m| *m != own).take(MAX_PEERS) {
+            for member in members.iter().filter(|m| *m != own).take(self.peer_limit) {
                 let peer = Peer {
                     channel: *channel,
                     member: *member,
                 };
-                if self.discovery.len() >= MAX_PEERS && !self.discovery.contains_key(&peer) {
+                if self.discovery.len() >= self.peer_limit && !self.discovery.contains_key(&peer) {
                     continue;
                 }
                 let discovery = self.discovery.entry(peer).or_default();
@@ -898,7 +910,7 @@ impl Engine {
             .filter(|(id, s)| s.status == Status::Downloading && !waiting.contains(*id))
             .take(ACTIVE_DOWNLOADS)
         {
-            while self.pulls.keys().filter(|(share, _)| share == id).count() < PIPELINE {
+            while self.pulls.keys().filter(|(share, _)| share == id).count() < self.pipeline {
                 let mut candidates = Vec::new();
                 for (i, have) in state.have.iter().enumerate() {
                     if *have || self.pulls.contains_key(&(*id, i as u32)) {
