@@ -1,27 +1,59 @@
 # gcoms-channel-service
 
-Experimental, single-writer ordered channel storage. This library stores public
-membership commits and authenticated application ciphertext; it never instantiates
-an MLS member or receives a client's private state. It is not yet a network daemon
-or enabled in GChat. The caller must supply authenticated transport and reader
-authorization before exposing records.
+Experimental single-writer ciphertext service for `hosted-mls-pq-v1` channels.
+It stores public membership/policy and authenticated encrypted application data;
+it never instantiates an MLS member or receives client private state. The default
+`http` feature supplies the HTTP upstream daemon. Disable default features when
+using only the record codec/storage library.
 
-Each append is validated, written with its predecessor hash and flushed to disk
-before returning service acceptance. Retries of the exact accepted content return
-the original sequence. This is not a recipient delivery acknowledgment. Reopening
-replays membership and verifies every complete frame. Only a partial final frame
-is truncated; corruption of a complete record fails closed. A failed write poisons
-the open store until reopening. Exclusive file locking prevents concurrent writers.
-The containing directory and log must pass shared private-filesystem checks.
+Run `gcoms-channel-service config.json` behind the installed network's HTTPS
+origin. Both `POST /v1/hosted` and `POST /v1/hosted/bulk` must reach the same
+instance. Configure the origin in signed network defaults. Client routing retains
+origin restrictions, remote DNS, WebPKI and no direct fallback. Large trees and
+records use observable bulk; small chat and polling remain covered. Recipient
+receipts must also remain covered, accepting longer status latency in large rooms.
 
-Storage has explicit byte and record quotas; reaching them refuses new appends.
-No accepted record is silently evicted. Memory retains indexes rather than all
-ciphertext bodies. Signed policy changes are ordered in the same log. Member
-rekeys complete authorized departures without service-held MLS keys. This does
-not yet supply replication, log compaction, network negotiation or application
-latency/capacity qualification.
+Create the storage directory privately (0700 on Unix). A minimal bounded config:
 
-Dependencies reuse the workspace's `sha2`, `tls_codec`, `gcoms-mls` and
-`gcoms-private-fs`; tests use existing `gcoms-crypto` and `tempfile`. No new
-third-party package is introduced. Run `cargo test -p gcoms-channel-service` and
-strict all-target Clippy, plus the MLS suite, when changing the storage contract.
+```json
+{
+  "listen": "127.0.0.1:8080",
+  "directory": "/var/lib/gcoms-channels",
+  "max_channels": 10,
+  "max_total_bytes": 536870912,
+  "channel_bytes": 134217728,
+  "channel_records": 100000,
+  "requests_per_second": 1000,
+  "source_requests_per_second": 100,
+  "motd": "Welcome",
+  "rules": "Respect other members",
+  "operator_contact": "Contact your network administrator"
+}
+```
+
+Creation defaults to denial. Set `creation` to `{"kind":"allow_list","channels":[]}`
+with explicitly provisioned 32-byte channel IDs, or deliberately choose
+`{"kind":"public"}`. These are network creation permissions, separate from
+channel owner/operator/voice roles. `blocked_channels` stops writes while retaining
+read access; `blocked_sources` denies matching upstream peer addresses. Behind a
+proxy, per-source rates apply to the proxy socket, not untrusted forwarding headers.
+Non-loopback listening requires `tls_terminated_upstream: true`. SIGTERM and Ctrl-C
+stop admission gracefully.
+
+Every append is validated and flushed before service acceptance. Exact retries
+return the original sequence. Acceptance is not recipient delivery. Reader proofs
+bind channel, scope, query and expiry; invitation holders can read admission state
+but cannot read member messages. Removed members retain read access only through
+their removal record, including after restart. Single-use invitations and reusable
+admission codes are separate, client-held secrets; only verifiers enter the log.
+
+Reopening checks sequence/predecessor hashes and every complete frame. Only an
+incomplete final frame is truncated; complete corruption fails closed. An uncertain
+write poisons the instance until reopening. Exclusive locks prevent concurrent
+writers. Quotas reject new writes without evicting accepted data; memory holds
+indexes rather than all ciphertext bodies. Members perform authorized rekeys.
+
+This checkpoint does not provide replication, compaction, recipient receipt
+aggregation or complete GChat/native/500-member network qualification. Run the
+MLS/service suites and strict all-target Clippy when changing the storage or API
+contract; see the repository's IRC parity ledger for evidence and remaining work.

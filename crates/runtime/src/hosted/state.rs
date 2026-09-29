@@ -98,8 +98,27 @@ pub(super) struct NewClient {
     pub join_link: Option<api::InviteLink>,
 }
 
+#[derive(Default, Serialize, Deserialize)]
+struct Receipts {
+    outbox: Vec<(u64, Vec<u8>)>,
+    committed: u64,
+    cursor: u64,
+    received: BTreeMap<[u8; 32], Vec<[u8; 32]>>,
+}
+fn decode_archive(bytes: &[u8]) -> Result<(Archive, Receipts), String> {
+    let (archive, tail): (Archive, _) =
+        postcard::take_from_bytes(bytes).map_err(|_| "invalid hosted client archive")?;
+    let receipts = match archive.version {
+        1 if tail.is_empty() => Receipts::default(),
+        2 => postcard::from_bytes(tail).map_err(|_| "invalid hosted receipt archive")?,
+        _ => return Err("unsupported hosted client archive".into()),
+    };
+    Ok((archive, receipts))
+}
+
 pub(super) struct Client {
     pub session: HostedSession,
+    receipts: Receipts,
     pub archive: Archive,
     pub transport: Arc<dyn Transport>,
     storage: Storage,
@@ -182,11 +201,12 @@ impl Client {
         let channel = session.policy().channel_id();
         let mut client = Self {
             session,
+            receipts: Receipts::default(),
             transport,
             storage,
             wrapping_key: Zeroizing::new(key),
             archive: Archive {
-                version: 1,
+                version: 2,
                 channel,
                 alias,
                 endpoint,
@@ -214,8 +234,7 @@ impl Client {
         Ok(client)
     }
     pub fn stored_endpoint(bytes: &[u8]) -> Result<String, String> {
-        let archive: Archive =
-            postcard::from_bytes(bytes).map_err(|_| "invalid hosted client archive")?;
+        let (archive, _) = decode_archive(bytes)?;
         Ok(archive.endpoint)
     }
     pub fn register_invite(
@@ -286,9 +305,11 @@ impl Client {
         key: [u8; 32],
         transport: Arc<dyn Transport>,
     ) -> Result<Self, String> {
-        let archive: Archive =
-            postcard::from_bytes(bytes).map_err(|_| "invalid hosted client archive")?;
-        if archive.version != 1
+        let (archive, receipts) = decode_archive(bytes)?;
+        if !matches!(archive.version, 1 | 2)
+            || receipts.outbox.len() > MAX_EVENTS
+            || receipts.received.len() > MAX_EVENTS
+            || receipts.received.values().any(|r| r.len() > 500)
             || archive.channel != channel
             || archive.events.len() > MAX_EVENTS
             || archive.pending.len() > MAX_PENDING
@@ -301,6 +322,7 @@ impl Client {
         Ok(Self {
             session,
             archive,
+            receipts,
             storage,
             wrapping_key: Zeroizing::new(key),
             transport,
@@ -316,8 +338,12 @@ impl Client {
     fn checkpoint(&mut self) -> Result<(), String> {
         let result = (|| {
             self.archive.session = self.session.persist(&self.wrapping_key).map_err(mls)?;
-            let bytes = Zeroizing::new(
+            self.archive.version = 2;
+            let mut bytes = Zeroizing::new(
                 postcard::to_allocvec(&self.archive).map_err(|_| "encode hosted client archive")?,
+            );
+            bytes.extend_from_slice(
+                &postcard::to_allocvec(&self.receipts).map_err(|_| "encode hosted receipts")?,
             );
             self.storage.save(&bytes)
         })();
@@ -328,7 +354,7 @@ impl Client {
     }
     fn receive_room(&self) -> Result<(), String> {
         self.healthy()?;
-        if self.archive.events.len() > MAX_EVENTS - 2 {
+        if self.archive.events.len() > MAX_EVENTS - 2 || self.receipts.outbox.len() >= MAX_EVENTS {
             return Err("archive pending channel events before continuing".into());
         }
         Ok(())
@@ -692,6 +718,7 @@ impl Client {
             return Err("cannot commit unseen hosted events".into());
         }
         self.archive.events.retain(|event| event.sequence > through);
+        self.receipts.committed = self.receipts.committed.max(through);
         self.checkpoint()
     }
     async fn fetch_record(&self, item: wire::RecordItem) -> Result<Record, String> {
@@ -848,6 +875,9 @@ impl Client {
             topic: self.archive.topic.clone(),
             members,
             capacity: rules.capacity(),
+            bans: rules.list(HostedAccessList::Ban).to_vec(),
+            exemptions: rules.list(HostedAccessList::Exemption).to_vec(),
+            invite_exceptions: rules.list(HostedAccessList::InviteException).to_vec(),
             moderated: rules.mode(HostedMode::Moderated),
             invite_only: rules.mode(HostedMode::InviteOnly),
             topic_operators: rules.mode(HostedMode::TopicOperators),
@@ -1011,6 +1041,11 @@ impl Client {
                     )
                     .into();
                     let key = (sender, application.id);
+                    let receipt_valid = self
+                        .archive
+                        .seen
+                        .get(&key)
+                        .is_none_or(|previous| *previous == digest);
                     match self.archive.seen.get(&key) {
                         Some(previous) if *previous != digest => self.emit(
                             record.accepted_at,
@@ -1038,6 +1073,15 @@ impl Client {
                                 );
                             }
                         }
+                    }
+                    if receipt_valid && sender != self.session.member_id() {
+                        let receipt = self
+                            .session
+                            .receipt(sender, record.id(), record.sequence)
+                            .map_err(mls)?;
+                        self.receipts
+                            .outbox
+                            .push((self.archive.next_event - 1, receipt.encode().map_err(mls)?));
                     }
                 }
                 Ok(None) => {}
@@ -1130,6 +1174,128 @@ impl Client {
         if self.archive.cursor == page.head.sequence {
             self.recover_refused()?;
         }
+        self.sync_receipts().await?;
         Ok(progressed)
+    }
+}
+
+impl Client {
+    async fn sync_receipts(&mut self) -> Result<(), String> {
+        let outgoing: Vec<_> = self
+            .receipts
+            .outbox
+            .iter()
+            .take_while(|(event, _)| *event <= self.receipts.committed)
+            .take(16)
+            .map(|(_, bytes)| encode(bytes))
+            .collect();
+        if !outgoing.is_empty() {
+            match self
+                .transport
+                .exchange(
+                    self.archive.channel,
+                    wire::Operation::Acknowledge {
+                        receipts: outgoing.clone(),
+                    },
+                )
+                .await?
+            {
+                wire::Reply::Acknowledged => {
+                    self.receipts.outbox.drain(..outgoing.len());
+                    self.checkpoint()?;
+                }
+                reply => return Err(format!("recipient receipt storage refused: {reply:?}")),
+            }
+        }
+        if self.archive.sent.is_empty() {
+            return Ok(());
+        }
+        let query = wire::ReadQuery {
+            after: self.receipts.cursor,
+            through: None,
+            limit: 32,
+        };
+        let proof = self
+            .session
+            .read_proof(HostedReadScope::Receipts, query_hash(query), now() + 120)
+            .map_err(mls)?;
+        let reply = self
+            .transport
+            .exchange(
+                self.archive.channel,
+                wire::Operation::Receipts {
+                    query,
+                    proof: encode(&proof.encode().map_err(mls)?),
+                },
+            )
+            .await?;
+        let wire::Reply::Receipts {
+            after,
+            next,
+            receipts,
+        } = reply
+        else {
+            return Err(format!("receipt recovery refused: {reply:?}"));
+        };
+        if after != query.after
+            || next < after
+            || next - after != receipts.len() as u64
+            || receipts.len() > 32
+        {
+            return Err("invalid recipient receipt page".into());
+        }
+        for bytes in &receipts {
+            let receipt = HostedReceipt::decode(&decode(bytes)?).map_err(mls)?;
+            receipt.verify(self.archive.channel).map_err(mls)?;
+            if receipt.sender() != self.session.member_id() {
+                return Err("receipt belongs to another sender".into());
+            }
+            for (id, sent) in &self.archive.sent {
+                if sent.accepted.is_some_and(|a| {
+                    a.id == receipt.record_id() && a.sequence == receipt.sequence()
+                }) && sent.expected.contains(&receipt.recipient())
+                {
+                    let received = self.receipts.received.entry(*id).or_default();
+                    if !received.contains(&receipt.recipient()) {
+                        received.push(receipt.recipient());
+                    }
+                }
+            }
+        }
+        let completed: Vec<_> = self
+            .archive
+            .sent
+            .iter()
+            .filter(|(id, sent)| {
+                sent.accepted
+                    .is_some_and(|a| a.sequence <= self.archive.cursor)
+                    && sent.expected.iter().all(|member| {
+                        self.receipts
+                            .received
+                            .get(*id)
+                            .is_some_and(|r| r.contains(member))
+                    })
+            })
+            .map(|(id, sent)| (*id, !sent.expected.is_empty()))
+            .take(MAX_EVENTS.saturating_sub(self.archive.events.len()))
+            .collect();
+        for (id, has_recipients) in &completed {
+            if *has_recipients {
+                self.emit(
+                    now(),
+                    api::EventKind::Delivery {
+                        id: *id,
+                        state: api::Delivery::Delivered,
+                    },
+                );
+            }
+            self.archive.sent.remove(id);
+            self.receipts.received.remove(id);
+        }
+        self.receipts.cursor = next;
+        if next != after || !completed.is_empty() {
+            self.checkpoint()?;
+        }
+        Ok(())
     }
 }

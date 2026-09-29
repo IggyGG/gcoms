@@ -7,6 +7,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 struct TransportFixture {
     service: Service,
     lose_acceptance: AtomicBool,
+    lose_acknowledgment: AtomicBool,
 }
 #[async_trait]
 impl Transport for TransportFixture {
@@ -27,6 +28,11 @@ impl Transport for TransportFixture {
             && self.lose_acceptance.swap(false, Ordering::SeqCst)
         {
             return Err("injected lost response after fsync".into());
+        }
+        if matches!(reply, wire::Reply::Acknowledged)
+            && self.lose_acknowledgment.swap(false, Ordering::SeqCst)
+        {
+            return Err("injected lost recipient receipt response after fsync".into());
         }
         Ok(reply)
     }
@@ -57,6 +63,7 @@ fn service(dir: &Path) -> Arc<TransportFixture> {
         })
         .unwrap(),
         lose_acceptance: AtomicBool::new(false),
+        lose_acknowledgment: AtomicBool::new(false),
     })
 }
 fn new_client(
@@ -191,6 +198,17 @@ async fn lost_acceptance_restart_and_offline_receiver_preserve_exactly_one_messa
     )));
     assert!(messages(&bob).is_empty());
     pump(&mut bob).await;
+    pump(&mut alice).await;
+    assert!(
+        !alice.events(0, 256).unwrap().iter().any(|e| matches!(
+            e.kind,
+            api::EventKind::Delivery {
+                state: api::Delivery::Delivered,
+                ..
+            }
+        )),
+        "decrypt alone cannot acknowledge before application archive commit"
+    );
     assert_eq!(messages(&bob).len(), 1);
     let events = bob.events(0, 256).unwrap();
     let through = events.last().unwrap().sequence;
@@ -202,6 +220,8 @@ async fn lost_acceptance_restart_and_offline_receiver_preserve_exactly_one_messa
     bob.commit_events(through).unwrap();
     pump(&mut bob).await;
     assert!(bob.events(0, 256).unwrap().is_empty());
+    pump(&mut alice).await;
+    assert!(alice.events(0,256).unwrap().iter().any(|e| matches!(e.kind, api::EventKind::Delivery { id: actual, state: api::Delivery::Delivered } if actual == id)));
 }
 
 #[tokio::test]
@@ -294,4 +314,110 @@ async fn profile_lock_authentication_and_uncertain_save_fail_closed() {
     raw[last] ^= 1;
     std::fs::write(&path, raw).unwrap();
     assert!(storage::Storage::open(&path, [99; 32], channel).is_err());
+}
+
+#[tokio::test]
+async fn covered_receipts_require_every_original_recipient_and_survive_lost_reply_and_service_restart(
+) {
+    let server_dir = private_dir();
+    let alice_dir = private_dir();
+    let bob_dir = private_dir();
+    let carol_dir = private_dir();
+    let transport = service(server_dir.path());
+    let mut alice = owner(alice_dir.path(), transport.clone()).await;
+    let channel = alice.archive.channel;
+    let mut bob = joining(channel, "bob", bob_dir.path(), transport.clone()).await;
+    pump(&mut bob).await;
+    let mut carol = joining(channel, "carol", carol_dir.path(), transport.clone()).await;
+    pump(&mut carol).await;
+    pump(&mut alice).await;
+    pump(&mut bob).await;
+    let id = alice
+        .queue_send(api::Content::Notice("acknowledge once".into()))
+        .unwrap();
+    pump(&mut alice).await;
+    pump(&mut bob).await;
+    let events = bob.events(0, 256).unwrap();
+    bob.commit_events(events.last().unwrap().sequence).unwrap();
+    transport.lose_acknowledgment.store(true, Ordering::SeqCst);
+    assert!(bob.sync_page().await.is_err());
+    pump(&mut bob).await;
+    pump(&mut alice).await;
+    assert!(!alice.events(0, 256).unwrap().iter().any(|e| matches!(
+        e.kind,
+        api::EventKind::Delivery {
+            state: api::Delivery::Delivered,
+            ..
+        }
+    )));
+    // A wrong scope or changed query must not expose another sender's ledger.
+    let query = wire::ReadQuery {
+        after: 0,
+        through: None,
+        limit: 32,
+    };
+    let wrong = bob
+        .session
+        .read_proof(
+            HostedReadScope::Records,
+            public::query_hash(query),
+            now() + 120,
+        )
+        .unwrap();
+    let operation = wire::Operation::Receipts {
+        query,
+        proof: encode(&wrong.encode().unwrap()),
+    };
+    assert!(!operation.requires_bulk());
+    assert!(matches!(
+        transport.exchange(channel, operation).await.unwrap(),
+        wire::Reply::Fault(_)
+    ));
+    let bad = carol
+        .session
+        .receipt(alice.session.member_id(), [0; 32], 1)
+        .unwrap();
+    let operation = wire::Operation::Acknowledge {
+        receipts: vec![encode(&bad.encode().unwrap())],
+    };
+    assert!(!operation.requires_bulk());
+    assert!(matches!(
+        transport.exchange(channel, operation).await.unwrap(),
+        wire::Reply::Fault(_)
+    ));
+    let mut forged = bad.encode().unwrap();
+    *forged.last_mut().unwrap() ^= 1;
+    assert!(HostedReceipt::decode(&forged)
+        .unwrap()
+        .verify(channel)
+        .is_err());
+    drop(alice);
+    drop(bob);
+    drop(carol);
+    drop(transport);
+    let transport = service(server_dir.path());
+    let restore = |dir: &Path| {
+        let (storage, bytes) =
+            storage::Storage::open(&dir.join(filename(channel)), [99; 32], channel).unwrap();
+        Client::restore(
+            &bytes.unwrap(),
+            channel,
+            storage,
+            [99; 32],
+            transport.clone(),
+        )
+        .unwrap()
+    };
+    let mut alice = restore(alice_dir.path());
+    let mut carol = restore(carol_dir.path());
+    pump(&mut carol).await;
+    let events = carol.events(0, 256).unwrap();
+    carol
+        .commit_events(events.last().unwrap().sequence)
+        .unwrap();
+    pump(&mut carol).await;
+    pump(&mut alice).await;
+    assert_eq!(alice.events(0,256).unwrap().iter().filter(|e| matches!(e.kind, api::EventKind::Delivery { id: actual, state: api::Delivery::Delivered } if actual == id)).count(), 1);
+    assert_eq!(messages(&alice).len(), 1);
+    assert_eq!(messages(&carol).len(), 0);
 }

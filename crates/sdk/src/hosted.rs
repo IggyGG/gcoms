@@ -27,11 +27,31 @@ pub struct Request {
 )]
 pub enum Operation {
     Info,
-    Create { policy: String, genesis: String },
-    Snapshot { query: ReadQuery, proof: String },
-    Read { query: ReadQuery, proof: String },
-    Fetch { query: ReadQuery, proof: String },
+    Create {
+        policy: String,
+        genesis: String,
+    },
+    Snapshot {
+        query: ReadQuery,
+        proof: String,
+    },
+    Read {
+        query: ReadQuery,
+        proof: String,
+    },
+    Fetch {
+        query: ReadQuery,
+        proof: String,
+    },
     Append(Append),
+    /// Always covered, bounded batches. Never selected by requires_bulk.
+    Receipts {
+        query: ReadQuery,
+        proof: String,
+    },
+    Acknowledge {
+        receipts: Vec<String>,
+    },
 }
 
 impl Operation {
@@ -84,10 +104,18 @@ impl ReadQuery {
 #[serde(tag = "kind", content = "value", rename_all = "snake_case")]
 pub enum Reply {
     Info(ServiceInfo),
-    Created { anchor: [u8; 32] },
+    Created {
+        anchor: [u8; 32],
+    },
     Snapshot(SnapshotPage),
     Records(RecordPage),
     Accepted(Acceptance),
+    Receipts {
+        after: u64,
+        next: u64,
+        receipts: Vec<String>,
+    },
+    Acknowledged,
     Fault(Fault),
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]

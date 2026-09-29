@@ -23,6 +23,8 @@ mod control;
 mod membership;
 pub use application::HostedMessageKind;
 mod read;
+mod receipt;
+pub use receipt::HostedReceipt;
 mod rules;
 pub use access::HostedAccessCode;
 pub use control::{HostedControl, HostedControlEvent};

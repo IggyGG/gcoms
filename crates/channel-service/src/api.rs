@@ -1,8 +1,9 @@
 //! Bounded hosted-profile API. Deploy behind the installed network's HTTPS
 //! origin; clients reach that origin over their existing protected route.
 use super::*;
+use crate::receipts::ReceiptLog;
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD as B64, Engine};
-use gcoms_mls::hosted::{HostedReadProof, HostedReadScope};
+use gcoms_mls::hosted::{HostedReadProof, HostedReadScope, HostedReceipt};
 use gcoms_sdk::hosted::*;
 use serde::Deserialize;
 use std::{
@@ -114,6 +115,7 @@ struct Rate {
 struct Inner {
     config: Config,
     channels: Mutex<HashMap<[u8; 32], ChannelLog>>,
+    receipts: Mutex<HashMap<[u8; 32], ReceiptLog>>,
     rate: Mutex<Rate>,
     permits: Arc<tokio::sync::Semaphore>,
 }
@@ -188,9 +190,33 @@ impl Service {
             }
             channels.insert(channel, log);
         }
+        let mut receipts = HashMap::new();
+        for entry in std::fs::read_dir(&config.directory)? {
+            let entry = entry?;
+            let Some(name) = entry
+                .file_name()
+                .to_str()
+                .and_then(|s| s.strip_suffix(".gack"))
+                .map(str::to_owned)
+            else {
+                continue;
+            };
+            let channel = channel_from_name(&format!("{name}.gch"))
+                .ok_or_else(|| Error::Invalid("invalid receipt filename".into()))?;
+            let log = channels
+                .get_mut(&channel)
+                .ok_or_else(|| Error::Invalid("orphaned receipt log".into()))?;
+            let ledger = ReceiptLog::open(&entry.path(), channel, config.limits(), log)?;
+            total = total.checked_add(ledger.bytes).ok_or(Error::Full)?;
+            if total > config.max_total_bytes {
+                return Err(Error::Full);
+            }
+            receipts.insert(channel, ledger);
+        }
         Ok(Self(Arc::new(Inner {
             config,
             channels: Mutex::new(channels),
+            receipts: Mutex::new(receipts),
             rate: Mutex::new(Rate {
                 second: 0,
                 count: 0,
@@ -251,7 +277,7 @@ impl Service {
         if self.0.config.blocked_channels.contains(&channel)
             && matches!(
                 request.operation,
-                Operation::Create { .. } | Operation::Append(_)
+                Operation::Create { .. } | Operation::Append(_) | Operation::Acknowledge { .. }
             )
         {
             return fault(
@@ -260,7 +286,9 @@ impl Service {
             );
         }
         let result = (|| -> Result<Reply, Error> {
-            let total: u64 = channels.values().map(|log| log.bytes).sum();
+            let mut ledgers = self.0.receipts.lock().map_err(|_| Error::Poisoned)?;
+            let total: u64 = channels.values().map(|log| log.bytes).sum::<u64>()
+                + ledgers.values().map(|log| log.bytes).sum::<u64>();
             if let Operation::Create { policy, genesis } = request.operation {
                 let policy = HostedPolicy::decode(&decode(&policy)?, channel)?;
                 let genesis = decode(&genesis)?;
@@ -311,6 +339,82 @@ impl Service {
                 return Ok(fault(FaultCode::NotFound, "channel unavailable"));
             };
             match request.operation {
+                Operation::Acknowledge { receipts } => {
+                    if receipts.is_empty() || receipts.len() > 16 {
+                        return Err(Error::Invalid("receipt batch bound".into()));
+                    }
+                    let receipts = receipts
+                        .iter()
+                        .map(|r| HostedReceipt::decode(&decode(r)?).map_err(Error::from))
+                        .collect::<Result<Vec<_>, Error>>()?;
+                    for receipt in &receipts {
+                        log.validate_receipt(receipt)?;
+                    }
+                    // Reserve worst-case encoded frame size before creating or writing.
+                    let missing = receipts
+                        .iter()
+                        .filter(|r| !ledgers.get(&channel).is_some_and(|l| l.contains(r)))
+                        .count() as u64;
+                    if missing > 0
+                        && missing * 336 + u64::from(!ledgers.contains_key(&channel)) * 40
+                            > self.0.config.max_total_bytes.saturating_sub(total)
+                    {
+                        return Err(Error::Full);
+                    }
+                    if let std::collections::hash_map::Entry::Vacant(entry) = ledgers.entry(channel)
+                    {
+                        let path = self
+                            .0
+                            .config
+                            .directory
+                            .join(file_name(channel))
+                            .with_extension("gack");
+                        entry.insert(ReceiptLog::open(
+                            &path,
+                            channel,
+                            self.0.config.limits(),
+                            log,
+                        )?);
+                    }
+                    let ledger = ledgers.get_mut(&channel).expect("opened");
+                    for receipt in receipts {
+                        ledger.append(&receipt)?;
+                    }
+                    Ok(Reply::Acknowledged)
+                }
+                Operation::Receipts { query, proof } => {
+                    if query.through.is_some() || query.limit == 0 || query.limit > 32 {
+                        return Err(Error::Invalid("receipt query bound".into()));
+                    }
+                    let proof = HostedReadProof::decode(&decode(&proof)?)?;
+                    proof.verify(
+                        channel,
+                        HostedReadScope::Receipts,
+                        checksum(&query.authentication_bytes()),
+                        now,
+                    )?;
+                    let sender = proof
+                        .member_id()
+                        .ok_or(Error::Mls(MlsError::Unauthorized))?;
+                    if !log.observer.members().contains(&sender)
+                        && !log.read_until.contains_key(&sender)
+                    {
+                        return Err(Error::Mls(MlsError::Unauthorized));
+                    }
+                    let receipts = if let Some(ledger) = ledgers.get_mut(&channel) {
+                        ledger.read(sender, query.after, query.limit)?
+                    } else {
+                        if query.after != 0 {
+                            return Err(Error::Invalid("receipt cursor beyond log".into()));
+                        }
+                        Vec::new()
+                    };
+                    Ok(Reply::Receipts {
+                        after: query.after,
+                        next: query.after + receipts.len() as u64,
+                        receipts: receipts.iter().map(|r| encode(r)).collect(),
+                    })
+                }
                 Operation::Snapshot { query, proof } => {
                     log.read_api(query, &proof, HostedReadScope::Snapshot, now, false)
                 }

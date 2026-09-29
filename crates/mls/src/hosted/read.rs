@@ -10,6 +10,7 @@ const READ_DOMAIN: &[u8] = b"gcoms/hosted/read/v1";
 pub enum HostedReadScope {
     Snapshot = 1,
     Records = 2,
+    Receipts = 3,
 }
 
 #[derive(Clone, TlsSerialize, TlsDeserialize, TlsSize)]

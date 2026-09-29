@@ -12,6 +12,8 @@ use tls_codec::{Deserialize, Serialize, TlsDeserialize, TlsSerialize, TlsSize, V
 
 #[cfg(feature = "http")]
 pub mod api;
+#[cfg(feature = "http")]
+mod receipts;
 
 const MAGIC: &[u8; 8] = b"GCHLOG01";
 const MAX_FRAME: usize = 2 * MAX_WIRE_BYTES + 64 * 1024;

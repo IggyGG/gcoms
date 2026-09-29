@@ -169,7 +169,7 @@ The service/member negative-control coverage is preserved in the corrected suite
 
 The ciphertext service now has a versioned, bounded HTTP upstream API suitable
 for an installed TLS origin. Creation is denied by default; an operator must
-configure a creator allowlist or explicitly enable public creation. Read proofs
+configure a channel allowlist or explicitly enable public creation. Read proofs
 bind channel, scope, query and expiry. Admission snapshots contain public
 membership/policy only; message records require current or bounded historical
 member authority. Removed clients can read through their removal record after
@@ -180,10 +180,11 @@ SDK IPC22 appends HostedChannels authorization and typed client operations.
 Signed network defaults supply endpoint candidates. Catalog routing retains
 origin restrictions, remote DNS, WebPKI verification and no direct fallback.
 Large public trees/records use the existing observable bulk class; small chat
-and polling retain the covered class. A separate user decision remains pending
-on large receipt-bundle privacy versus the five-second acknowledgement target:
-499 individual 64-byte signatures already exceed eight seconds at 4 KiB/s,
-before framing. No timing requirement is silently considered satisfied.
+and polling retain the covered class. The user selected covered receipt traffic and slower delivery status for large
+channels (2026-09-29). 499 individual 64-byte signatures already exceed eight
+seconds at 4 KiB/s, before framing. Large-channel acknowledgement latency is
+therefore measured separately from message acceptance/delivery; receipt traffic
+will not switch to observable bulk to meet the previous five-second ACK target.
 
 The opt-in runtime client stores MLS state, exact pending wires, invitation
 secrets, ordered cursor and unarchived application events in a separate encrypted
@@ -212,3 +213,22 @@ IRC-parity release. There is no automatic migration of legacy channels or PMs.
 secret storage: 127 tests pass, two explicit scale ignores, strict
 MLS/service/runtime/SDK/application checks. The source-bound receipt is
 [retained here](evidence/irc-hosted-client-20260929/summary.json).
+
+### Covered recipient receipts and GChat archive checkpoint (in progress)
+
+The receipt implementation now uses a separate sender-scoped append log with
+recipient signatures bound to channel, sender, recipient and exact accepted record.
+Batches stay on the covered endpoint. Application event commit gates receipt
+publication; the sender retains the original expected recipient set and only
+reports delivered after every required signature verifies. Restart/lost-response,
+query-scope and forged-target regressions are being added; this paragraph is an
+implementation checkpoint, not a passing qualification claim. Runtime archive v2
+reads the original v1 layout and adds receipt state; older runtimes reject v2
+rather than discard pending receipts. Legacy profiles are unaffected.
+
+GChat now has opt-in hosted commands and shared API v3 projections, with a separate
+encrypted hosted-history sidecar so old clients cannot overwrite its committed
+cursor. The application uses the same runtime SDK through desktop/TUI; generated
+contracts, typed action/notice display, IRC formatting, member roles, presence and
+operator information commands are included. Full IRC-4/IRC-8 qualification remains
+open, as do encrypted new-member topic recovery and the remaining client workflows.
