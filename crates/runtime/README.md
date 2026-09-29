@@ -26,3 +26,8 @@ Admission snapshot reads tolerate transient protected-circuit disconnects with
 at most four attempts and a 30-second deadline per page. The same prepared
 identity and pinned transcript remain authoritative. Service policy refusals
 are final; this read retry does not repeat membership mutations.
+
+Services advertising `covered-poll-v1` combine message polling with bounded
+covered acknowledgment publication/recovery. Consumer archival still precedes
+ACK publication; each signature is verified. Older services retain the separate
+requests. Capability negotiation is transient and does not alter archive format.

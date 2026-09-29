@@ -253,7 +253,11 @@ impl Service {
     }
     pub fn info(&self) -> ServiceInfo {
         ServiceInfo {
-            extensions: vec!["ciphertext-pieces-v1".into(), "public-directory-v1".into()],
+            extensions: vec![
+                "ciphertext-pieces-v1".into(),
+                "public-directory-v1".into(),
+                "covered-poll-v1".into(),
+            ],
             requests_per_second: Some(self.0.config.requests_per_second),
             source_requests_per_second: Some(self.0.config.source_requests_per_second),
             version: VERSION,
@@ -488,79 +492,49 @@ impl Service {
                     Ok(Reply::BlobStored)
                 }
                 Operation::Acknowledge { receipts } => {
-                    if receipts.is_empty() || receipts.len() > 16 {
-                        return Err(Error::Invalid("receipt batch bound".into()));
-                    }
-                    let receipts = receipts
-                        .iter()
-                        .map(|r| HostedReceipt::decode(&decode(r)?).map_err(Error::from))
-                        .collect::<Result<Vec<_>, Error>>()?;
-                    for receipt in &receipts {
-                        log.validate_receipt(receipt)?;
-                    }
-                    // Reserve worst-case encoded frame size before creating or writing.
-                    let missing = receipts
-                        .iter()
-                        .filter(|r| !ledgers.get(&channel).is_some_and(|l| l.contains(r)))
-                        .count() as u64;
-                    if missing > 0
-                        && missing * 336 + u64::from(!ledgers.contains_key(&channel)) * 40
-                            > self.0.config.max_total_bytes.saturating_sub(total)
-                    {
-                        return Err(Error::Full);
-                    }
-                    if let std::collections::hash_map::Entry::Vacant(entry) = ledgers.entry(channel)
-                    {
-                        let path = self
-                            .0
-                            .config
-                            .directory
-                            .join(file_name(channel))
-                            .with_extension("gack");
-                        entry.insert(ReceiptLog::open(
-                            &path,
-                            channel,
-                            self.0.config.limits(),
-                            log,
-                        )?);
-                    }
-                    let ledger = ledgers.get_mut(&channel).expect("opened");
-                    for receipt in receipts {
-                        ledger.append(&receipt)?;
-                    }
-                    Ok(Reply::Acknowledged)
+                    self.acknowledge(channel, log, &mut ledgers, receipts, total)
                 }
                 Operation::Receipts { query, proof } => {
-                    if query.through.is_some() || query.limit == 0 || query.limit > 32 {
-                        return Err(Error::Invalid("receipt query bound".into()));
+                    let page = Self::receipt_page(channel, log, &mut ledgers, query, proof, now)?;
+                    Ok(Reply::Receipts {
+                        after: page.after,
+                        next: page.next,
+                        receipts: page.receipts,
+                    })
+                }
+                Operation::Poll {
+                    query,
+                    proof,
+                    acknowledgments,
+                    receipts,
+                } => {
+                    if query.limit == 0 || query.limit > 32 || acknowledgments.len() > 16 {
+                        return Err(Error::Invalid("covered poll bound".into()));
                     }
-                    let proof = HostedReadProof::decode(&decode(&proof)?)?;
-                    proof.verify(
-                        channel,
-                        HostedReadScope::Receipts,
-                        checksum(&query.authentication_bytes()),
-                        now,
-                    )?;
-                    let sender = proof
-                        .member_id()
-                        .ok_or(Error::Mls(MlsError::Unauthorized))?;
-                    if !log.observer.members().contains(&sender)
-                        && !log.read_until.contains_key(&sender)
+                    if !acknowledgments.is_empty()
+                        && self.0.config.blocked_channels.contains(&channel)
                     {
                         return Err(Error::Mls(MlsError::Unauthorized));
                     }
-                    let receipts = if let Some(ledger) = ledgers.get_mut(&channel) {
-                        ledger.read(sender, query.after, query.limit)?
-                    } else {
-                        if query.after != 0 {
-                            return Err(Error::Invalid("receipt cursor beyond log".into()));
-                        }
-                        Vec::new()
+                    // Validate both read scopes before accepting any acknowledgment.
+                    let Reply::Records(page) =
+                        log.read_api(query, &proof, HostedReadScope::Records, now, false)?
+                    else {
+                        return Err(Error::Invalid("covered poll reply".into()));
                     };
-                    Ok(Reply::Receipts {
-                        after: query.after,
-                        next: query.after + receipts.len() as u64,
-                        receipts: receipts.iter().map(|r| encode(r)).collect(),
+                    let receipts = receipts
+                        .map(|r| {
+                            Self::receipt_page(channel, log, &mut ledgers, r.query, r.proof, now)
+                        })
+                        .transpose()?;
+                    let acknowledged = acknowledgments.len();
+                    if acknowledged != 0 {
+                        self.acknowledge(channel, log, &mut ledgers, acknowledgments, total)?;
+                    }
+                    Ok(Reply::Polled {
+                        page,
+                        acknowledged,
+                        receipts,
                     })
                 }
                 Operation::Snapshot { query, proof } => {
@@ -610,6 +584,93 @@ impl Service {
             }
         })();
         result.unwrap_or_else(error_reply)
+    }
+    fn acknowledge(
+        &self,
+        channel: [u8; 32],
+        log: &mut ChannelLog,
+        ledgers: &mut HashMap<[u8; 32], ReceiptLog>,
+        receipts: Vec<String>,
+        total: u64,
+    ) -> Result<Reply, Error> {
+        if receipts.is_empty() || receipts.len() > 16 {
+            return Err(Error::Invalid("receipt batch bound".into()));
+        }
+        let receipts = receipts
+            .iter()
+            .map(|r| HostedReceipt::decode(&decode(r)?).map_err(Error::from))
+            .collect::<Result<Vec<_>, Error>>()?;
+        for receipt in &receipts {
+            log.validate_receipt(receipt)?;
+        }
+        // Reserve worst-case encoded frame size before creating or writing.
+        let missing = receipts
+            .iter()
+            .filter(|r| !ledgers.get(&channel).is_some_and(|l| l.contains(r)))
+            .count() as u64;
+        if missing > 0
+            && missing * 336 + u64::from(!ledgers.contains_key(&channel)) * 40
+                > self.0.config.max_total_bytes.saturating_sub(total)
+        {
+            return Err(Error::Full);
+        }
+        if let std::collections::hash_map::Entry::Vacant(entry) = ledgers.entry(channel) {
+            let path = self
+                .0
+                .config
+                .directory
+                .join(file_name(channel))
+                .with_extension("gack");
+            entry.insert(ReceiptLog::open(
+                &path,
+                channel,
+                self.0.config.limits(),
+                log,
+            )?);
+        }
+        let ledger = ledgers.get_mut(&channel).expect("opened");
+        for receipt in receipts {
+            ledger.append(&receipt)?;
+        }
+        Ok(Reply::Acknowledged)
+    }
+    fn receipt_page(
+        channel: [u8; 32],
+        log: &ChannelLog,
+        ledgers: &mut HashMap<[u8; 32], ReceiptLog>,
+        query: ReadQuery,
+        proof: String,
+        now: u64,
+    ) -> Result<ReceiptPage, Error> {
+        if query.through.is_some() || query.limit == 0 || query.limit > 32 {
+            return Err(Error::Invalid("receipt query bound".into()));
+        }
+        let proof = HostedReadProof::decode(&decode(&proof)?)?;
+        proof.verify(
+            channel,
+            HostedReadScope::Receipts,
+            checksum(&query.authentication_bytes()),
+            now,
+        )?;
+        let sender = proof
+            .member_id()
+            .ok_or(Error::Mls(MlsError::Unauthorized))?;
+        if !log.observer.members().contains(&sender) && !log.read_until.contains_key(&sender) {
+            return Err(Error::Mls(MlsError::Unauthorized));
+        }
+        let receipts = if let Some(ledger) = ledgers.get_mut(&channel) {
+            ledger.read(sender, query.after, query.limit)?
+        } else {
+            if query.after != 0 {
+                return Err(Error::Invalid("receipt cursor beyond log".into()));
+            }
+            Vec::new()
+        };
+        Ok(ReceiptPage {
+            after: query.after,
+            next: query.after + receipts.len() as u64,
+            receipts: receipts.iter().map(|r| encode(r)).collect(),
+        })
     }
     pub fn router(&self) -> axum::Router {
         use axum::{extract::DefaultBodyLimit, routing::post};

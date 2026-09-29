@@ -29,8 +29,14 @@ impl Transport for TransportFixture {
         {
             return Err("injected lost response after fsync".into());
         }
-        if matches!(reply, wire::Reply::Acknowledged)
-            && self.lose_acknowledgment.swap(false, Ordering::SeqCst)
+        if matches!(
+            reply,
+            wire::Reply::Acknowledged
+                | wire::Reply::Polled {
+                    acknowledged: 1..,
+                    ..
+                }
+        ) && self.lose_acknowledgment.swap(false, Ordering::SeqCst)
         {
             return Err("injected lost recipient receipt response after fsync".into());
         }
@@ -729,3 +735,5 @@ mod capacity;
 mod responsiveness;
 
 mod snapshot_recovery;
+
+mod covered_poll;

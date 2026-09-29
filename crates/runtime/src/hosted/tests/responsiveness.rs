@@ -18,7 +18,9 @@ impl Transport for HeldResponse {
             wire::Operation::Append(wire::Append::Message(_)) => {
                 self.append.swap(false, Ordering::SeqCst)
             }
-            wire::Operation::Read { .. } => self.read.swap(false, Ordering::SeqCst),
+            wire::Operation::Read { .. } | wire::Operation::Poll { .. } => {
+                self.read.swap(false, Ordering::SeqCst)
+            }
             _ => false,
         };
         let reply = self.service.exchange(channel, operation).await?;

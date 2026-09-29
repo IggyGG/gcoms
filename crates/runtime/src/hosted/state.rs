@@ -185,6 +185,7 @@ pub(super) struct Client {
     pub transport: Arc<dyn Transport>,
     storage: Storage,
     wrapping_key: Zeroizing<[u8; 32]>,
+    covered_poll: Option<bool>,
 }
 fn mls(error: impl std::fmt::Display) -> String {
     error.to_string()
@@ -291,6 +292,7 @@ impl Client {
             transport,
             storage,
             wrapping_key: Zeroizing::new(key),
+            covered_poll: None,
             archive: Archive {
                 version: 4,
                 channel,
@@ -448,6 +450,7 @@ impl Client {
             files,
             storage,
             wrapping_key: Zeroizing::new(key),
+            covered_poll: None,
             transport,
         })
     }
@@ -1425,18 +1428,57 @@ impl Client {
             .session
             .read_proof(HostedReadScope::Records, query_hash(query), now() + 120)
             .map_err(mls)?;
+        if self.covered_poll.is_none() {
+            let wire::Reply::Info(info) = self
+                .transport
+                .exchange(self.archive.channel, wire::Operation::Info)
+                .await?
+            else {
+                return Err("hosted service information unavailable".into());
+            };
+            self.covered_poll = Some(info.extensions.iter().any(|e| e == "covered-poll-v1"));
+        }
+        let polling = self.covered_poll == Some(true);
+        let outgoing = if polling {
+            self.committed_receipts()
+        } else {
+            Vec::new()
+        };
+        let receipt_query = if polling { self.receipt_query()? } else { None };
+        let operation = if polling {
+            wire::Operation::Poll {
+                query,
+                proof: encode(&proof.encode().map_err(mls)?),
+                acknowledgments: outgoing.clone(),
+                receipts: receipt_query.clone(),
+            }
+        } else {
+            wire::Operation::Read {
+                query,
+                proof: encode(&proof.encode().map_err(mls)?),
+            }
+        };
         let reply = self
             .transport
-            .exchange(
-                self.archive.channel,
-                wire::Operation::Read {
-                    query,
-                    proof: encode(&proof.encode().map_err(mls)?),
-                },
-            )
+            .exchange(self.archive.channel, operation)
             .await?;
-        let wire::Reply::Records(page) = reply else {
-            return Err(format!("hosted replay refused: {reply:?}"));
+        let (page, receipt_page) = match reply {
+            wire::Reply::Polled {
+                page,
+                acknowledged,
+                receipts,
+            } if polling => {
+                if acknowledged != outgoing.len() || receipts.is_some() != receipt_query.is_some() {
+                    return Err("invalid covered poll acknowledgment".into());
+                }
+                if acknowledged > 0 {
+                    self.receipts.outbox.drain(..acknowledged);
+                    self.checkpoint()?;
+                }
+                (page, receipts)
+            }
+            wire::Reply::Records(page) if !polling => (page, None),
+            reply => return Err(format!("hosted replay refused: {reply:?}")),
         };
         if page.after != self.archive.cursor
             || page.next < page.after
@@ -1483,7 +1525,11 @@ impl Client {
         if self.archive.cursor == page.head.sequence {
             self.recover_refused()?;
         }
-        self.sync_receipts().await?;
+        if let (Some(query), Some(page)) = (receipt_query, receipt_page) {
+            self.apply_receipts(query.query, page)?;
+        } else if !polling {
+            self.sync_receipts().await?;
+        }
         self.renew_presence(now())?;
         if self.archive.cursor == page.head.sequence {
             self.share_topic()?;
@@ -1493,15 +1539,35 @@ impl Client {
 }
 
 impl Client {
-    async fn sync_receipts(&mut self) -> Result<(), String> {
-        let outgoing: Vec<_> = self
-            .receipts
+    fn committed_receipts(&self) -> Vec<String> {
+        self.receipts
             .outbox
             .iter()
             .take_while(|(event, _)| *event <= self.receipts.committed)
             .take(16)
             .map(|(_, bytes)| encode(bytes))
-            .collect();
+            .collect()
+    }
+    fn receipt_query(&self) -> Result<Option<wire::ReceiptQuery>, String> {
+        if self.archive.sent.is_empty() {
+            return Ok(None);
+        }
+        let query = wire::ReadQuery {
+            after: self.receipts.cursor,
+            through: None,
+            limit: 32,
+        };
+        let proof = self
+            .session
+            .read_proof(HostedReadScope::Receipts, query_hash(query), now() + 120)
+            .map_err(mls)?;
+        Ok(Some(wire::ReceiptQuery {
+            query,
+            proof: encode(&proof.encode().map_err(mls)?),
+        }))
+    }
+    async fn sync_receipts(&mut self) -> Result<(), String> {
+        let outgoing = self.committed_receipts();
         if !outgoing.is_empty() {
             match self
                 .transport
@@ -1520,25 +1586,17 @@ impl Client {
                 reply => return Err(format!("recipient receipt storage refused: {reply:?}")),
             }
         }
-        if self.archive.sent.is_empty() {
+        let Some(request) = self.receipt_query()? else {
             return Ok(());
-        }
-        let query = wire::ReadQuery {
-            after: self.receipts.cursor,
-            through: None,
-            limit: 32,
         };
-        let proof = self
-            .session
-            .read_proof(HostedReadScope::Receipts, query_hash(query), now() + 120)
-            .map_err(mls)?;
+        let query = request.query;
         let reply = self
             .transport
             .exchange(
                 self.archive.channel,
                 wire::Operation::Receipts {
                     query,
-                    proof: encode(&proof.encode().map_err(mls)?),
+                    proof: request.proof,
                 },
             )
             .await?;
@@ -1550,6 +1608,25 @@ impl Client {
         else {
             return Err(format!("receipt recovery refused: {reply:?}"));
         };
+        self.apply_receipts(
+            query,
+            wire::ReceiptPage {
+                after,
+                next,
+                receipts,
+            },
+        )
+    }
+    fn apply_receipts(
+        &mut self,
+        query: wire::ReadQuery,
+        page: wire::ReceiptPage,
+    ) -> Result<(), String> {
+        let wire::ReceiptPage {
+            after,
+            next,
+            receipts,
+        } = page;
         if after != query.after
             || next < after
             || next - after != receipts.len() as u64

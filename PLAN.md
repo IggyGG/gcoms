@@ -691,3 +691,18 @@ The archive-content gate then caught missing license texts in the new channel
 service crate. Include the repository's existing MIT and Apache texts, matching
 the other crates. This adds no new licensing terms or dependency. The failed
 archive gate is retained as packages-4df1c06-11.log; corrected consumers are next.
+
+### IRC-2 covered polling round trips — 2026-09-30
+
+The fourth actual GChat journey passed offline-owner admission/Topic pending,
+authenticated topic handoff, moderation/voice/notices, offline recovery and a
+verified 16 MiB partial-file restart with an unvoiced completion receipt. It
+missed latency targets: 9.165s small-room message/ACK and about 299s resumed
+verification. Keep those failures. Combine transcript reads, at most sixteen
+consumer-committed ACKs and at most thirty-two sender receipts into one covered
+poll. Both read scopes validate before ACK storage, with unchanged signatures,
+quotas and durability. Service-info negotiation retains the older request flow.
+The preceding full seven-package suite passed 690 tests (seven explicit ignores).
+Current hosted regressions, three poll-specific cases, five service API cases
+and strict checks pass; evidence is docs/evidence/irc-covered-poll-20260930.
+A new paired build/deployment and live timing check remain required.

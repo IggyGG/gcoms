@@ -681,3 +681,14 @@ service reads and require one eventual membership change; return Unauthorized
 and require one attempt; fail every transport read and require exactly four
 attempts. Keep prepared identity and pinned pagination authority unchanged.
 Repeat the offline-owner real-network GChat journey without bypassing TLS.
+
+## Combined covered polling
+
+Run runtime `covered_poll`: require one covered steady-state exchange for data,
+committed ACKs and sender receipts; no ACK before consumer commit; legacy service
+Info must retain the prior Read/Acknowledge/Receipts path. A bad receipt read
+scope with an otherwise valid ACK must be rejected before storing that ACK, and
+seventeen ACKs must exceed the batch bound. Retain the existing lost-ACK-response,
+service-restart, three-recipient completion and interrupted-owner checks.
+Run service API cases and strict affected-package Clippy, then measure actual
+GChat timings; fewer requests alone do not qualify the five-second target.

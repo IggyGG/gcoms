@@ -18,7 +18,9 @@ impl Transport for Measured {
         let bulk = operation.requires_bulk();
         if matches!(
             operation,
-            wire::Operation::Acknowledge { .. } | wire::Operation::Receipts { .. }
+            wire::Operation::Acknowledge { .. }
+                | wire::Operation::Receipts { .. }
+                | wire::Operation::Poll { .. }
         ) {
             assert!(!bulk, "receipt traffic must remain covered");
         }

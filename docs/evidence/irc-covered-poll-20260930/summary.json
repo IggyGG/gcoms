@@ -1,0 +1,36 @@
+{
+  "scope": "source tests; live latency improvement remains unqualified",
+  "baseline_rust_revision": "b6f0b6038ac0f594df4ac51f21fd9d67f3506733",
+  "baseline": {
+    "passed": 690,
+    "failed": 0,
+    "ignored": 7,
+    "suites": 58
+  },
+  "checks": [
+    {
+      "log": "test-evidence/irc-parity/paired-runtime-01.log",
+      "sha256": "447de77daf979553d22f623669d368b05cd5235c1690915fe041a32b433fe106",
+      "scope": "seven-package all-feature regression before combined polling",
+      "passed": true
+    },
+    {
+      "log": "test-evidence/irc-parity/covered-poll-01.log",
+      "sha256": "7031cffdf4d8a5f934685828faf61077f6aa786b7260592927787ba736144da7",
+      "scope": "existing hosted regressions and strict seven-package Clippy",
+      "passed": true
+    },
+    {
+      "log": "test-evidence/irc-parity/covered-poll-02.log",
+      "sha256": "dff97fbe5521b113d425ac96dd6a0e91f55d363d6edc24f040b90878b97bea25",
+      "scope": "three new combined-poll cases, five service API cases, strict seven-package Clippy",
+      "passed": true
+    }
+  ],
+  "source_sha256": {
+    "crates/sdk/src/hosted.rs": "6ceb4b13a91bc69e5fb6d7c9e494067fbfed8dc81e142e11a9dbf793283cde5a",
+    "crates/channel-service/src/api.rs": "b0eee01e1adb2ff6be79f907dc301a8967da08b0a74511353de2e3cdba74a323",
+    "crates/runtime/src/hosted/state.rs": "6fd48d4453b81cf08b7b795c717a390a520e07a2f2626cfa882cc46ff9be0ea6",
+    "crates/runtime/src/hosted/tests/covered_poll.rs": "4cb441af4157895cebcc322d494349d1170e394db49c0c2cf0cafdcd3554754b"
+  }
+}

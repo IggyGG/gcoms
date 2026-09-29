@@ -82,3 +82,9 @@ requires the client's normal proof and current policy verification.
 Native systemd configuration, exact HTTPS routes and state-preserving rollback
 are in [deploy/](deploy/README.md). The supplied configuration denies channel
 creation until the operator explicitly provisions it.
+
+The `covered-poll-v1` extension combines a bounded transcript read, up to sixteen
+signed acknowledgments and up to thirty-two sender receipts on `/v1/hosted`.
+Each read scope is authenticated before accepting acknowledgments. Existing
+receipt signatures, storage limits, operator suspension and fsync boundaries
+apply. This operation never uses `/bulk`; older individual operations remain.

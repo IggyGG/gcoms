@@ -356,3 +356,18 @@ authenticated policy refusals or membership writes. Three focused cases and
 strict seven-package Clippy pass in `snapshot-recovery-03.log`; the first two logs
 cover the earlier two-case fixture and are retained. Full live completion remains
 open.
+
+### Live correctness and covered-poll latency follow-up
+
+GChat live-04 completed the two-client protected-network journey with real
+recipient/file receipts, offline-owner admission and Topic pending/handoff.
+Local message feedback was 119ms; small-room display plus receipt was 9.165s
+and resumed 16 MiB verification about 299s. This passes that journey's correctness
+checks, not the latency requirements or 500-member/native release gates.
+
+The full preceding seven-package Rust run passed 690 tests with seven explicit
+ignores. The new negotiated covered poll removes separate receipt round trips
+while retaining consumer commit, scoped proofs, individual signatures and bounded
+batches. Existing hosted tests, three new polling/compatibility/authorization
+cases, five service API cases and strict checks pass. Source-bound evidence is
+in docs/evidence/irc-covered-poll-20260930; live improvement remains unmeasured.

@@ -39,6 +39,14 @@ pub enum Operation {
         query: ReadQuery,
         proof: String,
     },
+    /// One covered exchange for transcript polling, committed acknowledgments
+    /// and sender receipt recovery. Advertised by covered-poll-v1.
+    Poll {
+        query: ReadQuery,
+        proof: String,
+        acknowledgments: Vec<String>,
+        receipts: Option<ReceiptQuery>,
+    },
     Fetch {
         query: ReadQuery,
         proof: String,
@@ -151,6 +159,11 @@ pub enum Reply {
     },
     Snapshot(SnapshotPage),
     Records(RecordPage),
+    Polled {
+        page: RecordPage,
+        acknowledged: usize,
+        receipts: Option<ReceiptPage>,
+    },
     Accepted(Acceptance),
     Receipts {
         after: u64,
@@ -223,6 +236,19 @@ pub enum PublicChange {
     Membership(String),
     Control(String),
 }
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ReceiptQuery {
+    pub query: ReadQuery,
+    pub proof: String,
+}
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ReceiptPage {
+    pub after: u64,
+    pub next: u64,
+    pub receipts: Vec<String>,
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct RecordPage {
     pub head: Head,
