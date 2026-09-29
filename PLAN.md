@@ -631,3 +631,11 @@ reopen/completion and prompt close during a stalled read. Strict seven-package
 Clippy passes, including the capacity-fixture iterator correction. Broader retained
 integration/regression evidence is `directory-regression-04.log` (tests passed;
 its original strict stage caught that test-only iterator lint).
+
+### IRC-2 hosted service deployment preparation — 2026-09-30
+
+Added bounded systemd/loopback configuration and exact HTTPS route templates for
+the installed signed origin, with retained-state rollback instructions. The
+source255f9cd release binary builds successfully on the bounded HEL worker; its
+hash is retained in docs/evidence/irc-hosted-service-20260930/build.json. Deployment
+and actual protected-network/GChat qualification remain in progress.

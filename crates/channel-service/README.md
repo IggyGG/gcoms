@@ -78,3 +78,7 @@ empty publication withdraws it. Private/secret/closed/suspended rooms are omitte
 The index is rebuilt from validated controls after restart. Encrypted topics and
 member identities are never directory fields. Advertised public admission still
 requires the client's normal proof and current policy verification.
+
+Native systemd configuration, exact HTTPS routes and state-preserving rollback
+are in [deploy/](deploy/README.md). The supplied configuration denies channel
+creation until the operator explicitly provisions it.

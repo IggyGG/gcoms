@@ -1,0 +1,11 @@
+{
+  "schema": 1,
+  "source_revision": "255f9cd",
+  "command": "cargo build --offline --locked --release -p gcoms-channel-service --bin gcoms-channel-service",
+  "binary_sha256": "5f010e4a616dcaa2d0ea8427801b70c871e5e6cc6a5f1359c2145a9cd02e730c",
+  "binary_bytes": 3215440,
+  "build_passed": true,
+  "validation": "hosted-responsive-01: runtime stalled-response/reopen regression and seven-package all-target strict Clippy passed; service/directory suite evidence in IRC_PARITY.md",
+  "deployment_verified": false,
+  "protected_network_verified": false
+}

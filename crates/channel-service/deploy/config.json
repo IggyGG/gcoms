@@ -1,0 +1,14 @@
+{
+  "listen": "127.0.0.1:18081",
+  "directory": "/var/lib/gcoms-channels",
+  "creation": { "kind": "allow_list", "channels": [] },
+  "max_channels": 64,
+  "max_total_bytes": 4294967296,
+  "channel_bytes": 268435456,
+  "channel_records": 100000,
+  "requests_per_second": 1000,
+  "source_requests_per_second": 1000,
+  "motd": "Hosted channels are being qualified. Delivery receipts remain covered and can take longer in large rooms.",
+  "rules": "Private channels are the default. Members control admission, moderation and publication.",
+  "operator_contact": "Your installed network administrator"
+}

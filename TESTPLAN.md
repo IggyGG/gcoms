@@ -651,3 +651,11 @@ Withhold an actual service reply after fsync, require a second local send to que
 within 200ms, then retry without duplicates or false delivery. Close must interrupt
 a stalled read; reopen must retain both messages and require real recipient
 receipts before Delivered. Run strict runtime/application all-feature checks.
+
+## Hosted HTTPS deployment
+
+Validate the source-bound service binary and supplied configuration, preserve and
+validate the existing TLS boundary before reload, and probe hosted Info plus the
+pre-existing health/defaults paths. Keep direct HTTPS readiness separate from
+actual installed-network GChat admission, message receipts, recovery and files.
+Require state-preserving restart and rollback without discarding accepted logs.
