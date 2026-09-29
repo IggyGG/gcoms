@@ -347,6 +347,30 @@ impl Engine {
         let sources = self.sources.entry(id).or_default();
         sources.len() < MAX_PEERS && sources.insert(peer)
     }
+    fn query_new_source(
+        &mut self,
+        id: ShareId,
+        peer: Peer,
+        now: u64,
+        out: &mut Vec<Action>,
+    ) -> Result<()> {
+        // Only authenticated advertisements reach this helper. Keep the same
+        // source, retry and user-intent bounds for offers and completion claims.
+        if self.source(id, peer)
+            && self.refresh_at > now
+            && self.sources[&id].len() <= MAX_SOURCES
+            && self.backoff.get(&peer).is_none_or(|at| *at <= now)
+            && self.cache.get(id)?.status == Status::Downloading
+        {
+            out.push(Action {
+                _payload: None,
+                discovery_generation: None,
+                peer,
+                message: Message::Inventory { id, start: 0 },
+            });
+        }
+        Ok(())
+    }
     pub fn action_allowed(&self, action: &Action) -> bool {
         if !self.permits(
             action.peer,
@@ -457,24 +481,11 @@ impl Engine {
                     }
                     let id = manifest.id;
                     self.cache.offer(manifest, now)?;
-                    let discovered = self.source(id, peer);
                     // Retained downloads need not wait for the periodic poll
                     // after discovery finally replies. Only the first bounded
                     // source set gets an immediate query; repeated offers and
                     // later sources keep the rotating maintenance schedule.
-                    if discovered
-                        && self.refresh_at > now
-                        && self.sources[&id].len() <= MAX_SOURCES
-                        && self.backoff.get(&peer).is_none_or(|at| *at <= now)
-                        && self.cache.get(id)?.status == Status::Downloading
-                    {
-                        out.push(Action {
-                            _payload: None,
-                            discovery_generation: None,
-                            peer,
-                            message: Message::Inventory { id, start: 0 },
-                        });
-                    }
+                    self.query_new_source(id, peer, now, &mut out)?;
                 }
                 if let Some(after) = next {
                     out.push(Action {
@@ -721,6 +732,10 @@ impl Engine {
                     return Err(Error::Unauthorized);
                 }
                 self.cache.receipt(id, peer.member)?;
+                // A valid completion identifies a candidate source after our
+                // restart. It does not verify any local piece or finish our
+                // download: inventory and authenticated piece checks still do.
+                self.query_new_source(id, peer, now, &mut out)?;
             }
         }
         Ok(out)

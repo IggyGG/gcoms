@@ -27,3 +27,8 @@ is not completion. Failed initial discovery retries after the existing 30-second
 request bound; successful discovery keeps its normal 60-second cadence. Pending
 attempts are not duplicated, and old completions cannot release a newer attempt
 or a request created after membership removal and restoration.
+
+Authenticated completion receipts also identify candidate sources after a restart.
+For an already accepted download, a newly identified source gets the same bounded
+inventory query as an offer. The receipt does not verify local pieces or mark the
+download complete; normal inventory, per-piece and final integrity checks remain.

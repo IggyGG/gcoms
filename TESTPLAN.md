@@ -506,3 +506,11 @@ test against 8cdfd3f. Runtime checks retain incoming progress with stalled outbo
 receipts and retry completion across locking. These are component checks, not
 proof of Mac installed 16 MiB completion within 180 seconds; the separately bound
 native artifact must still pass that gate and rollback qualification.
+
+`completion_source` separately reproduces an authenticated completion arriving
+before discovery after cache reopen. It must request inventory from that source
+without waiting for the discovery clock, preserve retained pieces, and request
+only missing pieces after inventory. Negative cases preserve private scope,
+digest checks, pause/cancel/unaccepted intent, duplicate suppression, the first
+four immediate source queries, revocation and source backoff. A completion claim
+alone must neither verify pieces nor complete the local download.
