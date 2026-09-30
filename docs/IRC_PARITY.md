@@ -49,13 +49,17 @@ run11 passes: 111 ms feedback, 4.439 s message plus covered receipt, 6.739 s
 offline-owner admission, Topic pending/encrypted handoff, moderation, voice,
 notices, ordinary offline-message recovery and 156.586 s verified 16 MiB resume.
 The full file workflow takes 231.017 s. Cleanup and grant revocation pass.
-Fresh exact-source smoke07 is running before the protected-network 500-member
-campaign; native installed qualification and normal trunk publication remain open.
+Fresh exact-source smoke07 also passes twelve independent members, 220 covered
+recipient signatures, 5 ms ordinary recovery, visible membership progress,
+97.373 s file resume, removal and replacement, resource capture and cleanup.
+The protected-network 500-member campaign is now running on this verified pair;
+native installed qualification and normal trunk publication remain open.
 See `docs/evidence/irc-workspace-20260930/removal-replay-qualified.json`,
 `docs/evidence/irc-durable-capacity-20260930/removal-fixed-01.json` and GChat's
 `docs/evidence/irc-trunk-integration-20260930/worker-wake-qualified.json`,
 `worker-wake-packages.json`, and
-`docs/evidence/irc-hosted-capacity-20260930/live-11-pass.json`.
+`docs/evidence/irc-hosted-capacity-20260930/live-11-pass.json` and
+`smoke-12-07-pass.json` in that directory.
 
 The durable-runtime 500-member campaign passes with 4,990 authenticated recipient
 signatures, unchanged 4-CPU/8-GiB/7,200-second bounds and 4,166.48-second elapsed
