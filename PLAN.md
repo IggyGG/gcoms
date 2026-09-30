@@ -1001,7 +1001,10 @@ capacity hypothesis, not yet a definitive explanation of the original timeout.
 Explicit operator circuit/connection budgets are implemented with default
 128/1024, hard ceilings4096/8192, validation before listen, and unchanged source
 and per-entry bounds. Real stream saturation/release tests are being qualified.
-No relay has yet been reconfigured or restarted for this change, and no new
+All eight native relays now run the qualified full-feature binary at the original
+128/1024 capacity settings, with identity files, existing drop-ins and resource
+limits preserved. See `relay-control-rollout.json` in the durable-capacity
+evidence directory. The matched load comparison remains in progress; no new
 network-capacity pass is claimed.
 
 The retained-profile load diagnostic reproduced a failure at68 started profiles
