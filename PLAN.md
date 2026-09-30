@@ -885,3 +885,13 @@ recorded 225,198,874,624 bytes written. It did not reach the full message/offlin
 file/churn phases and is not a capacity pass. The source-bound failure receipt is
 `docs/evidence/irc-durable-capacity-20260930/serial-batch-02.json`. The later 75ms
 serial and separately scheduled four-owner campaigns remain unchanged and active.
+
+The full merged GComs `0e7db6a` gate completed: 1,110 tests passed, 13 explicit
+ignores, 129 suites, strict workspace Clippy, Rust documentation and minimal
+core/IPC builds. `docs/evidence/irc-workspace-20260930/merged.json` retains its
+exact log hash. This qualifies the merged implementation before the new deferred
+replay concurrency follow-up. The actual 12-profile application smoke verified
+12 independent identities and 110 recipient signatures for ten simultaneous
+senders, but the returning owner took 14.537s to replay eleven admissions after
+network readiness (10s target). A bounded two-read replay window is now under
+validation; originals and fixed deadlines remain unchanged.

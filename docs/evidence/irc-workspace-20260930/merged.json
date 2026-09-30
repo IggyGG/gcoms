@@ -1,0 +1,18 @@
+{
+  "source": "0e7db6add4113b8888ef9700ffedd6c1d1a44a16",
+  "scope": "full merged GComs workspace all-feature Rust gate before deferred replay concurrency follow-up",
+  "passed": 1110,
+  "failed": 0,
+  "ignored": 13,
+  "suites": 129,
+  "clippy_workspace_all_targets_all_features": "passed",
+  "rustdoc_workspace_all_features": "passed",
+  "core_no_default_features": "passed",
+  "sdk_no_default_features_ipc": "passed",
+  "runner_exit": 0,
+  "log": {
+    "path": "test-evidence/irc-parity/workspace-final-03.log",
+    "sha256": "77a77b7c72bc7b5bfafec081e928d52577f22a5eebc06cacf4db8d4f9dbd9ce6"
+  },
+  "limits": "Does not qualify later replay edits, 500-member protected-network capacity, native installers or physical mobile/push."
+}
