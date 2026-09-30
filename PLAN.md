@@ -1012,3 +1012,10 @@ daemons stopped, originals stayed byte-identical and its grant was revoked.
 See `docs/evidence/irc-durable-capacity-20260930/bootstrap-load-01.json`. A paired
 old/new operator-budget control is still required to isolate capacity from other
 relay-source changes.
+
+The isolated original owner's 80 missed admissions converge to81 members in
+96.815s after network readiness, missing the unchanged10s target without fleet
+congestion. Its original profile stayed untouched and its diagnostic grant was
+revoked. See `docs/evidence/irc-durable-capacity-20260930/owner-backlog-81.json`.
+A user clarification is pending on the target for long membership backlogs versus
+ordinary offline-message recovery; no deadline or qualification was relaxed.

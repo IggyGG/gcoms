@@ -1,0 +1,60 @@
+{
+  "schema": 1,
+  "scope": "retained-profile bootstrap diagnostic only",
+  "passed": true,
+  "latency_passed": false,
+  "grant_revoked": true,
+  "original_untouched": true,
+  "cleanup_passed": true,
+  "finished_unix": 1790743103,
+  "source": {
+    "gcoms": "40b440d",
+    "gchat": "c5bbfe8",
+    "deployed_relay": "0b41cb2"
+  },
+  "members": 81,
+  "missed_admissions": 80,
+  "measured_steps": [
+    {
+      "step": "alice daemon ready",
+      "elapsed_ms": 507,
+      "duration_ms": 506
+    },
+    {
+      "step": "alice network ready",
+      "elapsed_ms": 5094,
+      "duration_ms": 4581
+    },
+    {
+      "step": "batch ready",
+      "elapsed_ms": 5095,
+      "profiles": 1
+    },
+    {
+      "step": "owner complete81 roster",
+      "elapsed_ms": 101910,
+      "duration_ms": 96814
+    },
+    {
+      "step": "owner81 replay after network ready",
+      "elapsed_ms": 101910,
+      "duration_ms": 96815,
+      "target_ms": 10000,
+      "within_target": false
+    },
+    {
+      "step": "diagnostic complete",
+      "elapsed_ms": 101940,
+      "passed": true,
+      "error": null,
+      "grant_revoked": true,
+      "original_untouched": true
+    }
+  ],
+  "evidence": {
+    "bootstrap-owner-01-result.json": "9ba8c78f9fab9e720a1bff4b32709e6fdde695d2d2a9d27b28ee41c9c29e506d",
+    "bootstrap-owner-01-transport.json": "6ff2a3a546ff0a7bebd25013346ba642794b0f019e3659215fbec48fa27ad177",
+    "bootstrap-owner-01.log": "475021afc540de6c0660279925e9d19afcb0b7c94f4b1dc6c24d036bccbee04b"
+  },
+  "limits": "Healthy one-client replay diagnostic on a private copy of the original offline owner. No target changed. Correctness passes; the original10000ms recovery target fails at96815ms. Scope decision requested for large membership backlogs; ordinary offline-message recovery target remains10000ms."
+}
