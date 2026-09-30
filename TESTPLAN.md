@@ -725,11 +725,12 @@ Replay cost comparisons retain the 7200-second campaign limit and identical
 alongside process I/O/RSS. The 75ms scheduling budget is checked between records;
 actual large-room feedback and recovery still require measured qualification.
 
-Current archive qualification uses GComs65b54c7/GChatd4ff03d; the paired-pass
+Current archive qualification uses GComs `65b54c7`/GChat `d4ff03d`; the paired-pass
 receipt includes every archive hash and the untouched source manifests. Live07
-qualifies only its runtime907e54f two-client protected-network journey. Retain
+qualifies only its runtime `907e54f` two-client protected-network journey. Retain
 earlier failed latency results and require separate 500-member and native
 installed results before claiming the full IRC parity release.
+
 ## Retained inbox recovery when replacement is full
 
 With a pinned TLS fixture, populate the six retained cleanup roles and allow
@@ -756,20 +757,20 @@ encryption/archive checks and the original invalid millisecond equality result
 For the IPC25 integration, run SDK all-feature tests and strict SDK/runtime
 Clippy. `recovery_is_owner_capability_bounded_and_versioned` decodes and re-encodes
 fixed released IPC22 request/response bytes.
-`hosted_task_dialects_and_new_capabilities_fail_before_welcome` rejects task23/24
-and hosted/file capabilities on22. The retained route-recovery connection test
+`hosted_task_dialects_and_new_capabilities_fail_before_welcome` rejects task IPC23/24
+and hosted/file capabilities on IPC22. The retained route-recovery connection test
 also requires hosted dispatch denial under an ordinary legacy admin session.
 Repeat merged GChat Rust/UI/generated checks and paired package consumers.
 
-Retain the serial500-client campaign and its original7200-second bound. The
+Retain the serial 500-client campaign and its original 7200-second bound. The
 separate ignored `five_hundred_concurrent_durable_hosted_clients_ten_senders_offline_and_churn`
 runs at most four independent catch-up owners, with identical commit validation
-and private archives. Run its12-client concurrent smoke first; do not compare
+and private archives. Run its 12-client concurrent smoke first; do not compare
 its wall time as a production-code-only speedup or protected-network result.
-Require a configured channel quota above the measured339,264,618-byte admission
-log; the500-member deployment template uses1GiB with a4GiB aggregate ceiling.
+Require a configured channel quota above the measured 339,264,618-byte admission
+log; the 500-member deployment template uses 1 GiB with a 4 GiB aggregate ceiling.
 
-Use the merged-paired-pass archive receipt for0e7db6a/5533b1e. The1096-test
-workspace receipt belongs to65b54c7 and must not be substituted for the active
-merged workspace rerun. CurrentGChat full browser integration passes80 cases;
-physical native installers and500-member protected-network checks remain separate.
+Use the merged-paired-pass archive receipt for `0e7db6a`/`5533b1e`. The 1,096-test
+workspace receipt belongs to `65b54c7` and must not be substituted for the active
+merged workspace rerun. Current GChat full browser integration passes 80 cases;
+physical native installers and 500-member protected-network checks remain separate.

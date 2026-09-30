@@ -313,8 +313,8 @@ GChat's existing binary file controls now route through the selected conversatio
 profile without converting contacts into legacy channel identities.
 
 `files-inbox-02.log` passes the new restart/idempotence/moderation cases and selected
-existing file regressions. Full GChat `contacts-full-01.log` passes on GComs4c651a1
-and GChatd6c0235; that receipt predates the new file worker. Contact transfer,
+existing file regressions. Full GChat `contacts-full-01.log` passes on GComs `4c651a1`
+and GChat `d6c0235`; that receipt predates the new file worker. Contact transfer,
 hosted whole-file transfer, quota/lifecycle audit, scale and release gates remain
 open. The user chose covered receipts with slower large-channel delivery status
 and “Topic pending” for newcomers while existing authorized writers are offline.
@@ -377,12 +377,12 @@ in docs/evidence/irc-covered-poll-20260930; live improvement remains unmeasured.
 ### Current release qualification checkpoint — 2026-09-30
 
 The feature mapping covers the implemented native IRC equivalents across GComs
-and GChat. Current GComs65b54c7/GChatd4ff03d archive consumers, generated bindings,
+and GChat. Current GComs `65b54c7`/GChat `d4ff03d` archive consumers, generated bindings,
 frontend and Linux desktop compilation pass; no packages have been published.
 See `evidence/irc-package-staging-20260930/current-paired-pass.json`. The full
 workspace run and 500-client durable replay campaigns remain in progress.
 
-GChat live07 on runtime907e54f passes the actual two-client protected-network
+GChat live07 on runtime `907e54f` passes the actual two-client protected-network
 journey and all measured latency targets: 110ms feedback, 2.409s delivery/covered
 ACK, 3.328s offline-owner admission, 170.050s resumed whole-file verification and
 297.114s file workflow. Receipts stay covered; offline joins retain Topic pending

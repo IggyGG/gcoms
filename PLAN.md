@@ -789,17 +789,17 @@ also passes and reports aggregate replay checkpoint counts. Current 500-client
 performance remains unqualified. See `docs/evidence/irc-replay-budget-20260930`.
 The full workspace run on older 441efb5 hit the debug-speed-dependent count test;
 its failed log is retained. That test's controlled scheduling clock was corrected
-in907e54f and passed the full runtime library run before this follow-up.
+in `907e54f` and passed the full runtime library run before this follow-up.
 
 ### IRC-8 current paired archives and live timing — 2026-09-30
 
-The full archive/consumer gate now also passes on GComs65b54c7 and GChatd4ff03d,
+The full archive/consumer gate now also passes on GComs `65b54c7` and GChat `d4ff03d`,
 including the two-piece file window and 75ms replay batch. The same 20 Rust
 archives, external Rust/npm consumers, paired GChat tests/frontend and Linux
 desktop compilation pass without publishing packages or changing source inputs.
 Evidence: `docs/evidence/irc-package-staging-20260930/current-paired-pass.json`.
 
-The actual two-client protected-network journey on runtime907e54f passes both
+The actual two-client protected-network journey on runtime `907e54f` passes both
 correctness and its fixed latency targets: 110ms local feedback, 2.409s delivery
 plus covered receipt, 3.328s offline-owner join after network readiness, 170.050s
 resumed 16MiB verification and 297.114s full file workflow. Exact hash verification,
@@ -808,6 +808,7 @@ retains the source-bound `window-07.json` receipt. The temporary bootstrap-only
 grant was revoked after both daemons stopped; accepted channel logs remain.
 This is a two-client pass, not 500-member or native installed qualification.
 The full workspace and unchanged-bound 500-client campaigns remain running.
+
 ## Inbox recovery at the retained-cleanup bound (2026-09-29)
 
 The live channel repair uncovered an independent recovery loop: after retained
@@ -839,13 +840,13 @@ Integrating current trunk eef71ea preserves owner-controlled legacy membership
 recovery and inbox restoration fixes. IPC25 keeps the published IPC22 recovery
 discriminants, appends hosted/file variants, and rejects the conflicting
 unpublished task IPC23/24 dialects before dispatch. Hosted and modern-file
-capabilities require25. Fixed original recovery bytes, older capability denial
+capabilities require IPC25. Fixed original recovery bytes, older capability denial
 and handshake refusal regressions are included. Paired merged qualification is
 running; earlier live/archive results retain their original source bindings.
 
-The 500-member admission log measured339,264,618 bytes, exceeding the deployment
-profile's256MiB channel quota. The supplied and installed HEL profile now allows
-1GiB/channel within the unchanged4GiB aggregate ceiling, exact seven-channel
+The 500-member admission log measured 339,264,618 bytes, exceeding the deployment
+profile's 256 MiB channel quota. The supplied and installed HEL profile now allows
+1 GiB/channel within the unchanged 4 GiB aggregate ceiling, exact seven-channel
 allowlist and existing rate bounds. Restart preserved all retained state and
 HTTPS Info; see `docs/evidence/irc-hosted-service-20260930/capacity-quota-rollout.json`.
 This corrects storage headroom, not replay latency. The original serial capacity
@@ -853,11 +854,11 @@ campaigns remain unchanged; an additional four-owner concurrent replay campaign
 retains independent validation/archives and all original send/recovery/churn
 assertions, reporting its scheduling separately. No security check is skipped.
 
-Merged-source archives pass on GComs0e7db6a/GChat5533b1e: all20 Rust archives,
+Merged-source archives pass on GComs `0e7db6a`/GChat `5533b1e`: all 20 Rust archives,
 isolated Rust/npm consumers, GChat Rust/generated/frontend checks and Linux
 desktop compilation. `docs/evidence/irc-package-staging-20260930/merged-paired-pass.json`
 records the real clean commits and archive hashes. The full pre-merge workspace
-gate on65b54c7 also completed:1,096 tests passed,12 explicit ignores,129 suites;
+gate on `65b54c7` also completed: 1,096 tests passed, 12 explicit ignores, 129 suites;
 strict Clippy, documentation and minimal core/IPC builds pass. Its separate
 receipt is `docs/evidence/irc-workspace-20260930/pre-merge.json`; the merged
 workspace rerun is active. No package registry publication or installed release
