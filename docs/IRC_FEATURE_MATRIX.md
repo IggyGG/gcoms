@@ -7,7 +7,7 @@ semantics come from [RFC 2811](https://www.rfc-editor.org/info/rfc2811/). Client
 conveniences and file workflows are additional product requirements. The user
 excluded an IRC bridge, IRCv3, public user discovery and silent identity linking.
 
-“Implemented” below refers to source on the paired IRC-parity branches. Exact
+“Implemented” below refers to the paired IRC-parity implementation. Exact
 validation and unfinished release gates remain in [the evidence ledger](IRC_PARITY.md).
 A source mapping does not imply an installed release or a 64-member network pass.
 
@@ -16,7 +16,7 @@ A source mapping does not imply an installed release or a 64-member network pass
 | Connection, disconnect, quit, reconnect | Existing `/network`, `/disconnect`, `/quit`, retained network/profile lifecycle | Preserved; current native/installed checks open |
 | Join, part, room creation | `/hosted create`, `/hosted join`, `/part`; independent external MLS admission | Implemented; offline-owner, competing-join and persisted retry checks |
 | Continued channel operation without creator | Ciphertext service sequences policy and membership; members verify every transition | Implemented; service holds no member key |
-| Channel list | `/hosted list`, hosted `/list`, opt-in operator `/publish` | Implemented; pagination/privacy/restart/IPC25 checks |
+| Channel list | `/hosted list`, hosted `/list`, opt-in operator `/publish` | Implemented; pagination/privacy/restart/IPC26 checks |
 | Member list | `/names`, scoped `/who` | Implemented; identity and role supplied by verified membership |
 | Channel messages | Text or `/say`; ordered retained records | Implemented; acceptance and recipient delivery remain distinct |
 | Independent private messages | Bilateral signed-card consent, `/contact add`, `/contact open` | Implemented; real no-channel delivery/reopen/block tests |
@@ -34,7 +34,7 @@ A source mapping does not imply an installed release or a 64-member network pass
 | Member limit | `/mode +l number` | Implemented; capacity bounded at 64 |
 | Bans and exceptions | `/mode +b/-b/+e/-e/+I/-I member-id` | Implemented as scoped identities rather than host masks |
 | Private and secret rooms | `/mode private/secret/public`; explicit publication required | Implemented; private/secret rooms omitted from public directory |
-| Kick, departure, ownership | `/kick`, `/part`, `/owner`, `/close-channel` | Implemented; pending removal revokes authority before member-assisted rekey. Removed-client snapshot replay fix passes focused tests, exact-profile recovery/reopen and fresh 12-client live exclusion/replacement |
+| Kick, departure, ownership | `/kick`, `/part`, `/owner`, `/close-channel` | Implemented; pending removal revokes authority before member-assisted rekey. Removed-client snapshot replay fix passes focused tests, exact-profile recovery/reopen and full 64-member live exclusion/replacement |
 | Away and availability | `/away`, `/back`, `/presence on/off` | Implemented; opt-in authenticated leases, expiry becomes Unknown |
 | User information | Scoped `/whois`, contact fingerprint/card/verification | Implemented; no global host/user directory |
 | Persistent block, ignore and mute | `/block`, `/ignore`, `/mute` | Implemented; contact block revokes new file authority, local filters preserve encrypted history |
@@ -47,7 +47,7 @@ A source mapping does not imply an installed release or a 64-member network pass
 | Connectivity probe | `/ping`, `/refresh` | Implemented as authenticated service recovery/round trip |
 | Network operator controls | Service creation allowlist, suspension, source/global rates and storage quotas | Implemented and deployed to the HEL qualification service; exact allowlist and retained-state restart checks pass |
 | Bots and automation | `crates/application/examples/hosted_bot.rs` | Implemented scoped ordinary-member example; bounded replies and no notice loop |
-| Delivery/recovery status | Pending, ServiceAccepted, Delivered, Failed; durable dedup and retry; confirmed catch-up progress | Implemented; covered receipts may be slower in large rooms. Ordinary offline recovery keeps 10 seconds; large membership backlogs show progress. Actual 81-member replay and indicator completion pass |
+| Delivery/recovery status | Pending, ServiceAccepted, Delivered, Failed; durable dedup and retry; confirmed catch-up progress | Implemented; covered receipts may be slower in large rooms. Ordinary offline recovery keeps 10 seconds; large membership backlogs show progress. Current 64-member replay and indicator completion pass; earlier 81-member evidence retains its historical scope |
 | Load and churn | 64 identities, ten senders, offline recovery, file traffic and removal | Durable-runtime 500-member/4,990-signature campaign passes within its original limits; matched 85-client bootstrap passes with hosted relay budgets. Full protected-network/GChat 64-member gate passes: 1,260 covered signatures, offline recovery, visible replay, 16 MiB resume, removal/replacement and cleanup. Larger runs are historical and no longer required |
 
 The following are deliberate differences in this approved scope: no raw IRC

@@ -38,8 +38,9 @@ the departed member before a replacement restores the roster to 64. Resource
 capture, cleanup and grant revocation pass. No larger campaign is required.
 See `docs/evidence/irc-workspace-20260930/limit-64-merged-qualified.json` and GChat's
 `docs/evidence/irc-hosted-capacity-20260930/capacity-64-01-pass.json`.
-Paired GChat/package checks and source landing are finishing; native installer
-publication remains separately gated. Historical evidence below retains its scope.
+Paired GChat passes 194 tests with three retained exclusions, strict Clippy and
+generated contract checks. Package checks and source landing are finishing;
+native installer publication remains separately gated. Historical evidence below retains its scope.
 
 Earlier checkpoint, 2026-09-30: mapped native features were implemented; live
 capacity and installed publication were still in progress. GComs `2c4535d` passes

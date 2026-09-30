@@ -14,7 +14,9 @@ channels, contacts or the 64-member limit. IPC26 keeps the released IPC22 recove
 and IPC23 invitation discriminants; hosted/file operations follow them with
 separate capabilities. Negotiate released IPC23, reject unpublished IPC24/25, and
 retain legacy privilege checks. Fixed-byte invitation/recovery fixtures and an
-actual IPC23 handshake check the merged layout. Full paired checks are pending.
+actual IPC23 handshake check the merged layout. Paired GChat passes 194 tests
+with three retained exclusions, strict Clippy and generated contracts. Package
+checks and source landing are finishing.
 
 ## IRC parity: retain the 64-member limit (2026-09-30)
 
