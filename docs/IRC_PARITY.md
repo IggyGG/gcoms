@@ -29,7 +29,7 @@ See the [command-by-command feature mapping](IRC_FEATURE_MATRIX.md) for the sour
 | IRC-5 | Authenticated activity and richer presence | In progress | Actor/target/reason ordering; away/back/unknown/invisible; optional sharing; snapshot polling loses no events |
 | IRC-6 | Notices, blocking/muting, highlights, formatting and client workflows | In progress | Same actual service-backed behavior through desktop/TUI/shared mobile UI; no automatic notice loops |
 | IRC-7 | Operator workflows and supported bot integration | In progress | Scoped authorization, rate control, network/channel authority separation, executable bot example |
-| IRC-8 | Capacity, compatibility and release qualification | Pending | 500 real identities; ten concurrent senders; churn/offline/file traffic; timing/resource evidence; profile-preserving upgrade |
+| IRC-8 | Capacity, compatibility and release qualification | In progress | 500 real identities; ten concurrent senders; churn/offline/file traffic; timing/resource evidence; profile-preserving upgrade |
 
 The classical mode equivalents include +o/+v/+m/+b/+e/+I/+i/+k/+l/+t and
 private/secret discovery; member-authenticated sending (+n) remains mandatory.
@@ -371,3 +371,19 @@ while retaining consumer commit, scoped proofs, individual signatures and bounde
 batches. Existing hosted tests, three new polling/compatibility/authorization
 cases, five service API cases and strict checks pass. Source-bound evidence is
 in docs/evidence/irc-covered-poll-20260930; live improvement remains unmeasured.
+
+### Current release qualification checkpoint — 2026-09-30
+
+The feature mapping covers the implemented native IRC equivalents across GComs
+and GChat. Current GComs65b54c7/GChatd4ff03d archive consumers, generated bindings,
+frontend and Linux desktop compilation pass; no packages have been published.
+See `evidence/irc-package-staging-20260930/current-paired-pass.json`. The full
+workspace run and 500-client durable replay campaigns remain in progress.
+
+GChat live07 on runtime907e54f passes the actual two-client protected-network
+journey and all measured latency targets: 110ms feedback, 2.409s delivery/covered
+ACK, 3.328s offline-owner admission, 170.050s resumed whole-file verification and
+297.114s file workflow. Receipts stay covered; offline joins retain Topic pending
+until authorized encrypted handoff. The exact 16MiB hash and unvoiced completion
+verify. Prior failures remain retained. Native installed and full 500-member
+network qualification, followed by normal trunk publication, remain open.

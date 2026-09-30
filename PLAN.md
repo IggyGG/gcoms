@@ -786,3 +786,21 @@ performance remains unqualified. See `docs/evidence/irc-replay-budget-20260930`.
 The full workspace run on older 441efb5 hit the debug-speed-dependent count test;
 its failed log is retained. That test's controlled scheduling clock was corrected
 in907e54f and passed the full runtime library run before this follow-up.
+
+### IRC-8 current paired archives and live timing — 2026-09-30
+
+The full archive/consumer gate now also passes on GComs65b54c7 and GChatd4ff03d,
+including the two-piece file window and 75ms replay batch. The same 20 Rust
+archives, external Rust/npm consumers, paired GChat tests/frontend and Linux
+desktop compilation pass without publishing packages or changing source inputs.
+Evidence: `docs/evidence/irc-package-staging-20260930/current-paired-pass.json`.
+
+The actual two-client protected-network journey on runtime907e54f passes both
+correctness and its fixed latency targets: 110ms local feedback, 2.409s delivery
+plus covered receipt, 3.328s offline-owner join after network readiness, 170.050s
+resumed 16MiB verification and 297.114s full file workflow. Exact hash verification,
+Topic pending/handoff, moderation and unvoiced file completion all pass. GChat
+retains the source-bound `window-07.json` receipt. The temporary bootstrap-only
+grant was revoked after both daemons stopped; accepted channel logs remain.
+This is a two-client pass, not 500-member or native installed qualification.
+The full workspace and unchanged-bound 500-client campaigns remain running.

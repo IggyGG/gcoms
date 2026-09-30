@@ -721,3 +721,9 @@ Replay cost comparisons retain the 7200-second campaign limit and identical
 500-member work. Record aggregate checkpoint counts at each catch-up marker
 alongside process I/O/RSS. The 75ms scheduling budget is checked between records;
 actual large-room feedback and recovery still require measured qualification.
+
+Current archive qualification uses GComs65b54c7/GChatd4ff03d; the paired-pass
+receipt includes every archive hash and the untouched source manifests. Live07
+qualifies only its runtime907e54f two-client protected-network journey. Retain
+earlier failed latency results and require separate 500-member and native
+installed results before claiming the full IRC parity release.

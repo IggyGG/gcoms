@@ -1,0 +1,13 @@
+{
+  "grant_digest": "25DmMb9EtoCGt2wWHK3L4JAo66b1UE9x2Sus_L9QEjw",
+  "scope": "bootstrap",
+  "max_names": 0,
+  "expires_at": 1790736088,
+  "revoke_after_qualification": true,
+  "revoked": true,
+  "revoked_at": 1790729666,
+  "operator_exit": 0,
+  "owner_preserved": true,
+  "mode": "0600",
+  "daemons_stopped": true
+}
