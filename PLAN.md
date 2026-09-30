@@ -741,3 +741,18 @@ renamed consumer compiled. The original full runner remains recorded as failed
 at its npm-cache step; these component results do not qualify the latest paired
 release. `docs/evidence/irc-package-staging-20260930/summary.json` records archive
 hashes, runner adaptations and logs. Nothing was published to package registries.
+
+### IRC-4 bounded hosted file window — 2026-09-30
+
+The live two-client run now meets small-room delivery and full-workflow targets,
+but resumed verification remains 234.873s against 180s. Hosted file transfers now
+keep two immutable pieces in flight while the channel owner continues covered
+sync. Local authority is checked both before the request and before its result is
+exposed; cache verification and saved piece progress remain unchanged. Real held
+service responses prove the two-request bound, concurrent chat, shutdown and
+revocation refusal. All 60 runtime library tests pass (two explicit ignores),
+and strict all-target runtime Clippy passes. Evidence:
+`docs/evidence/irc-blob-window-20260930/summary.json`. Live latency remains open.
+The batching count test now freezes only its scheduling clock to avoid making
+its write-count assertion depend on debug-build CPU speed. Real-time capacity
+and responsiveness tests keep their original clocks and bounds.

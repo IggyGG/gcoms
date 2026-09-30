@@ -1,0 +1,27 @@
+{
+  "base_revision": "441efb5",
+  "scope": "full runtime library all-feature tests and strict all-target all-feature Clippy",
+  "tests": {
+    "passed": 60,
+    "failed": 0,
+    "ignored": 2
+  },
+  "logs": {
+    "test-evidence/irc-parity/blob-window-03.log": "8ed17af1bc21294e8cd4066d11a73b51f2bff400d624269978b8f4405cd1e65f",
+    "test-evidence/irc-parity/blob-window-04.log": "b735da3fb309d4bd6c836f3350552883c46fec056f19a972648718b93178ef5e"
+  },
+  "source_sha256": {
+    "crates/runtime/src/hosted/owner.rs": "65426779998d7cacbb3edf6d48ea49135129cc302a112a02e6c0bb251fd3454d",
+    "crates/runtime/src/hosted/state.rs": "468594f52c1c306f82c0c6bafd0657d79979d47db1dd3333aa81f74d597a6a45",
+    "crates/runtime/src/hosted/tests.rs": "427c22e57d02bb5ca295aa326d845ebf34ce3011c290b4608250ee893adc4c6d",
+    "crates/runtime/src/hosted/tests/checkpoint_batch.rs": "7cf86f46fb65be9949d357e54dc9321522b8cbe8f92b6dcbc03aecc455dac6f2",
+    "crates/runtime/src/modern_files/mod.rs": "ca441535bb18e8e38f3b1f73c1f44da61421db3707ee699ed9834a3ac85f9ad3",
+    "crates/runtime/src/hosted/tests/blob_concurrency.rs": "272ee9e8b4c01625aa8b7f96f874e01fed75fa010f155aacf93b1ea95bf91df1"
+  },
+  "retained_failures": [
+    "01: debug-speed-dependent checkpoint-count assertion",
+    "02: Copy-value clone lint",
+    "03: redundant test field-name lint; full test run passed"
+  ],
+  "live_resume_target": "not yet qualified"
+}

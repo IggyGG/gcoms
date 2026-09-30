@@ -13,6 +13,34 @@ use zeroize::Zeroizing;
 const MAX_EVENTS: usize = 4096;
 const MAX_PENDING: usize = 256;
 
+// Immutable piece I/O carries a scoped proof prepared by the live owner. The
+// owner rechecks local authority before exposing its result after concurrent sync.
+pub(super) struct BlobTransfer {
+    transport: Arc<dyn Transport>,
+    channel: [u8; 32],
+    operation: wire::Operation,
+    uploading: bool,
+}
+impl BlobTransfer {
+    pub(super) async fn exchange(self) -> Result<api::Reply, String> {
+        match self
+            .transport
+            .exchange(self.channel, self.operation)
+            .await?
+        {
+            wire::Reply::BlobStored if self.uploading => Ok(api::Reply::Done),
+            wire::Reply::Blob { body } if !self.uploading => {
+                let bytes = decode(&body)?;
+                if bytes.is_empty() || bytes.len() > wire::MAX_BLOB_BYTES {
+                    return Err("Ciphertext piece reply exceeds bounds".into());
+                }
+                Ok(api::Reply::Blob(bytes))
+            }
+            other => Err(format!("Ciphertext piece operation refused: {other:?}")),
+        }
+    }
+}
+
 #[derive(Clone, Serialize, Deserialize)]
 pub(super) struct Application {
     version: u16,
@@ -1161,7 +1189,7 @@ impl Client {
         // batches amortize sealed full-state writes while allowing urgent local
         // operations to interrupt catch-up between durable boundaries.
         let mut dirty = false;
-        let mut started = std::time::Instant::now();
+        let mut started = tokio::time::Instant::now();
         for (index, record) in records.iter().enumerate() {
             if let Err(error) = self.receive_room() {
                 if dirty {
@@ -1182,7 +1210,7 @@ impl Client {
                 if index + 1 != records.len() {
                     tokio::task::yield_now().await;
                 }
-                started = std::time::Instant::now();
+                started = tokio::time::Instant::now();
             }
         }
         Ok(())
@@ -1382,12 +1410,11 @@ impl Client {
         // The caller checkpoints the validated batch before any await or return.
         Ok(())
     }
-    pub async fn blob(
+    pub(super) fn check_blob(
         &self,
-        reference: wire::BlobRef,
-        bytes: Option<Vec<u8>>,
-    ) -> Result<api::Reply, String> {
-        use sha2::{Digest, Sha256};
+        reference: &wire::BlobRef,
+        bytes: Option<&[u8]>,
+    ) -> Result<(), String> {
         self.healthy()?;
         if !matches!(self.archive.phase, Phase::Ready)
             || !self.session.active()
@@ -1397,7 +1424,7 @@ impl Client {
                 "Active channel membership and a valid piece reference are required".into(),
             );
         }
-        if let Some(bytes) = &bytes {
+        if let Some(bytes) = bytes {
             if reference.owner != self.session.member_id()
                 || !self.session.rules().may_post(reference.owner)
                 || bytes.is_empty()
@@ -1408,6 +1435,15 @@ impl Client {
                 );
             }
         }
+        Ok(())
+    }
+    pub(super) fn prepare_blob(
+        &self,
+        reference: wire::BlobRef,
+        bytes: Option<Vec<u8>>,
+    ) -> Result<BlobTransfer, String> {
+        use sha2::{Digest, Sha256};
+        self.check_blob(&reference, bytes.as_deref())?;
         let digest = bytes.as_ref().map(|b| Sha256::digest(b).into());
         let query = Sha256::digest(reference.authentication_bytes(digest)).into();
         let scope = if bytes.is_some() {
@@ -1432,21 +1468,19 @@ impl Client {
             },
             None => wire::Operation::GetBlob { reference, proof },
         };
-        match self
-            .transport
-            .exchange(self.archive.channel, operation)
-            .await?
-        {
-            wire::Reply::BlobStored if uploading => Ok(api::Reply::Done),
-            wire::Reply::Blob { body } if !uploading => {
-                let bytes = decode(&body)?;
-                if bytes.is_empty() || bytes.len() > wire::MAX_BLOB_BYTES {
-                    return Err("Ciphertext piece reply exceeds bounds".into());
-                }
-                Ok(api::Reply::Blob(bytes))
-            }
-            other => Err(format!("Ciphertext piece operation refused: {other:?}")),
-        }
+        Ok(BlobTransfer {
+            transport: self.transport.clone(),
+            channel: self.archive.channel,
+            operation,
+            uploading,
+        })
+    }
+    pub async fn blob(
+        &self,
+        reference: wire::BlobRef,
+        bytes: Option<Vec<u8>>,
+    ) -> Result<api::Reply, String> {
+        self.prepare_blob(reference, bytes)?.exchange().await
     }
     pub async fn sync_page(&mut self) -> Result<bool, String> {
         self.receive_room()?;

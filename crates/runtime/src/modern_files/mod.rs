@@ -844,20 +844,29 @@ impl Backend {
         };
         if entry.own && entry.publish && !entry.published {
             if entry.uploaded < state.manifest.pieces() as u32 {
-                let piece = entry.uploaded;
-                let bytes =
-                    postcard::to_allocvec(&self.engine.cache.read_piece(id, piece).map_err(error)?)
-                        .map_err(error)?;
-                sdk.hosted_channels(h::Request::PutBlob {
-                    channel,
-                    reference: reference(piece),
-                    bytes,
-                })
-                .await?;
-                let entry = self.metadata.entries.get_mut(&id).unwrap();
-                entry.uploaded += 1;
-                entry.error = None;
-                self.save()?;
+                let mut requests = Vec::new();
+                for piece in
+                    entry.uploaded..(entry.uploaded + 2).min(state.manifest.pieces() as u32)
+                {
+                    let bytes = postcard::to_allocvec(
+                        &self.engine.cache.read_piece(id, piece).map_err(error)?,
+                    )
+                    .map_err(error)?;
+                    requests.push(h::Request::PutBlob {
+                        channel,
+                        reference: reference(piece),
+                        bytes,
+                    });
+                }
+                for reply in hosted_pair(sdk, requests).await {
+                    if !matches!(reply?, h::Reply::Done) {
+                        return Err(error("invalid ciphertext upload response"));
+                    }
+                    let entry = self.metadata.entries.get_mut(&id).unwrap();
+                    entry.uploaded += 1;
+                    entry.error = None;
+                    self.save()?;
+                }
             } else {
                 sdk.hosted_channels(h::Request::SendIdentified {
                     channel,
@@ -874,14 +883,22 @@ impl Backend {
                 self.save()?;
             }
         } else if !entry.own && state.status == swarm::Status::Downloading {
-            if let Some(piece) = state.have.iter().position(|have| !have) {
-                let h::Reply::Blob(bytes) = sdk
-                    .hosted_channels(h::Request::GetBlob {
-                        channel,
-                        reference: reference(piece as u32),
-                    })
-                    .await?
-                else {
+            let pieces: Vec<_> = state
+                .have
+                .iter()
+                .enumerate()
+                .filter_map(|(index, have)| (!have).then_some(index as u32))
+                .take(2)
+                .collect();
+            let requests = pieces
+                .iter()
+                .map(|piece| h::Request::GetBlob {
+                    channel,
+                    reference: reference(*piece),
+                })
+                .collect();
+            for (piece, reply) in pieces.into_iter().zip(hosted_pair(sdk, requests).await) {
+                let h::Reply::Blob(bytes) = reply? else {
                     return Err(error("invalid ciphertext piece response"));
                 };
                 let ((proof, bytes), tail): ((Vec<[u8; 32]>, Vec<u8>), _) =
@@ -891,7 +908,7 @@ impl Backend {
                 }
                 self.engine
                     .cache
-                    .put(id, piece as u32, &bytes, &proof, now())
+                    .put(id, piece, &bytes, &proof, now())
                     .map_err(error)?;
                 self.metadata.entries.get_mut(&id).unwrap().error = None;
                 self.save()?;
@@ -920,6 +937,24 @@ impl Backend {
         }
         Ok(())
     }
+}
+
+// Keep only two immutable pieces in flight. A cancelled or lost response
+// retries identical ciphertext; only individually verified/stored results advance.
+async fn hosted_pair(
+    sdk: &dyn GcClient,
+    requests: Vec<h::Request>,
+) -> Vec<Result<h::Reply, SdkError>> {
+    debug_assert!(requests.len() <= 2);
+    let mut requests = requests.into_iter();
+    let Some(first) = requests.next() else {
+        return Vec::new();
+    };
+    let Some(second) = requests.next() else {
+        return vec![sdk.hosted_channels(first).await];
+    };
+    let (first, second) = tokio::join!(sdk.hosted_channels(first), sdk.hosted_channels(second));
+    vec![first, second]
 }
 
 #[cfg(test)]

@@ -39,7 +39,10 @@ fn restore(dir: &Path, channel: [u8; 32], transport: Arc<TransportFixture>) -> C
     Client::restore(&bytes.unwrap(), channel, storage, [99; 32], transport).unwrap()
 }
 
-#[tokio::test]
+// Freeze only the scheduling clock so this assertion measures checkpoint
+// batching independently of debug-build CPU speed. Real elapsed-time bounds
+// remain exercised by the release capacity and responsiveness campaigns.
+#[tokio::test(start_paused = true)]
 async fn hosted_checkpoint_batches_survive_lost_prefetch_and_reopen_without_per_record_writes() {
     let server = private_dir();
     let a = private_dir();

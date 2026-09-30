@@ -739,3 +739,5 @@ mod snapshot_recovery;
 mod covered_poll;
 
 mod checkpoint_batch;
+
+mod blob_concurrency;

@@ -242,3 +242,9 @@ use the last healthy durable view during network I/O; signed presence still
 expires locally at its original deadline. Consumer commits can interrupt network
 waits after the application has saved its archive. This keeps recipient ACKs
 behind durable consumption while reducing repeated full-state writes.
+
+Hosted files use a two-piece upload/download window. Immutable authenticated bulk
+requests release the mutable channel owner while in flight, so covered recovery
+and chat can progress. The runtime bounds bulk concurrency at two and rechecks
+current local membership and upload authority before exposing results. Shutdown
+cancels pending bulk requests; retry uses the same piece identity and ciphertext.

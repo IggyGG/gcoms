@@ -9,13 +9,27 @@ struct Published {
     files: BTreeMap<[u8; 32], Vec<api::Event>>,
     presence_deadlines: BTreeMap<api::ChannelId, BTreeMap<api::MemberId, u64>>,
 }
-#[derive(Default)]
 pub(crate) struct Owner {
     slot: Mutex<Option<HostedChannels>>,
     views: std::sync::RwLock<Option<Published>>,
     urgent: AtomicUsize,
     wake: Notify,
     closed: AtomicBool,
+    shutdown: Notify,
+    blob_slots: tokio::sync::Semaphore,
+}
+impl Default for Owner {
+    fn default() -> Self {
+        Self {
+            slot: Mutex::new(None),
+            views: std::sync::RwLock::new(None),
+            urgent: AtomicUsize::new(0),
+            wake: Notify::new(),
+            closed: AtomicBool::new(false),
+            shutdown: Notify::new(),
+            blob_slots: tokio::sync::Semaphore::new(2),
+        }
+    }
 }
 struct Waiting<'a>(&'a AtomicUsize);
 impl Drop for Waiting<'_> {
@@ -49,6 +63,61 @@ fn uses_network(request: &api::Request) -> bool {
     )
 }
 impl Owner {
+    async fn blob_request(
+        &self,
+        request: api::Request,
+        initialize: impl FnOnce() -> Result<HostedChannels, String>,
+    ) -> Result<api::Reply, String> {
+        let (channel, reference, bytes) = match request {
+            api::Request::GetBlob { channel, reference } => (channel, reference, None),
+            api::Request::PutBlob {
+                channel,
+                reference,
+                bytes,
+            } => (channel, reference, Some(bytes)),
+            _ => unreachable!("blob request"),
+        };
+        let shutdown = self.shutdown.notified();
+        tokio::pin!(shutdown);
+        shutdown.as_mut().enable();
+        let work = async {
+            let _permit = self
+                .blob_slots
+                .acquire()
+                .await
+                .map_err(|_| "Hosted owner is closed")?;
+            let transfer = {
+                let mut slot = self.slot.lock().await;
+                if self.closed.load(Ordering::Acquire) {
+                    return Err("Hosted owner is closed".into());
+                }
+                if slot.is_none() {
+                    *slot = Some(initialize()?);
+                }
+                let owner = slot.as_mut().ok_or("Hosted owner is unavailable")?;
+                owner
+                    .channel(channel)?
+                    .prepare_blob(reference, bytes.clone())?
+            };
+            // No mutable MLS state or pending receipt crosses this await.
+            // Two bounded bulk requests can progress alongside covered sync.
+            let result = transfer.exchange().await;
+            let mut slot = self.slot.lock().await;
+            if self.closed.load(Ordering::Acquire) {
+                return Err("Hosted owner is closed".into());
+            }
+            let owner = slot.as_mut().ok_or("Hosted owner is unavailable")?;
+            owner
+                .channel(channel)?
+                .check_blob(&reference, bytes.as_deref())?;
+            result
+        };
+        tokio::select! {
+            biased;
+            _ = &mut shutdown => Err("Hosted owner is closed".into()),
+            result = work => result,
+        }
+    }
     fn cache_views(&self, owner: &HostedChannels, failed: bool) {
         *self.views.write().unwrap_or_else(|e| e.into_inner()) =
             if failed || self.closed.load(Ordering::Acquire) {
@@ -75,6 +144,7 @@ impl Owner {
         self.closed.store(true, Ordering::Release);
         self.views.write().unwrap_or_else(|e| e.into_inner()).take();
         self.wake.notify_waiters();
+        self.shutdown.notify_waiters();
         self.slot.lock().await.take();
     }
     pub async fn request(
@@ -87,6 +157,12 @@ impl Owner {
         // This does not interrupt I/O or relax the live checks on mutations.
         if self.closed.load(Ordering::Acquire) {
             return Err("Hosted owner is closed".into());
+        }
+        if matches!(
+            &request,
+            api::Request::GetBlob { .. } | api::Request::PutBlob { .. }
+        ) {
+            return self.blob_request(request, initialize).await;
         }
         {
             let published = self.views.read().unwrap_or_else(|e| e.into_inner());

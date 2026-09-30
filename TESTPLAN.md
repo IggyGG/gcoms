@@ -705,3 +705,14 @@ is held, List and bounded FileEvents must finish within 200ms without cancelling
 the poll; shutdown, reopen and authenticated delivery must still work. Check
 available/away/invisible expiry at the exact signed deadline. Repeat the original
 500-client campaign with its 7200-second deadline and retain phase/resource logs.
+
+## Bounded hosted piece concurrency
+
+Run all runtime library tests with all features and strict runtime Clippy. Hold
+two actual service blob responses, queue a third, and require chat/send/sync to
+finish while the third cannot enter. Release the original responses and verify
+exact success. Hold an authorized read, learn a signed channel closure, then
+release it: the caller must receive an error. Shutdown must cancel detached bulk
+I/O within 200ms. Retain the existing tamper, interrupted publisher, partial
+restart, exact hash and contact revocation tests. Repeat the live 16MiB journey
+against the fixed 180s resume-verification and 600s workflow targets.
