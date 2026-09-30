@@ -19,8 +19,30 @@ The GComs task also preserves the canonical checkout's `0c2c704` bootstrap fix.
   delivery status in large rooms.
 - Preserve encrypted topic handoff: a newcomer sees “Topic pending” while all
   existing members are offline. Invitation links gain no separate metadata key.
+- Keep 10 seconds for ordinary offline-message recovery. Large membership
+  backlogs show confirmed applied-record progress and report completion separately.
 
 See the [command-by-command feature mapping](IRC_FEATURE_MATRIX.md) for the source audit.
+
+Current checkpoint, 2026-09-30: all mapped native features are implemented; full
+live capacity and installed publication remain in progress. GComs `250ece7`
+passes 1,115 workspace tests with 13 unchanged exclusions, strict lint,
+documentation and minimal-feature checks. GChat `39848b8` passes 190 workspace
+tests with three unchanged exclusions and strict lint; desktop/mobile-width
+catch-up UI checks pass. Its actual retained 81-member replay shows confirmed
+progress, completes in 102.236 seconds and clears the indicator. Original
+profiles, cleanup and grant revocation pass.
+
+The durable-runtime 500-member campaign passes with 4,990 authenticated recipient
+signatures, unchanged 4-CPU/8-GiB/7,200-second bounds and 4,166.48-second elapsed
+time. That run tests encrypted pieces rather than the full GChat file workflow.
+The matched 85-client bootstrap comparison passes at the hosted relay budgets
+after failing at the default budgets. Neither substitutes for the separate
+500-member protected-network application campaign. See
+`docs/evidence/irc-durable-capacity-20260930/concurrent-06-pass.json`,
+`docs/evidence/irc-durable-capacity-20260930/bootstrap-load-03-hosted.json`, and
+GChat's `docs/evidence/irc-trunk-integration-20260930/catchup-live-81.json` and
+`catchup-rust-02-pass.json`. Historical checkpoints below retain their own scope.
 
 ## Work and acceptance ledger
 

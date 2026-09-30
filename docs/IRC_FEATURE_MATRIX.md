@@ -47,8 +47,8 @@ A source mapping does not imply an installed release or a 500-member network pas
 | Connectivity probe | `/ping`, `/refresh` | Implemented as authenticated service recovery/round trip |
 | Network operator controls | Service creation allowlist, suspension, source/global rates and storage quotas | Implemented and deployed to the HEL qualification service; exact allowlist and retained-state restart checks pass |
 | Bots and automation | `crates/application/examples/hosted_bot.rs` | Implemented scoped ordinary-member example; bounded replies and no notice loop |
-| Delivery/recovery status | Pending, ServiceAccepted, Delivered, Failed; durable dedup and retry | Implemented; covered receipt completion may be slower in large rooms, as selected by the user |
-| Load and churn | 500 identities, ten senders, offline recovery, file traffic and removal | MLS component pass retained; durable-client campaign running; full protected-network/GChat gate open |
+| Delivery/recovery status | Pending, ServiceAccepted, Delivered, Failed; durable dedup and retry; confirmed catch-up progress | Implemented; covered receipts may be slower in large rooms. Ordinary offline recovery keeps 10 seconds; large membership backlogs show progress. Actual 81-member replay and indicator completion pass |
+| Load and churn | 500 identities, ten senders, offline recovery, file traffic and removal | Durable-runtime 500-member/4,990-signature campaign passes within its original limits; matched 85-client bootstrap passes with hosted relay budgets. Full protected-network/GChat 500-member gate remains open |
 
 The following are deliberate differences in this approved scope: no raw IRC
 server-link management, host login queries, global username enumeration, automatic
