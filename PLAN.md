@@ -1114,3 +1114,11 @@ contracts, UI63 and Linux desktop compilation. Fresh protected two-client run11
 also passes unchanged timing, correctness, cleanup and grant revocation. See
 `docs/IRC_PARITY.md` for source-bound receipts. Exact-source smoke07 precedes
 the still-open protected-network 500-member and installed release gates.
+
+IRC-8 documentation correction: the initial 4 KiB/s receipt illustration applies
+to older fixed-cover profile 22. The existing trunk and qualified task artifacts
+select responsive profile 46: immediate real data with padded interactive
+records and randomized idle cover. The task preserves that profile and keeps
+receipts on the interactive endpoint; large-room acknowledgment timing remains
+separate as selected by the user. See `docs/IRC_PARITY.md`. No code or active
+campaign settings changed.

@@ -241,11 +241,16 @@ SDK IPC22 appends HostedChannels authorization and typed client operations.
 Signed network defaults supply endpoint candidates. Catalog routing retains
 origin restrictions, remote DNS, WebPKI verification and no direct fallback.
 Large public trees/records use the existing observable bulk class; small chat
-and polling retain the covered class. The user selected covered receipt traffic and slower delivery status for large
-channels (2026-09-29). 499 individual 64-byte signatures already exceed eight
-seconds at 4 KiB/s, before framing. Large-channel acknowledgement latency is
-therefore measured separately from message acceptance/delivery; receipt traffic
-will not switch to observable bulk to meet the previous five-second ACK target.
+and polling retain the interactive class with cover. The user selected covered
+receipt traffic and slower delivery status for large channels (2026-09-29).
+The initial bandwidth illustration describes fixed-cover profile 22: 499
+individual 64-byte signatures take about 7.8 seconds at 4 KiB/s before framing.
+Current GChat profile 46, already selected on trunk, makes real data immediately
+eligible and adds padded interactive records with randomized idle cover; that
+older 4 KiB/s ceiling is not its throughput limit. This task preserves profile 46.
+Large-channel acknowledgment timing is measured separately from message
+acceptance/delivery. Receipts remain on the interactive endpoint and never move
+to bulk to meet a small-room timing target.
 
 The opt-in runtime client stores MLS state, exact pending wires, invitation
 secrets, ordered cursor and unarchived application events in a separate encrypted
