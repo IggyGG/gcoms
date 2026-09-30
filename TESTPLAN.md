@@ -805,3 +805,9 @@ the MLS state and reopen to the exact prior view. A failed replacement remains
 poisoned and must reopen the last intact archive. Preserve all version1–3 archive
 migration cases. Repeat the application smoke against the original ten-second
 owner recovery and covered-receipt/file deadlines; keep the prior 14.537s failure.
+
+For the 500-client durable runtime campaign, use the deployed 100000-record
+profile. `channel_records` bounds the separate authenticated receipt ledger too;
+ten senders already require 4990 entries. Retain the failed 2000-record run.
+Do not skip recipient signatures or count only transcript records. Resource and
+7200-second deadlines remain independent and unchanged for the corrected run.

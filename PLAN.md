@@ -958,3 +958,12 @@ resumed 16MiB verification and 329.148s whole file workflow. Topic pending/hando
 moderation, notices and actual offline/file receipts pass. Its temporary grant
 is revoked. Full GChat/package consumers and separate 500-member campaigns remain
 active; native installed qualification and normal main publication remain open.
+
+The current four-owner runtime campaign completed all 500 catch-ups and reached
+sending at 3928.692s under the original 8GiB limit, then failed at 4009.46s on the
+fixture's 2000-record receipt quota. Ten senders require 4990 recipient signatures.
+Production already uses 100000 records; only the test fixture is being aligned
+with that deployed setting. The original failure is retained in
+`docs/evidence/irc-durable-capacity-20260930/concurrent-05-quota.json`. Every receipt
+assertion and the original CPU/memory/7200s limits stay in the new campaign.
+This is not a completed capacity pass or a production-code change.

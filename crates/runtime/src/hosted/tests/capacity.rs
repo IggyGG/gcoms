@@ -53,7 +53,10 @@ fn transport(path: &Path) -> Arc<Measured> {
                 max_channels: 1,
                 max_total_bytes: 1024 * 1024 * 1024,
                 channel_bytes: 1024 * 1024 * 1024,
-                channel_records: 2000,
+                // The same bound covers individual receipt signatures, not only
+                // membership/message records. Match the deployed 500-member profile;
+                // ten senders alone require 10 * 499 authenticated receipts.
+                channel_records: 100_000,
                 requests_per_second: 100_000,
                 source_requests_per_second: 100_000,
                 blocked_channels: vec![],

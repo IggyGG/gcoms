@@ -1,0 +1,46 @@
+{
+  "source": "40b440ddaa1f681c4f76aa49697c155741c8cd37",
+  "binary_sha256": "880b731e9b5d66a163d2bdf02520b2a7ac6f35fdc13c47e8c938786ca62a6bcd",
+  "passed": false,
+  "exit_code": 101,
+  "failure": "ReceiptLog capacity uses channel_records; the fixture had 2000, fewer than the required 10 * 499 recipient signatures. Replay correctly refused further receipt appends with Quota.",
+  "all_500_replayed_before_send_seconds": 3928.692,
+  "test_seconds": 4009.46,
+  "original_deadline_seconds": 7200,
+  "memory_limit": "8Gi",
+  "cpu_limit": 4,
+  "peak_sampled_rss_kib": 5986140,
+  "last_resource_sample": {
+    "time_unix": 1790739367,
+    "elapsed_seconds": 4000.253,
+    "io": {
+      "rchar": 281735126011,
+      "wchar": 347971034055,
+      "syscr": 1133837,
+      "syscw": 101911,
+      "read_bytes": 2727936,
+      "write_bytes": 348173393920,
+      "cancelled_write_bytes": 0
+    },
+    "VmRSS": "5886796 kB",
+    "VmHWM": "5981968 kB",
+    "Threads": "10"
+  },
+  "original_fixture_records": 2000,
+  "production_records": 100000,
+  "next_run": "Align only fixture record count with the deployed 100000-record profile; retain production code, memory/CPU/deadline and every recipient assertion.",
+  "evidence": {
+    ".log": {
+      "path": "test-evidence/irc-parity/runtime-capacity-500-05.log",
+      "sha256": "2b21f2ad2488f092e10ea059d423a5e03a91cf5096b88bc0a42888418faf9964"
+    },
+    "-resources.jsonl": {
+      "path": "test-evidence/irc-parity/runtime-capacity-500-05-resources.jsonl",
+      "sha256": "89bccc98f3b0c83723cf2271657e42647bbe9f41447de14b66e40963d0d3066d"
+    },
+    ".exit": {
+      "path": "test-evidence/irc-parity/runtime-capacity-500-05.exit",
+      "sha256": "39b8dc3fc8b44765c8e6f1adee04c5b465e555ab791cc42d0d9e810d5b64297c"
+    }
+  }
+}
