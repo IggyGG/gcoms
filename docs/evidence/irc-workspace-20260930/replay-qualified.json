@@ -1,0 +1,18 @@
+{
+  "source": "40b440ddaa1f681c4f76aa49697c155741c8cd37",
+  "scope": "full merged GComs workspace including bounded deferred replay and sealed-session buffer release",
+  "passed": 1112,
+  "failed": 0,
+  "ignored": 13,
+  "suites": 129,
+  "clippy_workspace_all_targets_all_features": "passed",
+  "rustdoc_workspace_all_features": "passed",
+  "core_no_default_features": "passed",
+  "sdk_no_default_features_ipc": "passed",
+  "runner_exit": 0,
+  "log": {
+    "path": "test-evidence/irc-parity/workspace-final-04.log",
+    "sha256": "ea9d75da19f3fd7c3acacc652c0c3c0cc3bf83003463e5500aadcabef655ba9f"
+  },
+  "limits": "Full component/workspace source gate; not 500-member protected-network capacity, native installers or physical mobile/push."
+}

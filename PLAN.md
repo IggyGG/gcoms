@@ -947,3 +947,14 @@ coverage and cleanup pass; the grant is revoked. The GChat source-bound receipt
 is `docs/evidence/irc-hosted-capacity-20260930/smoke-12-02.json`. This is not a
 500-member pass. Current small-room, full workspace/package, scale and installed
 release gates remain open; the IRC ledger records the current proof boundaries.
+
+The current `40b440d` full workspace gate is complete: 1,112 tests passed, 13
+unchanged explicit exclusions, 129 suites, strict all-target/all-feature Clippy,
+Rust documentation and minimal core/IPC builds. See
+`docs/evidence/irc-workspace-20260930/replay-qualified.json`. The same source with
+GChat `c5bbfe8` also passes live09 small-room correctness and fixed timing:
+113ms feedback, 3.933s covered display/ACK, 7.857s offline-owner join, 164.709s
+resumed 16MiB verification and 329.148s whole file workflow. Topic pending/handoff,
+moderation, notices and actual offline/file receipts pass. Its temporary grant
+is revoked. Full GChat/package consumers and separate 500-member campaigns remain
+active; native installed qualification and normal main publication remain open.

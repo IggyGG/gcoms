@@ -1,0 +1,7 @@
+{
+  "run": "live09",
+  "revoked": true,
+  "owned_daemons_stopped": true,
+  "time_unix": 1790737586,
+  "store_mode": "0o600"
+}

@@ -386,8 +386,9 @@ GComs `40b440d` overlaps two deferred immutable replay reads, preserves ordered
 validation and durable boundaries, and releases a redundant sealed-session
 buffer. It passes 29 release hosted tests, the full 63-test runtime library
 (three existing exclusions), and strict runtime Clippy. The old sequential code
-fails the held-read control. The current full workspace and paired archive gates
-are running. The preceding `0e7db6a` / `5533b1e` pair passed 1,110 workspace tests,
+fails the held-read control. The current full workspace gate passes 1,112 tests with 13 unchanged
+explicit exclusions, strict workspace Clippy, documentation and minimal core/IPC
+builds; the paired GChat/archive gates are running. The preceding `0e7db6a` / `5533b1e` pair passed 1,110 workspace tests,
 strict checks, all 20 Rust package archives and external consumers, generated
 contracts, frontend and Linux desktop compilation. Its GChat 188 Rust and 80
 browser passes retain that earlier source binding.
@@ -401,15 +402,19 @@ without historical ciphertext, resource sampling and cleanup pass. Cold startup
 uses at most four profiles with serialized joins; total run time is not a
 production-code-only comparison. The grant was revoked after every owned daemon
 stopped. GChat retains `evidence/irc-hosted-capacity-20260930/smoke-12-02.json`.
-The original 14.537s recovery miss remains retained. Small-room live09 is running;
-the earlier pair's live08 passed 1.905s display plus covered receipt and Topic
-pending/encrypted handoff with its own exact source and export hash.
+The original 14.537s recovery miss remains retained. The same current pair passes small-room live09: 113ms feedback, 3.933s
+display plus covered receipt, 7.857s offline-owner join, Topic pending/encrypted
+handoff and 164.709s resumed 16MiB verification. Its exact whole-file hash and
+cleanup pass, and its bootstrap grant is revoked. GChat retains
+`evidence/irc-hosted-live-20260930/replay-09.json`; the earlier live08 keeps its
+own source-bound result.
 
 The serial 25ms and 75ms durable-runtime baselines timed out at their original
 7200-second bounds after admitting 500 identities. The earlier four-owner run
 hit its unchanged 8GiB memory limit. These are failures, not capacity passes.
 The current `40b440d` four-owner campaign retains those limits and is running;
-full 500-profile protected-network application qualification remains separate.
+the full 500-profile protected-network application campaign is now running
+separately on the source-pinned GChat binary.
 Missing timing, actual recipient signatures, file verification, churn exclusion,
 resource coverage or cleanup cannot become a success. Native installed checks
 and normal trunk publication remain open.
