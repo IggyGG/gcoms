@@ -1070,3 +1070,14 @@ Original profiles are unchanged, clients stopped and the temporary grant revoked
 See `docs/evidence/irc-durable-capacity-20260930/bootstrap-load-03-hosted.json`.
 This qualifies the bounded bootstrap diagnosis; the 500-member application
 workflow remains a separate live gate.
+
+### IRC-8 bounded admission recovery follow-up — 2026-09-30
+
+The current 12-member network smoke failed on member-11 after a transient
+independent-route outage exhausted four read attempts in about 600 ms. Ten peers
+had joined; the failure remains a failure, all daemons stopped and the grant was
+revoked. Snapshot read retries now back off 1/2/4 seconds within the existing
+30-second page deadline and four-attempt limit. They retain the prepared leaf and
+pinned transcript, never repeat a membership write and cannot wake route
+maintenance. A held-route regression requires one eventual membership admission.
+Qualification of this change is in progress; prior 250ece7 results keep their scope.

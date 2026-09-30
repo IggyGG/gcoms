@@ -112,9 +112,12 @@ pub(super) async fn snapshot(
                 Ok(reply) => break reply,
                 Err(_) if retries < 3 => {
                     retries += 1;
+                    // Entry renewal is owned by background maintenance. Give a
+                    // brief outage time to recover without waking that owner,
+                    // changing routes or consuming all four reads in 600 ms.
                     tokio::time::sleep_until(deadline.min(
                         tokio::time::Instant::now()
-                            + std::time::Duration::from_millis(100 * retries),
+                            + std::time::Duration::from_secs(1 << (retries - 1)),
                     ))
                     .await;
                 }

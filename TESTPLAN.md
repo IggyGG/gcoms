@@ -683,6 +683,10 @@ Run runtime `snapshot_recovery` tests: lose two responses after authenticated
 service reads and require one eventual membership change; return Unauthorized
 and require one attempt; fail every transport read and require exactly four
 attempts. Keep prepared identity and pinned pagination authority unchanged.
+Hold transport availability off for four seconds and require recovery on the
+fourth read, followed by exactly one admitted membership change. The 1/2/4-second
+backoff must stay inside the existing 30-second page deadline; it cannot dial or
+wake routing maintenance. Preserve the original 600-ms retry-exhaustion failure.
 Repeat the offline-owner real-network GChat journey without bypassing TLS.
 
 ## Combined covered polling

@@ -3,6 +3,10 @@ service, durable MLS runtime, SDK/IPC and GChat. Clients enforce signed policy;
 the service has no member decryption secrets. Recipient receipts stay on the
 covered channel, and large channels can take longer to show delivery. An offline
 newcomer sees “Topic pending” until an authorized topic writer returns.
+Admission snapshot reads retain the prepared identity and pinned transcript
+across up to four transport attempts, with 1/2/4-second backoff inside the same
+30-second page deadline. Background routing owns recovery; admission writes and
+authenticated policy refusals are not retried by this read path.
 
 IPC25 adds `sharing_v2` and `ModernFileSharing` for explicit hosted/contact file
 scopes. A separate encrypted `.v2` cache preserves legacy files. Hosted offers

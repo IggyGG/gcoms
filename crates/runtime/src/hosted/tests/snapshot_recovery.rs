@@ -1,11 +1,13 @@
 use super::*;
 use std::sync::atomic::AtomicUsize;
+use std::time::Duration;
 
 struct ReadFailures {
     inner: Arc<TransportFixture>,
     calls: AtomicUsize,
     deny: bool,
     failures: usize,
+    unavailable_until: Option<tokio::time::Instant>,
 }
 #[async_trait]
 impl Transport for ReadFailures {
@@ -24,7 +26,11 @@ impl Transport for ReadFailures {
                     message: "admission refused".into(),
                 }));
             }
-            if previous < self.failures {
+            if previous < self.failures
+                || self
+                    .unavailable_until
+                    .is_some_and(|until| tokio::time::Instant::now() < until)
+            {
                 return Err("injected closed circuit after authenticated snapshot read".into());
             }
         }
@@ -46,6 +52,7 @@ async fn snapshot_read_recovers_closed_circuits_without_repeating_membership() {
         calls: AtomicUsize::new(0),
         deny: false,
         failures: 2,
+        unavailable_until: None,
     });
     let mut bob = joining(channel, "bob", bob_dir.path(), transport.clone()).await;
     assert_eq!(transport.calls.load(Ordering::SeqCst), 3);
@@ -71,6 +78,7 @@ async fn snapshot_authority_refusal_is_not_retried_as_transport_failure() {
         calls: AtomicUsize::new(0),
         deny: true,
         failures: 0,
+        unavailable_until: None,
     };
     let prepared = PreparedHostedJoin::new("denied").unwrap();
     let error = snapshot(&transport, channel, SnapshotAuthority::Joining(&prepared))
@@ -93,6 +101,7 @@ async fn snapshot_transport_retries_stop_after_four_attempts() {
         calls: AtomicUsize::new(0),
         deny: false,
         failures: usize::MAX,
+        unavailable_until: None,
     };
     let prepared = PreparedHostedJoin::new("bounded").unwrap();
     let error = snapshot(&transport, channel, SnapshotAuthority::Joining(&prepared))
@@ -102,4 +111,29 @@ async fn snapshot_transport_retries_stop_after_four_attempts() {
     assert!(error.contains("injected closed circuit"));
     assert_eq!(transport.calls.load(Ordering::SeqCst), 4);
     assert_eq!(alice.archive.cursor, 0);
+}
+
+#[tokio::test(start_paused = true)]
+async fn snapshot_read_waits_for_background_route_recovery_before_single_admission() {
+    let server = private_dir();
+    let alice_dir = private_dir();
+    let bob_dir = private_dir();
+    let inner = service(server.path());
+    let alice = owner(alice_dir.path(), inner.clone()).await;
+    let channel = alice.archive.channel;
+    let transport = Arc::new(ReadFailures {
+        inner,
+        calls: AtomicUsize::new(0),
+        deny: false,
+        failures: 0,
+        unavailable_until: Some(tokio::time::Instant::now() + Duration::from_secs(4)),
+    });
+    let mut bob = joining(channel, "bob", bob_dir.path(), transport.clone()).await;
+    assert_eq!(transport.calls.load(Ordering::SeqCst), 4);
+    assert!(!bob.view().active);
+    assert_eq!(alice.archive.cursor, 0);
+    assert!(bob.flush_one().await.unwrap());
+    assert!(bob.view().active);
+    assert_eq!(bob.archive.cursor, 1);
+    assert!(!bob.flush_one().await.unwrap());
 }
