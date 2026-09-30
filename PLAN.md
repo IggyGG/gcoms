@@ -756,3 +756,20 @@ and strict all-target runtime Clippy passes. Evidence:
 The batching count test now freezes only its scheduling clock to avoid making
 its write-count assertion depend on debug-build CPU speed. Real-time capacity
 and responsiveness tests keep their original clocks and bounds.
+
+### IRC-8 paired archive consumer gate — 2026-09-30
+
+The full release-mode package runner passed on clean GComs 441efb5 and GChat
+12a8a93: 20 normalized Rust archives, isolated renamed Rust and npm consumers,
+paired GChat Rust, generated bindings, frontend checks/tests/build, dependency
+notices and Linux desktop compilation. Original checkouts remained unchanged and
+nothing was published. The disposable Debian runner used verified locked Rust
+archives and an isolated sysroot of signed-APT-selected desktop dependencies.
+Earlier missing-cache, source-hygiene and library setup failures remain retained.
+`docs/evidence/irc-package-staging-20260930/paired-pass.json` binds the sources,
+archives and logs. The subsequent 907e54f file-window change still needs the
+current-source package gate and installed/native runtime qualification.
+
+The live06 temporary bootstrap grant was revoked after both daemons stopped;
+operator file ownership and0600 permissions were preserved. Receipt:
+`docs/evidence/irc-hosted-service-20260930/grant-revocation.json`.
