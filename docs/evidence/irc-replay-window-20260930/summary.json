@@ -1,0 +1,41 @@
+{
+  "source": "40b440d",
+  "change": [
+    "two immutable deferred reads within existing 16MiB prefetch bound",
+    "release redundant sealed-session buffer after save or restore"
+  ],
+  "archive_and_wire_formats_unchanged": true,
+  "latest_release_hosted": {
+    "passed": 29,
+    "ignored": 2
+  },
+  "latest_full_runtime_library": {
+    "passed": 63,
+    "ignored": 3
+  },
+  "strict_runtime_all_targets_all_features": "passed",
+  "negative_control": {
+    "source": "0e7db6a with initial held-read test only",
+    "exit_code": 101,
+    "reason": "old sequential implementation cannot enter both reads before either response is released",
+    "deadline_seconds": 3,
+    "later_test_strengthening": "fixed test explicitly observes second response completion before releasing first"
+  },
+  "interrupted_followup": {
+    "pod": "gcoms-irc-final-20260930",
+    "reason": "5GiB emptyDir exhausted after initial regression passed",
+    "verdict": "not a completed gate",
+    "terminal_receipt_sha256": "454456f89505525f553bb86c7f96a82b4c8b75238864e9df9e5a4a727cfab4b0"
+  },
+  "source_sha256": {
+    "crates/runtime/src/hosted/state.rs": "0c18e19d264123e25c6f536b3bb6dd61995d9d775acfedcfe1228c2d94a0e77e",
+    "crates/runtime/src/hosted/tests/checkpoint_batch.rs": "c950036ff553fba5c433747b627f105596ad3a2d056494bf844d877c2f4fbf62"
+  },
+  "logs": {
+    "replay-window-red-01.log": "4a866a7edfb2b0d42d12bf5bdb0b065cfacbec2d2d99fbfe6e047d19f687293d",
+    "replay-window-green-02.log": "63741a0f9b480d0cb7873b181a64f7ffc6556f435321722422d176d4fb293ef2",
+    "replay-window-green-03.log": "2341ca935282308c2b301330ac7d3cac9362c8ff7ad5b3881ade79bec05a81f4",
+    "replay-window-green-04.log": "43863ced43ae44c11eb2e44120c2e39f2707b2a89c403da6eb5e3908e54be9ad"
+  },
+  "remaining": "Full current workspace, current paired/archive gates, fresh protected-network application recovery, 500-member and native qualification."
+}

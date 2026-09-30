@@ -915,3 +915,11 @@ active. An earlier follow-up build was evicted after exhausting its 5 GiB emptyD
 its interrupted gate is not a pass. Validation now uses an explicitly permitted
 12 GiB persistent scratch volume. The completed earlier 1,110-test merged gate
 and all source-bound failed capacity/timing receipts remain retained.
+
+The combined `40b440d` follow-up now passes 29 release hosted cases, the complete
+63-test runtime library suite (three unchanged exclusions) and strict runtime
+all-target/all-feature Clippy. Source hashes, negative control and the interrupted
+volume-bound run are recorded in `docs/evidence/irc-replay-window-20260930/summary.json`.
+The current full workspace rerun, new release application binary and source-bound
+500-client concurrent campaign are active. The previous 12-profile recovery miss
+remains a failure until the new actual network run measures it again.
