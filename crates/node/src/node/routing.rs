@@ -61,6 +61,9 @@ pub trait RoutingStateStore: Send + Sync {
 
 #[derive(Clone, Default)]
 pub struct RoutingConfig {
+    /// Explicit aggregate relay budget, independent of client traffic profiles.
+    #[cfg(feature = "relay-host")]
+    pub relay_capacity: super::RelayCapacity,
     /// Full native automatic listener; absent preserves fixed-port behavior.
     pub connectivity: Option<crate::connectivity::ConnectivityConfig>,
     pub bootstrap: Option<BootstrapBundle>,
@@ -114,6 +117,8 @@ pub(crate) struct Gc2Routing {
 }
 
 pub(crate) struct RoutingRuntime {
+    #[cfg(feature = "relay-host")]
+    pub relay_capacity: super::RelayCapacity,
     #[cfg(feature = "experimental-gc2")]
     pub gc2: std::sync::OnceLock<Gc2Routing>,
     #[cfg(feature = "experimental-gc2")]
@@ -284,6 +289,8 @@ impl RoutingRuntime {
             discovery.install(&bundle).map_err(|e| e.to_string())?;
         }
         Ok(Arc::new(Self {
+            #[cfg(feature = "relay-host")]
+            relay_capacity: config.relay_capacity,
             #[cfg(feature = "experimental-gc2")]
             gc2: std::sync::OnceLock::new(),
             #[cfg(feature = "experimental-gc2")]
@@ -402,6 +409,7 @@ impl RoutingRuntime {
         #[cfg(feature = "experimental-gc2")]
         let provision_seed = seed;
         let mut policy = ServicePolicy {
+            max_circuits: self.relay_capacity.circuits(),
             catalog_origins: self
                 .catalog_origins
                 .lock()

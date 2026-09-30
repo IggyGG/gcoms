@@ -44,3 +44,19 @@ ignored live provisioning test and requires separate authorization to run.
 ### Stale peer inbox descriptors
 
 A locally originated send to an expired cached descriptor first sends an authenticated cover probe through the configured connector. The current relay implementation accepts the probe only for the existing queue, epoch and push capability, and only when the requested short expiry fits its live lease. The client uses that pinned acknowledgement for the same destination until the accepted expiry. GC/2 uses natural cover cells and never falls back to legacy framing. One memo per bounded scheduler lane coalesces probes and backs off failed attempts. The probe consumes one short-lived replay entry but no queued message or file storage; it cannot renew or resurrect an inbox. Already authenticated forwarded envelopes and application command deadlines are unchanged. No dependencies were added.
+
+## Operator relay capacity
+
+`gcnode serve --relay-circuits 2048 --relay-connections 4096` explicitly budgets
+a larger production relay. Defaults remain 128 forwarding circuits and 1024
+accepted connections. The maximum is 4096 circuits and 8192 connections; the
+connection budget must be at least twice the circuit budget. Invalid values fail
+before listener startup. Embedders use `RoutingConfig::relay_capacity` with
+`RelayCapacity::new`. Ordinary application traffic profiles do not select these
+operator settings. Size the service's memory, descriptor and process limits
+and qualify the intended workload before enabling a larger budget.
+
+Unauthenticated source admission stays at eight connections per IP. The entry's
+16-circuit/15-bulk bounds, class separation, covered schedule, authenticated path
+selection and service expiry remain enforced. Bulk cannot consume the relay's
+last circuit. Failed connections and dropped streams return their slots.

@@ -499,8 +499,31 @@ async fn run() -> Result<(), String> {
                 ))
                 }
             };
+            let capacity = gcoms_node::node::RelayCapacity::default();
+            let relay_capacity = gcoms_node::node::RelayCapacity::new(
+                arg("--relay-circuits")
+                    .map(|value| {
+                        value
+                            .parse::<usize>()
+                            .map_err(|_| "invalid --relay-circuits")
+                    })
+                    .transpose()?
+                    .unwrap_or(capacity.circuits()),
+                arg("--relay-connections")
+                    .map(|value| {
+                        value
+                            .parse::<usize>()
+                            .map_err(|_| "invalid --relay-connections")
+                    })
+                    .transpose()?
+                    .unwrap_or(capacity.connections()),
+            )?;
+            if !profile.is_production() && relay_capacity != capacity {
+                return Err("operator relay capacity requires a production traffic profile".into());
+            }
             let routing = if profile.is_production() {
                 let mut routing = gcoms_node::node::RoutingConfig::from_environment()?;
+                routing.relay_capacity = relay_capacity;
                 routing.routing_state = Some(std::sync::Arc::new(
                     gcoms_node::routing_cache::Cache::open(
                         &keystore.with_extension("routing"),
@@ -644,7 +667,7 @@ fn print_usage() {
     eprintln!("  rekey --keystore <file> [--old-pass-file <file>] [--new-pass-file <file>]");
     eprintln!("  provision-relay --control <loopback-address:port> --out <file>");
     eprintln!(
-        "  serve --keystore <file> [--pass-file <file>] [--auto-listen | --port N] [--schedule production|gc2|gchat-files|compressed] [--no-router-mapping] [--advertise-addr <ip:port>] [--tls-identity <file>] [--control-bind <address>] [--control-port 9090] [--control-server-cert <file> --control-server-key <file> --control-client-ca <file>] [--inbox-relay-file <file>] [--network-config <installed-network-json>] [--network-invitation-file <private-file>] [--dns-server-label r1..r8] [--dns-opt-in | --dns-opt-out] [--metrics <file>] [--print-node-info]"
+        "  serve --keystore <file> [--pass-file <file>] [--auto-listen | --port N] [--schedule production|gc2|gchat-files|compressed] [--relay-circuits N --relay-connections N] [--no-router-mapping] [--advertise-addr <ip:port>] [--tls-identity <file>] [--control-bind <address>] [--control-port 9090] [--control-server-cert <file> --control-server-key <file> --control-client-ca <file>] [--inbox-relay-file <file>] [--network-config <installed-network-json>] [--network-invitation-file <private-file>] [--dns-server-label r1..r8] [--dns-opt-in | --dns-opt-out] [--metrics <file>] [--print-node-info]"
     );
     eprintln!();
     eprintln!(

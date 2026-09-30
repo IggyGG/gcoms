@@ -988,3 +988,18 @@ cold bootstrap before joining, after 81 total channel admissions. All daemons
 stopped and its grant was revoked; original private profiles are retained for
 diagnosis. Paired GChat retains its decisive failure receipt. Neither500 gate
 is complete; the current paired188 Rust/strict and package gates are complete.
+
+### IRC-8 relay aggregate capacity — in validation
+
+A private clone of failed member-83 connects in33.271s without the fleet load,
+leaving its original profile unchanged; the diagnostic grant is revoked. A
+separate retained-profile load diagnostic is collecting transport counters.
+The deployed relay source caps each service at128 forwarding circuits; aggregate
+socket measurements approach that bound as clients accumulate. This is a
+capacity hypothesis, not yet a definitive explanation of the original timeout.
+
+Explicit operator circuit/connection budgets are implemented with default
+128/1024, hard ceilings4096/8192, validation before listen, and unchanged source
+and per-entry bounds. Real stream saturation/release tests are being qualified.
+No relay has yet been reconfigured or restarted for this change, and no new
+network-capacity pass is claimed.

@@ -59,6 +59,10 @@ pub fn gc2_introduction_from(
 }
 pub type FixtureCatalogResolver = Arc<dyn Fn(&str) -> Vec<SocketAddr> + Send + Sync>;
 
+/// Operator-selected aggregate capacity. Per-entry circuit and source-IP
+/// admission bounds remain independent of this service-wide ceiling.
+pub const MAX_SERVICE_CIRCUITS: usize = 4096;
+
 #[derive(Clone)]
 pub struct ServicePolicy {
     pub carrier: CarrierConfig,
@@ -142,7 +146,7 @@ impl RelayService {
         policy.carrier.validate()?;
         if secret == [0; 32]
             || service_id == [0; 32]
-            || !(1..=128).contains(&policy.max_circuits)
+            || !(1..=MAX_SERVICE_CIRCUITS).contains(&policy.max_circuits)
             || policy.catalog_origins.len() > 8
             || policy
                 .catalog_origins
@@ -754,6 +758,11 @@ pub fn public_ip(ip: IpAddr) -> bool {
         }
     }
 }
+
+#[cfg(test)]
+#[cfg(feature = "experimental-gc2")]
+#[path = "service_capacity_tests.rs"]
+mod capacity_tests;
 
 #[cfg(test)]
 mod connectivity_tests {

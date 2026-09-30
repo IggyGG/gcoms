@@ -78,6 +78,8 @@ mod persist;
 mod persist_legacy;
 mod presence;
 #[cfg(feature = "relay-host")]
+mod relay_capacity;
+#[cfg(feature = "relay-host")]
 mod relay_service;
 mod routing;
 mod startup_transport;
@@ -89,6 +91,8 @@ pub use api::{
     NodeHandle, Reachability, RecvEventError,
 };
 pub use application_inbox::ApplicationDelivery;
+#[cfg(feature = "relay-host")]
+pub use relay_capacity::RelayCapacity;
 pub use routing::{RoutingConfig, RoutingStateStore};
 pub use state::NodeState;
 

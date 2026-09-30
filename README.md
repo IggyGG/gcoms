@@ -269,3 +269,9 @@ the temporary sealed session buffer after saving or restoring; the encrypted dis
 archive and its compatibility rules are unchanged. Updated runtime and actual
 application recovery qualification are in progress; previous timings retain their
 source bindings.
+
+Production relay operators can explicitly budget aggregate forwarding capacity
+with `gcnode serve --relay-circuits N --relay-connections N`; ordinary defaults
+and per-client/source security bounds remain unchanged. See the
+[node operator capacity contract](crates/node/README.md#operator-relay-capacity).
+This option requires workload qualification and is not itself a 500-user claim.

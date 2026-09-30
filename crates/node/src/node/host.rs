@@ -94,7 +94,14 @@ pub(super) async fn start(
         tls_identity,
     )
     .map_err(|e| e.to_string())?
-    .with_limits(cfg.profile.server_limits());
+    .with_limits(routing.map_or_else(
+        || cfg.profile.server_limits(),
+        |runtime| {
+            runtime
+                .relay_capacity
+                .server_limits(cfg.profile.server_limits())
+        },
+    ));
     #[cfg(feature = "experimental-gc2")]
     let server = if cfg.profile.gc2_gate() {
         // Compose the owned terminal queue service under the same role gate.

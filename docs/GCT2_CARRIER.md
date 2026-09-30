@@ -111,7 +111,7 @@ must still authenticate before entering the service.
 | Logical circuits | 16 shared across both classes; at most 15 bulk |
 | Nested middle drivers | At most 16, each retaining a logical circuit permit |
 | Middle targets per nested TLS connection | 1 |
-| Relay circuits | Existing service limit, at most 128; GC/2 bulk leaves one slot |
+| Relay circuits | Operator budget: default 128, bounded at 4096; GC/2 bulk leaves one slot |
 | Circuit open operations | 64/second across both class channels |
 | Outer client receive credit | 32 KiB per class, 64 KiB connection |
 | Outer server receive credit | Existing TP1 256 KiB per stream, 1 MiB connection |

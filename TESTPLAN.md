@@ -811,3 +811,13 @@ profile. `channel_records` bounds the separate authenticated receipt ledger too;
 ten senders already require 4990 entries. Retain the failed 2000-record run.
 Do not skip recipient signatures or count only transcript records. Resource and
 7200-second deadlines remain independent and unchanged for the corrected run.
+
+### IRC-8 operator relay capacity
+
+Cluster checks must include routing `service::capacity_tests`, node
+`relay_capacity::tests`, existing GC/2 mux/entry tests and strict Clippy. The real
+256-stream regression verifies exact saturation, the reserved interactive slot,
+released sockets and failed-target permit recovery above the old128 ceiling.
+Default128 and hard4096/8192 ceilings and unchanged eight-per-IP unauthenticated
+admission are checked independently. Actual protected-network capacity, resource
+use, cleanup and native qualification remain separate required gates.
