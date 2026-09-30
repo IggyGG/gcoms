@@ -1,0 +1,41 @@
+{
+  "source_gcoms": "40b440d",
+  "failed_run": "capacity500-01",
+  "member": 83,
+  "binary_sha256": "fee2abc139c9bd09a6d9f9b0a3497565506b85fdd2fb8b24b69e034bc4832aaf",
+  "original_untouched": true,
+  "grant_revoked": true,
+  "exit_code": 0,
+  "finished_unix": 1790740875,
+  "scope": "isolated private clone of capacity500-01 member83; not a capacity pass",
+  "observation": {
+    "elapsed_ms": 33271,
+    "result": {
+      "Ok": null
+    },
+    "transport": {
+      "bootstrap_version": 2,
+      "bulk_subscriptions": 2,
+      "interactive_subscriptions": 2,
+      "owned_aliases": 2,
+      "owner_transition_failed": false,
+      "profile_id": 46,
+      "protocol": "gchat",
+      "ready_entries": 2,
+      "recovering_inbox": false,
+      "recovery": {
+        "attempts": 2,
+        "failure": null,
+        "phase": "waiting for next recovery check"
+      },
+      "routing_ready": true,
+      "subscribed_owned_aliases": 2,
+      "usable_terminal_routes": 1
+    }
+  },
+  "evidence": {
+    "bootstrap-diagnostic-01-result.json": "591acad75706623a5461cf85161f89e160f74340415ed2f8ad80c577dbe6845e",
+    "bootstrap-diagnostic-01.jsonl": "957abedf17c7610c4f1579734e4409e5cbc0816db3822861587e41b5490f625e"
+  },
+  "limits": "Fresh normal bootstrap-only grant; public Application recovery API and unchanged120s deadline. Automatic application recovery loop disabled to isolate one public recovery call; node background routing remains normal. Source profile preserved. One success with load removed does not identify the original fault."
+}
