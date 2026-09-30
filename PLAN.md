@@ -1003,3 +1003,12 @@ Explicit operator circuit/connection budgets are implemented with default
 and per-entry bounds. Real stream saturation/release tests are being qualified.
 No relay has yet been reconfigured or restarted for this change, and no new
 network-capacity pass is claimed.
+
+The retained-profile load diagnostic reproduced a failure at68 started profiles
+(65 ready), timing out member-64 after180s. Its transport counters retained two
+ready entries, an eligible terminal route and zero restored inbox subscriptions;
+other stalled profiles reported explicit logical-circuit refusals. All cloned
+daemons stopped, originals stayed byte-identical and its grant was revoked.
+See `docs/evidence/irc-durable-capacity-20260930/bootstrap-load-01.json`. A paired
+old/new operator-budget control is still required to isolate capacity from other
+relay-source changes.

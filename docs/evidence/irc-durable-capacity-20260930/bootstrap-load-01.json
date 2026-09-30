@@ -1,0 +1,54 @@
+{
+  "schema": 1,
+  "scope": "retained-profile bootstrap diagnostic only",
+  "passed": false,
+  "error": "member-64 network ready",
+  "grant_revoked": true,
+  "original_untouched": true,
+  "cleanup_passed": true,
+  "finished_unix": 1790741770,
+  "source": {
+    "gcoms": "40b440d",
+    "gchat": "c5bbfe8",
+    "deployed_relay": "0b41cb2"
+  },
+  "started_profiles": 68,
+  "ready_profiles": 65,
+  "deadline_seconds": 180,
+  "max_ready_ms": 148781,
+  "failed_member_last": {
+    "time": 1790741770,
+    "transport": {
+      "bootstrap_version": 2,
+      "bulk_subscriptions": 0,
+      "interactive_subscriptions": 0,
+      "owned_aliases": 2,
+      "owner_transition_failed": false,
+      "profile_id": 46,
+      "protocol": "gchat",
+      "ready_entries": 2,
+      "recovering_inbox": true,
+      "recovery": {
+        "attempts": 7,
+        "failure": "GC/2 middle 3: target connection acknowledgment: stream error received: stream no longer needed",
+        "phase": "inbox recovery completed"
+      },
+      "routing_ready": false,
+      "subscribed_owned_aliases": 0,
+      "usable_terminal_routes": 1
+    }
+  },
+  "relay_observation": {
+    "samples": 32,
+    "outbound_established_min": 99,
+    "outbound_established_max": 139,
+    "caveat": "OS socket counts include relay-owned background connections; not exact active service-circuit counts."
+  },
+  "evidence": {
+    "bootstrap-load-01-result.json": "04fdd81c9cce25e9f2daf37c1a9feeb680dbf2792c74881d83e0e57743b9fd64",
+    "bootstrap-load-01-transport.json": "eb324fc3e5ee995fc94c1667338d7814350672dc73961ac50e1c8328ec11be31",
+    "bootstrap-load-01.log": "a85153c5cde7a9a6b710b11baca26caf3a3fd081232ba7bbb1d49c038d704180",
+    "bootstrap-load-relay-resources.jsonl": "03519866d77d0434fd6992c89f461a40b93166334d0e6e31d350e1841b9281a3"
+  },
+  "limits": "Retained private clones only. No new joins or messages, no500 qualification. Original profiles unchanged; normal temporary grant revoked. Circuit saturation is a hypothesis requiring paired budget control on the same relay binary."
+}
