@@ -87,7 +87,7 @@ clients. Do not increase the 600-second IPC request ceiling.
 - [x] Actual three-client friends journey: same invitation, messages, small
   file, restart and revoke. SDK fleet fixture: isolated identities, authenticated
   operator round trip and unauthorized sender rejection.
-- [ ] Required format/static/package/combined checks on frozen source; archive
+- [x] Required format/static/package/combined checks on frozen source; archive
   upgrade/reopen/rollback and exact artifact provenance.
 - [ ] Controlled provider/client rollout, preserving personal profiles and
   requiring no unattended personal-service restart.
@@ -168,6 +168,11 @@ original PNG also retains the exact invitation. Share either privately.
 
 ## Qualification scope
 
+The public MLS `ReceiveOutcome` and existing receive methods retain their
+original shape. `receive_authenticated` is an additive interface for callers
+that need the sender identity from the wire's epoch. Node delivery, enrollment
+and reconnect use this authenticated history internally.
+
 Cluster fixtures cover durable same-link admission by two identities, protected
 GC/2 request/reply, both authenticated message directions, revoked admission,
 profile reopen, and an exact small file. The final protected test passed in
@@ -180,3 +185,10 @@ Kotlin client/relay compilation and Swift iOS-simulator typechecking cover the
 new wrappers. These are not new installed Android/iOS application, live push,
 traffic-privacy or fleet-scale performance receipts. The provider and personal
 client rollout require separate artifact-bound checks.
+
+The production HEL and FSN providers now serve the bounded invitation endpoint.
+Their deployed artifact passed actual HTTPS encrypted publication/lookup,
+unscoped and forged publication refusal, and grant-revocation checks on both
+hosts. The existing owner grant gained only the `invitations` scope. Provider
+rollback binaries/configuration are retained; personal-client activation still
+requires the agreed profile-preserving restart procedure.
