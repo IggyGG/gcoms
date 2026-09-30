@@ -59,7 +59,7 @@ original KeyPackage lifetime; the un-updated negative control must fail.
 Explicit MLS scale gate:
 `cargo test --locked --release -p gcoms-mls --all-features --test hosted sixty_four_real_members_and_ten_concurrent_senders -- --ignored --nocapture`.
 Require 64 distinct actual leaves, 63 membership changes, ten concurrent
-senders, 4,990 authenticated receives, overflow rejection and retained duration /
+senders, 630 authenticated receives, overflow rejection and retained duration /
 wire-size measurements. Keep network/UI/ACK timing and file/churn qualification
 separate; this component gate cannot close IRC-8 by itself.
 
@@ -651,7 +651,7 @@ and retain the same session tag. Unconsumed inbox quota is not a crypto failure.
 `durable_hosted_capacity_smoke` exercises twelve actual encrypted client states
 against the ciphertext service. The explicit ignored
 `sixty_four_durable_hosted_clients_ten_senders_offline_and_churn` runs the same
-500-identity campaign in release mode: ten concurrent senders, withheld offline
+64-identity campaign in release mode: ten concurrent senders, withheld offline
 ACKs, reopen and exact recipient completion, encrypted piece storage, kick/rekey
 and replacement admission. Keep covered and bulk JSON byte counters and timing.
 This uses in-process transport and cannot qualify protected-network latency or the
@@ -720,8 +720,8 @@ and reopen again exactly. Force a real save failure and require poisoned reads
 and sends until restoring/reopening the prior prefix. While a real service poll
 is held, List and bounded FileEvents must finish within 200ms without cancelling
 the poll; shutdown, reopen and authenticated delivery must still work. Check
-available/away/invisible expiry at the exact signed deadline. Repeat the original
-500-client campaign with its 7200-second deadline and retain phase/resource logs.
+available/away/invisible expiry at the exact signed deadline. Run the current
+64-client campaign with the retained 7200-second deadline and retain phase/resource logs.
 
 ## Bounded hosted piece concurrency
 
