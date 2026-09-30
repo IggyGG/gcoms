@@ -89,7 +89,7 @@ clients. Do not increase the 600-second IPC request ceiling.
   operator round trip and unauthorized sender rejection.
 - [x] Required format/static/package/combined checks on frozen source; archive
   upgrade/reopen/rollback and exact artifact provenance.
-- [ ] Controlled provider/client rollout, preserving personal profiles and
+- [x] Controlled provider/client rollout, preserving personal profiles and
   requiring no unattended personal-service restart.
 
 Implementation starts from GComs `eef71eaa1a54d28b5b7c50e305f2a08018567719`
@@ -192,3 +192,17 @@ unscoped and forged publication refusal, and grant-revocation checks on both
 hosts. The existing owner grant gained only the `invitations` scope. Provider
 rollback binaries/configuration are retained; personal-client activation still
 requires the agreed profile-preserving restart procedure.
+
+The local Linux daemon and desktop were activated after explicit restart
+approval, with a verified encrypted-profile backup. The existing identity and
+all five channels reopened, retained history was readable, the network reported
+connected, and the invitation chooser/list API returned the new typed outputs.
+This is local Linux acceptance; the automatic platform/store releases retain
+their own build, signing and publication checks.
+
+The initial native SDK release matrix passed the real backend tests on Linux,
+Windows and both Macs, then found a stale isolated consumer lockfile. The
+lockfile follow-up adds only the already-declared local dependency edges; no
+registry package/version or runtime code changes. All 32 locked desktop/mobile
+dependency graphs pass on the cluster. The original failed matrix is retained;
+the normal release workflow qualifies the corrected source independently.

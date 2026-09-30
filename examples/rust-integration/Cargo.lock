@@ -843,6 +843,7 @@ version = "0.1.0"
 dependencies = [
  "base64ct",
  "hmac 0.12.1",
+ "serde",
  "sha2 0.10.9",
  "zeroize",
 ]
@@ -918,11 +919,16 @@ dependencies = [
 name = "gcoms-network"
 version = "0.1.0"
 dependencies = [
+ "aes-gcm",
  "base64",
  "gcoms-crypto",
+ "hkdf 0.12.4",
+ "rand 0.8.8",
  "serde",
  "serde_json",
+ "sha2 0.10.9",
  "url",
+ "zeroize",
 ]
 
 [[package]]
@@ -951,6 +957,7 @@ version = "0.1.0"
 dependencies = [
  "aes-gcm",
  "argon2",
+ "base64",
  "bytes",
  "fs2",
  "futures-util",
@@ -1043,6 +1050,7 @@ dependencies = [
  "gcoms-core",
  "gcoms-crypto",
  "gcoms-file-transfer",
+ "gcoms-network",
  "gcoms-network-client",
  "gcoms-node",
  "gcoms-private-fs",
@@ -1069,6 +1077,7 @@ dependencies = [
  "async-trait",
  "gcoms-core",
  "gcoms-crypto",
+ "gcoms-network",
  "gcoms-node",
  "postcard",
  "rustix",
