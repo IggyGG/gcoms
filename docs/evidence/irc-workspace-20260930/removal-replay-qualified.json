@@ -1,0 +1,18 @@
+{
+  "source": "2c4535d562216340ea54a08e5fc8d419549d73e2",
+  "scope": "full GComs workspace including authenticated removed-member public snapshot replay",
+  "passed": 1117,
+  "failed": 0,
+  "ignored": 13,
+  "suites": 129,
+  "clippy_workspace_all_targets_all_features": "passed",
+  "rustdoc_workspace_all_features": "passed",
+  "core_no_default_features": "passed",
+  "sdk_no_default_features_ipc": "passed",
+  "runner_exit": 0,
+  "log": {
+    "path": "test-evidence/irc-parity/workspace-final-07.log",
+    "sha256": "37ce3a1002afa575ce66aec70b01c730fcafba52b6e14da5d2a336dd78334831"
+  },
+  "limits": "Full component/workspace source gate; not 500-member protected-network capacity, native installers or physical mobile/push."
+}

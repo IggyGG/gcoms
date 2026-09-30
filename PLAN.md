@@ -1100,3 +1100,9 @@ Removal fix `2c4535d` passes MLS and hosted-runtime tests and strict Clippy
 (`docs/evidence/irc-durable-capacity-20260930/removal-fixed-01.json`).
 Forged removal, stale policy and mismatched snapshot controls remain enforced.
 Full workspace and fresh protected-network qualification are running.
+
+Removal source `2c4535d` passes the full GComs gate: 1,117 tests, 13 unchanged
+ignored tests, strict workspace/all-target Clippy, documentation and minimal
+core/SDK feature checks. Evidence: `removal-replay-qualified.json` in the
+workspace evidence directory. New GChat worker scheduling qualification remains
+separate from the retained passing twelve-member removal journey.
