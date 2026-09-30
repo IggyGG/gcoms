@@ -266,7 +266,7 @@ measured alongside responsiveness, without changing any receipt or policy check.
 
 IPC26 preserves released IPC22 owner-recovery and IPC23 invitation tags, and appends
 hosted channels and modern files. Their distinct capabilities require IPC26.
-The conflicting, unpublished task IPC23/24 dialects are refused at negotiation;
+The conflicting, unpublished task IPC24/25 dialects are refused at negotiation;
 existing supported legacy clients retain their versioned operations. Hosted
 profile archives and service HTTP wires are unchanged by this IPC integration.
 
