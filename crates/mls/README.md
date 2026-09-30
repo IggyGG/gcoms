@@ -30,8 +30,8 @@ the encrypted sender before advancing their state. The separate
 are offline. Clients keep its high-entropy signing secret; public policy stores
 only the verification key. Each proof binds the channel policy, epoch, leaf,
 name and expiry. Refused concurrent joins can rebuild at the new epoch while
-preserving their scoped signing identity. Code rotation/revocation still awaits
-the ordered policy-change work; these primitives remain experimental.
+preserving their scoped signing identity. Signed ordered policy changes rotate or revoke admission codes; prepared
+admissions bind the policy revision. These primitives remain experimental.
 
 With `client-persist`, hosted clients seal their membership state and pending
 acceptance together using a distinct archive kind. Legacy groups explicitly
