@@ -1060,3 +1060,13 @@ configuration and resource ceilings as the control. See
 `docs/evidence/irc-durable-capacity-20260930/relay-hosted-rollout.json`.
 The retained-profile comparison is running; 500-member application qualification
 still remains separate.
+
+### IRC-8 matched relay capacity result — 2026-09-30
+
+The same relay binary and 85 retained independent client profiles pass bootstrap
+at the hosted 2048-circuit/4096-connection limits: all ready in 180.305 seconds
+and held online for 30 seconds. The matched 128/1024 control stopped at 75 ready.
+Original profiles are unchanged, clients stopped and the temporary grant revoked.
+See `docs/evidence/irc-durable-capacity-20260930/bootstrap-load-03-hosted.json`.
+This qualifies the bounded bootstrap diagnosis; the 500-member application
+workflow remains a separate live gate.
