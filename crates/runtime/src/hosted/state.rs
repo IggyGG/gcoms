@@ -1033,6 +1033,13 @@ fn discovery_value(discovery: HostedDiscovery) -> api::Discovery {
 }
 
 impl Client {
+    pub(super) fn presence_deadlines(&self) -> BTreeMap<api::MemberId, u64> {
+        self.archive
+            .presence
+            .iter()
+            .map(|(id, (_, expiry))| (*id, *expiry))
+            .collect()
+    }
     pub fn view(&self) -> api::Channel {
         let rules = self.session.rules();
         let members = self
@@ -1149,13 +1156,40 @@ impl Client {
             _ => {}
         }
     }
-    fn apply_record(&mut self, record: &Record) -> Result<(), String> {
-        self.receive_room()?;
-        let result = self.apply_record_inner(record);
-        if result.is_err() {
-            self.storage.poison();
+    async fn apply_records(&mut self, records: &[Record]) -> Result<(), String> {
+        // No await may expose an uncheckpointed MLS/event prefix. Short CPU
+        // batches amortize sealed full-state writes while allowing urgent local
+        // operations to interrupt catch-up between durable boundaries.
+        let mut dirty = false;
+        let mut started = std::time::Instant::now();
+        for (index, record) in records.iter().enumerate() {
+            if let Err(error) = self.receive_room() {
+                if dirty {
+                    self.checkpoint()?;
+                }
+                return Err(error);
+            }
+            if let Err(error) = self.apply_record_inner(record) {
+                self.storage.poison();
+                return Err(error);
+            }
+            dirty = true;
+            if index + 1 == records.len()
+                || started.elapsed() >= std::time::Duration::from_millis(25)
+            {
+                self.checkpoint()?;
+                dirty = false;
+                if index + 1 != records.len() {
+                    tokio::task::yield_now().await;
+                }
+                started = std::time::Instant::now();
+            }
         }
-        result
+        Ok(())
+    }
+    #[cfg(test)]
+    pub(super) fn checkpoint_count(&self) -> u64 {
+        self.storage.checkpoint_count()
     }
     fn apply_record_inner(&mut self, record: &Record) -> Result<(), String> {
         if record.sequence != self.archive.cursor + 1
@@ -1345,8 +1379,8 @@ impl Client {
         self.archive.cursor = record.sequence;
         self.archive.head = record.hash().map_err(mls)?;
         self.archive.last_time = record.accepted_at;
-        // Events become visible to consumers only after this durable boundary.
-        self.checkpoint()
+        // The caller checkpoints the validated batch before any await or return.
+        Ok(())
     }
     pub async fn blob(
         &self,
@@ -1493,10 +1527,28 @@ impl Client {
             return Err("hosted replay made no progress".into());
         }
         let progressed = !page.records.is_empty();
+        // Fetch before mutating live MLS state. Cancellation during a deferred
+        // fetch discards only this bounded buffer; earlier batches are durable.
+        const MAX_BATCH_WIRE_BYTES: usize = 16 * 1024 * 1024;
+        let mut records = Vec::new();
+        let mut buffered = 0;
         for item in page.records {
-            let record = self.fetch_record(item).await?;
-            self.apply_record(&record)?;
+            let bytes = match &item {
+                wire::RecordItem::Inline(wire) => wire.len(),
+                wire::RecordItem::Deferred { wire_bytes, .. } => *wire_bytes,
+            };
+            if bytes > wire::MAX_HTTP_BYTES {
+                return Err("hosted record exceeds bound".into());
+            }
+            if buffered + bytes > MAX_BATCH_WIRE_BYTES {
+                self.apply_records(&records).await?;
+                records.clear();
+                buffered = 0;
+            }
+            records.push(self.fetch_record(item).await?);
+            buffered += bytes;
         }
+        self.apply_records(&records).await?;
         if self.archive.cursor == page.head.sequence && self.archive.head != page.head.hash {
             return Err("hosted replay head mismatch".into());
         }

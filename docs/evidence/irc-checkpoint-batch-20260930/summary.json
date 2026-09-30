@@ -1,0 +1,19 @@
+{
+  "scope": "release hosted runtime tests and strict all-target all-feature runtime Clippy",
+  "passed": 25,
+  "ignored": 1,
+  "failed": 0,
+  "log": "test-evidence/irc-parity/checkpoint-batch-02.log",
+  "sha256": "7f2c2bfff042fb15ae954fdadd9e1dc1493be80546d7c73b31a2e7268d137718",
+  "source_sha256": {
+    "crates/runtime/src/hosted/owner.rs": "ee9f08e205a878701875bcaab18917a3848778bbbc9052aee1370129571adb10",
+    "crates/runtime/src/hosted/state.rs": "65c457d82545ceb3f53fdd505095868228ba0a6fa176f75cb1959c11a41e0427",
+    "crates/runtime/src/hosted/storage.rs": "e303ced143c9e7ef489c492b2c90f5059584c54bce71c9d848bc6e25d3e1a890",
+    "crates/runtime/src/hosted/tests.rs": "8bdada8e4a7b308c0e2927fa2be1c745dec7ed60ea9cdc09a4f76816ab2d703e",
+    "crates/runtime/src/hosted/tests/capacity.rs": "079378e4c30acf6abcb530480c46a242a1554ddbb23660c023f385af555eeb1c",
+    "crates/runtime/src/hosted/tests/responsiveness.rs": "5eaac23179159dcb92d6fb757f66b1b390ae70975be39f261d4ae2bc483fcddf",
+    "crates/runtime/src/hosted/tests/checkpoint_batch.rs": "67d11f0e0e8f1d23b96fa33ec28012c2d79c8570c2d07c1e6fdad5283c3634e7"
+  },
+  "capacity_500": "replacement campaign pending",
+  "live_latency": "unqualified"
+}

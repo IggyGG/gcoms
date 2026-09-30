@@ -173,6 +173,35 @@ async fn hosted_local_send_preempts_a_lost_network_reply_without_losing_or_dupli
     tokio::time::timeout(Duration::from_secs(5), held.entered.notified())
         .await
         .unwrap();
+    let api::Reply::Channels(views) = tokio::time::timeout(
+        Duration::from_millis(200),
+        manager.request(api::Request::List, initialized),
+    )
+    .await
+    .expect("durable channel views must not wait for network I/O")
+    .unwrap() else {
+        panic!("views");
+    };
+    assert_eq!(views.len(), 1);
+    assert_eq!(views[0].id, channel);
+    assert!(
+        !background.is_finished(),
+        "cached listing must not cancel or starve the poll"
+    );
+    let api::Reply::FileEvents(files) = tokio::time::timeout(
+        Duration::from_millis(200),
+        manager.request(api::Request::FileEvents { channel, limit: 16 }, initialized),
+    )
+    .await
+    .expect("durable file inbox must not wait for network I/O")
+    .unwrap() else {
+        panic!("file inbox");
+    };
+    assert!(files.is_empty());
+    assert!(
+        !background.is_finished(),
+        "cached file reads must not cancel the poll"
+    );
     tokio::time::timeout(Duration::from_millis(200), manager.close())
         .await
         .expect("shutdown cancels network waits");

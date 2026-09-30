@@ -235,3 +235,10 @@ Protected subscription recovery fixtures use the current responsive profile 46
 on Linux, both Mac architectures and Windows. The optional Rust integration
 workflow diagnostic retains redacted local dispatch/count evidence; it does
 not qualify installed artifacts or change production timing constants.
+
+Hosted recovery prefetches at most16MiB of encoded record data and checkpoints
+short replay batches before every yield. Listings and bounded file-inbox reads
+use the last healthy durable view during network I/O; signed presence still
+expires locally at its original deadline. Consumer commits can interrupt network
+waits after the application has saved its archive. This keeps recipient ACKs
+behind durable consumption while reducing repeated full-state writes.

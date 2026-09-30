@@ -132,9 +132,17 @@ async fn run(members: usize) {
     let admission_seconds = started.elapsed().as_secs_f64();
     // The owner was absent during every external admission. Every retained
     // client now replays ordered commits through its own encrypted sidecar.
-    for client in &mut clients {
+    eprintln!("hosted_runtime_capacity stage=admission_complete members={members} seconds={admission_seconds:.3}");
+    for (index, client) in clients.iter_mut().enumerate() {
         catch_up(client).await;
         assert_eq!(client.view().members.len(), members);
+        if index % 25 == 0 {
+            eprintln!(
+                "hosted_runtime_capacity stage=catch_up clients={} seconds={:.3}",
+                index + 1,
+                started.elapsed().as_secs_f64()
+            );
+        }
     }
     // A single topic handoff can be queued by the owner during convergence.
     for client in &mut clients {
@@ -144,6 +152,10 @@ async fn run(members: usize) {
     let offline_member = offline.session.member_id();
     consume(&mut offline);
     drop(offline);
+    eprintln!(
+        "hosted_runtime_capacity stage=send seconds={:.3}",
+        started.elapsed().as_secs_f64()
+    );
     let mut sends = tokio::task::JoinSet::new();
     // Ten independent actual client owners persist and publish concurrently.
     for (index, mut client) in clients.drain(..10).enumerate() {
@@ -191,6 +203,10 @@ async fn run(members: usize) {
         }
         assert!(!has_delivery(&consume(client), ids[index]));
     }
+    eprintln!(
+        "hosted_runtime_capacity stage=offline_recovery seconds={:.3}",
+        started.elapsed().as_secs_f64()
+    );
     let recovered = Instant::now();
     let mut offline = restored(dirs[members - 1].path(), channel, network.clone());
     while offline.sync_page().await.unwrap() {}
@@ -244,6 +260,10 @@ async fn run(members: usize) {
             .decrypt(Nonce::from_slice(&[17; 12]), bytes.as_slice())
             .unwrap(),
         plaintext
+    );
+    eprintln!(
+        "hosted_runtime_capacity stage=churn seconds={:.3}",
+        started.elapsed().as_secs_f64()
     );
     clients[0]
         .queue_control(HostedPolicyChange::Kick(offline_member), "capacity churn")

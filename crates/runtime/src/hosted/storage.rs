@@ -19,6 +19,8 @@ pub(super) struct Storage {
     channel: [u8; 32],
     _lock: std::fs::File,
     poisoned: bool,
+    #[cfg(test)]
+    checkpoints: u64,
 }
 impl Storage {
     pub(super) fn open(
@@ -34,6 +36,8 @@ impl Storage {
             channel,
             _lock: lock,
             poisoned: false,
+            #[cfg(test)]
+            checkpoints: 0,
         };
         let data = match std::fs::symlink_metadata(path) {
             Ok(metadata) => {
@@ -96,7 +100,15 @@ impl Storage {
         self.poisoned = true;
         crate::store::atomic_write(&self.path, &record, false)?;
         self.poisoned = false;
+        #[cfg(test)]
+        {
+            self.checkpoints += 1;
+        }
         Ok(())
+    }
+    #[cfg(test)]
+    pub(super) fn checkpoint_count(&self) -> u64 {
+        self.checkpoints
     }
     pub(super) fn poison(&mut self) {
         self.poisoned = true;

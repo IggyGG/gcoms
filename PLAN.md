@@ -722,3 +722,14 @@ restart; the old255f9cd binary remains available for rollback. The WebPKI probe
 and deployment receipt are `docs/evidence/irc-hosted-service-20260930/poll-rollout.json`.
 GChat live05 passes correctness through the installed network, while small-room
 ACK6.146s and16MiB resume285.756s still fail the latency targets.
+
+### IRC-2/IRC-8 bounded replay and durable views — 2026-09-30
+
+Replaced per-record sealed-state writes with16MiB-bounded prefetch and short
+synchronous replay batches, each checkpointed before yielding. Lost prefetch
+replies leave the previous durable prefix intact; validation or save failures
+still fail closed. Published channel/file views avoid waiting behind network I/O,
+retain presence deadlines, and clear on errors or closure. Consumer commits now
+receive local priority. All25 hosted runtime cases and strict runtime Clippy pass
+in `docs/evidence/irc-checkpoint-batch-20260930/summary.json`. The replacement500
+campaign and paired protected-network latency remain outstanding.
