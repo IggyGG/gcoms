@@ -821,3 +821,8 @@ released sockets and failed-target permit recovery above the old128 ceiling.
 Default128 and hard4096/8192 ceilings and unchanged eight-per-IP unauthenticated
 admission are checked independently. Actual protected-network capacity, resource
 use, cleanup and native qualification remain separate required gates.
+
+For the user-selected long-backlog policy, keep 10 seconds for ordinary offline
+message recovery. GChat must display confirmed applied-record progress during
+large membership replay and clear it only after catch-up, failure or cancellation.
+Measure long membership replay separately; do not relabel earlier failed runs.

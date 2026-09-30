@@ -1,0 +1,51 @@
+{
+  "scope": "Matched relay-binary baseline, retained-profile bootstrap only; no hosted-capacity qualification",
+  "relay_source": "250ece7c7abdb10458e8db72a9c60f110ce4ad08",
+  "relay_binary_sha256": "6619abb2af19764490e933b3abba4e2434589274d57537b5d935293ed843554b",
+  "relay_circuits": 128,
+  "relay_connections": 1024,
+  "client_gcoms_source": "40b440ddaa1f681c4f76aa49697c155741c8cd37",
+  "client_gchat_source": "c5bbfe89b3a4156febb5fe05674ccf42bb1c8077",
+  "client_artifacts": {
+    "gchat": "4464e3f8edcc99b27c59719342d4692e1f32c5eb163b201f254a9de04b02f8f9",
+    "fleet_probe": "b7791b518f79b408581044a3ace1c836a59780d832415f88f330fb21ea235c94",
+    "hosted-live.py": "ef69fdd6071bdc45bf82b1237fcf877e729855ff827544841beec27f6c6530c3"
+  },
+  "passed": false,
+  "error": "member-73 network ready",
+  "planned_profiles": 85,
+  "profiles_started": 76,
+  "profiles_ready": 75,
+  "network_ready_timeout_seconds": 180,
+  "cleanup_passed": true,
+  "grant_revoked": true,
+  "original_untouched": true,
+  "host_unit_limits": {
+    "runtime_seconds": 1800,
+    "cpu_quota_percent": 800,
+    "memory": "16G",
+    "tasks": 4096
+  },
+  "relay_resource_samples": 40,
+  "peak_os_outbound_established": 142,
+  "peak_relay_rss_kib": 34776,
+  "counter_limit": "OS sockets include background connections; these are not exact forwarding-semaphore counts.",
+  "evidence": {
+    "bootstrap-load-02-result.json": {
+      "path": "test-evidence/irc-parity/bootstrap-load-02-result.json",
+      "sha256": "2cd14976b1ff72e46a2e6b2bc929653d6dc309eba4e2f334b2d361391477e1c8"
+    },
+    "bootstrap-load-02-transport.json": {
+      "path": "test-evidence/irc-parity/bootstrap-load-02-transport.json",
+      "sha256": "dfeff0af5ee907a924606fd1941603a55e8fa7cf93b3379fd30c77bcc70ec7c0"
+    },
+    "bootstrap-load-02.log": {
+      "path": "test-evidence/irc-parity/bootstrap-load-02.log",
+      "sha256": "fa08e145bbdd3448fd2d672e64083b1ef9e2e3748b72da4d8840ac95852a8ae6"
+    },
+    "bootstrap-load-02-relay-resources.jsonl": {
+      "path": "test-evidence/irc-parity/bootstrap-load-02-relay-resources.jsonl",
+      "sha256": "042c7ede6170b25e471520fbd6539e29528f94a5e78e99f8457405903ca74ab8"
+    }
+  }
+}

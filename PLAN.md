@@ -1046,3 +1046,10 @@ The paired package gate also passes on `250ece7` / `c5bbfe8`, including all
 Linux desktop compilation. All archives are downloaded and hash verified.
 See `docs/evidence/irc-package-staging-20260930/relay-paired-pass.json`. This
 precedes GChat’s new catch-up display, which needs its own paired validation.
+
+The same-binary relay control at 128/1024 again stalls: 76 profiles start and
+75 become ready; member-73 exceeds the unchanged 180-second bootstrap bound.
+Cleanup, grant revocation and original-profile preservation pass. See
+`docs/evidence/irc-durable-capacity-20260930/bootstrap-load-02-control.json`.
+The same binary is now being rolled to the explicit hosted budget before the
+matched repeat; the control failure is retained.
