@@ -1,0 +1,23 @@
+{
+  "source": "75a0b1d",
+  "passed": true,
+  "checks": {
+    "routing_library": {
+      "passed": 66
+    },
+    "node_library": {
+      "passed": 377,
+      "ignored": 2
+    },
+    "gc2_entry_integration": {
+      "passed": 10
+    },
+    "strict_all_targets_all_features_routing_node_clippy": "passed"
+  },
+  "scope": "Explicit relay aggregate budgets; defaults and unauthenticated/per-entry limits preserved",
+  "evidence": {
+    "log": "test-evidence/irc-parity/relay-capacity-gates-01.log",
+    "sha256": "413d9641030743f9c3c2743b43a03e401f04bcc2fc8f67cfa7856b8f5d7b48eb"
+  },
+  "limits": "Before250ece7 CLI argument/minimal-feature fix. Full250ece7 workspace, paired consumers, fleet budget comparison and500 qualification remain open."
+}
