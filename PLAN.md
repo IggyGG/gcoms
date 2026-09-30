@@ -4,7 +4,10 @@ Merged source `a460d74` passes 1,142 tests, 13 retained exclusions, strict works
 Clippy, Rustdoc and both minimal-feature checks. Creation/control boundaries and
 released IPC23 invitation bytes/handshake pass with the new IPC26 hosted layout.
 The separate GChat 64-member network campaign passes; no larger campaign is
-required. Native installer publication remains separate. See
+required. Paired GChat passes 194 tests, strict Clippy, generated contracts,
+all 22 archive consumers, 63 UI tests and Linux desktop compilation. Source
+implementation and 64-member qualification are complete. Native installer
+publication remains separate. See
 [workspace receipt](docs/evidence/irc-workspace-20260930/limit-64-merged-qualified.json).
 
 ## IRC/main invitation integration (2026-09-30)
@@ -16,7 +19,7 @@ separate capabilities. Negotiate released IPC23, reject unpublished IPC24/25, an
 retain legacy privilege checks. Fixed-byte invitation/recovery fixtures and an
 actual IPC23 handshake check the merged layout. Paired GChat passes 194 tests
 with three retained exclusions, strict Clippy and generated contracts. Package
-checks and source landing are finishing.
+checks, frontend and Linux desktop compilation pass.
 
 ## IRC parity: retain the 64-member limit (2026-09-30)
 

@@ -57,7 +57,7 @@ operators manage service configuration and lifecycle outside ordinary chat; chan
 operators cannot impersonate that authority. A nick is a display name, and neither
 a name match nor a shared room silently grants an independent contact relationship.
 
-Release completion still requires current source-bound runtime/GChat regression,
-protected-network capacity and latency/resource measurements, paired package/API
-checks, native/installed qualification, configured signed service origins and
-normal trunk publication. Physical mobile/live push remain a separate scope.
+Current source-bound runtime/GChat regression, the full 64-member protected-network
+campaign, latency/resource measurements and paired package/API checks pass.
+Native installer publication still requires its own installed qualification and
+normal signed release process. Physical mobile/live push remain a separate scope.
