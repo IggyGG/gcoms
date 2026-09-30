@@ -1,0 +1,12 @@
+{
+  "run": "live08",
+  "grant_id": "vePxrn8XxYDRH3vBrkdfpdq64pLGV5mquT5LENXgVDU",
+  "revoked": true,
+  "scopes": [
+    "bootstrap"
+  ],
+  "max_names": 0,
+  "daemons_stopped": true,
+  "time_unix": 1790732886,
+  "accepted_channel_state_retained": true
+}

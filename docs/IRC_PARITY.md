@@ -377,15 +377,30 @@ in docs/evidence/irc-covered-poll-20260930; live improvement remains unmeasured.
 ### Current release qualification checkpoint — 2026-09-30
 
 The feature mapping covers the implemented native IRC equivalents across GComs
-and GChat. Current GComs `65b54c7`/GChat `d4ff03d` archive consumers, generated bindings,
-frontend and Linux desktop compilation pass; no packages have been published.
-See `evidence/irc-package-staging-20260930/current-paired-pass.json`. The full
-workspace run and 500-client durable replay campaigns remain in progress.
+and GChat. Current merged GComs `0e7db6a`/GChat `5533b1e` pass the paired archive
+and consumer gate, generated contracts, frontend and Linux desktop compilation.
+See `evidence/irc-package-staging-20260930/merged-paired-pass.json`. The full merged
+workspace gate remains running; the completed 1,096-test pre-merge receipt is
+separately bound to `65b54c7`. GChat's merged 188 Rust and 80 browser cases pass.
+Released IPC22 owner recovery retains its original wire discriminants; new hosted
+and modern-file APIs require IPC25. Conflicting unpublished task IPC23/24 dialects
+are rejected before dispatch. No registry packages have been published.
 
-GChat live07 on runtime `907e54f` passes the actual two-client protected-network
-journey and all measured latency targets: 110ms feedback, 2.409s delivery/covered
-ACK, 3.328s offline-owner admission, 170.050s resumed whole-file verification and
-297.114s file workflow. Receipts stay covered; offline joins retain Topic pending
-until authorized encrypted handoff. The exact 16MiB hash and unvoiced completion
-verify. Prior failures remain retained. Native installed and full 500-member
-network qualification, followed by normal trunk publication, remain open.
+The same merged pair passes live08 on the actual protected network: 118ms local
+feedback, 1.905s display plus covered recipient receipt, 4.044s offline-owner
+admission after network readiness, 100.142s resumed 16MiB whole-file verification
+and 179.396s full file workflow. Topic pending/encrypted handoff, moderation,
+offline delivery and unvoiced file completion pass with the exact exported hash.
+GChat retains `docs/evidence/irc-hosted-live-20260930/merged-08.json`. Both daemons
+stopped and the bootstrap-only grant was revoked; retained profiles and service
+ciphertext logs remain. Earlier failed or slower results retain their source
+bindings and original verdicts.
+
+The 500-member durable-runtime campaigns have admitted all 500 identities, but
+replay still incurs substantial checkpoint I/O. Serial and bounded concurrent
+campaigns retain their 7200-second deadlines and are not network results. The new
+GChat application harness first runs 12 independent profiles over the installed
+protected network, then requires a separate 500-profile campaign. Smoke cannot
+qualify capacity, and missing timing, recipient signatures, file verification,
+churn exclusion or cleanup cannot be promoted to success. Current smoke/capacity,
+native installed qualification and normal trunk publication remain open.

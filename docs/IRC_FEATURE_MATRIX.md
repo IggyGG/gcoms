@@ -16,7 +16,7 @@ A source mapping does not imply an installed release or a 500-member network pas
 | Connection, disconnect, quit, reconnect | Existing `/network`, `/disconnect`, `/quit`, retained network/profile lifecycle | Preserved; current native/installed checks open |
 | Join, part, room creation | `/hosted create`, `/hosted join`, `/part`; independent external MLS admission | Implemented; offline-owner, competing-join and persisted retry checks |
 | Continued channel operation without creator | Ciphertext service sequences policy and membership; members verify every transition | Implemented; service holds no member key |
-| Channel list | `/hosted list`, hosted `/list`, opt-in operator `/publish` | Implemented; pagination/privacy/restart/IPC24 checks |
+| Channel list | `/hosted list`, hosted `/list`, opt-in operator `/publish` | Implemented; pagination/privacy/restart/IPC25 checks |
 | Member list | `/names`, scoped `/who` | Implemented; identity and role supplied by verified membership |
 | Channel messages | Text or `/say`; ordered retained records | Implemented; acceptance and recipient delivery remain distinct |
 | Independent private messages | Bilateral signed-card consent, `/contact add`, `/contact open` | Implemented; real no-channel delivery/reopen/block tests |

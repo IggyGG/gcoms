@@ -863,3 +863,17 @@ strict Clippy, documentation and minimal core/IPC builds pass. Its separate
 receipt is `docs/evidence/irc-workspace-20260930/pre-merge.json`; the merged
 workspace rerun is active. No package registry publication or installed release
 claim follows from either result.
+
+### Current merged protected-network result — 2026-09-30
+
+GComs `0e7db6a` with GChat `5533b1e` passes the live08 two-client correctness and
+fixed latency checks: 118ms feedback, 1.905s delivery plus covered receipt, 4.044s
+offline-owner join, 100.142s resumed 16MiB verification and 179.396s full workflow.
+GChat retains the exact source/binary report in
+`docs/evidence/irc-hosted-live-20260930/merged-08.json`. Topic pending/handoff,
+moderation, offline recovery, exact exported hash and unvoiced completion pass.
+The temporary grant was revoked after owned daemons stopped; see
+`docs/evidence/irc-hosted-service-20260930/merged-grant-revocation.json`.
+A separate 12-profile application smoke is running before the full 500-profile
+protected-network gate. The merged full workspace and durable-runtime campaigns
+remain running; native installed qualification and trunk publication remain open.
