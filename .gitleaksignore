@@ -78,3 +78,11 @@ ed492e687cc5eb7addb8277bf8ca9b5d8e6df6f3:docs/evidence/recipient-route-readiness
 ed492e687cc5eb7addb8277bf8ca9b5d8e6df6f3:docs/evidence/recipient-route-readiness-20260928/sources.json:generic-api-key:174
 ed492e687cc5eb7addb8277bf8ca9b5d8e6df6f3:docs/evidence/recipient-route-readiness-20260928/sources.json:generic-api-key:430
 ed492e687cc5eb7addb8277bf8ca9b5d8e6df6f3:docs/evidence/recipient-route-readiness-20260928/sources.json:generic-api-key:614
+
+# Reviewed IRC source-inventory SHA-256 values; verified against each committed blob.
+# Exact historical fingerprints only; new findings still block publication.
+8687749cdf7f407033d5794d0763a41ae5732115:docs/evidence/irc-covered-poll-20260930/summary.json:generic-api-key:32
+5bfc321dce9fd480f6bf12bea2f85844eaf6e18a:docs/evidence/irc-hosted-policy-20260929/summary.json:generic-api-key:7
+9a1f31b00483933c8bc7de9ce6b424422dcb301e:docs/evidence/irc-hosted-client-20260929/summary.json:generic-api-key:8
+9a1f31b00483933c8bc7de9ce6b424422dcb301e:docs/evidence/irc-hosted-client-20260929/summary.json:generic-api-key:11
+9a1f31b00483933c8bc7de9ce6b424422dcb301e:docs/evidence/irc-hosted-client-20260929/summary.json:generic-api-key:14
