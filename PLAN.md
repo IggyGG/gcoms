@@ -977,3 +977,14 @@ from the source repository. See
 the test-only capacity receipt-quota correction; its production code is identical.
 The corrected fixture is being rebuilt/checked before its fresh capacity run.
 No registry publication or native installation follows from this build result.
+
+The test-only `1d11de1` quota fixture passes release compilation, 28 hosted tests
+(two unchanged ignored capacity cases), and strict runtime all-feature/all-target
+Clippy. A fresh binary-only worker runs the corrected capacity test under the
+original 4CPU/8GiB/7200s limits; see
+`docs/evidence/irc-durable-capacity-20260930/quota-fixture-checks.json`.
+The independent protected-network500 campaign failed member-83's 180-second
+cold bootstrap before joining, after 81 total channel admissions. All daemons
+stopped and its grant was revoked; original private profiles are retained for
+diagnosis. Paired GChat retains its decisive failure receipt. Neither500 gate
+is complete; the current paired188 Rust/strict and package gates are complete.

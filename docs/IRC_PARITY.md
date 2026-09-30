@@ -388,7 +388,9 @@ buffer. It passes 29 release hosted tests, the full 63-test runtime library
 (three existing exclusions), and strict runtime Clippy. The old sequential code
 fails the held-read control. The current full workspace gate passes 1,112 tests with 13 unchanged
 explicit exclusions, strict workspace Clippy, documentation and minimal core/IPC
-builds; the paired GChat/archive gates are running. The preceding `0e7db6a` / `5533b1e` pair passed 1,110 workspace tests,
+builds. Paired GChat passes 188 Rust tests (three unchanged exclusions) and strict
+Clippy; the current 20 Rust/two npm archives, external consumers, generated
+contracts, UI63 and Linux desktop compilation also pass. The preceding `0e7db6a` / `5533b1e` pair passed 1,110 workspace tests,
 strict checks, all 20 Rust package archives and external consumers, generated
 contracts, frontend and Linux desktop compilation. Its GChat 188 Rust and 80
 browser passes retain that earlier source binding.
@@ -412,9 +414,14 @@ own source-bound result.
 The serial 25ms and 75ms durable-runtime baselines timed out at their original
 7200-second bounds after admitting 500 identities. The earlier four-owner run
 hit its unchanged 8GiB memory limit. These are failures, not capacity passes.
-The current `40b440d` four-owner campaign retains those limits and is running;
-the full 500-profile protected-network application campaign is now running
-separately on the source-pinned GChat binary.
+The `40b440d` four-owner campaign completed 500 catch-ups, then failed because
+the fixture allowed only 2000 receipt records for 4990 required signatures.
+Test-only `1d11de1` aligns that quota with production100000; focused release
+tests and strict Clippy pass, and a fresh campaign retains the original limits.
+The separate protected-network500 campaign failed the 180s cold bootstrap of
+member-83 before joining. Eighty additional members plus the creator were
+admitted, at most16.354s each. All owned daemons stopped and its grant was revoked.
+Original private profiles/logs remain for diagnosis. Neither failure qualifies500.
 Missing timing, actual recipient signatures, file verification, churn exclusion,
 resource coverage or cleanup cannot become a success. Native installed checks
 and normal trunk publication remain open.

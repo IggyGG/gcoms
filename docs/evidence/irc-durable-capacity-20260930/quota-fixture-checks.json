@@ -1,0 +1,28 @@
+{
+  "source": "1d11de1",
+  "production_source": "40b440d",
+  "change": "test fixture channel_records 2000 to deployed 100000",
+  "passed": true,
+  "checks": {
+    "release_compile": 0,
+    "hosted": {
+      "passed": 28,
+      "ignored": 2
+    },
+    "runtime_all_targets_all_features_clippy": 0
+  },
+  "binary_sha256": "19462875e462bb94a11c0424b8947cabdb86c2ed65d98dfa1ba086b9bef3160b",
+  "evidence": {
+    "capacity-build-06-02.log": "5d4580287eeec8592919ffff380fd7092f1fa3bd9a9a8c0a177e6189639a02a2",
+    "capacity-hosted-06.log": "a175adfc92b3af6dfcf0901968d33a74b70217c564eb36b073bcccb80f6f08e6",
+    "capacity-clippy-06.log": "0892dc51647b0dd8cb46081009ef42a7d469e113df55745317a27c3160e1b1f1"
+  },
+  "capacity_run": {
+    "pod": "gcoms-irc-quota-20260930",
+    "status": "running, not qualified",
+    "cpu": 4,
+    "memory": "8Gi",
+    "deadline_seconds": 7200
+  },
+  "limits": "Focused validation of test-only quota correction. Separate runtime500, protected-network500 and native gates remain open."
+}
