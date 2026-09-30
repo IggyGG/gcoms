@@ -25,30 +25,37 @@ The GComs task also preserves the canonical checkout's `0c2c704` bootstrap fix.
 See the [command-by-command feature mapping](IRC_FEATURE_MATRIX.md) for the source audit.
 
 Current checkpoint, 2026-09-30: mapped native features are implemented; live
-capacity and installed publication remain in progress. GComs `a715a70` passes
-1,116 workspace tests with 13 unchanged exclusions, strict lint, documentation
-and minimal-feature checks. Its GChat `39848b8` pair passes 190 workspace tests
+capacity and installed publication remain in progress. GComs `2c4535d` passes
+1,117 workspace tests with 13 unchanged exclusions, strict lint, documentation
+and minimal-feature checks. Its GChat `556c8f8` pair passes 191 workspace tests
 with three unchanged exclusions, strict lint and all 22 archive consumers.
-Desktop/mobile-width catch-up UI checks pass. Actual retained 81-member replay
-shows confirmed progress and completes in 102.236 seconds, clearing its indicator.
+Generated contracts, 63 UI tests and Linux desktop compilation pass. All 22
+archives are retained locally with verified hashes. Desktop/mobile-width
+catch-up UI checks pass. Actual retained 81-member replay shows confirmed
+progress and completes in 102.236 seconds, clearing its indicator.
 
-Fresh smoke05 passes 220 covered recipient signatures, ordinary message recovery
-in 6 ms, visible membership replay and the verified 16 MiB file workflow. It
-exposes a removed-member replay defect: a kick completes for the owner, but the
-victim rejects the following snapshot and retains an active view. GComs
-`2c4535d` authenticates that removal snapshot through public replay without
-providing new epoch secrets. Its 71 focused MLS/runtime tests and strict lint
-pass, including forged removal, stale policy, wrong-snapshot and durable reopen
-controls. The exact failed profile recovers inactive in 262 ms and reopens
-correctly, with its original files untouched. Fresh twelve-client smoke06 also
-passes: 220 covered signatures, 6 ms ordinary recovery, 96.850-second file resume,
-removal exclusion, replacement and a healthy inactive victim afterward.
-Full regression, two-client feature coverage, protected-network 500-member and
-installed release qualification remain open. All completed runs stopped their
-clients and revoked their temporary grants.
-See `docs/evidence/irc-durable-capacity-20260930/removal-fixed-01.json` and
-GChat's `docs/evidence/irc-hosted-capacity-20260930/smoke-12-05-removal-failure.json`,
-`removal-replay-live-01.json` and `smoke-12-06-pass.json` in that directory.
+Smoke05 exposed a removed-member replay defect after otherwise passing its
+message/file checks. GComs `2c4535d` authenticates the removal snapshot through
+public replay without providing new epoch secrets. The exact failed profile
+recovers inactive in 262 ms and reopens correctly with its original files
+untouched. Fresh twelve-client smoke06 passes 220 covered signatures, ordinary
+recovery, file resume, removal exclusion and replacement, with a healthy inactive
+victim afterward. Earlier failures retain their original results.
+
+Two-client run10 then misses the unchanged message/receipt and file-resume timing
+targets. GChat now coalesces immediate worker wake-ups after successful durable
+mutations, preserving idle cadence and covered receipts. Fresh exact-source
+run11 passes: 111 ms feedback, 4.439 s message plus covered receipt, 6.739 s
+offline-owner admission, Topic pending/encrypted handoff, moderation, voice,
+notices, ordinary offline-message recovery and 156.586 s verified 16 MiB resume.
+The full file workflow takes 231.017 s. Cleanup and grant revocation pass.
+Fresh exact-source smoke07 is running before the protected-network 500-member
+campaign; native installed qualification and normal trunk publication remain open.
+See `docs/evidence/irc-workspace-20260930/removal-replay-qualified.json`,
+`docs/evidence/irc-durable-capacity-20260930/removal-fixed-01.json` and GChat's
+`docs/evidence/irc-trunk-integration-20260930/worker-wake-qualified.json`,
+`worker-wake-packages.json`, and
+`docs/evidence/irc-hosted-capacity-20260930/live-11-pass.json`.
 
 The durable-runtime 500-member campaign passes with 4,990 authenticated recipient
 signatures, unchanged 4-CPU/8-GiB/7,200-second bounds and 4,166.48-second elapsed

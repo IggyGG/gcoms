@@ -1106,3 +1106,11 @@ ignored tests, strict workspace/all-target Clippy, documentation and minimal
 core/SDK feature checks. Evidence: `removal-replay-qualified.json` in the
 workspace evidence directory. New GChat worker scheduling qualification remains
 separate from the retained passing twelve-member removal journey.
+
+IRC-8 current pair `2c4535d` / GChat `556c8f8` passes full GComs regression
+(1,117 tests, 13 unchanged ignores), strict/doc/minimal checks, paired GChat
+(191 tests, three unchanged ignores), all 22 archive consumers, generated
+contracts, UI63 and Linux desktop compilation. Fresh protected two-client run11
+also passes unchanged timing, correctness, cleanup and grant revocation. See
+`docs/IRC_PARITY.md` for source-bound receipts. Exact-source smoke07 precedes
+the still-open protected-network 500-member and installed release gates.
