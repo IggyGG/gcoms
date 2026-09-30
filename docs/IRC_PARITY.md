@@ -24,14 +24,25 @@ The GComs task also preserves the canonical checkout's `0c2c704` bootstrap fix.
 
 See the [command-by-command feature mapping](IRC_FEATURE_MATRIX.md) for the source audit.
 
-Current checkpoint, 2026-09-30: all mapped native features are implemented; full
-live capacity and installed publication remain in progress. GComs `250ece7`
-passes 1,115 workspace tests with 13 unchanged exclusions, strict lint,
-documentation and minimal-feature checks. GChat `39848b8` passes 190 workspace
-tests with three unchanged exclusions and strict lint; desktop/mobile-width
-catch-up UI checks pass. Its actual retained 81-member replay shows confirmed
-progress, completes in 102.236 seconds and clears the indicator. Original
-profiles, cleanup and grant revocation pass.
+Current checkpoint, 2026-09-30: mapped native features are implemented; live
+capacity and installed publication remain in progress. GComs `a715a70` passes
+1,116 workspace tests with 13 unchanged exclusions, strict lint, documentation
+and minimal-feature checks. Its GChat `39848b8` pair passes 190 workspace tests
+with three unchanged exclusions, strict lint and all 22 archive consumers.
+Desktop/mobile-width catch-up UI checks pass. Actual retained 81-member replay
+shows confirmed progress and completes in 102.236 seconds, clearing its indicator.
+
+Fresh smoke05 passes 220 covered recipient signatures, ordinary message recovery
+in 6 ms, visible membership replay and the verified 16 MiB file workflow. It
+exposes a removed-member replay defect: a kick completes for the owner, but the
+victim rejects the following snapshot and retains an active view. GComs
+`2c4535d` authenticates that removal snapshot through public replay without
+providing new epoch secrets. Its 71 focused MLS/runtime tests and strict lint
+pass, including forged removal, stale policy, wrong-snapshot and durable reopen
+controls. Full regression and fresh live qualification of that fix are running.
+All failed live-run clients stopped and their temporary grants were revoked.
+See `docs/evidence/irc-durable-capacity-20260930/removal-fixed-01.json` and
+GChat's `docs/evidence/irc-hosted-capacity-20260930/smoke-12-05-removal-failure.json`.
 
 The durable-runtime 500-member campaign passes with 4,990 authenticated recipient
 signatures, unchanged 4-CPU/8-GiB/7,200-second bounds and 4,166.48-second elapsed

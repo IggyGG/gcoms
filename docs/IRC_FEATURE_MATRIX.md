@@ -34,7 +34,7 @@ A source mapping does not imply an installed release or a 500-member network pas
 | Member limit | `/mode +l number` | Implemented; capacity bounded at 500 |
 | Bans and exceptions | `/mode +b/-b/+e/-e/+I/-I member-id` | Implemented as scoped identities rather than host masks |
 | Private and secret rooms | `/mode private/secret/public`; explicit publication required | Implemented; private/secret rooms omitted from public directory |
-| Kick, departure, ownership | `/kick`, `/part`, `/owner`, `/close-channel` | Implemented; pending removal revokes authority before member-assisted rekey |
+| Kick, departure, ownership | `/kick`, `/part`, `/owner`, `/close-channel` | Implemented; pending removal revokes authority before member-assisted rekey. Removed-client snapshot replay fix passes focused tests; fresh live qualification is pending |
 | Away and availability | `/away`, `/back`, `/presence on/off` | Implemented; opt-in authenticated leases, expiry becomes Unknown |
 | User information | Scoped `/whois`, contact fingerprint/card/verification | Implemented; no global host/user directory |
 | Persistent block, ignore and mute | `/block`, `/ignore`, `/mute` | Implemented; contact block revokes new file authority, local filters preserve encrypted history |
