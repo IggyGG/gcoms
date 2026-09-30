@@ -967,3 +967,13 @@ with that deployed setting. The original failure is retained in
 `docs/evidence/irc-durable-capacity-20260930/concurrent-05-quota.json`. Every receipt
 assertion and the original CPU/memory/7200s limits stay in the new campaign.
 This is not a completed capacity pass or a production-code change.
+
+The paired archive gate on `40b440d` / `c5bbfe8` passes all 20 normalized Rust
+archives, external renamed Rust and npm consumers, paired GChat Rust/frontend,
+generated contracts, notices and Linux desktop compilation, with original source
+unchanged. All 22 archives (20 crates/two npm tarballs) are retained separately
+from the source repository. See
+`docs/evidence/irc-package-staging-20260930/replay-paired-pass.json`. This precedes
+the test-only capacity receipt-quota correction; its production code is identical.
+The corrected fixture is being rebuilt/checked before its fresh capacity run.
+No registry publication or native installation follows from this build result.
