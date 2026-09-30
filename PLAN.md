@@ -852,3 +852,13 @@ This corrects storage headroom, not replay latency. The original serial capacity
 campaigns remain unchanged; an additional four-owner concurrent replay campaign
 retains independent validation/archives and all original send/recovery/churn
 assertions, reporting its scheduling separately. No security check is skipped.
+
+Merged-source archives pass on GComs0e7db6a/GChat5533b1e: all20 Rust archives,
+isolated Rust/npm consumers, GChat Rust/generated/frontend checks and Linux
+desktop compilation. `docs/evidence/irc-package-staging-20260930/merged-paired-pass.json`
+records the real clean commits and archive hashes. The full pre-merge workspace
+gate on65b54c7 also completed:1,096 tests passed,12 explicit ignores,129 suites;
+strict Clippy, documentation and minimal core/IPC builds pass. Its separate
+receipt is `docs/evidence/irc-workspace-20260930/pre-merge.json`; the merged
+workspace rerun is active. No package registry publication or installed release
+claim follows from either result.

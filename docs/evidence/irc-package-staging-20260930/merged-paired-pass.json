@@ -1,0 +1,83 @@
+{
+  "status": "passed",
+  "release": true,
+  "published": false,
+  "sources": {
+    "gcoms": {
+      "commit": "0e7db6add4113b8888ef9700ffedd6c1d1a44a16",
+      "tracked_source_manifest_sha256": "2ab04cac2d05e34c52a805253f76708929937338d75356745051e988de4f968c"
+    },
+    "gchat": {
+      "commit": "5533b1e0063cdfa1ea8389dd48e8e78f934156d3",
+      "tracked_source_manifest_sha256": "8477461e777687c9455a27342071b042e823f4e055fbb81b27d9b100d41a2b1b"
+    }
+  },
+  "rust_packages": [
+    "gcoms-channel-service",
+    "gcoms-mls",
+    "gcoms-crypto",
+    "gcoms-core",
+    "gcoms-private-fs",
+    "gcoms-sdk",
+    "gcoms-node",
+    "gcoms-gossip",
+    "gcoms-network",
+    "gcoms-network-client",
+    "gcoms-routing",
+    "gcoms-transport",
+    "gcoms-protocol",
+    "gcoms-runtime",
+    "gcoms-file-transfer",
+    "gcoms",
+    "gcoms-rpc",
+    "gcoms-rpc-contract",
+    "gcoms-rpc-macros",
+    "gcoms-catalog"
+  ],
+  "rust_external_alias_consumer": "passed",
+  "npm_archive_consumer": "passed",
+  "gchat_rust": "passed",
+  "gchat_frontend": "passed",
+  "gchat_desktop": "passed",
+  "archive_sha256": {
+    "gcoms-runtime-0.1.0.crate": "3d87476a6e3e4954ada3d7258c73524dfe415a18b6567b59d075924216354b07",
+    "gcoms-routing-0.1.0.crate": "ac8f85ec675b14967927eb50b9a71563e4bfa97d19aff1c63013c39bc6c228ed",
+    "gcoms-protocol-0.1.0.crate": "46064d72a7ebb474a72871040e79867ecfa82096549f7bb50601d6275cdff463",
+    "gcoms-file-transfer-0.1.0.crate": "f750e023a6c42da91742c9da4f5def547aa9b9c9cc4c4d304f61f75fed04cd48",
+    "gcoms-network-0.1.0.crate": "d3a22c4458449d5c10815aa9534985439a0efaee6af74fb4c3cd3dcbd0da0e52",
+    "gcoms-catalog-0.1.0.crate": "8993e42a2acd21bdcb6a354944459c37e93741a71eaf56408bb84193aef0c0c0",
+    "gcoms-mls-0.1.0.crate": "338cbe3af3ff8d905518c5fa19b676944a173e5d339db7eefbd75e14e1e776a1",
+    "gcoms-sdk-0.1.0.crate": "de37d4c2751e22bd58497c3472c9f838d3e45ed59627a766fddbf65b0789f629",
+    "gcoms-crypto-0.1.0.crate": "b4db368b3ad7bee35c2e405f85560b14ae85b572ce96a3f51342c32c439fd2fb",
+    "gcoms-network-client-0.1.0.crate": "a6874b2e060b8b37f418397b4dc0a682700ed751f6136cbf45b8c3fd391fe25c",
+    "gcoms-node-0.1.0.crate": "28be85f0f8c09393e1a4610d507f255c45efd1c9fb6434b04a53c088f399a85b",
+    "gcoms-channel-service-0.1.0.crate": "4ec83f68d8f333ba996b625a931c293ef700c856f2c311afbd2ca5cbcf6b3080",
+    "gcoms-gossip-0.1.0.crate": "2fc8c0729a9aae3c928b2d886ad6541607b4861973f879ac37ff8122f32fa432",
+    "gcoms-rpc-macros-0.1.0.crate": "987d41188d9d8158e5894c92e8aaf7376abfbe954c61b6227cfd085671910b42",
+    "gcoms-private-fs-0.1.0.crate": "571cd19742b2b493ee2ae7a490639b3857b7011c09619e21382d77b16dae6cd9",
+    "gcoms-rpc-contract-0.1.0.crate": "b7b0cd5e5ce0a555554b05998aec765c311786479a9b73d1e630b410402c1bba",
+    "gcoms-transport-0.1.0.crate": "00bb23d7bd156492d4a55d7c44aafe25640c271c04381df886ff46001259b43d",
+    "gcoms-rpc-0.1.0.crate": "259697bdb8800ac83324d4fddb54ecf22cbf9d66deba54a6213eae6bfdf38abd",
+    "gcoms-core-0.1.0.crate": "6e3a3947ca01bd44d087b8fcf5814852cce6bf7bf775b5904d9767d92213440c",
+    "gcoms-0.1.0.crate": "5db2677bb31609bebf637fb09217782a08fb4cbacec70361e1437270cf62bd32",
+    "gcoms-rpc-0.1.0.tgz": "dc875fec9fbf5e06a86610ef22f5c6c2c1fea7f187930f5e067612d31d5675c3",
+    "gcoms-rpc-codegen-0.1.0.tgz": "f1997a77b6aee2233d0fc675c67257f960d0d4c5a7e376d3514fc4c6cff07940"
+  },
+  "gchat_notices_sha256": "fbd6e451c7896aac0ec49decd93d0874829bef7144f83aeb951646b021447555",
+  "source_unchanged": true,
+  "scope": "actual archives, isolated Rust/npm consumers, paired GChat Rust/frontend and Linux desktop compilation; no installer/runtime or publication claim",
+  "runner": {
+    "base": "gcoms-ci:20260919-2 Debian12",
+    "desktop_libraries": "264 signed-APT-selected Debian packages in isolated sysroot, with unchanged base header/library fallbacks",
+    "desktop_debs_manifest_sha256": "0490703a05343d778ffebba232e7a0bdf29b81b0b878eb24afd78e1aab895cb3",
+    "rust_vendor": "locked archives verified before installation; own normalized staged packages checked against genuine VCS revision",
+    "python": "strict contained regular-file-only tar extraction compatibility shim",
+    "node": "22.22.1",
+    "npm": "11.6.2"
+  },
+  "logs": {
+    "test-evidence/irc-parity/packages-0e7db6a-10.json": "688e505c1ff2915d2c9181fc36723c25470a1167d1d8ff02019e13e8504d6498",
+    "test-evidence/irc-parity/packages-0e7db6a-10.log": "bb1443c2657bfa5b7eabb85954f4d442d750d18554c040d1073033d3714a42a0"
+  },
+  "retained_setup_failure": "packages-0e7db6a-01 refused an untracked disposable bootstrap runner before packaging; that exact runner path was excluded and the original failure retained"
+}

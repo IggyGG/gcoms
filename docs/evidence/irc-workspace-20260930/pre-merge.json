@@ -1,0 +1,18 @@
+{
+  "source": "65b54c7faeec6cf8887c80d3726854f45bc50627",
+  "scope": "full GComs workspace all-feature Rust gate before trunk integration",
+  "passed": 1096,
+  "failed": 0,
+  "ignored": 12,
+  "suites": 129,
+  "clippy_workspace_all_targets_all_features": "passed",
+  "rustdoc_workspace_all_features": "passed",
+  "core_no_default_features": "passed",
+  "sdk_no_default_features_ipc": "passed",
+  "runner_exit": 0,
+  "log": {
+    "path": "test-evidence/irc-parity/workspace-final-02.log",
+    "sha256": "31f1d5ae726579704d87ab896aa002be6d681cd264c8704e3848be32a291e35f"
+  },
+  "limits": "Does not qualify subsequent trunk merge, 500-member protected network, native installers or physical mobile/push."
+}

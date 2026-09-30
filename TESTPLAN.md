@@ -768,3 +768,8 @@ and private archives. Run its12-client concurrent smoke first; do not compare
 its wall time as a production-code-only speedup or protected-network result.
 Require a configured channel quota above the measured339,264,618-byte admission
 log; the500-member deployment template uses1GiB with a4GiB aggregate ceiling.
+
+Use the merged-paired-pass archive receipt for0e7db6a/5533b1e. The1096-test
+workspace receipt belongs to65b54c7 and must not be substituted for the active
+merged workspace rerun. CurrentGChat full browser integration passes80 cases;
+physical native installers and500-member protected-network checks remain separate.
