@@ -1,0 +1,31 @@
+{
+  "gcoms_source": "a715a70df1673e18fd730cf2ba9b4faf76f0c231",
+  "status": "passed",
+  "snapshot_regressions": 4,
+  "strict_runtime_all_target_all_feature_clippy": "passed",
+  "unchanged_bounds": {
+    "snapshot_attempts": 4,
+    "snapshot_page_seconds": 30,
+    "join_target_seconds": 30
+  },
+  "retry_backoff_seconds": [
+    1,
+    2,
+    4
+  ],
+  "regression": "Four-second route unavailability recovers before exactly one membership write; authenticated refusals stop after one read; persistent transport errors stop after four attempts.",
+  "evidence": {
+    "snapshot-maintenance-01.log": {
+      "path": "test-evidence/irc-parity/snapshot-maintenance-01.log",
+      "sha256": "4936330876af3ae16aea3f0c134bec2f0552525fbbdf46831b63c58b9277537c"
+    },
+    "snapshot-maintenance-01.exit": {
+      "path": "test-evidence/irc-parity/snapshot-maintenance-01.exit",
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "snapshot-maintenance-source.tar.gz": {
+      "path": "test-evidence/irc-parity/snapshot-maintenance-source.tar.gz",
+      "sha256": "53ec5f38b4a49419271faddda5e992b95cd269d8721833e1b7317de7fad2b920"
+    }
+  }
+}
