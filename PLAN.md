@@ -923,3 +923,11 @@ volume-bound run are recorded in `docs/evidence/irc-replay-window-20260930/summa
 The current full workspace rerun, new release application binary and source-bound
 500-client concurrent campaign are active. The previous 12-profile recovery miss
 remains a failure until the new actual network run measures it again.
+
+The original four-owner concurrent campaign on `0e7db6a` was OOM-killed at its
+unchanged 8 GiB memory limit at 02:31:25 UTC. The last observed marker was 476
+clients caught up; it is not a completed capacity pass. Kubernetes exit137 and
+the limitations of the retained partial logs are recorded in
+`docs/evidence/irc-durable-capacity-20260930/concurrent-04-oom.json`. The current
+`40b440d` campaign includes the sealed-buffer release and retains the same CPU,
+memory, replay concurrency and 7200-second deadline.

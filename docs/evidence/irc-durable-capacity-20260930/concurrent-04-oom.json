@@ -1,0 +1,27 @@
+{
+  "source": "0e7db6a production/runtime capacity source",
+  "binary_sha256": "bb4da93d7ca742eb57c05dedb9642330052f7e37f63729028737c97d87d858e5",
+  "campaign": "500 independent durable clients, four concurrent replay owners",
+  "passed": false,
+  "termination": "OOMKilled",
+  "exit_code": 137,
+  "finished_at": "2026-09-30T02:31:25Z",
+  "original_deadline_seconds": 7200,
+  "resource_limits": {
+    "cpu": 4,
+    "memory": "8Gi",
+    "ephemeral_storage": "6Gi"
+  },
+  "admitted_members": 500,
+  "admission_seconds": 939.854,
+  "last_observed_catch_up_clients": 476,
+  "last_observed_catch_up_seconds": 4248.275,
+  "last_observed_rss_kib": 8199288,
+  "observation_limits": "Last markers came from retained tool polling; final per-run files were unavailable after container termination. Do not infer which later phases ran.",
+  "terminal_receipt_sha256": "e5fa0249ab8de5817b385ba5d1f87785034ab02ba4c3ce720426924923880604",
+  "retained_partial_files": {
+    "runtime-capacity-500-04.log": "c8c04a50a8fe1864b678e4679550e0437e601ea3dac19f47c264dbe9bb6522a3",
+    "runtime-capacity-500-04-resources.jsonl": "ecbda1ca517f357570d9bc4559ba1e64766fdc6d554d13fe0b7e5c8f519fdcd2"
+  },
+  "next_campaign": "40b440d releases redundant sealed-session buffers; original four-owner scheduling, resource limits and 7200s deadline retained."
+}
