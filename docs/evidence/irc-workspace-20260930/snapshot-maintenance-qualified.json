@@ -1,0 +1,18 @@
+{
+  "source": "a715a70df1673e18fd730cf2ba9b4faf76f0c231",
+  "scope": "full GComs workspace including bounded snapshot read retry across transient route maintenance",
+  "passed": 1116,
+  "failed": 0,
+  "ignored": 13,
+  "suites": 129,
+  "clippy_workspace_all_targets_all_features": "passed",
+  "rustdoc_workspace_all_features": "passed",
+  "core_no_default_features": "passed",
+  "sdk_no_default_features_ipc": "passed",
+  "runner_exit": 0,
+  "log": {
+    "path": "test-evidence/irc-parity/workspace-final-06.log",
+    "sha256": "01a9ffaf3dd2eb8509d94b6a56b38c873001019fb1a179502e195266b1f42e6d"
+  },
+  "limits": "Full component/workspace source gate; not 500-member protected-network capacity, native installers or physical mobile/push."
+}

@@ -1081,3 +1081,9 @@ revoked. Snapshot read retries now back off 1/2/4 seconds within the existing
 pinned transcript, never repeat a membership write and cannot wake route
 maintenance. A held-route regression requires one eventual membership admission.
 Qualification of this change is in progress; prior 250ece7 results keep their scope.
+
+The final snapshot-read maintenance source `a715a70` passes the full GComs gate:
+1,116 tests, 13 unchanged ignored tests, strict workspace/all-target Clippy,
+rustdoc and both minimal feature checks. Evidence:
+`docs/evidence/irc-workspace-20260930/snapshot-maintenance-qualified.json`.
+Paired GChat and protected-network application qualification remain in progress.
