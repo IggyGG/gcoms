@@ -1017,5 +1017,23 @@ The isolated original owner's 80 missed admissions converge to81 members in
 96.815s after network readiness, missing the unchanged10s target without fleet
 congestion. Its original profile stayed untouched and its diagnostic grant was
 revoked. See `docs/evidence/irc-durable-capacity-20260930/owner-backlog-81.json`.
-A user clarification is pending on the target for long membership backlogs versus
-ordinary offline-message recovery; no deadline or qualification was relaxed.
+The user selected a 10-second target for ordinary offline-message recovery and
+visible progress for large membership backlogs. GChat is implementing that display;
+the earlier 96.815-second result remains a failure under its original target.
+
+
+### IRC-8 durable 500-client qualification — 2026-09-30
+
+The concurrent durable-client campaign passes on fixture `1d11de1` and production
+`40b440d`: 500 independent members, ten concurrent senders, 5,000 message deliveries,
+4,990 authenticated recipient signatures, offline reopen, encrypted piece transfer,
+kick and replacement. It finishes in 4,166.48 seconds within the unchanged
+7,200-second, 4-CPU, 8-GiB budget; sampled high-water RSS is 7,483,960 KiB.
+See `docs/evidence/irc-durable-capacity-20260930/concurrent-06-pass.json`.
+This is in-process transport, not a protected-network GChat or installed release pass.
+All earlier quota, deadline and memory failures remain retained.
+
+The complete workspace on operator-capacity source `250ece7` also passes:
+1,115 tests, 13 unchanged exclusions, strict Clippy, rustdoc and minimal feature
+checks. See `docs/evidence/irc-workspace-20260930/relay-capacity-qualified.json`.
+The full relay executable preserves push-gateway support; fleet comparison is next.

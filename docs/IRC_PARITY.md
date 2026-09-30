@@ -55,8 +55,11 @@ must remain working.
    local/source, native, installed and live-provider evidence distinct.
 
 Mandatory healthy-network targets retain the existing reliability requirements:
-200 ms feedback, 5 s small-room online delivery/ACK, 30 s joins and 10 s recovery,
-with the documented prerequisites. The user selected covered receipts with
+200 ms feedback, 5 s small-room online delivery/ACK, 30 s joins and 10 s ordinary offline-message recovery,
+with the documented prerequisites. On 2026-09-30 the user selected visible
+catch-up progress for large membership backlogs; their duration is measured
+separately. Earlier runs retain their original targets and outcomes.
+The user selected covered receipts with
 slower large-room delivery status; large-room ACK completion is measured
 separately rather than moving signatures onto the observable bulk class. Physical mobile/live push remain separate from existing
 emulator/simulator qualification. No feature is complete merely because a test

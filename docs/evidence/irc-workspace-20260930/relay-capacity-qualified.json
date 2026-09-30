@@ -1,0 +1,18 @@
+{
+  "source": "250ece7c7abdb10458e8db72a9c60f110ce4ad08",
+  "scope": "full GComs workspace including bounded operator relay capacity",
+  "passed": 1115,
+  "failed": 0,
+  "ignored": 13,
+  "suites": 129,
+  "clippy_workspace_all_targets_all_features": "passed",
+  "rustdoc_workspace_all_features": "passed",
+  "core_no_default_features": "passed",
+  "sdk_no_default_features_ipc": "passed",
+  "runner_exit": 0,
+  "log": {
+    "path": "test-evidence/irc-parity/workspace-final-05.log",
+    "sha256": "288ecd564c8d7a9e8ca9d06e70a37aab86422a00470db5c585300aea8098f828"
+  },
+  "limits": "Full component/workspace source gate; not 500-member protected-network capacity, native installers or physical mobile/push."
+}

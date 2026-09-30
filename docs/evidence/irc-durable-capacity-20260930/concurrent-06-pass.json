@@ -1,0 +1,52 @@
+{
+  "source": "1d11de1e03a5f74f01eefd441a084087104377b8",
+  "production_source": "40b440ddaa1f681c4f76aa49697c155741c8cd37",
+  "binary_sha256": "19462875e462bb94a11c0424b8947cabdb86c2ed65d98dfa1ba086b9bef3160b",
+  "scope": "500 independent durable MLS clients with in-process service transport; not GChat protected-network or native qualification",
+  "passed": true,
+  "exit_code": 0,
+  "members": 500,
+  "senders": 10,
+  "message_deliveries": 5000,
+  "required_recipient_signatures": 4990,
+  "all_assertions_passed": [
+    "all independent rosters replayed",
+    "ten concurrent senders",
+    "no Delivered while intended member is offline",
+    "reopen and authenticated delivery by every original recipient",
+    "AEAD ciphertext piece roundtrip",
+    "kick revokes ciphertext reads",
+    "replacement admission and roster convergence"
+  ],
+  "admission_seconds": 743.755,
+  "all_replay_before_send_seconds": 3778.676,
+  "test_seconds": 4166.48,
+  "original_deadline_seconds": 7200,
+  "memory_limit": "8Gi",
+  "cpu_limit": 4,
+  "replay_concurrency": 4,
+  "peak_sampled_rss_kib": 7483960,
+  "peak_sampled_hwm_kib": 7483960,
+  "resource_samples": 416,
+  "max_join_ms": 4452,
+  "max_feedback_ms": 76,
+  "ordinary_offline_recovery_ms": 312,
+  "covered_json_bytes": 38330586,
+  "bulk_json_bytes": 154755463718,
+  "fixture_records": 100000,
+  "earlier_failed_runs_retained": true,
+  "evidence": {
+    ".log": {
+      "path": "test-evidence/irc-parity/runtime-capacity-500-06.log",
+      "sha256": "811a6d75bf3826d30ac5fdac4eb57ebe69564c876a8242de3e36910b1a20cc4c"
+    },
+    ".exit": {
+      "path": "test-evidence/irc-parity/runtime-capacity-500-06.exit",
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "-resources.jsonl": {
+      "path": "test-evidence/irc-parity/runtime-capacity-500-06-resources.jsonl",
+      "sha256": "3a1a3676f42bb8cbaa044bb89eb59e2acb332faa0a07cbc4d4e614c0f92b4686"
+    }
+  }
+}
