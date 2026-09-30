@@ -1,0 +1,47 @@
+{
+  "revision": "885314952a8ade882568232d5a6329dcbf390c7b",
+  "scope": "component package archives and isolated Rust/npm consumers; current paired release remains open",
+  "full_gate_status": "failed",
+  "full_gate_failure": "npm offline cache miss; original failed report preserved",
+  "rust_package_count": 20,
+  "normalized_manifests_and_licenses": "passed",
+  "rust_external_alias_consumer": "passed",
+  "separate_npm_archive_install": "passed after filling existing dependency metadata cache",
+  "separate_npm_exports": "passed",
+  "published": false,
+  "archive_sha256": {
+    "gcoms-runtime-0.1.0.crate": "8b9fe0f0f377ea76ff213be9bc6df6360a3c17ed642b67137cc424f88b04762e",
+    "gcoms-routing-0.1.0.crate": "1a9709344a742005a63e74eba5412a5e729eec941708c9eb940ad6f58c4e28c7",
+    "gcoms-protocol-0.1.0.crate": "7caad0776b9de53850a898c182ba7d110ac591a26ac72c0e3ab7a542cf560740",
+    "gcoms-file-transfer-0.1.0.crate": "aaf845bd44aa0bb1bd4efa3e299a1d94f92231c840b047930f3e44ec8eb1a012",
+    "gcoms-network-0.1.0.crate": "ab649bdf9bd9e775205b40922f2685f01efa5f321defb3bd198d016491e01e35",
+    "gcoms-catalog-0.1.0.crate": "e90da067972826be944e70334b7d0a50faa7adfc2851db8c49467b78df5924af",
+    "gcoms-mls-0.1.0.crate": "96455915a9d41c445971ff83c76ee256598430d988f10b5e99a6f3a2aa3f0467",
+    "gcoms-sdk-0.1.0.crate": "ed09b60d22f29ef212b7836682cc9bed8f9d344b463ddd3409d0959ef6250490",
+    "gcoms-crypto-0.1.0.crate": "5c04c4a1e348a07661a579e1f2e69c4a71347ccb46a354c69ed4078b3634fccf",
+    "gcoms-network-client-0.1.0.crate": "e652c4bf63fb260b5e35e646fdc538933fcc686121a9df145bed131f2ca7ceeb",
+    "gcoms-node-0.1.0.crate": "f067005fcda9aa59b9ec823a5680c5161df9f7a80324fa7e68c3e28205667d14",
+    "gcoms-channel-service-0.1.0.crate": "116befd803b17a1ea68d6a3a9fecd55fa245351c59bf2276b40d1fc5ae294a76",
+    "gcoms-gossip-0.1.0.crate": "bc07283fffb90c197772c676478fbf2b84a5860de9b513e4898b13d32080280d",
+    "gcoms-rpc-macros-0.1.0.crate": "966d7dd050807e5a82df63bc655fcfacbd1f09e760abcd1463ae0c34f2001514",
+    "gcoms-private-fs-0.1.0.crate": "9968524bdbc193d5960436d1c76807f8358efd428908ea9c1ca484ae361c4741",
+    "gcoms-rpc-contract-0.1.0.crate": "cbb29e84dba72d5cfb484ecf95a4cdf78bf13d7b6f186e04e535d98d39a44e88",
+    "gcoms-transport-0.1.0.crate": "0d2c96ab0fc2255baaa5d4f0acb8f41d30d9603ce0032167285787b3dc411eaf",
+    "gcoms-rpc-0.1.0.crate": "a5bf8db8b23731894c1683d641f46086ba015df32a2904563edf8f3c3c34dd7a",
+    "gcoms-core-0.1.0.crate": "5434d8d5ca882574f8b5a1c95506ae3505993087ed4cdbd12802a10945f32b3a",
+    "gcoms-0.1.0.crate": "7b4df0447b15072f24c05b1a1f15d159d6266593e2bed9b62ece7f01d6d4554c",
+    "gcoms-rpc-0.1.0.tgz": "dc875fec9fbf5e06a86610ef22f5c6c2c1fea7f187930f5e067612d31d5675c3",
+    "gcoms-rpc-codegen-0.1.0.tgz": "f1997a77b6aee2233d0fc675c67257f960d0d4c5a7e376d3514fc4c6cff07940"
+  },
+  "logs": {
+    "test-evidence/irc-parity/packages-8853149-10/summary.json": "1b9998e099cf7fe8885e3a60419fc26b938c7192b98330a62dd5d9a371178a79",
+    "test-evidence/irc-parity/npm-archive-consumer-8853149.log": "8f7cc5dd4d2f175eddc904c093f17c79807e70d072945e631665c212f45f1a2b",
+    "test-evidence/irc-parity/npm-archive-exports-8853149.log": "3f9768ee04c0348e2601a10597d00992ffb4e9eafac2c81eba0878068acc9e40",
+    "test-evidence/irc-parity/package-vendor-bootstrap-8853149.json": "3db67d642c3ecc795e21796d0795149a2e6e64a6d5d26141b913f62c102bb601"
+  },
+  "runner_adaptations": [
+    "Directory-source runner stages only own normalized packages and checks actual VCS revision and checksums.",
+    "Python3.11 extraction shim rejects non-regular/non-directory entries and escaping paths.",
+    "Node22.22.1 and npm11.6.2; offline install uses verified actual npm archives."
+  ]
+}

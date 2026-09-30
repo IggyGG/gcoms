@@ -709,27 +709,35 @@ A new paired build/deployment and live timing check remain required.
 
 ### IRC-8 durable capacity baseline and hosted rollout — 2026-09-30
 
-The durable 500-client baseline on64632fd timed out at its unchanged two-hour
-bound (exit124). The last admission marker was476; the run did not produce a
-completed send/recovery/churn result. Retained process samples show5.60GiB peak
-RSS and261.65GB cumulative writes. This failed baseline motivates bounded replay
+The durable 500-client baseline on 64632fd timed out at its unchanged two-hour
+bound (exit 124). The last admission marker was 476; the run did not produce a
+completed send/recovery/churn result. Retained process samples show 5.60GiB peak
+RSS and 261.65GB cumulative writes. This failed baseline motivates bounded replay
 checkpointing; see `docs/evidence/irc-durable-capacity-20260930/baseline-01.json`.
-The source changes and replacement campaign are not yet qualified at500.
+The source changes and replacement campaign are not yet qualified at 500.
 
-The installed HEL ciphertext service now runs8687749 and advertises combined
+The installed HEL ciphertext service now runs 8687749 and advertises combined
 covered polling. All four pre-existing state files were unchanged across its
-restart; the old255f9cd binary remains available for rollback. The WebPKI probe
+restart; the old 255f9cd binary remains available for rollback. The WebPKI probe
 and deployment receipt are `docs/evidence/irc-hosted-service-20260930/poll-rollout.json`.
 GChat live05 passes correctness through the installed network, while small-room
-ACK6.146s and16MiB resume285.756s still fail the latency targets.
+ACK 6.146s and 16MiB resume285.756s still fail the latency targets.
 
 ### IRC-2/IRC-8 bounded replay and durable views — 2026-09-30
 
-Replaced per-record sealed-state writes with16MiB-bounded prefetch and short
+Replaced per-record sealed-state writes with 16MiB-bounded prefetch and short
 synchronous replay batches, each checkpointed before yielding. Lost prefetch
 replies leave the previous durable prefix intact; validation or save failures
 still fail closed. Published channel/file views avoid waiting behind network I/O,
 retain presence deadlines, and clear on errors or closure. Consumer commits now
-receive local priority. All25 hosted runtime cases and strict runtime Clippy pass
-in `docs/evidence/irc-checkpoint-batch-20260930/summary.json`. The replacement500
+receive local priority. All 25 hosted runtime cases and strict runtime Clippy pass
+in `docs/evidence/irc-checkpoint-batch-20260930/summary.json`. The replacement 500
 campaign and paired protected-network latency remain outstanding.
+
+The retained 8853149 package staging results now include the separate successful
+npm archive install/export checks after filling the offline metadata cache.
+All 20 Rust archives passed normalized-manifest/license checks and the external
+renamed consumer compiled. The original full runner remains recorded as failed
+at its npm-cache step; these component results do not qualify the latest paired
+release. `docs/evidence/irc-package-staging-20260930/summary.json` records archive
+hashes, runner adaptations and logs. Nothing was published to package registries.

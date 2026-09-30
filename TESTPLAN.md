@@ -697,11 +697,11 @@ GChat timings; fewer requests alone do not qualify the five-second target.
 
 Run `cargo test --release -p gcoms-runtime --all-features --lib hosted` and strict
 runtime all-target/all-feature Clippy. Lose the second deferred fetch before
-applying a24-admission page: cursor, archive bytes and checkpoint count must stay
-unchanged. Reopen, recover all members/events with fewer than12 full-state saves,
+applying a 24-admission page: cursor, archive bytes and checkpoint count must stay
+unchanged. Reopen, recover all members/events with fewer than 12 full-state saves,
 and reopen again exactly. Force a real save failure and require poisoned reads
 and sends until restoring/reopening the prior prefix. While a real service poll
-is held, List and bounded FileEvents must finish within200ms without cancelling
+is held, List and bounded FileEvents must finish within 200ms without cancelling
 the poll; shutdown, reopen and authenticated delivery must still work. Check
 available/away/invisible expiry at the exact signed deadline. Repeat the original
-500-client campaign with its7200-second deadline and retain phase/resource logs.
+500-client campaign with its 7200-second deadline and retain phase/resource logs.
