@@ -1095,3 +1095,8 @@ Both MLS and durable-runtime regressions reproduce it
 independently verifies the public transition from the prior authenticated tree
 and signed policy, then persists the removed member inactive. Invalid snapshots
 must leave state untouched. Focused and full qualification are in progress.
+
+Removal fix `2c4535d` passes MLS and hosted-runtime tests and strict Clippy
+(`docs/evidence/irc-durable-capacity-20260930/removal-fixed-01.json`).
+Forged removal, stale policy and mismatched snapshot controls remain enforced.
+Full workspace and fresh protected-network qualification are running.

@@ -1,0 +1,27 @@
+{
+  "source": "2c4535d562216340ea54a08e5fc8d419549d73e2",
+  "status": "passed",
+  "scope": "All MLS tests, runtime hosted tests, strict MLS/runtime all-target all-feature Clippy",
+  "tests": {
+    "passed": 71,
+    "failed": 0,
+    "ignored": 4,
+    "suites": 5
+  },
+  "negative_controls": [
+    "forged removal rejected",
+    "stale policy rejected",
+    "mismatched public snapshot rejected without state advance"
+  ],
+  "removal": "Kick and rekey replay in one page, durable removal event, inactive reopen, further sending refused",
+  "evidence": {
+    "removal-fixed-01.log": {
+      "path": "test-evidence/irc-parity/removal-fixed-01.log",
+      "sha256": "b60361b923e4779d32849ce24c4cf8cbe424f29eebdc3450d8a8285655cd5b03"
+    },
+    "removal-fixed-01.exit": {
+      "path": "test-evidence/irc-parity/removal-fixed-01.exit",
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    }
+  }
+}
