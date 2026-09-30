@@ -741,3 +741,42 @@ mod covered_poll;
 mod checkpoint_batch;
 
 mod blob_concurrency;
+
+#[tokio::test]
+async fn removed_member_replays_control_and_rekey_together_and_reopens_inactive() {
+    let server = private_dir();
+    let a = private_dir();
+    let b = private_dir();
+    let transport = service(server.path());
+    let mut alice = owner(a.path(), transport.clone()).await;
+    let channel = alice.archive.channel;
+    let mut bob = joining(channel, "bob", b.path(), transport.clone()).await;
+    pump(&mut bob).await;
+    pump(&mut alice).await;
+    pump(&mut bob).await;
+    let before = bob.archive.cursor;
+    alice
+        .queue_control(HostedPolicyChange::Kick(bob.session.member_id()), "removed")
+        .unwrap();
+    pump(&mut alice).await;
+    assert_eq!(alice.view().members.len(), 1);
+    assert!(alice.archive.cursor >= before + 2);
+    // The victim must consume the accepted control and rekey in one replay,
+    // not merely observe a transient inactive view between the two records.
+    bob.sync_page().await.unwrap();
+    assert!(!bob.view().active);
+    assert_eq!(bob.archive.cursor, alice.archive.cursor);
+    assert!(bob
+        .events(0, 256)
+        .unwrap()
+        .iter()
+        .any(|event| matches!(event.kind, api::EventKind::Removed)));
+    drop(bob);
+    let (storage, bytes) =
+        storage::Storage::open(&b.path().join(filename(channel)), [99; 32], channel).unwrap();
+    let mut bob = Client::restore(&bytes.unwrap(), channel, storage, [99; 32], transport).unwrap();
+    assert!(!bob.view().active);
+    assert!(bob
+        .queue_send(api::Content::Text("after removal".into()))
+        .is_err());
+}

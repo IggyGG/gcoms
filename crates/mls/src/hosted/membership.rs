@@ -309,6 +309,21 @@ mod tests {
             .unwrap();
         alice.accept_rekey(&accepted).unwrap();
         owner.receive(&accepted, 100).unwrap();
+        let epoch = bob.epoch();
+        let previous_info = bob.export_group_info().unwrap();
+        assert!(bob
+            .receive_membership(&accepted, &previous_info, 100)
+            .is_err());
+        assert_eq!(
+            bob.epoch(),
+            epoch,
+            "invalid snapshots must not mutate state"
+        );
+        assert!(matches!(
+            bob.receive_membership(&accepted, &alice.export_group_info().unwrap(), 100),
+            Err(MlsError::Removed)
+        ));
+        assert!(!bob.active());
         assert_eq!(public.member_count(), 2);
         assert_eq!(owner.epoch(), alice.epoch());
     }

@@ -1087,3 +1087,11 @@ The final snapshot-read maintenance source `a715a70` passes the full GComs gate:
 rustdoc and both minimal feature checks. Evidence:
 `docs/evidence/irc-workspace-20260930/snapshot-maintenance-qualified.json`.
 Paired GChat and protected-network application qualification remain in progress.
+
+Smoke05 exposed removed-member replay failure: an accepted rekey was followed
+by a private-state GroupInfo comparison that a removed MLS member cannot pass.
+Both MLS and durable-runtime regressions reproduce it
+(`removal-replay-regression-01.json` in durable-capacity evidence). The fix
+independently verifies the public transition from the prior authenticated tree
+and signed policy, then persists the removed member inactive. Invalid snapshots
+must leave state untouched. Focused and full qualification are in progress.

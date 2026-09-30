@@ -1057,6 +1057,41 @@ impl HostedSession {
         result
     }
 
+    /// Authenticate a membership commit and its advertised public snapshot as
+    /// one transition. A removed member cannot confirm the new epoch using
+    /// private MLS state, so it independently replays the public commit from
+    /// its authenticated prior tree and policy instead.
+    pub fn receive_membership(
+        &mut self,
+        wire: &[u8],
+        next_info: &[u8],
+        now: u64,
+    ) -> Result<crate::ReceiveOutcome, MlsError> {
+        if protocol(wire)?.content_type() != ContentType::Commit {
+            return Err(MlsError::Unauthorized);
+        }
+        let departing = self.rules.departing(self.member_id());
+        if departing {
+            let mut public =
+                HostedObserver::from_info(self.policy.clone(), &self.export_group_info()?)?;
+            public.rules = self.rules.clone();
+            public.stage_join(wire, next_info, now)?;
+        }
+        let mut candidate = self.fork()?;
+        let result = candidate.receive_inner(wire, now);
+        match &result {
+            Ok(crate::ReceiveOutcome::CommitMerged { .. }) => {
+                candidate.verify_group_info(next_info)?;
+            }
+            Err(MlsError::Removed) if departing => {}
+            Err(MlsError::Removed) => return Err(MlsError::Unauthorized),
+            Err(_) => return result,
+            _ => return Err(MlsError::Unauthorized),
+        }
+        *self = candidate;
+        result
+    }
+
     fn receive_inner(&mut self, wire: &[u8], now: u64) -> Result<crate::ReceiveOutcome, MlsError> {
         if self.pending_join.is_some() {
             return Err(MlsError::Unauthorized);

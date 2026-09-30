@@ -1263,9 +1263,13 @@ impl Client {
             let own = self.archive.pending.iter().position(|pending| matches!(pending, Pending::Membership { commit: ours, info: our_info, joining: false } if ours == commit && our_info == info));
             if let Some(index) = own {
                 self.session.accept_rekey(commit).map_err(mls)?;
+                self.session.verify_group_info(info).map_err(mls)?;
                 self.archive.pending.remove(index);
             } else {
-                match self.session.receive(commit, record.accepted_at) {
+                match self
+                    .session
+                    .receive_membership(commit, info, record.accepted_at)
+                {
                     Ok(gcoms_mls::ReceiveOutcome::CommitMerged { .. }) => {}
                     Err(gcoms_mls::MlsError::Removed) => {
                         self.archive.phase = Phase::Removed;
@@ -1275,7 +1279,6 @@ impl Client {
                     Err(error) => return Err(error.to_string()),
                 }
             }
-            self.session.verify_group_info(info).map_err(mls)?;
             if own.is_none() {
                 self.archive.pending.retain(|pending| {
                     !matches!(pending, Pending::Membership { joining: false, .. })

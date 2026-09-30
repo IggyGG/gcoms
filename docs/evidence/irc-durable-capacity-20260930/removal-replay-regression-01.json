@@ -1,0 +1,31 @@
+{
+  "source": {
+    "base": "747566fc8a74e78d30f67ff80f0342366c92020b",
+    "sha256": "3b27ee839eb19fe373767243be9fa6785fe1c4ef07ccbeea3911f2e39ef60df9",
+    "modified_files": {
+      "crates/mls/src/hosted/membership.rs": "2fa00bd259396b49f31c2f0d42af89f671dcaf285693805f71f25af3d2de90e9",
+      "crates/runtime/src/hosted/tests.rs": "353462290299ba549371064c6b30e8b6c1b6d305707a0d9d3d0f1b795d7d1d2a"
+    }
+  },
+  "status": "reproduced_failure",
+  "mls": "Removed member accepts commit, then rejects the matching new-epoch GroupInfo comparison.",
+  "runtime": "Replaying kick and rekey in one page fails and poisons the archive owner.",
+  "evidence": {
+    "removal-runtime-regression-01.log": {
+      "path": "test-evidence/irc-parity/removal-runtime-regression-01.log",
+      "sha256": "5831aa7fcf343d36ef503dfc11eed84d4a33d17ffd65ecd1e46c5d72ca4ca43a"
+    },
+    "removal-mls-regression-01.exit": {
+      "path": "test-evidence/irc-parity/removal-mls-regression-01.exit",
+      "sha256": "39b8dc3fc8b44765c8e6f1adee04c5b465e555ab791cc42d0d9e810d5b64297c"
+    },
+    "removal-mls-regression-01.log": {
+      "path": "test-evidence/irc-parity/removal-mls-regression-01.log",
+      "sha256": "94a256e4b671b403aa2369dd5c977ea6b1c3f8d66e4bd34f0078a9a886667e86"
+    },
+    "removal-runtime-regression-01.exit": {
+      "path": "test-evidence/irc-parity/removal-runtime-regression-01.exit",
+      "sha256": "39b8dc3fc8b44765c8e6f1adee04c5b465e555ab791cc42d0d9e810d5b64297c"
+    }
+  }
+}

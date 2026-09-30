@@ -8,6 +8,10 @@ across up to four transport attempts, with 1/2/4-second backoff inside the same
 30-second page deadline. Background routing owns recovery; admission writes and
 authenticated policy refusals are not retried by this read path.
 
+Removed members independently authenticate the removal commit and its advertised
+public snapshot from their prior tree and signed policy. They remain excluded
+from new epoch secrets and persist an inactive channel across reopening.
+
 IPC25 adds `sharing_v2` and `ModernFileSharing` for explicit hosted/contact file
 scopes. A separate encrypted `.v2` cache preserves legacy files. Hosted offers
 have their own durable consumer cursor; stable application IDs recover uncertain

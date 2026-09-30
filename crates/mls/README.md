@@ -37,8 +37,11 @@ With `client-persist`, hosted clients seal their membership state and pending
 acceptance together using a distinct archive kind. Legacy groups explicitly
 reject external commits and cannot be silently converted to this profile.
 
-This feature is not wired into GChat or a deployed hosted service yet. It does
-not yet implement policy revisions, moderation, service transport or
-network negotiation. The 500-member bound is not a capacity qualification.
+Hosted channels are integrated with the durable runtime, SDK/IPC, GChat and the
+ciphertext-only service. Signed policy revisions govern moderation and membership.
+`receive_membership` authenticates the advertised next public snapshot before
+committing client state. Removed clients verify it through public replay from
+their prior authenticated tree and policy; no new epoch secret is provided.
+The 500-member bound is not an application capacity qualification.
 See the [implementation ledger](../../docs/IRC_PARITY.md). No new third-party
 dependency is introduced.

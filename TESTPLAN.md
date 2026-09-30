@@ -836,3 +836,11 @@ slow membership replay. Replay exceeding ten seconds must show positive confirme
 progress; ordinary offline-message recovery still fails beyond ten seconds.
 Keep the 300-second smoke and 1,800-second capacity observation bounds, complete
 unique rosters and indicator completion. New reports identify the selected policy.
+
+### IRC-8 removed-member replay
+
+Replay an authorized kick and its rekey in one page on the removed client.
+Require durable inactive state, a removal event and successful reopen. Reject
+a mismatched next GroupInfo without advancing MLS state. Preserve forged-removal
+and stale-policy controls; never grant removed clients new epoch secrets.
+Repeat live removal/exclusion/replacement before capacity qualification.
