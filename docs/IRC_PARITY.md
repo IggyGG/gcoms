@@ -15,6 +15,10 @@ The GComs task also preserves the canonical checkout's `0c2c704` bootstrap fix.
   archives, scopes and security checks. A capability bit or UI button is not proof.
 - Preserve service acceptance versus recipient acknowledgment, durable operation
   recovery, exact-source receipts and state-compatible upgrade/rollback checks.
+- Keep delivery receipts on the covered channel, accepting slower authenticated
+  delivery status in large rooms.
+- Preserve encrypted topic handoff: a newcomer sees “Topic pending” while all
+  existing members are offline. Invitation links gain no separate metadata key.
 
 See the [command-by-command feature mapping](IRC_FEATURE_MATRIX.md) for the source audit.
 
