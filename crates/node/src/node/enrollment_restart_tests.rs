@@ -209,10 +209,11 @@ async fn compact_enrollment_reopens_with_the_same_id_and_a_fresh_owner_route() {
     // every maintenance tick. This network client deliberately has no grant:
     // an unnecessary upload would fail instead of returning the existing link.
     let network_home = tempfile::tempdir().unwrap();
+    gcoms_private_fs::make_private(network_home.path(), true).unwrap();
     owner
         .configure_invitation_directory(
             gcoms_network_client::NetworkClient::open(
-                network_home.path(),
+                &network_home.path().join("network"),
                 gcoms_network_client::InstalledNetwork {
                     trusted_key_b64: network.trusted_key_b64.clone(),
                     signed_defaults: network.signed_defaults.clone(),
