@@ -133,12 +133,15 @@ async fn run(members: usize) {
     // The owner was absent during every external admission. Every retained
     // client now replays ordered commits through its own encrypted sidecar.
     eprintln!("hosted_runtime_capacity stage=admission_complete members={members} seconds={admission_seconds:.3}");
+    let mut replay_checkpoints = 0;
     for (index, client) in clients.iter_mut().enumerate() {
+        let before = client.checkpoint_count();
         catch_up(client).await;
+        replay_checkpoints += client.checkpoint_count() - before;
         assert_eq!(client.view().members.len(), members);
         if index % 25 == 0 {
             eprintln!(
-                "hosted_runtime_capacity stage=catch_up clients={} seconds={:.3}",
+                "hosted_runtime_capacity stage=catch_up clients={} checkpoints={replay_checkpoints} seconds={:.3}",
                 index + 1,
                 started.elapsed().as_secs_f64()
             );

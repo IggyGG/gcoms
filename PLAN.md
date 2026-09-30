@@ -773,3 +773,16 @@ current-source package gate and installed/native runtime qualification.
 The live06 temporary bootstrap grant was revoked after both daemons stopped;
 operator file ownership and0600 permissions were preserved. Receipt:
 `docs/evidence/irc-hosted-service-20260930/grant-revocation.json`.
+
+### IRC-8 replay cost follow-up — 2026-09-30
+
+The second 500-client campaign admits all 500 but still accumulates large write
+volume during replay. The replay checkpoint window is now 75ms between records,
+with the same 16MiB prefetch bound and checkpoint-before-yield rule. Roster change
+detection uses a set instead of scanning the old roster for every current member.
+The 26 hosted cases and strict runtime Clippy pass; the 12-client durable smoke
+also passes and reports aggregate replay checkpoint counts. Current 500-client
+performance remains unqualified. See `docs/evidence/irc-replay-budget-20260930`.
+The full workspace run on older 441efb5 hit the debug-speed-dependent count test;
+its failed log is retained. That test's controlled scheduling clock was corrected
+in907e54f and passed the full runtime library run before this follow-up.

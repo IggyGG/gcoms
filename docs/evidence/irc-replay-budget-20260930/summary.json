@@ -1,0 +1,17 @@
+{
+  "scope": "hosted runtime regressions and strict all-target all-feature Clippy; capacity still pending",
+  "base_runtime_revision": "907e54f",
+  "hosted_cases_passed": 26,
+  "ignored": 1,
+  "capacity_smoke_members": 12,
+  "batch_scheduling_budget_ms": 75,
+  "prefetch_wire_limit_bytes": 16777216,
+  "logs": {
+    "test-evidence/irc-parity/replay-budget-01.log": "fe1ae72f0bda9697838543b4df61e79ad64a3034729b040c45ae47ee1d635749",
+    "test-evidence/irc-parity/replay-budget-02.log": "e99b346fde5389f07337c0867e081e5d157d078888ea2c1acac69b93843c2af4"
+  },
+  "source_sha256": {
+    "crates/runtime/src/hosted/state.rs": "d9add2bf2ccdcfcc1291dd5ba61bd65820f1b3d0888f1a50e9464803693cd3c6",
+    "crates/runtime/src/hosted/tests/capacity.rs": "db5714548ab3ad298a19abe785a085b6040c4a91e09db5ed74dd1cea7f70540d"
+  }
+}

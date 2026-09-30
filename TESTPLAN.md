@@ -716,3 +716,8 @@ release it: the caller must receive an error. Shutdown must cancel detached bulk
 I/O within 200ms. Retain the existing tamper, interrupted publisher, partial
 restart, exact hash and contact revocation tests. Repeat the live 16MiB journey
 against the fixed 180s resume-verification and 600s workflow targets.
+
+Replay cost comparisons retain the 7200-second campaign limit and identical
+500-member work. Record aggregate checkpoint counts at each catch-up marker
+alongside process I/O/RSS. The 75ms scheduling budget is checked between records;
+actual large-room feedback and recovery still require measured qualification.

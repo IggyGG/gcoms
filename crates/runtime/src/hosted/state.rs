@@ -1186,7 +1186,8 @@ impl Client {
     }
     async fn apply_records(&mut self, records: &[Record]) -> Result<(), String> {
         // No await may expose an uncheckpointed MLS/event prefix. Short CPU
-        // batches amortize sealed full-state writes while allowing urgent local
+        // batches (75ms between records) amortize sealed full-state writes while
+        // allowing urgent local
         // operations to interrupt catch-up between durable boundaries.
         let mut dirty = false;
         let mut started = tokio::time::Instant::now();
@@ -1203,7 +1204,7 @@ impl Client {
             }
             dirty = true;
             if index + 1 == records.len()
-                || started.elapsed() >= std::time::Duration::from_millis(25)
+                || started.elapsed() >= std::time::Duration::from_millis(75)
             {
                 self.checkpoint()?;
                 dirty = false;
@@ -1228,7 +1229,12 @@ impl Client {
             return Err("hosted transcript prefix mismatch".into());
         }
         if let Some((commit, info)) = record.membership() {
-            let before = self.session.roster();
+            let before: std::collections::BTreeSet<_> = self
+                .session
+                .roster()
+                .into_iter()
+                .map(|member| member.pseudonym)
+                .collect();
             let own = self.archive.pending.iter().position(|pending| matches!(pending, Pending::Membership { commit: ours, info: our_info, joining: false } if ours == commit && our_info == info));
             if let Some(index) = own {
                 self.session.accept_rekey(commit).map_err(mls)?;
@@ -1251,7 +1257,7 @@ impl Client {
                 });
             }
             for member in self.session.roster() {
-                if !before.iter().any(|old| old.pseudonym == member.pseudonym) {
+                if !before.contains(&member.pseudonym) {
                     if self.topic.known {
                         self.topic.share_after = record.sequence;
                     }

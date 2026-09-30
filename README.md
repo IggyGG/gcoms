@@ -248,3 +248,8 @@ requests release the mutable channel owner while in flight, so covered recovery
 and chat can progress. The runtime bounds bulk concurrency at two and rechecks
 current local membership and upload authority before exposing results. Shutdown
 cancels pending bulk requests; retry uses the same piece identity and ciphertext.
+
+Replay batches check a 75ms scheduling budget between records before saving and
+yielding; a cryptographic operation or storage write may add to that interval.
+The durable capacity driver reports checkpoint counts so write reduction can be
+measured alongside responsiveness, without changing any receipt or policy check.
