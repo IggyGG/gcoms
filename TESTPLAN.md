@@ -807,8 +807,9 @@ After create, successful checkpoint, restored archive and failed save, live owne
 must retain no separate sealed-session allocation. Saved bytes must still contain
 the MLS state and reopen to the exact prior view. A failed replacement remains
 poisoned and must reopen the last intact archive. Preserve all version1–3 archive
-migration cases. Repeat the application smoke against the original ten-second
-owner recovery and covered-receipt/file deadlines; keep the prior 14.537s failure.
+migration cases. Repeat the application smoke with the selected recovery policy
+below and the covered-receipt/file deadlines. Retain the original 14.537s and
+16.590s membership-recovery timing failures with their original requirements.
 
 For the 500-client durable runtime campaign, use the deployed 100000-record
 profile. `channel_records` bounds the separate authenticated receipt ledger too;
@@ -830,3 +831,8 @@ For the user-selected long-backlog policy, keep 10 seconds for ordinary offline
 message recovery. GChat must display confirmed applied-record progress during
 large membership replay and clear it only after catch-up, failure or cancellation.
 Measure long membership replay separately; do not relabel earlier failed runs.
+Apply that distinction in every room: even a twelve-member room can accumulate
+slow membership replay. Replay exceeding ten seconds must show positive confirmed
+progress; ordinary offline-message recovery still fails beyond ten seconds.
+Keep the 300-second smoke and 1,800-second capacity observation bounds, complete
+unique rosters and indicator completion. New reports identify the selected policy.
