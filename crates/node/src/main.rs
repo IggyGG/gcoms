@@ -111,6 +111,17 @@ fn has_flag(flag: &str) -> bool {
     std::env::args().any(|value| value == flag)
 }
 
+#[cfg(feature = "relay-host")]
+fn relay_capacity_arg(flag: &str, default: usize) -> Result<usize, String> {
+    if !has_flag(flag) {
+        return Ok(default);
+    }
+    arg(flag)
+        .ok_or_else(|| format!("missing value for {flag}"))?
+        .parse()
+        .map_err(|_| format!("invalid {flag}"))
+}
+
 fn require(flag: &str) -> String {
     arg(flag).unwrap_or_else(|| {
         eprintln!("missing required flag {flag}");
@@ -499,31 +510,27 @@ async fn run() -> Result<(), String> {
                 ))
                 }
             };
+            #[cfg(feature = "relay-host")]
             let capacity = gcoms_node::node::RelayCapacity::default();
+            #[cfg(feature = "relay-host")]
             let relay_capacity = gcoms_node::node::RelayCapacity::new(
-                arg("--relay-circuits")
-                    .map(|value| {
-                        value
-                            .parse::<usize>()
-                            .map_err(|_| "invalid --relay-circuits")
-                    })
-                    .transpose()?
-                    .unwrap_or(capacity.circuits()),
-                arg("--relay-connections")
-                    .map(|value| {
-                        value
-                            .parse::<usize>()
-                            .map_err(|_| "invalid --relay-connections")
-                    })
-                    .transpose()?
-                    .unwrap_or(capacity.connections()),
+                relay_capacity_arg("--relay-circuits", capacity.circuits())?,
+                relay_capacity_arg("--relay-connections", capacity.connections())?,
             )?;
+            #[cfg(feature = "relay-host")]
             if !profile.is_production() && relay_capacity != capacity {
                 return Err("operator relay capacity requires a production traffic profile".into());
             }
+            #[cfg(not(feature = "relay-host"))]
+            if has_flag("--relay-circuits") || has_flag("--relay-connections") {
+                return Err("operator relay capacity requires the relay-host feature".into());
+            }
             let routing = if profile.is_production() {
                 let mut routing = gcoms_node::node::RoutingConfig::from_environment()?;
-                routing.relay_capacity = relay_capacity;
+                #[cfg(feature = "relay-host")]
+                {
+                    routing.relay_capacity = relay_capacity;
+                }
                 routing.routing_state = Some(std::sync::Arc::new(
                     gcoms_node::routing_cache::Cache::open(
                         &keystore.with_extension("routing"),
