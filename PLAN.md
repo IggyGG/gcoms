@@ -1040,3 +1040,9 @@ The complete workspace on operator-capacity source `250ece7` also passes:
 1,115 tests, 13 unchanged exclusions, strict Clippy, rustdoc and minimal feature
 checks. See `docs/evidence/irc-workspace-20260930/relay-capacity-qualified.json`.
 The full relay executable preserves push-gateway support; fleet comparison is next.
+
+The paired package gate also passes on `250ece7` / `c5bbfe8`, including all
+20 Rust and two npm archives, external consumers, generated contracts, UI and
+Linux desktop compilation. All archives are downloaded and hash verified.
+See `docs/evidence/irc-package-staging-20260930/relay-paired-pass.json`. This
+precedes GChat’s new catch-up display, which needs its own paired validation.
