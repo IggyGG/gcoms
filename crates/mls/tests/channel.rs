@@ -69,9 +69,20 @@ fn channel_full_lifecycle() {
     assert_eq!(owner.epoch(), red.epoch());
 
     let msg = owner.send(b"first broadcast").unwrap();
-    let got = red.receive(&msg).unwrap().unwrap();
-    assert_eq!(got.1, b"first broadcast");
-    assert_eq!(got.0, 0, "owner is leaf 0");
+    // Existing integrations may exhaustively destructure this public result.
+    match red.receive_outcome(&msg).unwrap() {
+        gcoms_mls::ReceiveOutcome::Application {
+            sender_index,
+            payload,
+        } => {
+            assert_eq!(payload, b"first broadcast");
+            assert_eq!(sender_index, 0, "owner is leaf 0");
+        }
+        gcoms_mls::ReceiveOutcome::CommitMerged { sender_index } => {
+            panic!("unexpected commit from {sender_index}");
+        }
+        gcoms_mls::ReceiveOutcome::Other => panic!("application expected"),
+    }
 
     let reply = red.send(b"member reply").unwrap();
     let got_back = owner.receive(&reply).unwrap().unwrap();
@@ -541,7 +552,7 @@ fn group_id_is_the_owner_fingerprint_not_the_key() {
 #[test]
 #[cfg(feature = "client-persist")]
 fn delayed_message_keeps_historical_sender_after_leaf_reuse_and_reopen() {
-    use gcoms_mls::ReceiveOutcome;
+    use gcoms_mls::AuthenticatedReceiveOutcome;
     let mut owner = OwnerSession::create(owner_identity(), "owner", 8).unwrap();
     let p = ChannelMember::prepare("alice").unwrap();
     let kp = ChannelMember::key_package_bytes(&p).unwrap();
@@ -568,12 +579,12 @@ fn delayed_message_keeps_historical_sender_after_leaf_reuse_and_reopen() {
     assert!(alice.receive_outcome(&after).is_err());
     let archive = owner.persist(&[17; 32]).unwrap();
     let mut owner = OwnerSession::restore(&[17; 32], &archive, owner_identity()).unwrap();
-    let ReceiveOutcome::Application {
+    let AuthenticatedReceiveOutcome::Application {
         sender,
         epoch,
         payload,
         ..
-    } = owner.receive_outcome(&delayed).unwrap()
+    } = owner.receive_authenticated(&delayed).unwrap()
     else {
         panic!("application expected");
     };

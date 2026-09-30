@@ -247,9 +247,12 @@ pub(super) fn join_durable(
         .insert(prepared.display.clone(), cs.own_route.public.clone());
     let mut metadata_received = false;
     for wire in bootstrap {
-        let gcoms_mls::ReceiveOutcome::Application {
+        let gcoms_mls::AuthenticatedReceiveOutcome::Application {
             sender, payload, ..
-        } = cs.role.receive(wire).map_err(|e| e.to_string())?
+        } = cs
+            .role
+            .receive_authenticated(wire)
+            .map_err(|e| e.to_string())?
         else {
             return Err("invalid enrollment bootstrap message".into());
         };

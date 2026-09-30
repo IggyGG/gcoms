@@ -328,9 +328,10 @@ pub(crate) fn deliver_mls(
             return false;
         }
     };
-    let recv_result =
-        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| cs.role.receive(wire)))
-            .unwrap_or_else(|_| Err(gcoms_mls::MlsError::OpenMls("panic in receive".into())));
+    let recv_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        cs.role.receive_authenticated(wire)
+    }))
+    .unwrap_or_else(|_| Err(gcoms_mls::MlsError::OpenMls("panic in receive".into())));
     match recv_result {
         Err(gcoms_mls::MlsError::Removed) => {
             let owner_seed = channel_seed(st, chan);
@@ -390,7 +391,7 @@ pub(crate) fn deliver_mls(
                 ],
             );
         }
-        Ok(gcoms_mls::ReceiveOutcome::Application {
+        Ok(gcoms_mls::AuthenticatedReceiveOutcome::Application {
             sender_index: sender_idx,
             sender: historical_sender,
             epoch: received_epoch,
@@ -793,7 +794,7 @@ pub(crate) fn deliver_mls(
                 None => {}
             }
         }
-        Ok(gcoms_mls::ReceiveOutcome::CommitMerged { sender, .. }) => {
+        Ok(gcoms_mls::AuthenticatedReceiveOutcome::CommitMerged { sender, .. }) => {
             let ack = st.channels.get(chan).map(|cs| {
                 (
                     sender.pseudonym,
@@ -818,7 +819,7 @@ pub(crate) fn deliver_mls(
                 &[("channel", chan.to_string()), ("node", node_tag)],
             );
         }
-        Ok(gcoms_mls::ReceiveOutcome::Other) => {}
+        Ok(gcoms_mls::AuthenticatedReceiveOutcome::Other) => {}
     }
     was_text
 }

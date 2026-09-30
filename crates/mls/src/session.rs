@@ -91,7 +91,16 @@ pub fn pseudonym_of_key_package(wire: &[u8]) -> Option<[u8; 32]> {
         .ok()
 }
 
+/// Stable receive result for callers that only need the sender leaf index.
 pub enum ReceiveOutcome {
+    Application { sender_index: u32, payload: Vec<u8> },
+    CommitMerged { sender_index: u32 },
+    Other,
+}
+
+/// Receive result with the authenticated sender from the wire's epoch.
+/// A leaf index alone must not identify a delayed sender after leaf reuse.
+pub enum AuthenticatedReceiveOutcome {
     Application {
         sender_index: u32,
         sender: RosterMember,
@@ -103,6 +112,25 @@ pub enum ReceiveOutcome {
         sender: RosterMember,
     },
     Other,
+}
+
+impl From<AuthenticatedReceiveOutcome> for ReceiveOutcome {
+    fn from(outcome: AuthenticatedReceiveOutcome) -> Self {
+        match outcome {
+            AuthenticatedReceiveOutcome::Application {
+                sender_index,
+                payload,
+                ..
+            } => Self::Application {
+                sender_index,
+                payload,
+            },
+            AuthenticatedReceiveOutcome::CommitMerged { sender_index, .. } => {
+                Self::CommitMerged { sender_index }
+            }
+            AuthenticatedReceiveOutcome::Other => Self::Other,
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -271,7 +299,7 @@ impl Ctx {
         self.owner_pseudonym == Some(sender) || self.admin_pseudonyms.contains(&sender)
     }
 
-    fn receive(&mut self, wire: &[u8]) -> Result<ReceiveOutcome, MlsError> {
+    fn receive(&mut self, wire: &[u8]) -> Result<AuthenticatedReceiveOutcome, MlsError> {
         self.ensure_ciphersuite()?;
         if wire.len() > MAX_WIRE_BYTES {
             return Err(MlsError::Encoding);
@@ -298,7 +326,7 @@ impl Ctx {
         let sender_pseudonym = Some(sender.pseudonym);
         match processed.into_content() {
             openmls::prelude::ProcessedMessageContent::ApplicationMessage(am) => {
-                Ok(ReceiveOutcome::Application {
+                Ok(AuthenticatedReceiveOutcome::Application {
                     sender_index: sender_idx,
                     sender,
                     epoch,
@@ -322,12 +350,12 @@ impl Ctx {
                 self.group
                     .merge_staged_commit(&self.backend, *sc)
                     .map_err(|e| MlsError::OpenMls(format!("{e:?}")))?;
-                Ok(ReceiveOutcome::CommitMerged {
+                Ok(AuthenticatedReceiveOutcome::CommitMerged {
                     sender_index: sender_idx,
                     sender,
                 })
             }
-            _ => Ok(ReceiveOutcome::Other),
+            _ => Ok(AuthenticatedReceiveOutcome::Other),
         }
     }
 
@@ -575,7 +603,7 @@ impl OwnerSession {
 
     pub fn receive(&mut self, wire: &[u8]) -> Result<Option<(u32, Vec<u8>)>, MlsError> {
         match self.ctx.receive(wire)? {
-            ReceiveOutcome::Application {
+            AuthenticatedReceiveOutcome::Application {
                 sender_index,
                 payload,
                 ..
@@ -585,6 +613,14 @@ impl OwnerSession {
     }
 
     pub fn receive_outcome(&mut self, wire: &[u8]) -> Result<ReceiveOutcome, MlsError> {
+        self.ctx.receive(wire).map(Into::into)
+    }
+
+    /// Receive with the authenticated sender from the message's epoch.
+    pub fn receive_authenticated(
+        &mut self,
+        wire: &[u8],
+    ) -> Result<AuthenticatedReceiveOutcome, MlsError> {
         self.ctx.receive(wire)
     }
 
@@ -698,7 +734,7 @@ impl ChannelMember {
 
     pub fn receive(&mut self, wire: &[u8]) -> Result<Option<(u32, Vec<u8>)>, MlsError> {
         match self.ctx.receive(wire)? {
-            ReceiveOutcome::Application {
+            AuthenticatedReceiveOutcome::Application {
                 sender_index,
                 payload,
                 ..
@@ -708,6 +744,14 @@ impl ChannelMember {
     }
 
     pub fn receive_outcome(&mut self, wire: &[u8]) -> Result<ReceiveOutcome, MlsError> {
+        self.ctx.receive(wire).map(Into::into)
+    }
+
+    /// Receive with the authenticated sender from the message's epoch.
+    pub fn receive_authenticated(
+        &mut self,
+        wire: &[u8],
+    ) -> Result<AuthenticatedReceiveOutcome, MlsError> {
         self.ctx.receive(wire)
     }
 

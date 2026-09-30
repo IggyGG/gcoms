@@ -22,6 +22,9 @@ Limits count authenticated member identities, not physical machines. Reopening
 or retrying the same enrollment does not consume another admission. A new
 identity does. Removing a member does not refund its admission.
 
+The admission limit counts lifetime uses; it does not raise the existing
+64-member concurrent channel limit. Larger fleets use several channels.
+
 Revocation and policy revision are independent of the MLS membership epoch.
 Expiry/revocation prevents new admission; a committed enrollment can still
 retrieve its member-bound result. Closing a channel or transferring ownership

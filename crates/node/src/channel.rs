@@ -503,6 +503,16 @@ impl ChannelRole {
         }
     }
 
+    pub(crate) fn receive_authenticated(
+        &mut self,
+        wire: &[u8],
+    ) -> Result<gcoms_mls::AuthenticatedReceiveOutcome, gcoms_mls::MlsError> {
+        match self {
+            ChannelRole::Owner(o) => o.receive_authenticated(wire),
+            ChannelRole::Member(m) => m.receive_authenticated(wire),
+        }
+    }
+
     /// Sealed snapshot of the MLS state under the channel wrapping key.
     #[cfg(feature = "client-persist")]
     pub(crate) fn checkpoint(

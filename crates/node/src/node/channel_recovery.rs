@@ -395,10 +395,12 @@ pub(crate) fn import_channel_reconnect(
         .role
         .restore_checkpoint(&key, &checkpoint, || IdentityKeypair::from_seed(seed))
         .map_err(|e| e.to_string())?;
-    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| candidate.receive(wire)))
-        .map_err(|_| "invalid reconnect MLS message")?
-        .map_err(|_| "reconnect authentication failed")?;
-    let gcoms_mls::ReceiveOutcome::Application {
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        candidate.receive_authenticated(wire)
+    }))
+    .map_err(|_| "invalid reconnect MLS message")?
+    .map_err(|_| "reconnect authentication failed")?;
+    let gcoms_mls::AuthenticatedReceiveOutcome::Application {
         sender, payload, ..
     } = result
     else {
