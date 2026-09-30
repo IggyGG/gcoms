@@ -27,6 +27,167 @@ fn socket_path(test: &str) -> std::path::PathBuf {
     std::env::temp_dir().join(format!("gc-sdk-{}-{test}.sock", std::process::id()))
 }
 
+#[cfg(feature = "client-persist")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn machine_enrollment_uses_the_public_sdk_without_admin_or_shell_authority() {
+    use gcoms_sdk::machine::{ComponentCredentials, ComponentRegistration, MachineRegistry};
+    use gcoms_sdk::{
+        EnrollmentPhase, InvitationPreset, InvitationReply, InvitationRequest, SdkError,
+    };
+    use std::{
+        sync::Arc,
+        time::{Duration, SystemTime, UNIX_EPOCH},
+    };
+    let mut clients = Vec::new();
+    for seed in [0xDA, 0xDB] {
+        clients.push(EmbeddedClient::new(
+            gcoms_node::node::start_persistent_restored(
+                NodeConfig {
+                    seed: [seed; 32],
+                    listen: "127.0.0.1:0".parse().unwrap(),
+                    control: None,
+                    advertise: None,
+                    inbox_relay: None,
+                    profile: gcoms_node::node::NodeProfile::fixture(),
+                    alias_lifecycle: Default::default(),
+                },
+                None,
+                Arc::new(|_| Ok(())),
+                None,
+            )
+            .await
+            .unwrap(),
+        ));
+    }
+    let owner = &clients[0];
+    owner
+        .create_channel("devices", "operator", 8, ChannelVisibility::Private)
+        .await
+        .unwrap();
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+    let policy = InvitationPreset::Devices.policy(now).unwrap();
+    let InvitationReply::Created(invite) = owner
+        .invitations(InvitationRequest::Create {
+            channel: "devices".into(),
+            policy,
+        })
+        .await
+        .unwrap()
+    else {
+        panic!("invitation")
+    };
+    let home = tempfile::tempdir().unwrap();
+    let path = home.path().join("device.sock");
+    let credentials = ComponentCredentials {
+        component_id: [10; 16],
+        token: [11; 32],
+    };
+    let registry = MachineRegistry {
+        version: 1,
+        components: vec![ComponentRegistration {
+            credentials: credentials.clone(),
+            capabilities: vec![Capability::IdentityRead, Capability::ChannelMember],
+            peers: vec![],
+            files: None,
+        }],
+    };
+    let server = tokio::spawn(gcoms_sdk::ipc::serve_machine(
+        path.clone(),
+        clients[1].clone(),
+        registry,
+    ));
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(60);
+    let device = tokio::time::timeout_at(deadline, async {
+        loop {
+            if let Ok(client) = IpcClient::connect_component(
+                &path,
+                "sensor",
+                vec![
+                    Capability::IdentityRead,
+                    Capability::ChannelMember,
+                    Capability::ChannelAdmin,
+                    Capability::HostShell,
+                ],
+                credentials.clone(),
+            )
+            .await
+            {
+                break client;
+            }
+            assert!(!server.is_finished());
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .unwrap();
+    assert!(!device
+        .granted_capabilities()
+        .contains(&Capability::ChannelAdmin));
+    assert!(!device
+        .granted_capabilities()
+        .contains(&Capability::HostShell));
+    assert_eq!(
+        device
+            .invitations(InvitationRequest::Create {
+                channel: "devices".into(),
+                policy
+            })
+            .await,
+        Err(SdkError::PermissionDenied)
+    );
+    let InvitationReply::Enrollment(op) = device
+        .invitations(InvitationRequest::StartEnrollment {
+            link: invite.link,
+            display: "sensor".into(),
+        })
+        .await
+        .unwrap()
+    else {
+        panic!("enrollment")
+    };
+    tokio::time::timeout_at(deadline, async {
+        loop {
+            let InvitationReply::Enrollment(status) = device
+                .invitations(InvitationRequest::EnrollmentStatus { id: op.id })
+                .await
+                .unwrap()
+            else {
+                panic!("status")
+            };
+            if status.phase == EnrollmentPhase::Joined {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+    })
+    .await
+    .unwrap();
+    assert_eq!(device.list_channels().await.unwrap().len(), 1);
+    assert!(
+        matches!(device.invitations(InvitationRequest::ListEnrollments).await.unwrap(),InvitationReply::Enrollments(rows) if rows.len()==1)
+    );
+    assert_eq!(
+        device
+            .invitations(InvitationRequest::RetireEnrollment { id: op.id })
+            .await
+            .unwrap(),
+        InvitationReply::Retired
+    );
+    assert!(
+        matches!(device.invitations(InvitationRequest::ListEnrollments).await.unwrap(),InvitationReply::Enrollments(rows) if rows.is_empty())
+    );
+    assert_eq!(device.list_channels().await.unwrap().len(), 1);
+    device.close().await;
+    server.abort();
+    let _ = server.await;
+    for client in clients {
+        client.node().shutdown().await;
+    }
+}
+
 #[tokio::test(flavor = "multi_thread")]
 async fn ipc_backend_matches_embedded_messages_and_events() {
     let relay = embedded(0x60).await;

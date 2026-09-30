@@ -43,7 +43,7 @@ pub(crate) fn status(st: &NodeState, channel: &str) -> Result<MembershipRecovery
             member_id: m.pseudonym,
             display_name: m.display_name,
             is_self: m.pseudonym == cs.role.own_pseudonym(),
-            missing_commit: cs.membership_outbox.as_ref().is_some_and(|p| {
+            missing_commit: cs.membership_records().any(|p| {
                 p.expected.contains_key(&m.pseudonym) && !p.acknowledged.contains(&m.pseudonym)
             }),
             pending_messages: cs
@@ -60,11 +60,15 @@ pub(crate) fn status(st: &NodeState, channel: &str) -> Result<MembershipRecovery
     hash.update(b"GComs/member-recovery/v1\0");
     hash.update(cs.id.0);
     hash.update(cs.role.epoch().to_be_bytes());
-    if let Some(p) = &cs.membership_outbox {
-        hash.update([1]);
+    for p in cs.membership_records() {
         hash.update(p.commit_id);
-    } else {
-        hash.update([0]);
+        hash.update(p.epoch.to_be_bytes());
+        let mut expected = p.expected.keys().collect::<Vec<_>>();
+        expected.sort();
+        for member in expected {
+            hash.update(member);
+            hash.update([u8::from(p.acknowledged.contains(member))]);
+        }
     }
     for m in &members {
         hash.update(m.member_id);
@@ -139,7 +143,7 @@ pub(crate) fn recover(
     {
         return Err("selected member is not current".into());
     }
-    if cs.membership_outbox.as_ref().is_some_and(|pending| {
+    if cs.membership_records().any(|pending| {
         pending
             .expected
             .keys()
@@ -188,8 +192,12 @@ pub(crate) fn recover(
     let cs = st.channels.get_mut(channel).expect("held state");
     let old_role = std::mem::replace(&mut cs.role, candidate);
     let old_membership = cs.membership_outbox.take();
+    let old_journal = std::mem::take(&mut cs.membership_journal);
     let old_directory = cs.directory.clone();
     let old_removals = cs.completed_removals.clone();
+    let old_messages = cs.message_outbox.clone();
+    let old_invitations = cs.invitations.clone();
+    let old_catchup_members = cs.catchup_members.clone();
     if !expected.is_empty() {
         cs.membership_outbox = Some(crate::channel::MembershipOutbox {
             commit_id: crate::channel::msg_id(channel, &staged.commit),
@@ -202,6 +210,7 @@ pub(crate) fn recover(
     cs.directory
         .retain(|_, route| !removed.contains(&route.pseudonym));
     for id in &removed {
+        cs.remove_enrollment_member(id);
         cs.completed_removals
             .insert(completed_member_removal_key(id));
     }
@@ -211,8 +220,12 @@ pub(crate) fn recover(
         let cs = st.channels.get_mut(channel).expect("held state");
         cs.role = old_role;
         cs.membership_outbox = old_membership;
+        cs.membership_journal = old_journal;
         cs.directory = old_directory;
         cs.completed_removals = old_removals;
+        cs.message_outbox = old_messages;
+        cs.invitations = old_invitations;
+        cs.catchup_members = old_catchup_members;
         return Err(error);
     }
     let cs = st.channels.get_mut(channel).expect("held state");

@@ -693,6 +693,25 @@ pub(crate) fn spawn_command_loop(ctx: CommandLoopContext) -> tokio::task::JoinHa
                         result
                     });
                 }
+                Cmd::CreateReusableInvitation {
+                    channel,
+                    policy,
+                    done,
+                } => {
+                    let key = CmdKey::Channel(channel.clone());
+                    dispatch!(key, done, |state, _scheduler, _events_tx| {
+                        invitations::create(&state, &channel, policy)
+                    });
+                }
+                Cmd::ListInvitations { channel, done } => {
+                    let _ = done.send(invitations::list(&state, &channel));
+                }
+                Cmd::RevokeInvitation { channel, id, done } => {
+                    let key = CmdKey::Channel(channel.clone());
+                    dispatch!(key, done, |state, _scheduler, _events_tx| {
+                        invitations::revoke(&state, &channel, id)
+                    });
+                }
                 Cmd::CreateChannelInvite {
                     channel,
                     ttl_secs,

@@ -21,6 +21,135 @@ use std::{
 use tokio::sync::Mutex;
 
 const HEL: &str = "bootstrap-a.example";
+async fn invitation_descriptor(
+    HttpState(state): HttpState<Arc<Backend>>,
+    HttpPath(id): HttpPath<String>,
+    headers: HeaderMap,
+) -> Response {
+    state
+        .record(
+            Method::GET,
+            format!("/v1/invitations/{id}"),
+            &headers,
+            Value::Null,
+        )
+        .await;
+    let host = headers.get("host").unwrap().to_str().unwrap();
+    match state.invitations.lock().await.get(host) {
+        Some(value) => Json(value.clone()).into_response(),
+        None => StatusCode::GONE.into_response(),
+    }
+}
+async fn publish_descriptor(
+    HttpState(state): HttpState<Arc<Backend>>,
+    HttpPath(id): HttpPath<String>,
+    headers: HeaderMap,
+    Json(body): Json<gcoms_network::channel_invitation::Descriptor>,
+) -> Response {
+    state
+        .record(
+            Method::PUT,
+            format!("/v1/invitations/{id}"),
+            &headers,
+            serde_json::to_value(&body).unwrap(),
+        )
+        .await;
+    if auth(&headers) != token(9) {
+        return StatusCode::UNAUTHORIZED.into_response();
+    }
+    let host = headers.get("host").unwrap().to_str().unwrap().to_owned();
+    state.invitations.lock().await.insert(host, body);
+    StatusCode::NO_CONTENT.into_response()
+}
+#[tokio::test]
+async fn encrypted_invitation_fails_over_without_forwarding_secret_or_accepting_rollback() {
+    use gcoms_network::channel_invitation::{Descriptor, Reference, ResolvedInvitation};
+    let fixture = Fixture::new().await;
+    let client = fixture.client(true);
+    fixture.invite(&client, 9);
+    let issuer = IdentityKeypair::from_seed([99; 32]);
+    let identity = client.shareable_identity().unwrap();
+    let reference =
+        Reference::new(&identity, &issuer.public_bytes(), [3; 32], [4; 16], [5; 32]).unwrap();
+    let value = ResolvedInvitation {
+        network: identity,
+        channel_id: reference.channel_id.clone(),
+        channel_invitation: "private channel route".into(),
+    };
+    let now = now_unix();
+    let first = Descriptor::seal(&reference, &value, &issuer, 1, now, now + 200).unwrap();
+    client.publish_invitation(&first, deadline()).await.unwrap();
+    let (_, first_received) =
+        invitations::resolve_with(&client.http, &reference, 0, None, deadline())
+            .await
+            .unwrap();
+    let digest = Sha256::digest(serde_json::to_vec(&first_received).unwrap()).into();
+    // First provider is stale, second has the fresh owner route.
+    let mut changed = value.clone();
+    changed.channel_invitation = "new owner route after restart".into();
+    let second = Descriptor::seal(&reference, &changed, &issuer, 2, now, now + 200).unwrap();
+    fixture
+        .backend
+        .invitations
+        .lock()
+        .await
+        .insert(FSN.into(), second.clone());
+    let (resolved, d) = invitations::resolve_with(&client.http, &reference, 2, None, deadline())
+        .await
+        .unwrap();
+    assert_eq!(resolved.channel_invitation, changed.channel_invitation);
+    assert_eq!(d.body.sequence, 2);
+    assert!(invitations::resolve_with(
+        &fixture.client(false).http,
+        &reference,
+        0,
+        None,
+        deadline()
+    )
+    .await
+    .is_err());
+    fixture
+        .backend
+        .invitations
+        .lock()
+        .await
+        .insert(FSN.into(), first.clone());
+    assert!(
+        invitations::resolve_with(&client.http, &reference, 2, None, deadline())
+            .await
+            .is_err()
+    );
+    let equivocal = Descriptor::seal(&reference, &changed, &issuer, 1, now, now + 200).unwrap();
+    fixture
+        .backend
+        .invitations
+        .lock()
+        .await
+        .insert(HEL.into(), equivocal.clone());
+    fixture
+        .backend
+        .invitations
+        .lock()
+        .await
+        .insert(FSN.into(), equivocal);
+    assert!(
+        invitations::resolve_with(&client.http, &reference, 1, Some(digest), deadline())
+            .await
+            .is_err()
+    );
+    let log = fixture.backend.log.lock().await;
+    for exchange in log
+        .iter()
+        .filter(|e| e.path.starts_with("/v1/invitations/"))
+    {
+        assert!(!exchange.path.contains(&reference.secret));
+        assert!(!exchange.body.to_string().contains(&reference.secret));
+        if exchange.method == Method::GET {
+            assert!(exchange.authorization.is_empty());
+            assert_eq!(exchange.body, Value::Null);
+        }
+    }
+}
 const FSN: &str = "bootstrap-b.example";
 const NEXT: &str = "next.example";
 fn origin(host: &str) -> String {
@@ -85,6 +214,7 @@ struct Entry {
     removed: bool,
 }
 struct Backend {
+    invitations: Mutex<BTreeMap<String, gcoms_network::channel_invitation::Descriptor>>,
     signed: Mutex<SignedNetworkDefaults>,
     log: Mutex<Vec<Exchange>>,
     faults: Mutex<Faults>,
@@ -165,12 +295,17 @@ impl Fixture {
         let addr = listener.local_addr().unwrap();
         let installed = installed();
         let backend = Arc::new(Backend {
+            invitations: Mutex::new(BTreeMap::new()),
             signed: Mutex::new(installed.signed_defaults.clone()),
             log: Mutex::new(vec![]),
             faults: Mutex::new(Faults::default()),
             names: Mutex::new(BTreeMap::new()),
         });
         let app = Router::new()
+            .route(
+                "/v1/invitations/{id}",
+                get(invitation_descriptor).put(publish_descriptor),
+            )
             .route("/v1/network-defaults", get(defaults))
             .route("/v1/relay-provisions", axum::routing::post(provision))
             .route("/v1/names", axum::routing::post(register))

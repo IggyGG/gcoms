@@ -1,3 +1,4 @@
+mod invitations;
 pub mod network;
 pub mod persistence;
 use axum::extract::{ConnectInfo, Path as AxumPath, Query, State};
@@ -414,6 +415,7 @@ pub fn router(state: AppState) -> Router {
             put(network::update).delete(network::remove),
         )
         .layer(RequestBodyLimitLayer::new(MAX_BODY_BYTES))
+        .merge(invitations::routes())
         .layer(TimeoutLayer::with_status_code(
             StatusCode::REQUEST_TIMEOUT,
             Duration::from_secs(35),

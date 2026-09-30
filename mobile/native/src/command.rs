@@ -97,6 +97,9 @@ pub enum Command {
         capacity: usize,
         visibility: sdk::ChannelVisibility,
     },
+    InvitationOperation {
+        request: sdk::InvitationRequest,
+    },
     CreateInvitation {
         channel: String,
         lifetime_secs: u64,
@@ -336,6 +339,9 @@ impl State {
                     .await
                     .map_err(err)?,
             ),
+            Command::InvitationOperation { request } => {
+                value(client.invitations(request).await.map_err(err)?)
+            }
             Command::CreateInvitation {
                 channel,
                 lifetime_secs,

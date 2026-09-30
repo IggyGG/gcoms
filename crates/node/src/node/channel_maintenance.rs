@@ -632,12 +632,15 @@ impl ChannelMaintenance {
                         .iter()
                         .map(|(route, wire)| Work::Control(control_key(route, wire)))
                         .collect();
-                    if let Some(outbox) = &cs.membership_outbox {
+                    for outbox in cs.membership_records() {
                         work.extend(
                             outbox
                                 .expected
                                 .iter()
-                                .filter(|(identity, _)| !outbox.acknowledged.contains(*identity))
+                                .filter(|(identity, _)| {
+                                    !outbox.acknowledged.contains(*identity)
+                                        && cs.membership_target_ready(outbox.epoch, identity)
+                                })
                                 .map(|(_, route)| {
                                     Work::Membership(control_key(route, &outbox.commit))
                                 }),
@@ -792,11 +795,19 @@ impl ChannelMaintenance {
                     (wire, vec![control_target(route)])
                 }
                 Work::Membership(key) => {
-                    let outbox = cs.membership_outbox.as_ref()?;
+                    let outbox = cs.membership_records().find(|outbox| {
+                        outbox
+                            .expected
+                            .values()
+                            .any(|route| control_key(route, &outbox.commit) == *key)
+                    })?;
                     let route = outbox
                         .expected
                         .iter()
-                        .filter(|(identity, _)| !outbox.acknowledged.contains(*identity))
+                        .filter(|(identity, _)| {
+                            !outbox.acknowledged.contains(*identity)
+                                && cs.membership_target_ready(outbox.epoch, identity)
+                        })
                         .map(|(_, route)| route)
                         .find(|route| control_key(route, &outbox.commit) == *key)?;
                     (&outbox.commit, vec![control_target(route)])

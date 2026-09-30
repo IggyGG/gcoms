@@ -12,7 +12,7 @@ publish.workspace = true
 
 [features]
 default = ["embedded", "ipc", "descriptor-verification"]
-in-process = ["dep:gcoms-node", "dep:gcoms-crypto"]
+in-process = ["dep:gcoms-node", "dep:gcoms-crypto", "dep:gcoms-network"]
 embedded = ["in-process", "gcoms-node/relay-host"]
 ipc = []
 client-persist = ["embedded", "gcoms-node/client-persist"]
@@ -21,7 +21,8 @@ descriptor-verification = ["dep:gcoms-crypto"]
 [dependencies]
 zeroize = "1"
 async-trait = "0.1"
-gcoms-core = { version = "0.1.0", path = "../core" }
+gcoms-network = { version = "0.1.0", path = "../network", optional = true }
+gcoms-core = { version = "0.1.0", path = "../core", features = ["serde"] }
 gcoms-crypto = { version = "0.1.0", path = "../crypto", optional = true }
 gcoms-node = { version = "0.1.0", path = "../node", default-features = false, optional = true }
 postcard = { version = "1", default-features = false, features = ["alloc"] }

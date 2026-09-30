@@ -5,6 +5,7 @@ use sha2::{Digest, Sha256};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::Arc;
 
+pub(crate) mod catchup;
 pub mod metadata;
 pub use metadata::ChannelChange;
 
@@ -690,6 +691,8 @@ pub struct ChannelState {
     /// durable newcomer bootstrap. Dropping its owner releases cancellation.
     pub(crate) admission_finalizer: Arc<tokio::sync::Mutex<()>>,
     pub membership_outbox: Option<MembershipOutbox>,
+    pub(crate) membership_journal: VecDeque<MembershipOutbox>,
+    pub(crate) catchup_members: HashSet<[u8; 32]>,
     /// Woken whenever `membership_outbox` clears.
     pub membership_done: Arc<tokio::sync::Notify>,
     pub pending_control: VecDeque<(ChannelRoute, Vec<u8>)>,
@@ -706,6 +709,7 @@ pub struct ChannelState {
     /// Bounded FIFO like `admission_cache`.
     pub invites: HashMap<[u8; 16], InviteRecord>,
     pub invite_order: VecDeque<[u8; 16]>,
+    pub(crate) invitations: crate::channel_invite::policy::InvitationLedger,
     pub completed_removals: HashSet<String>,
     pub commit_ack_cache: HashMap<[u8; 16], (ChannelRoute, Vec<u8>)>,
     pub commit_ack_order: VecDeque<[u8; 16]>,
@@ -737,7 +741,7 @@ pub(crate) struct AuthenticatedRouteChange {
     directory: Option<ChannelRoute>,
     peer: Option<PeerRef>,
     messages: Vec<([u8; 16], ChannelRoute)>,
-    membership: Option<ChannelRoute>,
+    membership: Vec<([u8; 16], ChannelRoute)>,
     controls: Vec<(usize, ChannelRoute)>,
     acks: Vec<([u8; 16], ChannelRoute)>,
     pulls: Vec<(usize, PeerRef)>,
@@ -749,6 +753,7 @@ impl Drop for ChannelMessageOutbox {
     }
 }
 
+#[derive(Clone)]
 pub struct CachedAdmission {
     pub name: String,
     pub pseudonym: [u8; 32],
@@ -777,6 +782,7 @@ impl Drop for InviteRecord {
     }
 }
 
+#[derive(Clone)]
 pub struct MembershipOutbox {
     pub commit_id: [u8; 16],
     pub epoch: u64,
@@ -933,6 +939,8 @@ impl ChannelState {
             future_message_bytes: 0,
             admission_finalizer: Arc::new(tokio::sync::Mutex::new(())),
             membership_outbox: None,
+            membership_journal: VecDeque::new(),
+            catchup_members: HashSet::new(),
             membership_done: Arc::new(tokio::sync::Notify::new()),
             pending_control: VecDeque::new(),
             route_announcement: None,
@@ -941,6 +949,7 @@ impl ChannelState {
             admission_cache_order: VecDeque::new(),
             invites: HashMap::new(),
             invite_order: VecDeque::new(),
+            invitations: crate::channel_invite::policy::InvitationLedger::default(),
             completed_removals: HashSet::new(),
             commit_ack_cache: HashMap::new(),
             commit_ack_order: VecDeque::new(),
@@ -1068,7 +1077,7 @@ impl ChannelState {
             directory: self.directory.insert(name.to_string(), route.clone()),
             peer: self.id_to_ref.insert(id, peer.clone()),
             messages: Vec::new(),
-            membership: None,
+            membership: Vec::new(),
             controls: Vec::new(),
             acks: Vec::new(),
             pulls: Vec::new(),
@@ -1080,12 +1089,12 @@ impl ChannelState {
                     .push((*message_id, std::mem::replace(expected, route.clone())));
             }
         }
-        if let Some(expected) = self
-            .membership_outbox
-            .as_mut()
-            .and_then(|outbox| outbox.expected.get_mut(&route.pseudonym))
-        {
-            change.membership = Some(std::mem::replace(expected, route.clone()));
+        for outbox in self.membership_records_mut() {
+            if let Some(expected) = outbox.expected.get_mut(&route.pseudonym) {
+                change
+                    .membership
+                    .push((outbox.commit_id, std::mem::replace(expected, route.clone())));
+            }
         }
         for (index, (target, _)) in self.pending_control.iter_mut().enumerate() {
             if target.pseudonym == route.pseudonym {
@@ -1132,9 +1141,9 @@ impl ChannelState {
                 .expected
                 .insert(change.pseudonym, previous);
         }
-        if let Some(previous) = change.membership {
-            self.membership_outbox
-                .as_mut()
+        for (id, previous) in change.membership {
+            self.membership_records_mut()
+                .find(|r| r.commit_id == id)
                 .expect("membership retained during route installation")
                 .expected
                 .insert(change.pseudonym, previous);
@@ -1506,6 +1515,7 @@ impl ChannelRoute {
     }
 }
 
+#[derive(Clone)]
 pub struct OwnedChannelRoute {
     pub public: ChannelRoute,
     pub direct_secret: [u8; 32],

@@ -672,6 +672,9 @@ impl ProtocolRuntime {
                 zeroize::Zeroizing::new(hash.finalize().into()),
             )
         };
+        if let Some(network) = &network {
+            node.configure_invitation_directory(network.clone())?;
+        }
         let runtime = Self(Arc::new(Inner {
             closing: std::sync::atomic::AtomicBool::new(false),
             #[cfg(feature = "files")]
@@ -1251,6 +1254,12 @@ impl GcClient for ProtocolClient {
         self.runtime
             .import_network_invitation(invitation)
             .map_err(SdkError::Runtime)
+    }
+    async fn invitations(
+        &self,
+        request: gcoms_sdk::InvitationRequest,
+    ) -> Result<gcoms_sdk::InvitationReply, SdkError> {
+        self.embedded.invitations(request).await
     }
     async fn create_channel_invitation(
         &self,

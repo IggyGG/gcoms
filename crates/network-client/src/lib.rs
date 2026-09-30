@@ -2,6 +2,7 @@
 //! Public DNS locates services; installed signing roots and native TLS pins
 //! establish identity. Private grants are never sent to an invitation's URL
 //! until it agrees with independently verified network defaults.
+pub mod invitations;
 pub mod names;
 pub mod routing;
 

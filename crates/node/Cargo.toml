@@ -11,9 +11,10 @@ version.workspace = true
 publish.workspace = true
 
 [dependencies]
+base64 = "0.22"
 gcoms-network = { version = "0.1.0", path = "../network" }
 gcoms-protocol = { version = "0.1.0", path = "../protocol" }
-gcoms-core = { version = "0.1.0", path = "../core" }
+gcoms-core = { version = "0.1.0", path = "../core", features = ["serde"] }
 gcoms-crypto = { version = "0.1.0", path = "../crypto" }
 gcoms-gossip = { version = "0.1.0", path = "../gossip" }
 gcoms-mls = { version = "0.1.0", path = "../mls" }

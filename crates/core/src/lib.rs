@@ -11,6 +11,7 @@ pub mod fragment;
 #[cfg(feature = "experimental-gc2")]
 pub mod gc2;
 pub mod hop;
+pub mod invitation;
 pub mod lease;
 pub mod traffic;
 pub use traffic::TrafficClass;

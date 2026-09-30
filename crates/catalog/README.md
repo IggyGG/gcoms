@@ -27,6 +27,14 @@ The router exposes `/healthz`, `/readyz`, `/v1/catalog`, `/v1/descriptors`,
 and `/v1/names`. Use an HTTPS ingress appropriate to the deployment; the public
 listener itself is HTTP. Preserve signed-document checks and rate/capacity limits.
 
+`/v1/invitations/{opaque-id}` serves short-lived, owner-signed encrypted channel
+descriptors. PUT requires an explicitly issued `invitations` grant; existing
+bootstrap grants do not gain that scope. GET returns ciphertext and still checks
+that its publisher's grant remains valid. The provider never receives the bearer
+secret or grants membership. Deploy this endpoint before enabling compact sharing
+in clients. See [reusable invitations](../../docs/REUSABLE_INVITATIONS.md) for
+bounds, recovery and rollout requirements.
+
 The retained `gc-network-operator` binary creates signing keys, signs defaults,
 prepares key transitions, issues/revokes invitation grants and verifies documents.
 Run it without arguments for its exact file-oriented syntax. Secret outputs must

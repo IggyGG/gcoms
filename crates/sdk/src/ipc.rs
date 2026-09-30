@@ -29,7 +29,7 @@ use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 #[cfg(all(any(unix, windows), feature = "ipc"))]
 use tokio::sync::{broadcast, mpsc, oneshot, watch, Mutex};
 
-pub const VERSION: u16 = 22;
+pub const VERSION: u16 = 23;
 
 #[cfg(test)]
 mod metadata_compat;
@@ -273,11 +273,13 @@ pub enum Request {
         channel: String,
         request: Option<crate::MembershipRecoveryRequest>,
     },
+    Invitations(crate::InvitationRequest),
 }
 
 impl Request {
     pub fn minimum_version(&self) -> u16 {
         match self {
+            Self::Invitations(_) => 23,
             Self::ChannelRecovery { .. } => 22,
             Self::Sharing(crate::sharing::Request::Inspect { .. })
             | Self::ChannelReconnect { .. } => 21,
@@ -305,6 +307,7 @@ impl Request {
     }
     pub fn required_capability(&self) -> Capability {
         match self {
+            Self::Invitations(request) => request.required_capability(),
             Self::ChannelRecovery { .. } => Capability::ChannelAdmin,
             Self::ChannelReconnect { .. } => Capability::ChannelMember,
             Self::Sharing(_) => Capability::FileSharing,
@@ -370,6 +373,7 @@ impl Request {
 
     fn validate_application_payload(&self) -> Result<(), SdkError> {
         match self {
+            Self::Invitations(request) => request.validate(),
             Self::ChannelRecovery { channel, request }
                 if channel.len() > 256
                     || request.as_ref().is_some_and(|r| {
@@ -442,6 +446,7 @@ pub enum Response {
     NetworkStatus(crate::NetworkStatus),
     ChannelTopic(String),
     ChannelRecovery(crate::MembershipRecoveryStatus),
+    Invitations(crate::InvitationReply),
 }
 
 #[cfg(all(any(unix, windows), feature = "ipc"))]
@@ -502,6 +507,7 @@ pub fn encode(frame: &Frame) -> Result<Vec<u8>, SdkError> {
 impl Zeroize for Request {
     fn zeroize(&mut self) {
         match self {
+            Self::Invitations(request) => request.zeroize(),
             Self::Sharing(crate::sharing::Request::WritePiece { bytes, .. }) => {
                 bytes.as_mut_slice().zeroize()
             }
@@ -962,6 +968,17 @@ impl Drop for IpcClient {
 #[cfg(all(any(unix, windows), feature = "ipc"))]
 #[async_trait]
 impl GcClient for IpcClient {
+    async fn invitations(
+        &self,
+        request: crate::InvitationRequest,
+    ) -> Result<crate::InvitationReply, SdkError> {
+        request.validate()?;
+        match self.request(Request::Invitations(request)).await? {
+            Response::Invitations(reply) => Ok(reply),
+            _ => Err(SdkError::Protocol("unexpected invitation response".into())),
+        }
+    }
+
     async fn persist_profile(&self) -> Result<(), SdkError> {
         self.expect_empty(Request::PersistProfile).await
     }
@@ -2105,6 +2122,9 @@ pub(crate) async fn dispatch<C: GcClient>(
             client.import_network_invitation(&invitation).await?;
             Ok(Response::Empty)
         }
+        Request::Invitations(request) => {
+            client.invitations(request).await.map(Response::Invitations)
+        }
         Request::CreateChannelInvitation { channel, ttl_secs } => client
             .create_channel_invitation(&channel, ttl_secs)
             .await
@@ -2648,7 +2668,7 @@ mod tests {
 
     #[test]
     fn requests_declare_required_capability() {
-        assert_eq!(VERSION, 22);
+        assert_eq!(VERSION, 23);
         for request in [
             Request::SubmitDurableOpaque {
                 recipient: ContactCard(Vec::new()),

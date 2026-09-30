@@ -104,6 +104,25 @@ fn profile_channel_file_and_suspend_reopen_through_abi() {
     let invitation =
         session.request(json!({"op":"create_invitation","channel":"mobile","lifetime_secs":3600}));
     assert!(invitation["ok"]["link"].is_string(), "{invitation}");
+    let reusable = session.request(json!({"op":"invitation_operation","request":{"create":{
+        "channel":"mobile", "policy":{"expires_at":null,"max_admissions":25}
+    }}}));
+    let reusable_id = reusable["ok"]["created"]["id"].clone();
+    assert_eq!(reusable_id.as_array().unwrap().len(), 16, "{reusable}");
+    assert_eq!(reusable["ok"]["created"]["policy"]["max_admissions"], 25);
+    let listed = session
+        .request(json!({"op":"invitation_operation","request":{"list":{"channel":"mobile"}}}));
+    assert_eq!(listed["ok"]["listed"].as_array().unwrap().len(), 1);
+    let revoked = session.request(json!({"op":"invitation_operation","request":{"revoke":{"channel":"mobile","id":reusable_id}}}));
+    assert!(revoked["ok"]["revoked"]["revoked_at"].is_u64(), "{revoked}");
+    let retired = session.request(json!({"op":"invitation_operation","request":{"retire":{"channel":"mobile","id":reusable_id}}}));
+    assert_eq!(
+        retired["ok"], "retired",
+        "the Kotlin wrapper must accept unit replies too"
+    );
+    let operations =
+        session.request(json!({"op":"invitation_operation","request":"list_enrollments"}));
+    assert_eq!(operations["ok"]["enrollments"], json!([]));
     let id: Vec<u8> = (1..=16).collect();
     let scope = json!({"channel":channel,"participants":[]});
     let prepare = json!({"op":"files","request":{"Prepare":{"id":id,"scope":scope,"name":"mobile.txt","size_bytes":3}}});

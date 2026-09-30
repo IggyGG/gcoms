@@ -180,6 +180,24 @@ pub enum Cmd {
         peer: Box<NodeInfo>,
         done: tokio::sync::oneshot::Sender<Result<[u8; 16], String>>,
     },
+    CreateReusableInvitation {
+        channel: String,
+        policy: crate::channel_invite::policy::InvitationPolicy,
+        done: tokio::sync::oneshot::Sender<Result<IssuedInvitation, String>>,
+    },
+    ListInvitations {
+        channel: String,
+        done: tokio::sync::oneshot::Sender<
+            Result<Vec<crate::channel_invite::policy::InvitationSummary>, String>,
+        >,
+    },
+    RevokeInvitation {
+        channel: String,
+        id: [u8; 16],
+        done: tokio::sync::oneshot::Sender<
+            Result<crate::channel_invite::policy::InvitationSummary, String>,
+        >,
+    },
     CreateChannelInvite {
         channel: String,
         ttl_secs: u64,
@@ -1359,6 +1377,55 @@ impl NodeHandle {
     /// `(invite_id, invite_secret, expiry_unix)`; the caller assembles the
     /// shareable link (adding the rendezvous queue coordinates and this node's
     /// contact bundle).
+    pub async fn create_reusable_invitation(
+        &self,
+        channel: &str,
+        policy: crate::channel_invite::policy::InvitationPolicy,
+    ) -> Result<IssuedInvitation, String> {
+        let (done, receiver) = tokio::sync::oneshot::channel();
+        self.cmd_tx
+            .send(Cmd::CreateReusableInvitation {
+                channel: channel.to_owned(),
+                policy,
+                done,
+            })
+            .await
+            .map_err(|e| e.to_string())?;
+        receiver.await.map_err(|e| e.to_string())?
+    }
+
+    pub async fn list_invitations(
+        &self,
+        channel: &str,
+    ) -> Result<Vec<crate::channel_invite::policy::InvitationSummary>, String> {
+        let (done, receiver) = tokio::sync::oneshot::channel();
+        self.cmd_tx
+            .send(Cmd::ListInvitations {
+                channel: channel.to_owned(),
+                done,
+            })
+            .await
+            .map_err(|e| e.to_string())?;
+        receiver.await.map_err(|e| e.to_string())?
+    }
+
+    pub async fn revoke_invitation(
+        &self,
+        channel: &str,
+        id: [u8; 16],
+    ) -> Result<crate::channel_invite::policy::InvitationSummary, String> {
+        let (done, receiver) = tokio::sync::oneshot::channel();
+        self.cmd_tx
+            .send(Cmd::RevokeInvitation {
+                channel: channel.to_owned(),
+                id,
+                done,
+            })
+            .await
+            .map_err(|e| e.to_string())?;
+        receiver.await.map_err(|e| e.to_string())?
+    }
+
     pub async fn create_channel_invite(
         &self,
         channel: &str,

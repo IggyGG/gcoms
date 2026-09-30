@@ -93,6 +93,7 @@ struct DnsState {
     retry_at: u64,
 }
 pub struct NetworkService {
+    pub(crate) invitation_records: Mutex<super::invitations::Store>,
     config: NetworkConfig,
     defaults: SignedNetworkDefaults,
     state: Mutex<DnsState>,
@@ -172,6 +173,13 @@ fn random_handle() -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect()
 }
 impl NetworkService {
+    pub(crate) fn invitation_path(&self) -> PathBuf {
+        self.config.state_dir.join("invitations.json")
+    }
+    pub(crate) fn network_id(&self) -> &str {
+        &self.config.network_id
+    }
+
     pub fn load(config: NetworkConfig, allow_local_fixture: bool) -> Result<Self, String> {
         if config.network_id != "gchat.boo" || !(300..=86400).contains(&config.name_lease_secs) {
             return Err("invalid network or DNS lease configuration".into());
@@ -229,7 +237,11 @@ impl NetworkService {
             .timeout(Duration::from_secs(20))
             .build()
             .map_err(|_| "cannot build DNS HTTP client")?;
+        let invitation_records = Mutex::new(super::invitations::Store::load(
+            &config.state_dir.join("invitations.json"),
+        )?);
         Ok(Self {
+            invitation_records,
             config,
             defaults,
             state: Mutex::new(state),
@@ -249,7 +261,7 @@ impl NetworkService {
         let id = token_digest(bearer(headers)?).map_err(|_| unauthorized())?;
         self.grant_by_id(&id, scope)
     }
-    fn grant_by_id(&self, id: &str, scope: &str) -> Result<GrantRecord, ApiError> {
+    pub(crate) fn grant_by_id(&self, id: &str, scope: &str) -> Result<GrantRecord, ApiError> {
         let grants = read_grants(&self.config.grants_file).map_err(|_| unavailable())?;
         grants
             .grants

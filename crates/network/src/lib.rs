@@ -5,6 +5,7 @@ use gcoms_crypto::{verify_signature, IdentityKeypair};
 use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
 
+pub mod channel_invitation;
 mod invitation;
 pub use invitation::{
     invitation_code, invitation_link, JoinInvitation, NetworkIdentity, JOIN_INVITATION_PREFIX,

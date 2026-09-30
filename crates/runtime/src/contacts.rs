@@ -26,6 +26,7 @@ pub fn relay_label(card: &gcoms_sdk::RelayCard) -> Result<String, String> {
 /// Local inspection details, separate from the stable serialized SDK invitation.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ChannelInvitationDetails {
+    pub policy: Option<gcoms_sdk::InvitationPolicy>,
     pub invitation: gcoms_sdk::ChannelInvitation,
     /// `None` means no current-protocol bootstrap was supplied. These identifiers
     /// must be checked against the selected signed network by the application;
@@ -45,6 +46,7 @@ pub fn inspect_channel_invitation_details(link: &str) -> Result<ChannelInvitatio
     let current_bootstrap_relays = None;
     let invite = envelope.invite;
     Ok(ChannelInvitationDetails {
+        policy: envelope.policy,
         invitation: gcoms_sdk::ChannelInvitation {
             link: link.trim().into(),
             channel: invite.channel,
@@ -59,6 +61,26 @@ pub fn inspect_channel_invitation_details(link: &str) -> Result<ChannelInvitatio
 
 pub fn inspect_channel_invitation(link: &str) -> Result<gcoms_sdk::ChannelInvitation, String> {
     inspect_channel_invitation_details(link).map(|details| details.invitation)
+}
+
+pub fn is_reusable_channel_invitation(link: &str) -> bool {
+    gcoms_node::channel_invite::InviteEnvelope::from_link(link.trim())
+        .is_some_and(|envelope| envelope.policy.is_some())
+}
+
+pub async fn resolve_channel_invitation_reference(
+    link: &str,
+) -> Result<gcoms_network::channel_invitation::ResolvedInvitation, String> {
+    let reference = gcoms_network::channel_invitation::Reference::decode(link)?;
+    let (resolved, _) = gcoms_network_client::invitations::resolve(
+        &reference,
+        0,
+        None,
+        tokio::time::Instant::now() + std::time::Duration::from_secs(20),
+    )
+    .await?;
+    gcoms_node::node::validate_resolved_invitation(&reference, &resolved)?;
+    Ok(resolved)
 }
 
 /// Apply exactly the node's metadata validation before any application prompt.
