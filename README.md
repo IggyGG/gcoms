@@ -261,3 +261,11 @@ hosted channels and modern files. Their distinct capabilities require IPC25.
 The conflicting, unpublished task IPC23/24 dialects are refused at negotiation;
 existing supported legacy clients retain their versioned operations. Hosted
 profile archives and service HTTP wires are unchanged by this IPC integration.
+
+Hosted recovery now prefetches at most two immutable deferred records at once,
+within the existing 16 MiB batch limit. It preserves sequence, scoped proofs,
+hash/MLS validation and checkpoint-before-yield behavior. Live owners release
+the temporary sealed session buffer after saving or restoring; the encrypted disk
+archive and its compatibility rules are unchanged. Updated runtime and actual
+application recovery qualification are in progress; previous timings retain their
+source bindings.

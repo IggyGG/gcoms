@@ -452,7 +452,7 @@ impl Client {
         key: [u8; 32],
         transport: Arc<dyn Transport>,
     ) -> Result<Self, String> {
-        let (archive, receipts, topic, files) = decode_archive(bytes)?;
+        let (mut archive, receipts, topic, files) = decode_archive(bytes)?;
         if !matches!(archive.version, 1..=4)
             || files.events.len() > MAX_EVENTS
             || files.committed > archive.cursor
@@ -470,6 +470,9 @@ impl Client {
             return Err("hosted client archive outside bounds".into());
         }
         let session = HostedSession::restore(&key, &archive.session, channel).map_err(mls)?;
+        // The live MLS owner is authoritative in memory. Keep its sealed copy
+        // on disk, not a second full session buffer in every open channel.
+        archive.session = Vec::new();
         Ok(Self {
             session,
             archive,
@@ -507,6 +510,9 @@ impl Client {
             );
             self.storage.save(&bytes)
         })();
+        // Save always serializes a fresh session. Release the temporary sealed
+        // buffer, including after an error; failed owners remain poisoned.
+        self.archive.session = Vec::new();
         if result.is_err() {
             self.storage.poison();
         }
@@ -999,6 +1005,25 @@ impl Client {
             }
         };
         Record::decode(&decode(&wire)?).map_err(mls)
+    }
+
+    async fn fetch_records(&self, items: Vec<wire::RecordItem>) -> Result<Vec<Record>, String> {
+        let mut records = Vec::with_capacity(items.len());
+        let mut items = items.into_iter();
+        while let Some(first) = items.next() {
+            if let Some(second) = items.next() {
+                // Immutable, independently scoped reads. Keep the admitted
+                // sequence even when the second response arrives first. No
+                // live state changes until this bounded batch is complete.
+                let (first, second) =
+                    tokio::join!(self.fetch_record(first), self.fetch_record(second));
+                records.push(first?);
+                records.push(second?);
+            } else {
+                records.push(self.fetch_record(first).await?);
+            }
+        }
+        Ok(records)
     }
 }
 
@@ -1570,7 +1595,7 @@ impl Client {
         // Fetch before mutating live MLS state. Cancellation during a deferred
         // fetch discards only this bounded buffer; earlier batches are durable.
         const MAX_BATCH_WIRE_BYTES: usize = 16 * 1024 * 1024;
-        let mut records = Vec::new();
+        let mut items = Vec::new();
         let mut buffered = 0;
         for item in page.records {
             let bytes = match &item {
@@ -1581,13 +1606,14 @@ impl Client {
                 return Err("hosted record exceeds bound".into());
             }
             if buffered + bytes > MAX_BATCH_WIRE_BYTES {
+                let records = self.fetch_records(std::mem::take(&mut items)).await?;
                 self.apply_records(&records).await?;
-                records.clear();
                 buffered = 0;
             }
-            records.push(self.fetch_record(item).await?);
+            items.push(item);
             buffered += bytes;
         }
+        let records = self.fetch_records(items).await?;
         self.apply_records(&records).await?;
         if self.archive.cursor == page.head.sequence && self.archive.head != page.head.hash {
             return Err("hosted replay head mismatch".into());
@@ -1811,6 +1837,77 @@ mod archive_compatibility {
     }
 
     #[test]
+    fn sealed_session_buffer_is_released_after_checkpoint_and_reopen() {
+        let dir = tempfile::tempdir().unwrap();
+        crate::private_fs::make_private(dir.path(), true).unwrap();
+        let session = HostedSession::create(
+            &gcoms_crypto::IdentityKeypair::generate(),
+            "owner",
+            500,
+            true,
+        )
+        .unwrap();
+        let channel = session.policy().channel_id();
+        let path = dir.path().join("profile");
+        let (storage, _) = Storage::open(&path, [99; 32], channel).unwrap();
+        let client = Client::new(
+            session,
+            NewClient {
+                alias: "retained".into(),
+                endpoint: "https://example.invalid/v1/hosted".into(),
+                phase: Phase::Ready,
+                pending: Pending::Create {
+                    policy: String::new(),
+                    genesis: String::new(),
+                },
+                access_code: None,
+                join_link: None,
+            },
+            storage,
+            [99; 32],
+            Arc::new(Offline),
+        )
+        .unwrap();
+        let expected = client.view();
+        assert_eq!(client.archive.session.capacity(), 0);
+        drop(client);
+        let (storage, bytes) = Storage::open(&path, [99; 32], channel).unwrap();
+        let bytes = bytes.unwrap();
+        let (saved, _, _, _) = decode_archive(&bytes).unwrap();
+        assert!(
+            !saved.session.is_empty(),
+            "the durable archive must retain MLS secrets"
+        );
+        let mut restored =
+            Client::restore(&bytes, channel, storage, [99; 32], Arc::new(Offline)).unwrap();
+        assert_eq!(restored.view(), expected);
+        assert_eq!(restored.archive.session.capacity(), 0);
+        restored.checkpoint().unwrap();
+        assert_eq!(restored.archive.session.capacity(), 0);
+        // A real failed replacement still poisons the live owner and retains the
+        // last saved file; it must not retain a new full session allocation.
+        let saved_path = path.with_extension("retained");
+        std::fs::rename(&path, &saved_path).unwrap();
+        std::fs::create_dir(&path).unwrap();
+        assert!(restored.checkpoint().is_err());
+        assert_eq!(restored.archive.session.capacity(), 0);
+        assert!(restored.events(0, 256).is_err());
+        drop(restored);
+        std::fs::remove_dir(&path).unwrap();
+        std::fs::rename(&saved_path, &path).unwrap();
+        let (storage, bytes) = Storage::open(&path, [99; 32], channel).unwrap();
+        let restored = Client::restore(
+            &bytes.unwrap(),
+            channel,
+            storage,
+            [99; 32],
+            Arc::new(Offline),
+        )
+        .unwrap();
+        assert_eq!(restored.view(), expected);
+    }
+
+    #[test]
     fn modern_file_inbox_reopens_each_prior_hosted_archive() {
         for version in 1..=3 {
             let dir = tempfile::tempdir().unwrap();
@@ -1849,6 +1946,7 @@ mod archive_compatibility {
             client.topic.joined_at = 2;
             client.receipts.committed = 3;
             client.archive.version = version;
+            client.archive.session = client.session.persist(&[99; 32]).unwrap();
             let mut old = postcard::to_allocvec(&client.archive).unwrap();
             if version >= 2 {
                 old.extend(postcard::to_allocvec(&client.receipts).unwrap());

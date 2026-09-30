@@ -788,3 +788,20 @@ The temporary grant was revoked after owned daemons stopped; see
 A separate 12-profile application smoke is running before the full 500-profile
 protected-network gate. The merged full workspace and durable-runtime campaigns
 remain running; native installed qualification and trunk publication remain open.
+
+## Deferred replay concurrency and retained session memory
+
+Run the hosted runtime release suite and the full runtime library suite with
+strict all-target/all-feature Clippy. The held-fetch regression must observe two
+requests before releasing either, return the second first, keep a third blocked,
+and preserve original disk bytes until the ordered batch completes. Cancellation
+must reopen the original prefix and recover all membership events. The old
+sequential implementation fails this test at the unchanged three-second bound.
+Keep lost-fetch, forged hash/length, failed-checkpoint and urgency regressions.
+
+After create, successful checkpoint, restored archive and failed save, live owners
+must retain no separate sealed-session allocation. Saved bytes must still contain
+the MLS state and reopen to the exact prior view. A failed replacement remains
+poisoned and must reopen the last intact archive. Preserve all version1–3 archive
+migration cases. Repeat the application smoke against the original ten-second
+owner recovery and covered-receipt/file deadlines; keep the prior 14.537s failure.

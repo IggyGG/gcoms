@@ -895,3 +895,23 @@ replay concurrency follow-up. The actual 12-profile application smoke verified
 senders, but the returning owner took 14.537s to replay eleven admissions after
 network readiness (10s target). A bounded two-read replay window is now under
 validation; originals and fixed deadlines remain unchanged.
+
+### IRC-8 deferred reads and live session memory — in validation
+
+Hosted replay prefetches two immutable deferred reads concurrently within the
+unchanged 16 MiB batch, then applies their authenticated records in order. The
+old sequential code fails the new held-response control after three seconds;
+the changed code passes 28 release hosted cases and two explicit capacity ignores.
+The strengthened test observes the second response returning before the first,
+checks the two-read bound and verifies cancellation/reopen of the original prefix.
+No receipt, transport class, protocol/IPC, MLS or persistence validation is skipped.
+
+The live archive also drops its temporary sealed session buffer after checkpoint
+or restore. Each save still serializes the actual MLS state, the disk format is
+unchanged and uncertain saves poison the owner as before. A separate regression
+covers retained on-disk state, exact reopen, actual replacement failure and buffer
+release. The full current runtime/strict gate and updated release hosted run are
+active. An earlier follow-up build was evicted after exhausting its 5 GiB emptyDir;
+its interrupted gate is not a pass. Validation now uses an explicitly permitted
+12 GiB persistent scratch volume. The completed earlier 1,110-test merged gate
+and all source-bound failed capacity/timing receipts remain retained.
