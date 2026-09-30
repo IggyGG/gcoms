@@ -1,0 +1,18 @@
+{
+  "source": "a460d74d672179a7c82d45a4c80ca54409e6cc4a",
+  "scope": "Full merged GComs workspace; 64-member hosted ceiling and IPC23/26 compatibility",
+  "passed": 1142,
+  "failed": 0,
+  "ignored": 13,
+  "suites": 130,
+  "clippy_workspace_all_targets_all_features": "passed",
+  "rustdoc_workspace_all_features": "passed",
+  "core_no_default_features": "passed",
+  "sdk_no_default_features_ipc": "passed",
+  "runner_exit": 0,
+  "log": {
+    "path": "test-evidence/irc-parity/final64-workspace-01.log",
+    "sha256": "538f7d93ed605e857ee65970a4e18dbde241300dd925f687c37a9b3a4b96e167"
+  },
+  "limits": "Component/workspace qualification. The independent GChat 64-member protected-network receipt is separate; native installer publication remains separately gated."
+}

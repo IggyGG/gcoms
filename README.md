@@ -26,7 +26,7 @@ this does not turn uncertain acceptance into recipient delivery. Shutdown also
 cancels those waits. Read polling does not interrupt admission preparation.
 
 File integration is undergoing end-to-end qualification. See the
-[coverage ledger](docs/IRC_PARITY.md) for remaining application, 64-member and
+[coverage ledger](docs/IRC_PARITY.md) for application, qualified 64-member and
 release gates. An installed HTTPS service origin and explicit creation policy
 are required; see the ledger for the deployed HEL service and exact live checks.
 

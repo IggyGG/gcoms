@@ -1,3 +1,12 @@
+## IRC parity 64-member source qualification (2026-09-30)
+
+Merged source `a460d74` passes 1,142 tests, 13 retained exclusions, strict workspace
+Clippy, Rustdoc and both minimal-feature checks. Creation/control boundaries and
+released IPC23 invitation bytes/handshake pass with the new IPC26 hosted layout.
+The separate GChat 64-member network campaign passes; no larger campaign is
+required. Native installer publication remains separate. See
+[workspace receipt](docs/evidence/irc-workspace-20260930/limit-64-merged-qualified.json).
+
 ## IRC/main invitation integration (2026-09-30)
 
 Integrate main's reusable invitations and enrollment without dropping hosted

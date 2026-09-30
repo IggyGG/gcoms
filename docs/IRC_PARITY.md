@@ -25,8 +25,24 @@ The GComs task also preserves the canonical checkout's `0c2c704` bootstrap fix.
 
 See the [command-by-command feature mapping](IRC_FEATURE_MATRIX.md) for the source audit.
 
-Current checkpoint, 2026-09-30: mapped native features are implemented; live
-capacity and installed publication remain in progress. GComs `2c4535d` passes
+Current 64-member checkpoint, 2026-09-30: the user retained the 64-member ceiling.
+GComs `a460d74` passes 1,142 tests, 13 retained exclusions, strict lint, documentation
+and minimal-feature checks, including capacity refusal and released IPC23/26
+compatibility. Its GChat `624e8b2` pair passes the full 64-member protected-network
+campaign: 1,260 covered recipient signatures across baseline/mixed file traffic,
+137 ms maximum concurrent feedback, 14.272 s maximum admission including replacement,
+7 ms ordinary recovery after network readiness, and 81.645 s membership replay
+with confirmed progress `[0, 32, 63, 64]` and a cleared indicator. Verified 16 MiB
+resume takes 109.077 s; the full file workflow takes 269.355 s. Removal excludes
+the departed member before a replacement restores the roster to 64. Resource
+capture, cleanup and grant revocation pass. No larger campaign is required.
+See `docs/evidence/irc-workspace-20260930/limit-64-merged-qualified.json` and GChat's
+`docs/evidence/irc-hosted-capacity-20260930/capacity-64-01-pass.json`.
+Paired GChat/package checks and source landing are finishing; native installer
+publication remains separately gated. Historical evidence below retains its scope.
+
+Earlier checkpoint, 2026-09-30: mapped native features were implemented; live
+capacity and installed publication were still in progress. GComs `2c4535d` passes
 1,117 workspace tests with 13 unchanged exclusions, strict lint, documentation
 and minimal-feature checks. Its GChat `556c8f8` pair passes 191 workspace tests
 with three unchanged exclusions, strict lint and all 22 archive consumers.
@@ -86,7 +102,7 @@ GChat's `docs/evidence/irc-trunk-integration-20260930/catchup-live-81.json` and
 | IRC-5 | Authenticated activity and richer presence | Implemented; final qualification open | Actor/target/reason ordering; away/back/unknown/invisible; optional sharing; snapshot polling loses no events |
 | IRC-6 | Notices, blocking/muting, highlights, formatting and client workflows | Implemented; final qualification open | Same actual service-backed behavior through desktop/TUI/shared mobile UI; no automatic notice loops |
 | IRC-7 | Operator workflows and supported bot integration | Implemented; final qualification open | Scoped authorization, rate control, network/channel authority separation, executable bot example |
-| IRC-8 | Capacity, compatibility and release qualification | In progress | 64 real identities; ten concurrent senders; churn/offline/file traffic; timing/resource evidence; profile-preserving upgrade |
+| IRC-8 | Capacity, compatibility and release qualification | 64-member capacity passes; release pending | 64 real identities; ten concurrent senders; churn/offline/file traffic; timing/resource evidence; profile-preserving upgrade |
 
 The classical mode equivalents include +o/+v/+m/+b/+e/+I/+i/+k/+l/+t and
 private/secret discovery; member-authenticated sending (+n) remains mandatory.

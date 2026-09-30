@@ -48,7 +48,7 @@ A source mapping does not imply an installed release or a 64-member network pass
 | Network operator controls | Service creation allowlist, suspension, source/global rates and storage quotas | Implemented and deployed to the HEL qualification service; exact allowlist and retained-state restart checks pass |
 | Bots and automation | `crates/application/examples/hosted_bot.rs` | Implemented scoped ordinary-member example; bounded replies and no notice loop |
 | Delivery/recovery status | Pending, ServiceAccepted, Delivered, Failed; durable dedup and retry; confirmed catch-up progress | Implemented; covered receipts may be slower in large rooms. Ordinary offline recovery keeps 10 seconds; large membership backlogs show progress. Actual 81-member replay and indicator completion pass |
-| Load and churn | 64 identities, ten senders, offline recovery, file traffic and removal | Durable-runtime 500-member/4,990-signature campaign passes within its original limits; matched 85-client bootstrap passes with hosted relay budgets. Current protected-network/GChat 64-member gate remains open; larger runs are historical and no longer required |
+| Load and churn | 64 identities, ten senders, offline recovery, file traffic and removal | Durable-runtime 500-member/4,990-signature campaign passes within its original limits; matched 85-client bootstrap passes with hosted relay budgets. Full protected-network/GChat 64-member gate passes: 1,260 covered signatures, offline recovery, visible replay, 16 MiB resume, removal/replacement and cleanup. Larger runs are historical and no longer required |
 
 The following are deliberate differences in this approved scope: no raw IRC
 server-link management, host login queries, global username enumeration, automatic
