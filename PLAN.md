@@ -938,3 +938,12 @@ clients / 7152.111 seconds. Its complete log, resource samples and exit124 are
 retained in `docs/evidence/irc-durable-capacity-20260930/serial-window-03.json`.
 This does not qualify capacity; the current four-owner `40b440d` run remains
 separate and active under its original limits.
+
+The new actual 12-profile protected-network campaign now passes correctness and
+all measured targets on GComs `40b440d` / GChat `c5bbfe8`: owner recovery 6.130s,
+maximum burst feedback 121ms, 220 covered recipient signatures and 106.008s resumed
+16MiB verification. Independent replacement, no historical ciphertext, resource
+coverage and cleanup pass; the grant is revoked. The GChat source-bound receipt
+is `docs/evidence/irc-hosted-capacity-20260930/smoke-12-02.json`. This is not a
+500-member pass. Current small-room, full workspace/package, scale and installed
+release gates remain open; the IRC ledger records the current proof boundaries.
