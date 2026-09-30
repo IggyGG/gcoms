@@ -931,3 +931,10 @@ the limitations of the retained partial logs are recorded in
 `docs/evidence/irc-durable-capacity-20260930/concurrent-04-oom.json`. The current
 `40b440d` campaign includes the sealed-buffer release and retains the same CPU,
 memory, replay concurrency and 7200-second deadline.
+
+The unchanged 75ms serial baseline (`65b54c7`) also timed out at 7200 seconds,
+with all 500 identities admitted and the last reported catch-up marker at 176
+clients / 7152.111 seconds. Its complete log, resource samples and exit124 are
+retained in `docs/evidence/irc-durable-capacity-20260930/serial-window-03.json`.
+This does not qualify capacity; the current four-owner `40b440d` run remains
+separate and active under its original limits.
