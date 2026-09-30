@@ -9,7 +9,7 @@ excluded an IRC bridge, IRCv3, public user discovery and silent identity linking
 
 “Implemented” below refers to source on the paired IRC-parity branches. Exact
 validation and unfinished release gates remain in [the evidence ledger](IRC_PARITY.md).
-A source mapping does not imply an installed release or a 500-member network pass.
+A source mapping does not imply an installed release or a 64-member network pass.
 
 | Capability | GChat entry point / GComs behavior | Implementation and qualification |
 | --- | --- | --- |
@@ -31,7 +31,7 @@ A source mapping does not imply an installed release or a 500-member network pas
 | Members-only sending | Mandatory authenticated membership | Implemented; unauthenticated external application messages rejected |
 | Invitation-only admission | `/mode +i/-i`, `/invite`, retained `/links` | Implemented; one-use permits bind current authority and intended join |
 | Channel key | `/mode +k/-k`; reusable admission code/verifier | Implemented; service receives no invitation private secret |
-| Member limit | `/mode +l number` | Implemented; capacity bounded at 500 |
+| Member limit | `/mode +l number` | Implemented; capacity bounded at 64 |
 | Bans and exceptions | `/mode +b/-b/+e/-e/+I/-I member-id` | Implemented as scoped identities rather than host masks |
 | Private and secret rooms | `/mode private/secret/public`; explicit publication required | Implemented; private/secret rooms omitted from public directory |
 | Kick, departure, ownership | `/kick`, `/part`, `/owner`, `/close-channel` | Implemented; pending removal revokes authority before member-assisted rekey. Removed-client snapshot replay fix passes focused tests, exact-profile recovery/reopen and fresh 12-client live exclusion/replacement |
@@ -48,7 +48,7 @@ A source mapping does not imply an installed release or a 500-member network pas
 | Network operator controls | Service creation allowlist, suspension, source/global rates and storage quotas | Implemented and deployed to the HEL qualification service; exact allowlist and retained-state restart checks pass |
 | Bots and automation | `crates/application/examples/hosted_bot.rs` | Implemented scoped ordinary-member example; bounded replies and no notice loop |
 | Delivery/recovery status | Pending, ServiceAccepted, Delivered, Failed; durable dedup and retry; confirmed catch-up progress | Implemented; covered receipts may be slower in large rooms. Ordinary offline recovery keeps 10 seconds; large membership backlogs show progress. Actual 81-member replay and indicator completion pass |
-| Load and churn | 500 identities, ten senders, offline recovery, file traffic and removal | Durable-runtime 500-member/4,990-signature campaign passes within its original limits; matched 85-client bootstrap passes with hosted relay budgets. Full protected-network/GChat 500-member gate remains open |
+| Load and churn | 64 identities, ten senders, offline recovery, file traffic and removal | Durable-runtime 500-member/4,990-signature campaign passes within its original limits; matched 85-client bootstrap passes with hosted relay budgets. Current protected-network/GChat 64-member gate remains open; larger runs are historical and no longer required |
 
 The following are deliberate differences in this approved scope: no raw IRC
 server-link management, host login queries, global username enumeration, automatic

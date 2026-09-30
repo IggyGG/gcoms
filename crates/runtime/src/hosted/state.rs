@@ -1846,7 +1846,7 @@ mod archive_compatibility {
         let session = HostedSession::create(
             &gcoms_crypto::IdentityKeypair::generate(),
             "owner",
-            500,
+            64,
             true,
         )
         .unwrap();
@@ -1918,7 +1918,7 @@ mod archive_compatibility {
             let session = HostedSession::create(
                 &gcoms_crypto::IdentityKeypair::generate(),
                 "owner",
-                500,
+                64,
                 true,
             )
             .unwrap();

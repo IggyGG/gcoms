@@ -241,7 +241,7 @@ mod tests {
     #[test]
     fn modified_member_cannot_invent_removal_or_rekey_with_stale_policy() {
         let root = IdentityKeypair::from_seed([98; 32]);
-        let mut owner = HostedSession::create(&root, "owner", 500, true).unwrap();
+        let mut owner = HostedSession::create(&root, "owner", 64, true).unwrap();
         let mut public = HostedObserver::new(
             owner.policy.clone(),
             owner.policy.channel_id(),

@@ -254,7 +254,7 @@ mod tests {
     #[test]
     fn modified_member_cannot_grant_roles_or_impersonate_owner() {
         let root = IdentityKeypair::from_seed([31; 32]);
-        let mut owner = HostedSession::create(&root, "owner", 500, true).unwrap();
+        let mut owner = HostedSession::create(&root, "owner", 64, true).unwrap();
         let public = HostedObserver::new(
             owner.policy.clone(),
             owner.policy.channel_id(),
@@ -300,7 +300,7 @@ mod tests {
     #[test]
     fn bad_optional_reason_cannot_fork_policy_or_consume_chat() {
         let root = IdentityKeypair::from_seed([32; 32]);
-        let mut owner = HostedSession::create(&root, "owner", 500, true).unwrap();
+        let mut owner = HostedSession::create(&root, "owner", 64, true).unwrap();
         let mut public = HostedObserver::new(
             owner.policy.clone(),
             owner.policy.channel_id(),

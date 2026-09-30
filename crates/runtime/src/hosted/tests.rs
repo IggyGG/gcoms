@@ -101,7 +101,7 @@ fn new_client(
     .unwrap()
 }
 async fn owner(dir: &Path, transport: Arc<dyn Transport>) -> Client {
-    let session = HostedSession::create(&IdentityKeypair::generate(), "owner", 500, true).unwrap();
+    let session = HostedSession::create(&IdentityKeypair::generate(), "owner", 64, true).unwrap();
     let pending = Pending::Create {
         policy: encode(&session.policy().encode().unwrap()),
         genesis: encode(&session.export_group_info().unwrap()),

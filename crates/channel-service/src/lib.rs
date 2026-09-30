@@ -573,7 +573,7 @@ mod tests {
         gcoms_private_fs::make_private(dir.path(), true).unwrap();
         let path = dir.path().join("log");
         let root = IdentityKeypair::from_seed([71; 32]);
-        let mut owner = HostedSession::create(&root, "owner", 500, true).unwrap();
+        let mut owner = HostedSession::create(&root, "owner", 64, true).unwrap();
         let channel = owner.policy().channel_id();
         let limits = Limits {
             bytes: 1024 * 1024,

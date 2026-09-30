@@ -217,7 +217,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         gcoms_private_fs::make_private(dir.path(), true).unwrap();
         let mut owner =
-            HostedSession::create(&IdentityKeypair::generate(), "owner", 500, true).unwrap();
+            HostedSession::create(&IdentityKeypair::generate(), "owner", 64, true).unwrap();
         let channel = owner.policy().channel_id();
         let limits = Limits {
             bytes: 1024 * 1024,

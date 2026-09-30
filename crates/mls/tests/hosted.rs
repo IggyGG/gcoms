@@ -21,8 +21,32 @@ fn fixture(public: bool, capacity: u32) -> (IdentityKeypair, HostedSession, Host
 }
 
 #[test]
+fn hosted_capacity_is_bounded_at_sixty_four_for_creation_and_policy_changes() {
+    let root = IdentityKeypair::from_seed([74; 32]);
+    assert_eq!(MAX_HOSTED_MEMBERS, 64);
+    for limit in [0, 1, 65, 100, 500, u32::MAX] {
+        assert!(HostedSession::create(&root, "owner", limit, true).is_err());
+    }
+    let (_, mut owner, mut service) = fixture(true, 2);
+    let control = owner
+        .create_control(HostedPolicyChange::Capacity(64), "supported maximum")
+        .unwrap();
+    service = service.stage_control(&control).unwrap();
+    owner.apply_control(&control).unwrap();
+    let revision = owner.rules().revision();
+    for limit in [0, 1, 65, 100, 500, u32::MAX] {
+        assert!(owner
+            .create_control(HostedPolicyChange::Capacity(limit), "out of range")
+            .is_err());
+        assert_eq!(owner.rules().capacity(), 64);
+        assert_eq!(owner.rules().revision(), revision);
+        assert_eq!(service.rules().capacity(), 64);
+    }
+}
+
+#[test]
 fn public_joins_while_all_existing_members_are_offline_then_replay_and_chat() {
-    let (_, mut owner, mut service) = fixture(true, 500);
+    let (_, mut owner, mut service) = fixture(true, 64);
     let (mut alice, first) = PreparedHostedJoin::new("alice")
         .unwrap()
         .join(&service, &JoinPermit::public(), 100)
@@ -196,7 +220,7 @@ fn sequencer_rejects_concurrent_old_epoch_join_and_wrong_snapshot() {
 
 #[test]
 fn policy_and_profile_are_pinned_and_bounded() {
-    let (root, owner, _) = fixture(false, 500);
+    let (root, owner, _) = fixture(false, 64);
     assert!(HostedSession::create(&root, "owner", 501, false).is_err());
     assert!(PreparedHostedJoin::new("bad\nname").is_err());
     assert!(PreparedHostedJoin::new(&"x".repeat(129)).is_err());
@@ -209,7 +233,7 @@ fn policy_and_profile_are_pinned_and_bounded() {
 
 #[test]
 fn complete_join_bundle_is_validated_without_mutating_current_epoch() {
-    let (_, mut owner, service) = fixture(true, 500);
+    let (_, mut owner, service) = fixture(true, 64);
     let (mut alice, commit) = PreparedHostedJoin::new("alice")
         .unwrap()
         .join(&service, &JoinPermit::public(), 100)
@@ -239,7 +263,7 @@ fn complete_join_bundle_is_validated_without_mutating_current_epoch() {
 
 #[test]
 fn duplicate_display_name_is_rejected_by_service_and_member() {
-    let (_, mut owner, service) = fixture(true, 500);
+    let (_, mut owner, service) = fixture(true, 64);
     let (impostor, commit) = PreparedHostedJoin::new("owner")
         .unwrap()
         .join(&service, &JoinPermit::public(), 100)
@@ -256,7 +280,7 @@ fn reusable_code_joins_privately_with_owner_offline_and_retries_same_identity() 
     let root = IdentityKeypair::from_seed([84; 32]);
     let code = HostedAccessCode::generate().unwrap();
     let secret = code.export_secret().unwrap();
-    let owner = HostedSession::create_keyed(&root, "owner", 500, &code).unwrap();
+    let owner = HostedSession::create_keyed(&root, "owner", 64, &code).unwrap();
     let policy = owner.policy().clone();
     let mut observer = HostedObserver::new(
         policy.clone(),
@@ -322,7 +346,7 @@ fn reusable_code_joins_privately_with_owner_offline_and_retries_same_identity() 
 #[cfg(feature = "client-persist")]
 #[test]
 fn restart_preserves_pending_acceptance_and_encrypts_the_member_state() {
-    let (_, mut owner, service) = fixture(true, 500);
+    let (_, mut owner, service) = fixture(true, 64);
     let channel = owner.policy().channel_id();
     let (alice, commit) = PreparedHostedJoin::new("alice")
         .unwrap()
@@ -351,14 +375,14 @@ fn restart_preserves_pending_acceptance_and_encrypts_the_member_state() {
 }
 
 #[test]
-#[ignore = "explicit release-mode 500-identity MLS scale gate; not an application/network qualification"]
-fn five_hundred_real_members_and_ten_concurrent_senders() {
+#[ignore = "explicit release-mode 64-identity MLS scale gate; not an application/network qualification"]
+fn sixty_four_real_members_and_ten_concurrent_senders() {
     let started = std::time::Instant::now();
-    let (_, owner, mut service) = fixture(true, 500);
+    let (_, owner, mut service) = fixture(true, 64);
     let mut members = vec![owner];
     let mut max_commit = 0;
     let mut max_info = 0;
-    for index in 1..500 {
+    for index in 1..64 {
         let (mut joining, commit) = PreparedHostedJoin::new(&format!("member-{index}"))
             .unwrap()
             .join(&service, &JoinPermit::public(), 100 + index as u64)
@@ -383,16 +407,16 @@ fn five_hundred_real_members_and_ten_concurrent_senders() {
             );
         }
     }
-    assert_eq!(service.member_count(), 500);
+    assert_eq!(service.member_count(), 64);
     for member in &members {
-        assert_eq!(member.roster().len(), 500);
+        assert_eq!(member.roster().len(), 64);
     }
     let roster: std::collections::BTreeSet<_> = members[0]
         .roster()
         .into_iter()
         .map(|m| m.pseudonym)
         .collect();
-    assert_eq!(roster.len(), 500);
+    assert_eq!(roster.len(), 64);
     let admission_seconds = started.elapsed().as_secs_f64();
     let messages = std::thread::scope(|scope| {
         let handles: Vec<_> = members
@@ -426,10 +450,10 @@ fn five_hundred_real_members_and_ten_concurrent_senders() {
             delivered += 1;
         }
     }
-    assert_eq!(delivered, 4990);
+    assert_eq!(delivered, 630);
     assert!(PreparedHostedJoin::new("overflow")
         .unwrap()
         .join(&service, &JoinPermit::public(), 1000)
         .is_err());
-    eprintln!("hosted_scale_result members=500 senders=10 authenticated_receives={delivered} admission_seconds={admission_seconds:.3} total_seconds={:.3} max_commit_bytes={max_commit} max_info_bytes={max_info}", started.elapsed().as_secs_f64());
+    eprintln!("hosted_scale_result members=64 senders=10 authenticated_receives={delivered} admission_seconds={admission_seconds:.3} total_seconds={:.3} max_commit_bytes={max_commit} max_info_bytes={max_info}", started.elapsed().as_secs_f64());
 }

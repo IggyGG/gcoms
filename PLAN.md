@@ -1,3 +1,13 @@
+## IRC parity: retain the 64-member limit (2026-09-30)
+
+The user confirmed the existing limit of **64 members**, including the owner.
+Hosted creation, signed policy changes and service capacity advertising enforce
+that limit. Qualification targets 64 independent members; no larger campaign is
+required. The active 500-member run was cancelled at the user's scope reduction,
+its grant revoked and all owned processes stopped. Its original evidence remains
+historical, not a capacity pass. Covered receipts, Topic pending and the separate
+ordinary-message/replay recovery requirements remain unchanged.
+
 ## Owner-controlled membership recovery (2026-09-29)
 
 Implemented explicit, durable batch MLS revocation for stuck membership; original message/ACK journals remain. SDK and IPC22 expose a bound preview. Paired GChat recovery and focused protocol validation are recorded in the membership-recovery receipt; installed profile repair is a separate result. See [contract](docs/MEMBERSHIP_RECOVERY.md).

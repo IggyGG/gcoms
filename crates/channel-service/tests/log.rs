@@ -21,7 +21,7 @@ fn ordered_ciphertext_survives_restart_and_offline_owner() {
     let dir = private_dir();
     let path = dir.path().join("channel.log");
     let root = IdentityKeypair::from_seed([57; 32]);
-    let mut owner = HostedSession::create(&root, "owner", 500, true).unwrap();
+    let mut owner = HostedSession::create(&root, "owner", 64, true).unwrap();
     let channel = owner.policy().channel_id();
     let mut log = ChannelLog::create(
         &path,
@@ -98,7 +98,7 @@ fn torn_tail_is_recovered_but_complete_corruption_is_not_discarded() {
     let dir = private_dir();
     let path = dir.path().join("channel.log");
     let root = IdentityKeypair::from_seed([58; 32]);
-    let mut owner = HostedSession::create(&root, "owner", 500, true).unwrap();
+    let mut owner = HostedSession::create(&root, "owner", 64, true).unwrap();
     let channel = owner.policy().channel_id();
     let mut log = ChannelLog::create(
         &path,

@@ -1,3 +1,13 @@
+## IRC parity: retain the 64-member limit (2026-09-30)
+
+The user confirmed the existing limit of **64 members**, including the owner.
+Hosted creation, signed policy changes and service capacity advertising enforce
+that limit. Qualification targets 64 independent members; no larger campaign is
+required. The active 500-member run was cancelled at the user's scope reduction,
+its grant revoked and all owned processes stopped. Its original evidence remains
+historical, not a capacity pass. Covered receipts, Topic pending and the separate
+ordinary-message/replay recovery requirements remain unchanged.
+
 ## Hosted removal and application permissions — IRC-3/IRC-5/IRC-6
 
 `channel-service/tests/removal.rs` checks pending-rekey restart, kick confidentiality,
@@ -47,8 +57,8 @@ correct MLS sender's ratchet. Genesis replay must remain valid with an expired
 original KeyPackage lifetime; the un-updated negative control must fail.
 
 Explicit MLS scale gate:
-`cargo test --locked --release -p gcoms-mls --all-features --test hosted five_hundred_real_members_and_ten_concurrent_senders -- --ignored --nocapture`.
-Require 500 distinct actual leaves, 499 membership changes, ten concurrent
+`cargo test --locked --release -p gcoms-mls --all-features --test hosted sixty_four_real_members_and_ten_concurrent_senders -- --ignored --nocapture`.
+Require 64 distinct actual leaves, 63 membership changes, ten concurrent
 senders, 4,990 authenticated receives, overflow rejection and retained duration /
 wire-size measurements. Keep network/UI/ACK timing and file/churn qualification
 separate; this component gate cannot close IRC-8 by itself.
@@ -640,7 +650,7 @@ and retain the same session tag. Unconsumed inbox quota is not a crypto failure.
 
 `durable_hosted_capacity_smoke` exercises twelve actual encrypted client states
 against the ciphertext service. The explicit ignored
-`five_hundred_durable_hosted_clients_ten_senders_offline_and_churn` runs the same
+`sixty_four_durable_hosted_clients_ten_senders_offline_and_churn` runs the same
 500-identity campaign in release mode: ten concurrent senders, withheld offline
 ACKs, reopen and exact recipient completion, encrypted piece storage, kick/rekey
 and replacement admission. Keep covered and bulk JSON byte counters and timing.
@@ -767,7 +777,7 @@ also requires hosted dispatch denial under an ordinary legacy admin session.
 Repeat merged GChat Rust/UI/generated checks and paired package consumers.
 
 Retain the serial 500-client campaign and its original 7200-second bound. The
-separate ignored `five_hundred_concurrent_durable_hosted_clients_ten_senders_offline_and_churn`
+separate ignored `sixty_four_concurrent_durable_hosted_clients_ten_senders_offline_and_churn`
 runs at most four independent catch-up owners, with identical commit validation
 and private archives. Run its 12-client concurrent smoke first; do not compare
 its wall time as a production-code-only speedup or protected-network result.

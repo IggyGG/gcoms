@@ -263,7 +263,7 @@ impl Service {
             version: VERSION,
             profiles: vec![PROFILE.into()],
             public_creation: matches!(self.0.config.creation, CreationPolicy::Public),
-            max_members: 500,
+            max_members: gcoms_mls::hosted::MAX_HOSTED_MEMBERS,
             max_page_records: MAX_PAGE_RECORDS,
             max_http_bytes: MAX_HTTP_BYTES,
             motd: self.0.config.motd.clone(),

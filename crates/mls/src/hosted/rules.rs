@@ -332,7 +332,7 @@ impl HostedRules {
             }
             HostedPolicyChange::AccessCode(key) => next.access_key = *key,
             HostedPolicyChange::Capacity(limit) => {
-                if !(2..=500).contains(limit) {
+                if !(2..=MAX_HOSTED_MEMBERS).contains(limit) {
                     return Err(MlsError::Encoding);
                 }
                 next.capacity = *limit;

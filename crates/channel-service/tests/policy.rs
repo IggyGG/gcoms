@@ -28,7 +28,7 @@ fn roles_moderation_bans_exceptions_and_transfer_are_ordered_and_durable() {
     gcoms_private_fs::make_private(dir.path(), true).unwrap();
     let path = dir.path().join("channel.log");
     let root = IdentityKeypair::from_seed([90; 32]);
-    let mut owner = HostedSession::create(&root, "owner", 500, true).unwrap();
+    let mut owner = HostedSession::create(&root, "owner", 64, true).unwrap();
     let channel = owner.policy().channel_id();
     let limits = Limits {
         bytes: 128 * 1024 * 1024,
@@ -196,7 +196,7 @@ fn roles_moderation_bans_exceptions_and_transfer_are_ordered_and_durable() {
 fn access_code_rotation_and_invite_exceptions_apply_to_current_revision() {
     let root = IdentityKeypair::from_seed([93; 32]);
     let old_code = HostedAccessCode::generate().unwrap();
-    let mut owner = HostedSession::create_keyed(&root, "owner", 500, &old_code).unwrap();
+    let mut owner = HostedSession::create_keyed(&root, "owner", 64, &old_code).unwrap();
     let mut public = HostedObserver::new(
         owner.policy().clone(),
         owner.policy().channel_id(),
@@ -261,7 +261,7 @@ fn access_code_rotation_and_invite_exceptions_apply_to_current_revision() {
 #[test]
 fn a_prepared_join_cannot_bypass_a_new_ban_but_exemption_restores_admission() {
     let root = IdentityKeypair::from_seed([92; 32]);
-    let mut owner = HostedSession::create(&root, "owner", 500, true).unwrap();
+    let mut owner = HostedSession::create(&root, "owner", 64, true).unwrap();
     let mut public = HostedObserver::new(
         owner.policy().clone(),
         owner.policy().channel_id(),
@@ -321,7 +321,7 @@ fn single_use_invitation_survives_offline_creator_and_is_consumed_atomically() {
         records: 1000,
     };
     let root = IdentityKeypair::from_seed([104; 32]);
-    let mut owner = HostedSession::create(&root, "owner", 500, false).unwrap();
+    let mut owner = HostedSession::create(&root, "owner", 64, false).unwrap();
     let channel = owner.policy().channel_id();
     let mut log = ChannelLog::create(
         &path,

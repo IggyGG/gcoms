@@ -43,7 +43,7 @@ mod tests {
     #[test]
     fn topic_authority_and_inner_kind_survive_modified_client_and_moderation() {
         let root = IdentityKeypair::from_seed([100; 32]);
-        let mut owner = HostedSession::create(&root, "owner", 500, true).unwrap();
+        let mut owner = HostedSession::create(&root, "owner", 64, true).unwrap();
         let mut public = HostedObserver::new(
             owner.policy.clone(),
             owner.policy.channel_id(),

@@ -54,8 +54,8 @@ fn transport(path: &Path) -> Arc<Measured> {
                 max_total_bytes: 1024 * 1024 * 1024,
                 channel_bytes: 1024 * 1024 * 1024,
                 // The same bound covers individual receipt signatures, not only
-                // membership/message records. Match the deployed 500-member profile;
-                // ten senders alone require 10 * 499 authenticated receipts.
+                // membership/message records. Match the deployed 64-member profile;
+                // ten senders alone require 10 * 63 authenticated receipts.
                 channel_records: 100_000,
                 requests_per_second: 100_000,
                 source_requests_per_second: 100_000,
@@ -101,7 +101,7 @@ fn has_delivery(events: &[api::Event], id: [u8; 32]) -> bool {
     events.iter().any(|e| matches!(e.kind, api::EventKind::Delivery { id: got, state: api::Delivery::Delivered } if got == id))
 }
 async fn run(members: usize, replay_concurrency: usize) {
-    assert!((12..=500).contains(&members));
+    assert!((12..=64).contains(&members));
     assert!((1..=4).contains(&replay_concurrency));
     let started = Instant::now();
     let server = private_dir();
@@ -348,12 +348,12 @@ async fn durable_hosted_concurrent_capacity_smoke() {
     run(12, 4).await;
 }
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-#[ignore = "explicit 500-client durable capacity campaign; in-process transport, not a protected-network latency gate"]
-async fn five_hundred_durable_hosted_clients_ten_senders_offline_and_churn() {
-    run(500, 1).await;
+#[ignore = "explicit 64-client durable capacity campaign; in-process transport, not a protected-network latency gate"]
+async fn sixty_four_durable_hosted_clients_ten_senders_offline_and_churn() {
+    run(64, 1).await;
 }
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-#[ignore = "explicit concurrent 500-client campaign; complements rather than replaces the serial baseline"]
-async fn five_hundred_concurrent_durable_hosted_clients_ten_senders_offline_and_churn() {
-    run(500, 4).await;
+#[ignore = "explicit concurrent 64-client campaign; complements rather than replaces the serial baseline"]
+async fn sixty_four_concurrent_durable_hosted_clients_ten_senders_offline_and_churn() {
+    run(64, 4).await;
 }

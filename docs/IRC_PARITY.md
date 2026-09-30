@@ -8,7 +8,8 @@ The GComs task also preserves the canonical checkout's `0c2c704` bootstrap fix.
 
 - Native feature equivalence with classic IRC; no IRC gateway or bridge.
 - Contacts only: independent private conversations without a public user directory.
-- Qualify 500 independent channel identities, including offline members and churn.
+- Retain the 64-member maximum, including the owner; qualify offline members and churn.
+  The user confirmed this limit on 2026-09-30; larger campaigns are not required.
 - Hosted channels may use an always-online sequencing service, but it must not
   possess MLS member secrets or decrypt chat. Clients verify admission authority.
 - Keep private creation and optional presence as defaults. Keep existing profiles,
@@ -52,7 +53,9 @@ The full file workflow takes 231.017 s. Cleanup and grant revocation pass.
 Fresh exact-source smoke07 also passes twelve independent members, 220 covered
 recipient signatures, 5 ms ordinary recovery, visible membership progress,
 97.373 s file resume, removal and replacement, resource capture and cleanup.
-The protected-network 500-member campaign is now running on this verified pair;
+The larger protected-network campaign was cancelled by the user’s scope reduction;
+its grant is revoked and all owned processes are stopped. Qualification now targets
+the retained 64-member limit;
 native installed qualification and normal trunk publication remain open.
 See `docs/evidence/irc-workspace-20260930/removal-replay-qualified.json`,
 `docs/evidence/irc-durable-capacity-20260930/removal-fixed-01.json` and GChat's
@@ -66,7 +69,7 @@ signatures, unchanged 4-CPU/8-GiB/7,200-second bounds and 4,166.48-second elapse
 time. That run tests encrypted pieces rather than the full GChat file workflow.
 The matched 85-client bootstrap comparison passes at the hosted relay budgets
 after failing at the default budgets. Neither substitutes for the separate
-500-member protected-network application campaign. See
+current 64-member protected-network application campaign. See
 `docs/evidence/irc-durable-capacity-20260930/concurrent-06-pass.json`,
 `docs/evidence/irc-durable-capacity-20260930/bootstrap-load-03-hosted.json`, and
 GChat's `docs/evidence/irc-trunk-integration-20260930/catchup-live-81.json` and
@@ -83,7 +86,7 @@ GChat's `docs/evidence/irc-trunk-integration-20260930/catchup-live-81.json` and
 | IRC-5 | Authenticated activity and richer presence | Implemented; final qualification open | Actor/target/reason ordering; away/back/unknown/invisible; optional sharing; snapshot polling loses no events |
 | IRC-6 | Notices, blocking/muting, highlights, formatting and client workflows | Implemented; final qualification open | Same actual service-backed behavior through desktop/TUI/shared mobile UI; no automatic notice loops |
 | IRC-7 | Operator workflows and supported bot integration | Implemented; final qualification open | Scoped authorization, rate control, network/channel authority separation, executable bot example |
-| IRC-8 | Capacity, compatibility and release qualification | In progress | 500 real identities; ten concurrent senders; churn/offline/file traffic; timing/resource evidence; profile-preserving upgrade |
+| IRC-8 | Capacity, compatibility and release qualification | In progress | 64 real identities; ten concurrent senders; churn/offline/file traffic; timing/resource evidence; profile-preserving upgrade |
 
 The classical mode equivalents include +o/+v/+m/+b/+e/+I/+i/+k/+l/+t and
 private/secret discovery; member-authenticated sending (+n) remains mandatory.
@@ -101,7 +104,7 @@ must remain working.
    cannot grant itself private membership. Member clients perform MLS changes.
 3. Connect the same contracts through node/runtime, SDK/IPC/network-client and
    GChat; add contacts, policies and client behavior with generated bindings.
-4. Run adversarial, persistence, cross-client and 500-member qualification; keep
+4. Run adversarial, persistence, cross-client and 64-member qualification; keep
    local/source, native, installed and live-provider evidence distinct.
 
 Mandatory healthy-network targets retain the existing reliability requirements:

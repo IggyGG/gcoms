@@ -70,7 +70,7 @@ fn private_snapshot_replay_is_scoped_and_code_is_not_message_read_authority() {
     let service = Service::open(config(dir.path())).unwrap();
     let code = HostedAccessCode::generate().unwrap();
     let root = IdentityKeypair::from_seed([102; 32]);
-    let mut owner = HostedSession::create_keyed(&root, "owner", 500, &code).unwrap();
+    let mut owner = HostedSession::create_keyed(&root, "owner", 64, &code).unwrap();
     let channel = owner.policy().channel_id();
     create(&service, &owner);
     let message = owner.send_hosted(b"not visible before admission").unwrap();
@@ -264,7 +264,7 @@ fn departed_reader_recovers_only_through_removal_after_service_restart() {
     let cfg = config(dir.path());
     let service = Service::open(cfg.clone()).unwrap();
     let root = IdentityKeypair::from_seed([103; 32]);
-    let mut owner = HostedSession::create(&root, "owner", 500, true).unwrap();
+    let mut owner = HostedSession::create(&root, "owner", 64, true).unwrap();
     let channel = owner.policy().channel_id();
     create(&service, &owner);
     let mut public = HostedObserver::new(
@@ -408,7 +408,7 @@ async fn actual_http_contract_is_bounded_versioned_and_rate_limited() {
         panic!("info");
     };
     assert_eq!(info.profiles, vec![PROFILE]);
-    assert_eq!(info.max_members, 500);
+    assert_eq!(info.max_members, 64);
     assert_eq!(info.operator_contact, "operator@example.invalid");
     let oversized = client
         .post(&url)
@@ -455,7 +455,7 @@ fn ciphertext_pieces_bind_writer_body_scope_and_current_membership_across_restar
     let cfg = config(dir.path());
     let service = Service::open(cfg.clone()).unwrap();
     let root = IdentityKeypair::from_seed([118; 32]);
-    let mut owner = HostedSession::create(&root, "owner", 500, true).unwrap();
+    let mut owner = HostedSession::create(&root, "owner", 64, true).unwrap();
     let channel = owner.policy().channel_id();
     create(&service, &owner);
     let public = HostedObserver::new(
@@ -657,7 +657,7 @@ fn hosted_directory_requires_explicit_publication_and_tracks_privacy_after_resta
     gcoms_private_fs::make_private(dir.path(), true).unwrap();
     let service = Service::open(config(dir.path())).unwrap();
     let mut owners: Vec<_> = (0..3)
-        .map(|_| HostedSession::create(&IdentityKeypair::generate(), "owner", 500, true).unwrap())
+        .map(|_| HostedSession::create(&IdentityKeypair::generate(), "owner", 64, true).unwrap())
         .collect();
     for owner in &owners {
         create(&service, owner);

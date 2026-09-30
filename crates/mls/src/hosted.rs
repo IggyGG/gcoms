@@ -34,6 +34,9 @@ pub use rules::{
     HostedAccessList, HostedDiscovery, HostedMode, HostedPolicyChange, HostedRole, HostedRules,
 };
 
+/// Maximum members in a hosted channel, including the owner.
+pub const MAX_HOSTED_MEMBERS: u32 = 64;
+
 const VERSION: u16 = 1;
 const MAX_NAME: usize = 128;
 const MAX_AUTHORITY: usize = 16 * 1024;
@@ -204,7 +207,10 @@ impl HostedPolicy {
     }
 
     fn verify(&self, expected_channel: [u8; 32]) -> Result<(), MlsError> {
-        if self.version != VERSION || !(2..=500).contains(&self.capacity) || self.public_join > 1 {
+        if self.version != VERSION
+            || !(2..=MAX_HOSTED_MEMBERS).contains(&self.capacity)
+            || self.public_join > 1
+        {
             return Err(MlsError::Encoding);
         }
         if self.channel_id() != expected_channel {
@@ -932,7 +938,7 @@ impl HostedSession {
         public_join: bool,
         config: MlsGroupCreateConfig,
     ) -> Result<Self, MlsError> {
-        if !(2..=500).contains(&capacity) {
+        if !(2..=MAX_HOSTED_MEMBERS).contains(&capacity) {
             return Err(MlsError::Encoding);
         }
         let mut prepared = PreparedHostedJoin::new(name)?;
@@ -1324,7 +1330,7 @@ mod tests {
             .lifetime(Lifetime::init(0, 1))
             .build();
         let owner =
-            HostedSession::create_with_config(&root, "owner", 500, true, config.clone()).unwrap();
+            HostedSession::create_with_config(&root, "owner", 64, true, config.clone()).unwrap();
         assert_eq!(owner.epoch(), HOSTED_GENESIS_EPOCH);
         HostedObserver::new(
             owner.policy.clone(),
@@ -1358,7 +1364,7 @@ mod tests {
     #[test]
     fn false_outer_sender_cannot_consume_another_members_ratchet() {
         let root = IdentityKeypair::from_seed([25; 32]);
-        let mut owner = HostedSession::create(&root, "owner", 500, true).unwrap();
+        let mut owner = HostedSession::create(&root, "owner", 64, true).unwrap();
         let mut observer = HostedObserver::new(
             owner.policy.clone(),
             owner.policy.channel_id(),
@@ -1415,7 +1421,7 @@ mod tests {
     #[test]
     fn modified_client_cannot_bypass_private_admission() {
         let root = IdentityKeypair::from_seed([24; 32]);
-        let mut owner = HostedSession::create(&root, "owner", 500, false).unwrap();
+        let mut owner = HostedSession::create(&root, "owner", 64, false).unwrap();
         let mut observer = HostedObserver::new(
             owner.policy.clone(),
             owner.policy.channel_id(),

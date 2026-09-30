@@ -190,8 +190,8 @@ impl HostedChannels {
                             || e.name.is_empty()
                             || e.name.len() > 64
                             || e.name.chars().any(|c| c.is_control() || c.is_whitespace())
-                            || !(2..=500).contains(&e.capacity)
-                            || !(1..=500).contains(&e.members)
+                            || !(2..=MAX_HOSTED_MEMBERS).contains(&e.capacity)
+                            || !(1..=MAX_HOSTED_MEMBERS).contains(&e.members)
                     })
                     || next.is_some_and(|next| {
                         entries.len() != usize::from(limit)
