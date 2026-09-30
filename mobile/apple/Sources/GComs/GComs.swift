@@ -75,6 +75,38 @@ public actor GComs {
         }
     }
 
+    /// Durable enrollment status survives request cancellation and profile reopen.
+    public func invitationOperation(_ operation: Any) async throws -> Data {
+        try await request(JSONSerialization.data(withJSONObject: ["op": "invitation_operation", "request": operation]))
+    }
+    public func createInvitation(channel: String, expiresAt: UInt64?, maxAdmissions: UInt64?) async throws -> Data {
+        try await invitationOperation(["create": ["channel": channel, "policy": ["expires_at": expiresAt.map { $0 as Any } ?? NSNull(), "max_admissions": maxAdmissions.map { $0 as Any } ?? NSNull()]]])
+    }
+    public func listInvitations(channel: String) async throws -> Data {
+        try await invitationOperation(["list": ["channel": channel]])
+    }
+    public func revokeInvitation(channel: String, id: [UInt8]) async throws -> Data {
+        try await invitationOperation(["revoke": ["channel": channel, "id": id]])
+    }
+    public func listEnrollments() async throws -> Data {
+        try await invitationOperation("list_enrollments")
+    }
+    public func retireEnrollment(id: [UInt8]) async throws -> Data {
+        try await invitationOperation(["retire_enrollment": ["id": id]])
+    }
+    public func startEnrollment(link: String, display: String) async throws -> Data {
+        try await invitationOperation(["start_enrollment": ["link": link, "display": display]])
+    }
+    public func enrollmentStatus(id: [UInt8]) async throws -> Data {
+        try await invitationOperation(["enrollment_status": ["id": id]])
+    }
+    public func resumeEnrollment(id: [UInt8]) async throws -> Data {
+        try await invitationOperation(["resume_enrollment": ["id": id]])
+    }
+    public func cancelEnrollment(id: [UInt8]) async throws -> Data {
+        try await invitationOperation(["cancel_enrollment": ["id": id]])
+    }
+
     private func files(_ request: Any) async throws -> [String: Any] {
         let envelope = try await self.request(JSONSerialization.data(withJSONObject: ["op": "files", "request": request]))
         guard let object = try JSONSerialization.jsonObject(with: envelope) as? [String: Any],

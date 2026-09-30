@@ -69,7 +69,7 @@ fn main() -> Result<(), String> {
         ["grant",store,request_path,out] => {
             let _lock=lock(store)?;let request:GrantRequest=read(request_path)?;
             if request.expires_at<=now() || request.max_names>1000 || request.scopes.is_empty() || request.scopes.len()>10
-                || request.scopes.iter().any(|s|s!="bootstrap" && s!="names" && !(1..=8).any(|n|s==&format!("server:r{n}"))) {return Err("invalid grant scope, expiry or name quota".into());}
+                || request.scopes.iter().any(|s|s!="bootstrap" && s!="names" && s!="invitations" && !(1..=8).any(|n|s==&format!("server:r{n}"))) {return Err("invalid grant scope, expiry or name quota".into());}
             let mut grants=if Path::new(store).exists(){read_grants(Path::new(store))?}else{GrantFile{version:1,grants:vec![]}};
             if grants.grants.len()>=10_000 {return Err("grant store is full".into());}
             let mut secret=[0;32];rand::thread_rng().fill_bytes(&mut secret);let token=URL_SAFE_NO_PAD.encode(secret);

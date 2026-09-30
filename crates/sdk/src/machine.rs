@@ -111,6 +111,7 @@ impl MachineRegistry {
                             | Capability::EventRead
                             | Capability::DurableApplication
                             | Capability::FileTransfer
+                            | Capability::FileSharing
                             | Capability::VolatileApplication
                             | Capability::BootstrapApplication
                             | Capability::HostShell
@@ -223,6 +224,18 @@ impl ComponentRegistration {
         }
         match event {
             crate::ClientEvent::IdentityUpdated { .. } => Some(event),
+            crate::ClientEvent::ChannelMessage { .. }
+            | crate::ClientEvent::ChannelDelivered { .. }
+            | crate::ClientEvent::ChannelRemoved { .. }
+            | crate::ClientEvent::ChannelRosterChanged { .. }
+            | crate::ClientEvent::ChannelPresenceChanged { .. }
+            | crate::ClientEvent::ChannelDirectMessage { .. }
+            | crate::ClientEvent::ChannelDirectDelivered { .. }
+            | crate::ClientEvent::EventsLagged { .. }
+                if self.capabilities.contains(&Capability::ChannelMember) =>
+            {
+                Some(event)
+            }
             crate::ClientEvent::VolatileApplication {
                 peer_identity,
                 message_id,
@@ -500,13 +513,36 @@ pub(crate) async fn dispatch<C: GcClient>(
             client.commit_application(sequence, digest).await?;
             Ok(Response::Empty)
         }
-        // Machine membership is deliberately narrower than the personal-chat
-        // ChannelMember interface: no sending, administration or removal.
+        // Channel membership permits ordinary conversation and receipt of shared
+        // files. It never grants channel administration or shell authority.
+        request @ Request::Invitations(
+            crate::InvitationRequest::Inspect { .. }
+            | crate::InvitationRequest::StartEnrollment { .. }
+            | crate::InvitationRequest::EnrollmentStatus { .. }
+            | crate::InvitationRequest::ResumeEnrollment { .. }
+            | crate::InvitationRequest::CancelEnrollment { .. }
+            | crate::InvitationRequest::ListEnrollments
+            | crate::InvitationRequest::RetireEnrollment { .. },
+        ) => crate::ipc::dispatch(client, request).await,
         request @ (Request::PrepareChannelJoin { .. }
         | Request::ChannelKeyPackage { .. }
         | Request::JoinChannel { .. }
+        | Request::JoinChannelInvitation { .. }
+        | Request::InspectChannelInvitation { .. }
+        | Request::ChannelReconnect { .. }
+        | Request::SendChannel { .. }
+        | Request::SendChannelTracked { .. }
         | Request::ListChannels
         | Request::ChannelRoster { .. }) => crate::ipc::dispatch(client, request).await,
+        request @ (Request::Sharing(crate::sharing::Request::List)
+        | Request::Sharing(crate::sharing::Request::Accept { .. })
+        | Request::Sharing(crate::sharing::Request::ReadPiece { .. })
+        | Request::Sharing(crate::sharing::Request::Pause { .. })
+        | Request::Sharing(crate::sharing::Request::Resume { .. })
+        | Request::Sharing(crate::sharing::Request::Cancel { .. })
+        | Request::Sharing(crate::sharing::Request::Inspect { .. })) => {
+            crate::ipc::dispatch(client, request).await
+        }
         request @ (Request::Identity
         | Request::FileRoute
         | Request::ContactIdentity { .. }

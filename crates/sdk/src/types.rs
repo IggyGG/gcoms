@@ -525,6 +525,13 @@ pub struct ChannelInvitation {
 
 #[async_trait]
 pub trait GcClient: Send + Sync {
+    async fn invitations(
+        &self,
+        _request: crate::InvitationRequest,
+    ) -> Result<crate::InvitationReply, SdkError> {
+        Err(SdkError::PermissionDenied)
+    }
+
     async fn network_status(&self) -> Result<crate::NetworkStatus, SdkError> {
         Err(SdkError::Protocol(
             "host does not support network status".into(),
@@ -601,7 +608,7 @@ pub trait GcClient: Send + Sync {
         Err(SdkError::PermissionDenied)
     }
     /// Explicit hosted-profile exchange over the configured protected catalog
-    /// route. IPC25 requires a distinct HostedChannels capability.
+    /// route. IPC26 requires a distinct HostedChannels capability.
     async fn hosted_request(
         &self,
         endpoint: &str,
@@ -944,6 +951,12 @@ impl<T: GcClient + ?Sized> GcClient for std::sync::Arc<T> {
     }
     async fn import_network_invitation(&self, _invitation: &str) -> Result<(), SdkError> {
         (**self).import_network_invitation(_invitation).await
+    }
+    async fn invitations(
+        &self,
+        request: crate::InvitationRequest,
+    ) -> Result<crate::InvitationReply, SdkError> {
+        (**self).invitations(request).await
     }
     async fn create_channel_invitation(
         &self,

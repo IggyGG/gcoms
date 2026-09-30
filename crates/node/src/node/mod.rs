@@ -49,6 +49,9 @@ mod channel_recovery;
 mod channels;
 mod commands;
 mod direct;
+mod enrollment;
+pub(crate) mod invitation_directory;
+pub use invitation_directory::validate_resolved as validate_resolved_invitation;
 #[cfg(feature = "experimental-gc2")]
 mod gc2_acks;
 #[cfg(feature = "experimental-gc2")]
@@ -63,7 +66,9 @@ mod gc2_forward;
 mod gc2_gate;
 #[cfg(feature = "experimental-gc2")]
 mod gc2_receipts;
+mod invitations;
 pub mod membership_recovery;
+pub use invitations::IssuedInvitation;
 mod peer_session;
 #[cfg(feature = "push-notifications")]
 mod push_notifications;
@@ -1368,6 +1373,10 @@ async fn start_role(
             accepted_first_moves: VecDeque::new(),
             channels: HashMap::new(),
             prepared: HashMap::new(),
+            invitation_network: None,
+            #[cfg(test)]
+            invitation_resolver: None,
+            enrollments: Vec::new(),
             chan_parked: Vec::new(),
             channel_fragments: crate::proto::ChannelFragmentBuffer::default(),
             last_channel_send: None,
@@ -1653,7 +1662,7 @@ async fn start_role(
             }
             _ => None,
         };
-        Ok(NodeHandle {
+        let handle = NodeHandle {
             #[cfg(feature = "push-gateway")]
             notification_host: relay_host.as_ref().map(Arc::downgrade),
             state: Arc::downgrade(&state),
@@ -1671,7 +1680,24 @@ async fn start_role(
             scheduler,
             transit_scheduler,
             transport: Arc::new(tokio::sync::Mutex::new(transport.take())),
-        })
+        };
+        let enrollment_worker = tokio::spawn(enrollment::run(handle.clone()));
+        handle
+            .tasks
+            .lock()
+            .await
+            .as_mut()
+            .expect("new node task set")
+            .push(enrollment_worker);
+        let publication_worker = tokio::spawn(invitation_directory::run(handle.clone()));
+        handle
+            .tasks
+            .lock()
+            .await
+            .as_mut()
+            .expect("new node task set")
+            .push(publication_worker);
+        Ok(handle)
     }
     .await;
     if result.is_err() {

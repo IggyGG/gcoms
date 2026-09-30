@@ -21,7 +21,8 @@ pub fn invitation_code(input: &str) -> Result<&str> {
         .strip_prefix(JOIN_LINK_PREFIX)
         .ok_or("Invalid GComs invitation link")?;
     if input.len() > MAX_DOCUMENT_BYTES * 4 / 3 + 32
-        || !code.starts_with(JOIN_INVITATION_PREFIX)
+        || !(code.starts_with(JOIN_INVITATION_PREFIX)
+            || code.starts_with(crate::channel_invitation::PREFIX))
         || code.len() <= JOIN_INVITATION_PREFIX.len()
         || !code
             .bytes()

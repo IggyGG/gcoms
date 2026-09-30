@@ -61,6 +61,26 @@ class GComs {
         request(JSONObject().put("op", "inbox").put("after", after).put("limit", limit)) as JSONObject
     suspend fun acknowledge(sequence: Long, digest: JSONArray) =
         request(JSONObject().put("op", "acknowledge").put("sequence", sequence).put("digest", digest))
+    /** A durable operation continues after this call returns or the app reopens. */
+    suspend fun invitationOperation(value: Any) =
+        request(JSONObject().put("op", "invitation_operation").put("request", value))
+    suspend fun createInvitation(channel: String, expiresAt: Long?, maxAdmissions: Long?) =
+        invitationOperation(JSONObject().put("create", JSONObject().put("channel", channel).put("policy", JSONObject().put("expires_at", expiresAt ?: JSONObject.NULL).put("max_admissions", maxAdmissions ?: JSONObject.NULL))))
+    suspend fun listInvitations(channel: String) =
+        invitationOperation(JSONObject().put("list", JSONObject().put("channel", channel)))
+    suspend fun revokeInvitation(channel: String, id: JSONArray) =
+        invitationOperation(JSONObject().put("revoke", JSONObject().put("channel", channel).put("id", id)))
+    suspend fun listEnrollments() = invitationOperation("list_enrollments")
+    suspend fun retireEnrollment(id: JSONArray) =
+        invitationOperation(JSONObject().put("retire_enrollment", JSONObject().put("id", id)))
+    suspend fun startEnrollment(link: String, display: String) =
+        invitationOperation(JSONObject().put("start_enrollment", JSONObject().put("link", link).put("display", display)))
+    suspend fun enrollmentStatus(id: JSONArray) =
+        invitationOperation(JSONObject().put("enrollment_status", JSONObject().put("id", id)))
+    suspend fun resumeEnrollment(id: JSONArray) =
+        invitationOperation(JSONObject().put("resume_enrollment", JSONObject().put("id", id)))
+    suspend fun cancelEnrollment(id: JSONArray) =
+        invitationOperation(JSONObject().put("cancel_enrollment", JSONObject().put("id", id)))
     suspend fun files(value: Any) = request(JSONObject().put("op", "files").put("request", value))
 
     /** Streams may be ContentResolver streams. They remain owned by the caller. */

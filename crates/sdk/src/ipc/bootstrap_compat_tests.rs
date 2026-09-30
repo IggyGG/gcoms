@@ -137,8 +137,10 @@ async fn hosted_task_dialects_and_new_capabilities_fail_before_welcome() {
     for (version, capability) in [
         (22, Capability::HostedChannels),
         (22, Capability::ModernFileSharing),
-        (23, Capability::IdentityRead),
+        (23, Capability::HostedChannels),
+        (23, Capability::ModernFileSharing),
         (24, Capability::IdentityRead),
+        (25, Capability::IdentityRead),
     ] {
         let (mut peer, stream) = tokio::io::duplex(65536);
         let server = tokio::spawn(serve_connection(
@@ -166,6 +168,43 @@ async fn hosted_task_dialects_and_new_capabilities_fail_before_welcome() {
             .is_err());
         assert!(read_frame(&mut peer).await.is_err());
     }
+    node.shutdown().await;
+}
+
+#[tokio::test]
+async fn released_ipc23_can_negotiate_invitation_membership_capability() {
+    let node = node().await;
+    let (mut peer, stream) = tokio::io::duplex(65536);
+    let server = tokio::spawn(serve_connection(
+        stream,
+        crate::EmbeddedClient::new(node.clone()),
+        vec![Capability::ChannelMember],
+        None,
+    ));
+    write_frame(
+        &mut peer,
+        &Frame::Hello(Hello {
+            min_version: 23,
+            max_version: 23,
+            application: "released-invitations".into(),
+            requested_capabilities: vec![Capability::ChannelMember],
+            component: None,
+        }),
+    )
+    .await
+    .unwrap();
+    let Frame::Welcome(welcome) = read_frame(&mut peer).await.unwrap() else {
+        panic!("expected welcome");
+    };
+    assert_eq!(welcome.version, 23);
+    assert_eq!(
+        welcome.granted_capabilities,
+        vec![Capability::ChannelMember]
+    );
+    drop(peer);
+    let _ = tokio::time::timeout(Duration::from_secs(2), server)
+        .await
+        .unwrap();
     node.shutdown().await;
 }
 

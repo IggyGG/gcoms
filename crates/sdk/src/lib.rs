@@ -7,12 +7,17 @@
 mod catalog_http;
 #[cfg(feature = "in-process")]
 mod embedded;
+pub mod invitations;
 pub mod ipc;
 #[cfg(all(any(unix, windows), feature = "ipc"))]
 pub mod local;
 pub mod machine;
 mod types;
 pub use catalog_http::{CatalogHttpRequest, CatalogHttpResponse};
+pub use invitations::{
+    EnrollmentPhase, EnrollmentStatus, InvitationDetails, InvitationPolicy, InvitationPreset,
+    InvitationReply, InvitationRequest, InvitationSummary,
+};
 
 #[cfg(feature = "in-process")]
 pub use embedded::EmbeddedClient;

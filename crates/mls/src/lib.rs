@@ -62,8 +62,9 @@ pub mod session;
 pub use invite::{now_unix, verify_invite, Caps, Invite};
 pub use session::{
     channel_group_id, ciphersuite_of_key_package, ciphersuite_of_welcome, epoch_of_wire,
-    pseudonym_of_key_package, Admission, ChannelMember, OwnerSession, PreparedJoin, ReceiveOutcome,
-    RosterMember, StagedAdmission, StagedRemoval, CIPHERSUITE_ID, MAX_WIRE_BYTES,
+    pseudonym_of_key_package, Admission, AuthenticatedReceiveOutcome, ChannelMember, OwnerSession,
+    PreparedJoin, ReceiveOutcome, RosterMember, StagedAdmission, StagedRemoval, CIPHERSUITE_ID,
+    MAX_WIRE_BYTES,
 };
 
 pub const GROUP_MAX: usize = 64;

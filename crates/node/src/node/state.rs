@@ -262,6 +262,10 @@ pub struct NodeState {
     pub(crate) accepted_first_moves: VecDeque<[u8; 32]>,
     pub(crate) channels: HashMap<String, crate::channel::ChannelState>,
     pub(crate) prepared: HashMap<u64, PreparedChannelJoin>,
+    pub(crate) invitation_network: Option<gcoms_network_client::NetworkClient>,
+    #[cfg(test)]
+    pub(crate) invitation_resolver: Option<super::enrollment::TestResolver>,
+    pub(crate) enrollments: Vec<super::enrollment::Operation>,
     pub(crate) chan_parked: Vec<(String, Vec<u8>)>,
     pub(crate) channel_fragments: crate::proto::ChannelFragmentBuffer,
     pub(crate) last_channel_send: Option<(String, Vec<u8>)>,

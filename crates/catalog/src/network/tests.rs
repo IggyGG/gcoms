@@ -9,6 +9,165 @@ use gcoms_crypto::IdentityKeypair;
 use gcoms_network::{Founder, NetworkDefaults};
 use gcoms_transport::{server::Tp1Server, tls::TlsIdentity, TokenRegistry};
 use tower::ServiceExt;
+#[tokio::test]
+async fn invitation_directory_requires_scope_and_preserves_sequence_across_restart() {
+    use gcoms_network::channel_invitation::{Descriptor, Reference, ResolvedInvitation};
+    let fixture = Fixture::new();
+    let service = Arc::new(NetworkService::load(fixture.config.clone(), true).unwrap());
+    let app = fixture.app(service.clone()).await;
+    let root = IdentityKeypair::from_seed([71; 32]);
+    let issuer = IdentityKeypair::from_seed([72; 32]);
+    let identity = gcoms_network::NetworkIdentity {
+        trusted_key_b64: URL_SAFE_NO_PAD.encode(root.public_bytes()),
+        signed_defaults: service.defaults.clone(),
+    };
+    let reference =
+        Reference::new(&identity, &issuer.public_bytes(), [3; 32], [4; 16], [5; 32]).unwrap();
+    let value = ResolvedInvitation {
+        network: identity,
+        channel_id: reference.channel_id.clone(),
+        channel_invitation: "private route and admission secret".into(),
+    };
+    let now = now_unix();
+    let descriptor = Descriptor::seal(&reference, &value, &issuer, 2, now, now + 200).unwrap();
+    async fn call(
+        app: &AppState,
+        method: &str,
+        id: &str,
+        token: &str,
+        descriptor: Option<&Descriptor>,
+    ) -> (StatusCode, Vec<u8>) {
+        let body = descriptor
+            .map(|d| serde_json::to_vec(d).unwrap())
+            .unwrap_or_default();
+        let response = super::super::router(app.clone())
+            .oneshot(
+                Request::builder()
+                    .method(method)
+                    .uri(format!("/v1/invitations/{id}"))
+                    .header("content-type", "application/json")
+                    .header("authorization", format!("Bearer {token}"))
+                    .body(Body::from(body))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let status = response.status();
+        (
+            status,
+            to_bytes(response.into_body(), 1024 * 1024)
+                .await
+                .unwrap()
+                .to_vec(),
+        )
+    }
+    assert_eq!(
+        call(
+            &app,
+            "PUT",
+            &reference.id,
+            &fixture.token,
+            Some(&descriptor)
+        )
+        .await
+        .0,
+        StatusCode::UNAUTHORIZED
+    );
+    let mut grants = read_grants(&fixture.config.grants_file).unwrap();
+    grants.grants[0].scopes.push("invitations".into());
+    atomic_json(&fixture.config.grants_file, &grants).unwrap();
+    assert_eq!(
+        call(
+            &app,
+            "PUT",
+            &reference.id,
+            &fixture.token,
+            Some(&descriptor)
+        )
+        .await
+        .0,
+        StatusCode::NO_CONTENT
+    );
+    let (status, bytes) = call(&app, "GET", &reference.id, "", None).await;
+    assert_eq!(status, StatusCode::OK);
+    let fetched: Descriptor = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(
+        fetched.open(&reference, now, 2).unwrap().channel_invitation,
+        value.channel_invitation
+    );
+    assert!(!String::from_utf8(bytes)
+        .unwrap()
+        .contains(&reference.secret));
+    let stale = Descriptor::seal(&reference, &value, &issuer, 1, now, now + 200).unwrap();
+    assert_eq!(
+        call(&app, "PUT", &reference.id, &fixture.token, Some(&stale))
+            .await
+            .0,
+        StatusCode::CONFLICT
+    );
+    let equivocation = Descriptor::seal(&reference, &value, &issuer, 2, now, now + 200).unwrap();
+    assert_eq!(
+        call(
+            &app,
+            "PUT",
+            &reference.id,
+            &fixture.token,
+            Some(&equivocation)
+        )
+        .await
+        .0,
+        StatusCode::CONFLICT
+    );
+    drop(app);
+    drop(service);
+    let service = Arc::new(NetworkService::load(fixture.config.clone(), true).unwrap());
+    let app = fixture.app(service.clone()).await;
+    assert_eq!(
+        call(&app, "PUT", &reference.id, &fixture.token, Some(&stale))
+            .await
+            .0,
+        StatusCode::CONFLICT
+    );
+    // A failed durable write must not publish the newer sequence in memory.
+    let retained = std::fs::read(service.invitation_path()).unwrap();
+    std::fs::remove_file(service.invitation_path()).unwrap();
+    std::fs::create_dir(service.invitation_path()).unwrap();
+    let newer = Descriptor::seal(&reference, &value, &issuer, 3, now, now + 200).unwrap();
+    assert_eq!(
+        call(&app, "PUT", &reference.id, &fixture.token, Some(&newer))
+            .await
+            .0,
+        StatusCode::INTERNAL_SERVER_ERROR
+    );
+    let (_, bytes) = call(&app, "GET", &reference.id, "", None).await;
+    assert_eq!(
+        serde_json::from_slice::<Descriptor>(&bytes)
+            .unwrap()
+            .body
+            .sequence,
+        2
+    );
+    std::fs::remove_dir(service.invitation_path()).unwrap();
+    std::fs::write(service.invitation_path(), retained).unwrap();
+    grants.grants[0].revoked = true;
+    atomic_json(&fixture.config.grants_file, &grants).unwrap();
+    assert_eq!(
+        call(&app, "GET", &reference.id, "", None).await.0,
+        StatusCode::UNAUTHORIZED
+    );
+    assert_eq!(
+        call(
+            &app,
+            "PUT",
+            &reference.id,
+            &fixture.token,
+            Some(&descriptor)
+        )
+        .await
+        .0,
+        StatusCode::UNAUTHORIZED
+    );
+}
 
 struct Fixture {
     dir: PathBuf,

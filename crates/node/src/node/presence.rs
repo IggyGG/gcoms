@@ -263,7 +263,7 @@ pub(crate) fn prepare_channel_presence(
             if crate::channel::metadata::Metadata::read(&cs.role)?.closed() {
                 return Err("This channel is closed".into());
             }
-            if cs.membership_outbox.is_some() {
+            if cs.membership_barrier() {
                 return Err("channel membership is still converging".into());
             }
             let checkpoint = cs

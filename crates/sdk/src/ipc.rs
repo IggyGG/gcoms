@@ -29,9 +29,8 @@ use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 #[cfg(all(any(unix, windows), feature = "ipc"))]
 use tokio::sync::{broadcast, mpsc, oneshot, watch, Mutex};
 
-pub const VERSION: u16 = 25;
-// IPC25 appends hosted channels and modern files after released IPC22 recovery.
-// Task-only IPC23/24 layouts are not negotiated.
+pub const VERSION: u16 = 26;
+// IPC26 preserves released IPC23 invitations before hosted channels and modern files.
 
 #[cfg(test)]
 mod metadata_compat;
@@ -277,6 +276,7 @@ pub enum Request {
         channel: String,
         request: Option<crate::MembershipRecoveryRequest>,
     },
+    Invitations(crate::InvitationRequest),
     HostedChannels(crate::hosted_client::Request),
     SharingV2(crate::sharing_v2::Request),
 }
@@ -284,8 +284,9 @@ pub enum Request {
 impl Request {
     pub fn minimum_version(&self) -> u16 {
         match self {
-            Self::HostedChannels(_) | Self::SharingV2(_) => 25,
-            Self::CatalogHttp(request) if request.is_hosted() => 25,
+            Self::HostedChannels(_) | Self::SharingV2(_) => 26,
+            Self::CatalogHttp(request) if request.is_hosted() => 26,
+            Self::Invitations(_) => 23,
             Self::ChannelRecovery { .. } => 22,
             Self::Sharing(crate::sharing::Request::Inspect { .. })
             | Self::ChannelReconnect { .. } => 21,
@@ -316,6 +317,7 @@ impl Request {
             Self::SharingV2(_) => Capability::ModernFileSharing,
             Self::HostedChannels(_) => Capability::HostedChannels,
             Self::CatalogHttp(request) if request.is_hosted() => Capability::HostedChannels,
+            Self::Invitations(request) => request.required_capability(),
             Self::ChannelRecovery { .. } => Capability::ChannelAdmin,
             Self::ChannelReconnect { .. } => Capability::ChannelMember,
             Self::Sharing(_) => Capability::FileSharing,
@@ -399,6 +401,7 @@ impl Request {
                     "ciphertext piece reference bounds".into(),
                 ))
             }
+            Self::Invitations(request) => request.validate(),
             Self::ChannelRecovery { channel, request }
                 if channel.len() > 256
                     || request.as_ref().is_some_and(|r| {
@@ -471,6 +474,7 @@ pub enum Response {
     NetworkStatus(crate::NetworkStatus),
     ChannelTopic(String),
     ChannelRecovery(crate::MembershipRecoveryStatus),
+    Invitations(crate::InvitationReply),
     HostedChannels(crate::hosted_client::Reply),
     SharingV2(crate::sharing_v2::Reply),
 }
@@ -533,6 +537,7 @@ pub fn encode(frame: &Frame) -> Result<Vec<u8>, SdkError> {
 impl Zeroize for Request {
     fn zeroize(&mut self) {
         match self {
+            Self::Invitations(request) => request.zeroize(),
             Self::Sharing(crate::sharing::Request::WritePiece { bytes, .. })
             | Self::SharingV2(crate::sharing_v2::Request::WritePiece { bytes, .. }) => {
                 bytes.as_mut_slice().zeroize()
@@ -1004,6 +1009,17 @@ impl Drop for IpcClient {
 #[cfg(all(any(unix, windows), feature = "ipc"))]
 #[async_trait]
 impl GcClient for IpcClient {
+    async fn invitations(
+        &self,
+        request: crate::InvitationRequest,
+    ) -> Result<crate::InvitationReply, SdkError> {
+        request.validate()?;
+        match self.request(Request::Invitations(request)).await? {
+            Response::Invitations(reply) => Ok(reply),
+            _ => Err(SdkError::Protocol("unexpected invitation response".into())),
+        }
+    }
+
     async fn persist_profile(&self) -> Result<(), SdkError> {
         self.expect_empty(Request::PersistProfile).await
     }
@@ -1828,13 +1844,13 @@ where
         return Err(SdkError::Protocol("incompatible IPC hello".into()));
     }
     let mut inbox_lease = InboxLease(None);
-    // Versions 23 and 24 existed only on the unlanded hosted task branch and
-    // used the released IPC22 recovery discriminant for another operation.
-    // Negotiate only released legacy layouts or the unified IPC25 layout.
+    // Preserve released IPC23 invitation layouts. Unlanded hosted IPC24/25
+    // layouts are incompatible and must not be selected. Hosted requests need
+    // the unified IPC26 layout and their own negotiated capability.
     let version = if hello.max_version >= VERSION {
         VERSION
     } else {
-        hello.max_version.min(22)
+        hello.max_version.min(23)
     };
     if version < hello.min_version {
         return Err(SdkError::Protocol("incompatible IPC version".into()));
@@ -1850,11 +1866,11 @@ where
     }
     // Tag 12 meant BootstrapApplication in the unreleased bootstrap-v13 fork.
     // Never downgrade/filter that Hello: tags 30/31 now mean network sends.
-    if (version < 25
+    if (version < 26
         && hello
             .requested_capabilities
             .contains(&Capability::ModernFileSharing))
-        || (version < 25
+        || (version < 26
             && hello
                 .requested_capabilities
                 .contains(&Capability::HostedChannels))
@@ -1903,8 +1919,8 @@ where
                 && (version >= 11 || *capability != Capability::HostShell)
                 && (version >= 12 || *capability != Capability::VolatileApplication)
                 && (version >= 15 || *capability != Capability::CatalogAccess)
-                && (version >= 25 || *capability != Capability::ModernFileSharing)
-                && (version >= 25 || *capability != Capability::HostedChannels)
+                && (version >= 26 || *capability != Capability::ModernFileSharing)
+                && (version >= 26 || *capability != Capability::HostedChannels)
                 && (version >= 16 || *capability != Capability::BootstrapApplication)
                 && (version >= 18 || *capability != Capability::FileSharing)
                 && (version >= 17 || *capability != Capability::ProfileAdmin)
@@ -2185,6 +2201,9 @@ pub(crate) async fn dispatch<C: GcClient>(
             let invitation = Zeroizing::new(invitation);
             client.import_network_invitation(&invitation).await?;
             Ok(Response::Empty)
+        }
+        Request::Invitations(request) => {
+            client.invitations(request).await.map(Response::Invitations)
         }
         Request::CreateChannelInvitation { channel, ttl_secs } => client
             .create_channel_invitation(&channel, ttl_secs)
@@ -2713,7 +2732,7 @@ mod tests {
             piece: 0,
             bytes: vec![42; 256],
         });
-        assert_eq!(request.minimum_version(), 25);
+        assert_eq!(request.minimum_version(), 26);
         assert_eq!(request.required_capability(), Capability::ModernFileSharing);
         request.zeroize();
         assert!(
@@ -2748,12 +2767,12 @@ mod tests {
                 content: crate::hosted_client::Content::Text("test".into()),
             },
         ] {
-            assert_eq!(Request::HostedChannels(operation).minimum_version(), 25);
+            assert_eq!(Request::HostedChannels(operation).minimum_version(), 26);
         }
     }
 
     #[test]
-    fn hosted_directory_requires_ipc25_and_hosted_authority() {
+    fn hosted_directory_requires_ipc26_and_hosted_authority() {
         for operation in [
             crate::hosted_client::Request::Directory {
                 endpoint: "https://example.invalid/v1/hosted".into(),
@@ -2767,13 +2786,13 @@ mod tests {
             },
         ] {
             let request = Request::HostedChannels(operation);
-            assert_eq!(request.minimum_version(), 25);
+            assert_eq!(request.minimum_version(), 26);
             assert_eq!(request.required_capability(), Capability::HostedChannels);
         }
     }
 
     #[test]
-    fn ciphertext_piece_requests_require_ipc25_and_hosted_authority() {
+    fn ciphertext_piece_requests_require_ipc26_and_hosted_authority() {
         let reference = crate::hosted::BlobRef {
             owner: [1; 32],
             file: [2; 16],
@@ -2791,7 +2810,7 @@ mod tests {
             },
         ] {
             let request = Request::HostedChannels(operation);
-            assert_eq!(request.minimum_version(), 25);
+            assert_eq!(request.minimum_version(), 26);
             assert_eq!(request.required_capability(), Capability::HostedChannels);
             let frame = Frame::Request(RequestEnvelope {
                 version: VERSION,
@@ -2808,8 +2827,21 @@ mod tests {
         assert!(oversized.validate_application_payload().is_err());
         assert_eq!(
             Request::HostedChannels(crate::hosted_client::Request::List).minimum_version(),
-            25
+            26
         );
+    }
+
+    #[test]
+    fn released_ipc23_invitation_tags_remain_stable() {
+        let request = Request::Invitations(crate::InvitationRequest::ListEnrollments);
+        let bytes = [52, 10];
+        assert_eq!(request.minimum_version(), 23);
+        assert_eq!(postcard::from_bytes::<Request>(&bytes).unwrap(), request);
+        assert_eq!(postcard::to_allocvec(&request).unwrap(), bytes);
+        let reply = Response::Invitations(crate::InvitationReply::Enrollments(Vec::new()));
+        let bytes = [24, 5, 0];
+        assert_eq!(postcard::from_bytes::<Response>(&bytes).unwrap(), reply);
+        assert_eq!(postcard::to_allocvec(&reply).unwrap(), bytes);
     }
 
     #[test]
@@ -2866,7 +2898,7 @@ mod tests {
 
     #[test]
     fn requests_declare_required_capability() {
-        assert_eq!(VERSION, 25);
+        assert_eq!(VERSION, 26);
         for request in [
             Request::SubmitDurableOpaque {
                 recipient: ContactCard(Vec::new()),

@@ -4,6 +4,10 @@
 
 use super::*;
 
+mod invitations;
+#[cfg(test)]
+#[path = "persist/invitations_tests.rs"]
+mod invitations_tests;
 pub(super) mod owner_aliases;
 use crate::channel::{
     CachedAdmission, ChannelMessageOutbox, ChannelRole, ChannelState, MembershipOutbox,
@@ -48,6 +52,7 @@ const MAGIC_V20: &[u8; 6] = b"GCNSTK";
 /// v21 seals bounded logical receipt history across authenticated GC/2 recovery.
 const MAGIC_V21: &[u8; 6] = b"GCNSTL";
 const MAGIC_CHANNEL_INBOX: &[u8; 6] = b"GCNSTM";
+const MAGIC_INVITATIONS: &[u8; 6] = b"GCNSTN";
 const ROLE_OWNER: u8 = 1;
 const ROLE_MEMBER: u8 = 2;
 const MAX_ARCHIVE_BYTES: usize = 256 * 1024 * 1024;
@@ -114,6 +119,7 @@ struct Archive {
     direct_acks: Vec<DirectDelivery>,
     processed_direct: Vec<((Vec<u8>, u64), ProcessedDirect)>,
     channels: Vec<ArchivedChannel>,
+    enrollments: Vec<super::enrollment::Operation>,
     direct_presence_opt_in: HashSet<Vec<u8>>,
     channel_presence_opt_in: HashSet<String>,
     forward_grants: Vec<crate::alias::ForwardGrant>,
@@ -146,9 +152,12 @@ struct ArchivedChannel {
     directory: HashMap<String, crate::channel::ChannelRoute>,
     message_outbox: Vec<([u8; 16], ChannelMessageOutbox)>,
     membership_outbox: Option<MembershipOutbox>,
+    membership_journal: VecDeque<MembershipOutbox>,
+    catchup_members: HashSet<[u8; 32]>,
     pending_control: Vec<(crate::channel::ChannelRoute, Vec<u8>)>,
     admissions: Vec<([u8; 32], CachedAdmission)>,
     invites: Vec<([u8; 16], crate::channel::InviteRecord)>,
+    invitations: crate::channel_invite::policy::InvitationLedger,
     completed_removals: Vec<String>,
     commit_acks: Vec<([u8; 16], crate::channel::ChannelRoute, Vec<u8>)>,
     unrouted_acks: Vec<(crate::channel::UnroutedAckKey, Vec<u8>)>,
@@ -1124,6 +1133,7 @@ fn encode_state_inner(
         v.fill(0);
         return Err("node state export too large".into());
     }
+    let v = invitations::wrap(st, v)?;
     if st.channel_inbox.enabled {
         let mut wrapped = SecretBuffer(MAGIC_CHANNEL_INBOX.to_vec());
         put32(&mut wrapped, &v)?;
@@ -1145,6 +1155,9 @@ fn encode_state_inner(
 }
 
 fn decode_v2(buf: &[u8], identity_seed: &[u8; 32]) -> Result<Archive, String> {
+    if buf.get(..6) == Some(MAGIC_INVITATIONS) {
+        return invitations::unwrap(buf, identity_seed);
+    }
     if buf.get(..6) == Some(MAGIC_CHANNEL_INBOX) {
         if buf.len() > MAX_ARCHIVE_BYTES {
             return Err(malformed());
@@ -1605,9 +1618,12 @@ fn decode_v2(buf: &[u8], identity_seed: &[u8; 32]) -> Result<Archive, String> {
             directory,
             message_outbox,
             membership_outbox,
+            membership_journal: VecDeque::new(),
+            catchup_members: HashSet::new(),
             pending_control,
             admissions,
             invites,
+            invitations: crate::channel_invite::policy::InvitationLedger::default(),
             completed_removals,
             commit_acks,
             unrouted_acks,
@@ -1917,6 +1933,7 @@ fn decode_v2(buf: &[u8], identity_seed: &[u8; 32]) -> Result<Archive, String> {
         direct_acks,
         processed_direct,
         channels,
+        enrollments: Vec::new(),
         direct_presence_opt_in,
         channel_presence_opt_in,
         forward_grants,
@@ -2294,7 +2311,7 @@ pub async fn decode_state(
             return Err("cannot replace initialized central ownership".into());
         }
     }
-    if matches!(buf.get(..6), Some(magic) if magic == MAGIC_CHANNEL_INBOX || magic == MAGIC_V15 || magic == MAGIC_V16 || magic == MAGIC_V17 || magic == MAGIC_V18 || magic == MAGIC_V19 || magic == MAGIC_V20 || magic == MAGIC_V21)
+    if matches!(buf.get(..6), Some(magic) if magic == MAGIC_INVITATIONS || magic == MAGIC_CHANNEL_INBOX || magic == MAGIC_V15 || magic == MAGIC_V16 || magic == MAGIC_V17 || magic == MAGIC_V18 || magic == MAGIC_V19 || magic == MAGIC_V20 || magic == MAGIC_V21)
     {
         return Err("owner alias archives require constructor restoration".into());
     }
@@ -2319,6 +2336,7 @@ pub(super) async fn decode_state_at_startup(
     } else {
         buf
     };
+    let effective = invitations::base(effective)?;
     if matches!(effective.get(..6), Some(magic) if magic == MAGIC_V20 || magic == MAGIC_V21) {
         #[cfg(feature = "experimental-gc2")]
         if !state.lock().unwrap_or_else(|p| p.into_inner()).gc2_sessions {
@@ -2364,14 +2382,21 @@ pub(super) async fn decode_state_at_startup(
 
     let mut restored_prepared = Vec::new();
     for (id, display, mls, mut route) in archive.prepared {
-        if route
+        let expired = route
             .aliases
             .iter()
-            .any(|alias| alias.contact.expiry <= now_unix())
+            .any(|alias| alias.contact.expiry <= now_unix());
+        if expired
+            && !archive
+                .enrollments
+                .iter()
+                .any(|op| op.prepared_id == Some(id))
         {
             continue;
         }
-        if !offline {
+        // Resumable enrollment keeps its MLS identity after the old route
+        // expires. The operation worker provisions a fresh authenticated route.
+        if !offline && !expired {
             let authority = relay
                 .aliases
                 .first()
@@ -2469,6 +2494,8 @@ pub(super) async fn decode_state_at_startup(
             channel.overlay.first_sighting(message_id);
             channel.message_outbox.insert(message_id, outbox);
         }
+        channel.membership_journal = archived.membership_journal;
+        channel.catchup_members = archived.catchup_members;
         if let Some(outbox) = archived.membership_outbox {
             channel.overlay.first_sighting(outbox.commit_id);
             channel.membership_outbox = Some(outbox);
@@ -2482,6 +2509,7 @@ pub(super) async fn decode_state_at_startup(
             channel.invite_order.push_back(invite_id);
             channel.invites.insert(invite_id, record);
         }
+        channel.invitations = archived.invitations;
         channel.completed_removals = archived.completed_removals.into_iter().collect();
         for (message_id, route, wire) in archived.commit_acks {
             channel.overlay.first_sighting(message_id);
@@ -2728,6 +2756,7 @@ pub(super) async fn decode_state_at_startup(
         st.channels.insert(name, channel);
     }
     st.prepared = restored_prepared.into_iter().collect();
+    st.enrollments = archive.enrollments;
     st.next_prep_id = archive.next_prep_id;
     let enabled = st.channel_inbox.enabled;
     st.channel_inbox = archive.channel_inbox;
@@ -3091,6 +3120,9 @@ pub(in crate::node) mod tests {
             accepted_first_moves: VecDeque::new(),
             channels: HashMap::new(),
             prepared: HashMap::new(),
+            invitation_network: None,
+            invitation_resolver: None,
+            enrollments: Vec::new(),
             chan_parked: Vec::new(),
             channel_fragments: crate::proto::ChannelFragmentBuffer::default(),
             last_channel_send: None,

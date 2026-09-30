@@ -219,6 +219,168 @@ impl EmbeddedClient {
 
 #[async_trait]
 impl GcClient for EmbeddedClient {
+    async fn invitations(
+        &self,
+        request: crate::InvitationRequest,
+    ) -> Result<crate::InvitationReply, SdkError> {
+        use crate::{InvitationDetails, InvitationReply, InvitationRequest};
+        use gcoms_node::channel_invite::{ChannelInvite, InviteEnvelope};
+        request.validate()?;
+        match request {
+            InvitationRequest::ListEnrollments => self
+                .node
+                .list_enrollments()
+                .await
+                .map(InvitationReply::Enrollments)
+                .map_err(SdkError::Runtime),
+            InvitationRequest::RetireEnrollment { id } => self
+                .node
+                .retire_enrollment(id)
+                .await
+                .map(|()| InvitationReply::Retired)
+                .map_err(SdkError::Runtime),
+            InvitationRequest::Retire { channel, id } => self
+                .node
+                .retire_invitation(&channel, id)
+                .await
+                .map(|()| InvitationReply::Retired)
+                .map_err(SdkError::Runtime),
+            InvitationRequest::StartEnrollment { link, display } => self
+                .node
+                .start_enrollment(&link, &display)
+                .await
+                .map(InvitationReply::Enrollment)
+                .map_err(SdkError::Runtime),
+            InvitationRequest::EnrollmentStatus { id } => self
+                .node
+                .enrollment_status(id)
+                .await
+                .map(InvitationReply::Enrollment)
+                .map_err(SdkError::Runtime),
+            InvitationRequest::ResumeEnrollment { id } => self
+                .node
+                .resume_enrollment(id)
+                .await
+                .map(InvitationReply::Enrollment)
+                .map_err(SdkError::Runtime),
+            InvitationRequest::CancelEnrollment { id } => self
+                .node
+                .cancel_enrollment(id)
+                .await
+                .map(InvitationReply::Enrollment)
+                .map_err(SdkError::Runtime),
+
+            InvitationRequest::Share { channel, id } => {
+                let link = self
+                    .node
+                    .share_reusable_invitation(&channel, id)
+                    .await
+                    .map_err(SdkError::Runtime)?;
+                let summary = self
+                    .node
+                    .list_invitations(&channel)
+                    .await
+                    .map_err(SdkError::Runtime)?
+                    .into_iter()
+                    .find(|r| r.id == id)
+                    .ok_or_else(|| SdkError::Runtime("invite not found".into()))?;
+                Ok(InvitationReply::Created(InvitationDetails {
+                    link,
+                    channel,
+                    id,
+                    policy: summary.policy,
+                    local_only: false,
+                }))
+            }
+            InvitationRequest::Create { channel, policy } => {
+                let issued = self
+                    .node
+                    .create_reusable_invitation(&channel, policy)
+                    .await
+                    .map_err(SdkError::Runtime)?;
+                let invite = ChannelInvite {
+                    owner: self.node.current_info().await.map_err(SdkError::Runtime)?,
+                    channel,
+                    id: issued.summary.id,
+                    secret: issued.secret,
+                    expiry: policy.expires_at.unwrap_or(u64::MAX),
+                };
+                let routed = self
+                    .node
+                    .channel_invite_link(&invite)
+                    .map_err(SdkError::Runtime)?;
+                let mut envelope = InviteEnvelope::from_link(&routed)
+                    .ok_or_else(|| SdkError::Protocol("cannot encode invitation".into()))?;
+                envelope.policy = Some(policy);
+                let local_only = invite.owner.aliases.iter().all(|a| {
+                    a.target.address.ip().is_loopback() || a.target.address.ip().is_unspecified()
+                });
+                let link = envelope
+                    .to_link()
+                    .ok_or_else(|| SdkError::Protocol("invitation is too large".into()))?;
+                let link = if local_only {
+                    link
+                } else {
+                    self.node
+                        .share_reusable_invitation(&invite.channel, invite.id)
+                        .await
+                        .map_err(SdkError::Runtime)?
+                };
+                Ok(InvitationReply::Created(InvitationDetails {
+                    link,
+                    channel: invite.channel,
+                    id: invite.id,
+                    policy,
+                    local_only: invite.owner.aliases.iter().all(|a| {
+                        a.target.address.ip().is_loopback()
+                            || a.target.address.ip().is_unspecified()
+                    }),
+                }))
+            }
+            InvitationRequest::Inspect { link } => {
+                let resolved;
+                let inner = if gcoms_network::channel_invitation::Reference::is_reference(&link) {
+                    resolved = self
+                        .node
+                        .resolve_reusable_invitation(&link)
+                        .await
+                        .map_err(SdkError::Runtime)?;
+                    resolved.as_str()
+                } else {
+                    link.trim()
+                };
+                let envelope = InviteEnvelope::from_link(inner)
+                    .ok_or_else(|| SdkError::Protocol("invalid channel invitation".into()))?;
+                let policy = envelope.policy.unwrap_or(crate::InvitationPolicy {
+                    expires_at: Some(envelope.invite.expiry),
+                    max_admissions: Some(1),
+                });
+                Ok(InvitationReply::Inspected(InvitationDetails {
+                    link: link.trim().into(),
+                    channel: envelope.invite.channel,
+                    id: envelope.invite.id,
+                    policy,
+                    local_only: envelope.invite.owner.aliases.iter().all(|a| {
+                        a.target.address.ip().is_loopback()
+                            || a.target.address.ip().is_unspecified()
+                    }),
+                }))
+            }
+            InvitationRequest::List { channel } => self
+                .node
+                .list_invitations(&channel)
+                .await
+                .map(InvitationReply::Listed)
+                .map_err(SdkError::Runtime),
+            InvitationRequest::Revoke { channel, id } => self
+                .node
+                .revoke_invitation(&channel, id)
+                .await
+                .map(InvitationReply::Revoked)
+                .map_err(SdkError::Runtime),
+        }
+    }
+
     async fn create_channel_invitation(
         &self,
         channel: &str,
@@ -264,8 +426,43 @@ impl GcClient for EmbeddedClient {
         display: &str,
         timeout_secs: u64,
     ) -> Result<String, SdkError> {
-        let envelope = gcoms_node::channel_invite::InviteEnvelope::from_link(link.trim())
-            .ok_or_else(|| SdkError::Protocol("invalid channel invitation".into()))?;
+        let envelope = gcoms_node::channel_invite::InviteEnvelope::from_link(link.trim());
+        if gcoms_network::channel_invitation::Reference::is_reference(link)
+            || envelope.as_ref().is_some_and(|e| e.policy.is_some())
+        {
+            if !(1..=600).contains(&timeout_secs) {
+                return Err(SdkError::Protocol(
+                    "join deadline must be 1–600 seconds".into(),
+                ));
+            }
+            let status = self
+                .node
+                .start_enrollment(link.trim(), display)
+                .await
+                .map_err(SdkError::Runtime)?;
+            let deadline =
+                tokio::time::Instant::now() + std::time::Duration::from_secs(timeout_secs);
+            loop {
+                let status = self
+                    .node
+                    .enrollment_status(status.id)
+                    .await
+                    .map_err(SdkError::Runtime)?;
+                match status.phase {
+                    crate::EnrollmentPhase::Joined => return Ok(status.channel),
+                    crate::EnrollmentPhase::Cancelled => {
+                        return Err(SdkError::Runtime("enrollment cancelled".into()))
+                    }
+                    _ => {}
+                }
+                if tokio::time::Instant::now() >= deadline {
+                    return Err(SdkError::Runtime("Enrollment saved; the same identity will continue joining in the background".into()));
+                }
+                tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+            }
+        }
+        let envelope =
+            envelope.ok_or_else(|| SdkError::Protocol("invalid channel invitation".into()))?;
         let invite = envelope.invite.clone();
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)

@@ -69,9 +69,20 @@ fn channel_full_lifecycle() {
     assert_eq!(owner.epoch(), red.epoch());
 
     let msg = owner.send(b"first broadcast").unwrap();
-    let got = red.receive(&msg).unwrap().unwrap();
-    assert_eq!(got.1, b"first broadcast");
-    assert_eq!(got.0, 0, "owner is leaf 0");
+    // Existing integrations may exhaustively destructure this public result.
+    match red.receive_outcome(&msg).unwrap() {
+        gcoms_mls::ReceiveOutcome::Application {
+            sender_index,
+            payload,
+        } => {
+            assert_eq!(payload, b"first broadcast");
+            assert_eq!(sender_index, 0, "owner is leaf 0");
+        }
+        gcoms_mls::ReceiveOutcome::CommitMerged { sender_index } => {
+            panic!("unexpected commit from {sender_index}");
+        }
+        gcoms_mls::ReceiveOutcome::Other => panic!("application expected"),
+    }
 
     let reply = red.send(b"member reply").unwrap();
     let got_back = owner.receive(&reply).unwrap().unwrap();
@@ -536,4 +547,53 @@ fn group_id_is_the_owner_fingerprint_not_the_key() {
     let member = ChannelMember::join(prepared, &admission.welcome).unwrap();
     assert_eq!(member.stable_channel_id(), owner.stable_channel_id());
     assert_eq!(member.owner_pseudonym(), Some(owner.own_pseudonym()));
+}
+
+#[test]
+#[cfg(feature = "client-persist")]
+fn delayed_message_keeps_historical_sender_after_leaf_reuse_and_reopen() {
+    use gcoms_mls::AuthenticatedReceiveOutcome;
+    let mut owner = OwnerSession::create(owner_identity(), "owner", 8).unwrap();
+    let p = ChannelMember::prepare("alice").unwrap();
+    let kp = ChannelMember::key_package_bytes(&p).unwrap();
+    let invite = owner.sign_invite_key_package(&kp, "alice", Caps::member(), 3600);
+    let a = owner.admit(&invite, &kp).unwrap();
+    let mut alice = ChannelMember::join(p, &a.welcome).unwrap();
+    let old_identity = alice.own_pseudonym();
+    let old_epoch = alice.epoch();
+    let delayed = alice.send(b"before removal").unwrap();
+    let before = owner.send(b"not available to a later member").unwrap();
+    let removal = owner.remove(old_identity).unwrap();
+    assert!(matches!(
+        alice.receive_outcome(&removal),
+        Err(MlsError::Removed)
+    ));
+    let p = ChannelMember::prepare("alice").unwrap();
+    let kp = ChannelMember::key_package_bytes(&p).unwrap();
+    let invite = owner.sign_invite_key_package(&kp, "alice", Caps::member(), 3600);
+    let a = owner.admit(&invite, &kp).unwrap();
+    let mut replacement = ChannelMember::join(p, &a.welcome).unwrap();
+    assert_ne!(replacement.own_pseudonym(), old_identity);
+    assert!(replacement.receive_outcome(&before).is_err());
+    let after = owner.send(b"after removal").unwrap();
+    assert!(alice.receive_outcome(&after).is_err());
+    let archive = owner.persist(&[17; 32]).unwrap();
+    let mut owner = OwnerSession::restore(&[17; 32], &archive, owner_identity()).unwrap();
+    let AuthenticatedReceiveOutcome::Application {
+        sender,
+        epoch,
+        payload,
+        ..
+    } = owner.receive_authenticated(&delayed).unwrap()
+    else {
+        panic!("application expected");
+    };
+    assert_eq!(sender.pseudonym, old_identity);
+    assert_eq!(sender.display_name, "alice");
+    assert_eq!(epoch, old_epoch);
+    assert_eq!(payload, b"before removal");
+    assert!(
+        owner.receive_outcome(&delayed).is_err(),
+        "exact wire replay stays rejected"
+    );
 }

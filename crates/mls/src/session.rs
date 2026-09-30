@@ -17,6 +17,7 @@ use tls_codec::{Deserialize as TlsDeserializeTrait, Serialize as TlsSerializeTra
 use zeroize::Zeroize;
 
 mod authority;
+mod history;
 
 /// Domain separator for the channel group id (SPEC §9.2: the channel id is
 /// the owner key fingerprint, never the key itself).
@@ -90,10 +91,46 @@ pub fn pseudonym_of_key_package(wire: &[u8]) -> Option<[u8; 32]> {
         .ok()
 }
 
+/// Stable receive result for callers that only need the sender leaf index.
 pub enum ReceiveOutcome {
     Application { sender_index: u32, payload: Vec<u8> },
     CommitMerged { sender_index: u32 },
     Other,
+}
+
+/// Receive result with the authenticated sender from the wire's epoch.
+/// A leaf index alone must not identify a delayed sender after leaf reuse.
+pub enum AuthenticatedReceiveOutcome {
+    Application {
+        sender_index: u32,
+        sender: RosterMember,
+        epoch: u64,
+        payload: Vec<u8>,
+    },
+    CommitMerged {
+        sender_index: u32,
+        sender: RosterMember,
+    },
+    Other,
+}
+
+impl From<AuthenticatedReceiveOutcome> for ReceiveOutcome {
+    fn from(outcome: AuthenticatedReceiveOutcome) -> Self {
+        match outcome {
+            AuthenticatedReceiveOutcome::Application {
+                sender_index,
+                payload,
+                ..
+            } => Self::Application {
+                sender_index,
+                payload,
+            },
+            AuthenticatedReceiveOutcome::CommitMerged { sender_index, .. } => {
+                Self::CommitMerged { sender_index }
+            }
+            AuthenticatedReceiveOutcome::Other => Self::Other,
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -142,6 +179,9 @@ fn create_config() -> MlsGroupCreateConfig {
     MlsGroupCreateConfig::builder()
         .ciphersuite(CIPHERSUITE)
         .padding_size(128)
+        .set_past_epoch_deletion_policy(openmls::prelude::PastEpochDeletionPolicy::MaxEpochs(
+            history::EPOCHS,
+        ))
         .sender_ratchet_configuration(SenderRatchetConfiguration::new(10, 2000))
         .use_ratchet_tree_extension(true)
         .build()
@@ -150,6 +190,9 @@ fn create_config() -> MlsGroupCreateConfig {
 fn join_config() -> MlsGroupJoinConfig {
     MlsGroupJoinConfig::builder()
         .padding_size(128)
+        .set_past_epoch_deletion_policy(openmls::prelude::PastEpochDeletionPolicy::MaxEpochs(
+            history::EPOCHS,
+        ))
         .sender_ratchet_configuration(SenderRatchetConfiguration::new(10, 2000))
         .use_ratchet_tree_extension(true)
         .build()
@@ -249,13 +292,6 @@ impl Ctx {
         msg.tls_serialize_detached().map_err(|_| MlsError::Encoding)
     }
 
-    fn pseudonym_of_index(&self, index: u32) -> Option<[u8; 32]> {
-        self.group
-            .members()
-            .find(|member| member.index.u32() == index)
-            .and_then(|member| member.signature_key.as_slice().try_into().ok())
-    }
-
     fn may_remove(&self, sender_pseudonym: Option<[u8; 32]>) -> bool {
         let Some(sender) = sender_pseudonym else {
             return false;
@@ -263,7 +299,7 @@ impl Ctx {
         self.owner_pseudonym == Some(sender) || self.admin_pseudonyms.contains(&sender)
     }
 
-    fn receive(&mut self, wire: &[u8]) -> Result<ReceiveOutcome, MlsError> {
+    fn receive(&mut self, wire: &[u8]) -> Result<AuthenticatedReceiveOutcome, MlsError> {
         self.ensure_ciphersuite()?;
         if wire.len() > MAX_WIRE_BYTES {
             return Err(MlsError::Encoding);
@@ -285,11 +321,18 @@ impl Ctx {
         };
         // Resolve the sender leaf before the commit is merged: after a merge
         // the removed leaves (possibly the sender's peers) are gone.
-        let sender_pseudonym = self.pseudonym_of_index(sender_idx);
+        let epoch = processed.epoch().as_u64();
+        let sender = self.sender_at_epoch(epoch, sender_idx)?;
+        if sender.display_name.as_bytes() != processed.credential().serialized_content() {
+            return Err(MlsError::Unauthorized);
+        }
+        let sender_pseudonym = Some(sender.pseudonym);
         match processed.into_content() {
             openmls::prelude::ProcessedMessageContent::ApplicationMessage(am) => {
-                Ok(ReceiveOutcome::Application {
+                Ok(AuthenticatedReceiveOutcome::Application {
                     sender_index: sender_idx,
+                    sender,
+                    epoch,
                     payload: am.into_bytes(),
                 })
             }
@@ -306,14 +349,16 @@ impl Ctx {
                 if sc.self_removed() {
                     return Err(MlsError::Removed);
                 }
+                self.retain_epoch_roster()?;
                 self.group
                     .merge_staged_commit(&self.backend, *sc)
                     .map_err(|e| MlsError::OpenMls(format!("{e:?}")))?;
-                Ok(ReceiveOutcome::CommitMerged {
+                Ok(AuthenticatedReceiveOutcome::CommitMerged {
                     sender_index: sender_idx,
+                    sender,
                 })
             }
-            _ => Ok(ReceiveOutcome::Other),
+            _ => Ok(AuthenticatedReceiveOutcome::Other),
         }
     }
 
@@ -378,6 +423,7 @@ impl Ctx {
                 .map_err(|e| MlsError::OpenMls(format!("{e:?}")))?;
             return encoded;
         }
+        self.retain_epoch_roster()?;
         self.group
             .merge_pending_commit(&self.backend)
             .map_err(|e| MlsError::OpenMls(format!("{e:?}")))?;
@@ -539,6 +585,7 @@ impl OwnerSession {
     }
 
     pub fn merge_pending(&mut self) -> Result<(), MlsError> {
+        self.ctx.retain_epoch_roster()?;
         self.ctx
             .group
             .merge_pending_commit(&self.ctx.backend)
@@ -559,15 +606,24 @@ impl OwnerSession {
 
     pub fn receive(&mut self, wire: &[u8]) -> Result<Option<(u32, Vec<u8>)>, MlsError> {
         match self.ctx.receive(wire)? {
-            ReceiveOutcome::Application {
+            AuthenticatedReceiveOutcome::Application {
                 sender_index,
                 payload,
+                ..
             } => Ok(Some((sender_index, payload))),
             _ => Ok(None),
         }
     }
 
     pub fn receive_outcome(&mut self, wire: &[u8]) -> Result<ReceiveOutcome, MlsError> {
+        self.ctx.receive(wire).map(Into::into)
+    }
+
+    /// Receive with the authenticated sender from the message's epoch.
+    pub fn receive_authenticated(
+        &mut self,
+        wire: &[u8],
+    ) -> Result<AuthenticatedReceiveOutcome, MlsError> {
         self.ctx.receive(wire)
     }
 
@@ -681,15 +737,24 @@ impl ChannelMember {
 
     pub fn receive(&mut self, wire: &[u8]) -> Result<Option<(u32, Vec<u8>)>, MlsError> {
         match self.ctx.receive(wire)? {
-            ReceiveOutcome::Application {
+            AuthenticatedReceiveOutcome::Application {
                 sender_index,
                 payload,
+                ..
             } => Ok(Some((sender_index, payload))),
             _ => Ok(None),
         }
     }
 
     pub fn receive_outcome(&mut self, wire: &[u8]) -> Result<ReceiveOutcome, MlsError> {
+        self.ctx.receive(wire).map(Into::into)
+    }
+
+    /// Receive with the authenticated sender from the message's epoch.
+    pub fn receive_authenticated(
+        &mut self,
+        wire: &[u8],
+    ) -> Result<AuthenticatedReceiveOutcome, MlsError> {
         self.ctx.receive(wire)
     }
 
@@ -1014,10 +1079,16 @@ pub mod persist {
             let src = head.backend.storage().values.read().unwrap();
             *dst = src.clone();
         }
-        let group = MlsGroup::load(backend.storage(), &GroupId::from_slice(&head.gid))
+        let mut group = MlsGroup::load(backend.storage(), &GroupId::from_slice(&head.gid))
             .map_err(|e| MlsError::OpenMls(format!("load: {e:?}")))?
             .ok_or_else(|| MlsError::OpenMls("group not in storage".into()))?;
         ensure_ciphersuite(group.ciphersuite())?;
+        group
+            .set_past_epoch_deletion_policy(
+                &backend,
+                openmls::prelude::PastEpochDeletionPolicy::MaxEpochs(history::EPOCHS),
+            )
+            .map_err(|e| MlsError::OpenMls(format!("history policy: {e:?}")))?;
         let signer = SignatureKeyPair::read(
             backend.storage(),
             &head.signer_pub,

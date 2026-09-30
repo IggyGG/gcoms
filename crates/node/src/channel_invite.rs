@@ -14,10 +14,15 @@
 use crate::proto::NodeInfo;
 use gcoms_transport::{decode_b64url, encode_b64url};
 
+pub mod policy;
+pub(crate) mod proof;
+pub(crate) mod welcome;
+
 /// Wire/format version. Bump on any breaking change to the layout below.
 pub const INVITE_VERSION: u8 = 1;
 pub const BOOTSTRAP_INVITE_VERSION: u8 = 2;
 pub const GCHAT_BOOTSTRAP_INVITE_VERSION: u8 = 3;
+pub const REUSABLE_INVITE_VERSION: u8 = 4;
 /// Bound decoding before allocating the base64 body. Existing v1 format stays
 /// readable; v2 (legacy routing) and v3 (GChat) wrap it without adding fields to
 /// `ChannelInvite`. Their bootstrap authorities cannot be interchanged.
@@ -26,6 +31,7 @@ const MAX_INVITE_BYTES: usize = 128 * 1024;
 #[derive(Clone, Debug)]
 pub struct InviteEnvelope {
     pub invite: ChannelInvite,
+    pub policy: Option<policy::InvitationPolicy>,
     pub bootstrap: Option<gcoms_routing::bootstrap::BootstrapBundle>,
     #[cfg(feature = "experimental-gc2")]
     pub gc2_bootstrap: Option<gcoms_routing::gc2::directory::BootstrapBundle>,
@@ -74,7 +80,11 @@ impl ChannelInvite {
         }
         if matches!(
             buf.first(),
-            Some(&BOOTSTRAP_INVITE_VERSION | &GCHAT_BOOTSTRAP_INVITE_VERSION)
+            Some(
+                &BOOTSTRAP_INVITE_VERSION
+                    | &GCHAT_BOOTSTRAP_INVITE_VERSION
+                    | &REUSABLE_INVITE_VERSION
+            )
         ) {
             return InviteEnvelope::decode(buf).map(|envelope| envelope.invite);
         }
@@ -129,6 +139,7 @@ impl ChannelInvite {
     ) -> Option<String> {
         InviteEnvelope {
             invite: self.clone(),
+            policy: None,
             bootstrap: Some(bootstrap),
             #[cfg(feature = "experimental-gc2")]
             gc2_bootstrap: None,
@@ -143,6 +154,7 @@ impl ChannelInvite {
     ) -> Option<String> {
         InviteEnvelope {
             invite: self.clone(),
+            policy: None,
             bootstrap: None,
             gc2_bootstrap: Some(bootstrap),
         }
@@ -158,12 +170,42 @@ impl InviteEnvelope {
         if bytes.first() == Some(&INVITE_VERSION) {
             return Some(Self {
                 invite: ChannelInvite::decode(bytes)?,
+                policy: None,
                 bootstrap: None,
                 #[cfg(feature = "experimental-gc2")]
                 gc2_bootstrap: None,
             });
         }
         let version = *bytes.first()?;
+        if version == REUSABLE_INVITE_VERSION {
+            let flags = *bytes.get(1)?;
+            if flags & !3 != 0 {
+                return None;
+            }
+            let expiry = u64::from_be_bytes(bytes.get(2..10)?.try_into().ok()?);
+            let limit = u64::from_be_bytes(bytes.get(10..18)?.try_into().ok()?);
+            if (flags & 1 == 0 && expiry != 0) || (flags & 2 == 0 && limit != 0) {
+                return None;
+            }
+            let policy = policy::InvitationPolicy {
+                expires_at: (flags & 1 != 0).then_some(expiry),
+                max_admissions: (flags & 2 != 0).then_some(limit),
+            };
+            policy.validate().ok()?;
+            let inner = bytes.get(18..)?;
+            if !matches!(
+                inner.first(),
+                Some(&INVITE_VERSION | &BOOTSTRAP_INVITE_VERSION | &GCHAT_BOOTSTRAP_INVITE_VERSION)
+            ) {
+                return None;
+            }
+            let mut envelope = Self::decode(inner)?;
+            if envelope.invite.expiry != policy.expires_at.unwrap_or(u64::MAX) {
+                return None;
+            }
+            envelope.policy = Some(policy);
+            return Some(envelope);
+        }
         if !matches!(
             version,
             BOOTSTRAP_INVITE_VERSION | GCHAT_BOOTSTRAP_INVITE_VERSION
@@ -189,6 +231,7 @@ impl InviteEnvelope {
         if version == GCHAT_BOOTSTRAP_INVITE_VERSION {
             return Some(Self {
                 invite,
+                policy: None,
                 bootstrap: None,
                 gc2_bootstrap: Some(
                     gcoms_routing::gc2::directory::BootstrapBundle::decode(bundle).ok()?,
@@ -201,6 +244,7 @@ impl InviteEnvelope {
         let bootstrap = gcoms_routing::bootstrap::BootstrapBundle::decode(bundle).ok()?;
         Some(Self {
             invite,
+            policy: None,
             bootstrap: Some(bootstrap),
             #[cfg(feature = "experimental-gc2")]
             gc2_bootstrap: None,
@@ -208,6 +252,29 @@ impl InviteEnvelope {
     }
 
     pub fn encode(&self) -> Option<Vec<u8>> {
+        let inner = self.encode_routed()?;
+        let Some(policy) = self.policy else {
+            return Some(inner);
+        };
+        policy.validate().ok()?;
+        if self.invite.expiry != policy.expires_at.unwrap_or(u64::MAX)
+            || inner.len().checked_add(18)? > MAX_INVITE_BYTES
+        {
+            return None;
+        }
+        let mut bytes = Vec::with_capacity(inner.len() + 18);
+        bytes.push(REUSABLE_INVITE_VERSION);
+        bytes.push(
+            u8::from(policy.expires_at.is_some())
+                | (u8::from(policy.max_admissions.is_some()) << 1),
+        );
+        bytes.extend_from_slice(&policy.expires_at.unwrap_or(0).to_be_bytes());
+        bytes.extend_from_slice(&policy.max_admissions.unwrap_or(0).to_be_bytes());
+        bytes.extend_from_slice(&inner);
+        Some(bytes)
+    }
+
+    fn encode_routed(&self) -> Option<Vec<u8>> {
         let inner = self.invite.encode()?;
         #[cfg(feature = "experimental-gc2")]
         if let Some(bootstrap) = &self.gc2_bootstrap {
@@ -339,6 +406,36 @@ mod tests {
         assert_eq!(ChannelInvite::decode(&bad_version), None);
         // A non-b64url link is rejected without panicking.
         assert_eq!(ChannelInvite::from_link("!!!not base64!!!"), None);
+    }
+
+    #[test]
+    fn reusable_envelope_preserves_legacy_and_rejects_malformed_policy() {
+        let mut invite = sample(IpAddr::V4(Ipv4Addr::new(9, 9, 9, 9)));
+        for expiry in [Some(invite.expiry), None] {
+            invite.expiry = expiry.unwrap_or(u64::MAX);
+            for max_admissions in [Some(1), Some(100), None] {
+                let mut envelope = InviteEnvelope::from_link(&invite.to_link().unwrap()).unwrap();
+                envelope.policy = Some(policy::InvitationPolicy {
+                    expires_at: expiry,
+                    max_admissions,
+                });
+                let link = envelope.to_link().unwrap();
+                let raw = decode_b64url(&link).unwrap();
+                assert_eq!(raw[0], 4);
+                let decoded = InviteEnvelope::decode(&raw).unwrap();
+                assert_eq!(decoded.policy, envelope.policy);
+                assert_eq!(decoded.invite, invite);
+                for n in 0..raw.len() {
+                    assert!(InviteEnvelope::decode(&raw[..n]).is_none());
+                }
+                let mut extra = raw.clone();
+                extra.push(0);
+                assert!(InviteEnvelope::decode(&extra).is_none());
+                // The typed envelope retains policy; contact-only compatibility reads
+                // expose the exact same public owner contact.
+                assert_eq!(ChannelInvite::decode(&raw), Some(invite.clone()));
+            }
+        }
     }
 
     #[test]

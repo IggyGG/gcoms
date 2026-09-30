@@ -1,6 +1,9 @@
 // Split from the former monolithic node.rs on 2026-09-05; no behaviour change.
 
 use super::*;
+#[path = "invitations_admission.rs"]
+pub(super) mod invitations_admission;
+use invitations_admission::redeem_reusable_invite;
 
 pub(crate) async fn push_to_ref(
     scheduler: &RelayScheduler,
@@ -48,7 +51,7 @@ pub(crate) fn prepare_channel_control(
         }
         st.channels
             .iter()
-            .filter(|(_, cs)| cs.role.is_owner() && cs.membership_outbox.is_none())
+            .filter(|(_, cs)| cs.role.is_owner() && !cs.membership_barrier())
             .filter_map(|(name, cs)| {
                 crate::channel::metadata::Metadata::read(&cs.role)
                     .ok()?
@@ -325,9 +328,10 @@ pub(crate) fn deliver_mls(
             return false;
         }
     };
-    let recv_result =
-        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| cs.role.receive(wire)))
-            .unwrap_or_else(|_| Err(gcoms_mls::MlsError::OpenMls("panic in receive".into())));
+    let recv_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        cs.role.receive_authenticated(wire)
+    }))
+    .unwrap_or_else(|_| Err(gcoms_mls::MlsError::OpenMls("panic in receive".into())));
     match recv_result {
         Err(gcoms_mls::MlsError::Removed) => {
             let owner_seed = channel_seed(st, chan);
@@ -387,21 +391,32 @@ pub(crate) fn deliver_mls(
                 ],
             );
         }
-        Ok(gcoms_mls::ReceiveOutcome::Application {
+        Ok(gcoms_mls::AuthenticatedReceiveOutcome::Application {
             sender_index: sender_idx,
+            sender: historical_sender,
+            epoch: received_epoch,
             payload: plain,
         }) => {
-            let sender = st
+            let sender = historical_sender.display_name;
+            let authenticated_sender = historical_sender.pseudonym;
+            let inner = crate::channel::decode_inner(&plain);
+            // Old text/ACKs retain their epoch identity. State-changing control
+            // must also belong to that same identity in the current roster.
+            if !matches!(
+                inner,
+                Some(
+                    crate::channel::ChannelInner::Text { .. }
+                        | crate::channel::ChannelInner::TextAck { .. }
+                        | crate::channel::ChannelInner::CommitAck { .. }
+                )
+            ) && !st
                 .channels
                 .get(chan)
-                .map(|cs| cs.role.roster())
-                .and_then(|r| {
-                    r.into_iter()
-                        .find(|(idx, _)| *idx == sender_idx)
-                        .map(|(_, name)| name)
-                })
-                .unwrap_or_default();
-            let inner = crate::channel::decode_inner(&plain);
+                .is_some_and(|cs| cs.role.pseudonym_for_name(&sender) == Some(authenticated_sender))
+            {
+                restore_directory_receive(st, chan, &role_checkpoint);
+                return false;
+            }
             match inner {
                 Some(crate::channel::ChannelInner::Metadata(update)) => {
                     if !commit_channel_metadata(st, chan, id, &sender, &update, &role_checkpoint) {
@@ -437,15 +452,8 @@ pub(crate) fn deliver_mls(
                         return false;
                     }
                     let latency = now_ms().saturating_sub(ts_ms);
-                    let channel_epoch = st
-                        .channels
-                        .get(chan)
-                        .map(|cs| cs.role.epoch())
-                        .unwrap_or_default();
-                    let sender_pseudonym = st
-                        .channels
-                        .get(chan)
-                        .and_then(|channel| channel.role.pseudonym_for_name(&sender));
+                    let channel_epoch = received_epoch;
+                    let sender_pseudonym = Some(authenticated_sender);
                     let ack = sender_pseudonym.map(|sender| {
                         (
                             sender,
@@ -610,21 +618,28 @@ pub(crate) fn deliver_mls(
                     epoch,
                     share_presence,
                 }) => {
-                    let mut acknowledged_sender = None;
-                    if let Some(cs) = st.channels.get_mut(chan) {
-                        if let Some(outbox) = cs.membership_outbox.as_mut() {
-                            if outbox.commit_id == commit_id && outbox.epoch == epoch {
-                                if let Some(pseudonym) = cs.role.pseudonym_for_name(&sender) {
-                                    if outbox.expected.contains_key(&pseudonym) {
-                                        outbox.acknowledged.insert(pseudonym);
-                                        acknowledged_sender = Some(pseudonym);
-                                    }
-                                }
-                                if outbox.acknowledged.len() == outbox.expected.len() {
-                                    cs.membership_outbox = None;
-                                    cs.membership_done.notify_waiters();
-                                }
-                            }
+                    let previous = st
+                        .channels
+                        .get(chan)
+                        .map(|cs| (cs.membership_outbox.clone(), cs.membership_journal.clone()));
+                    let acknowledged_sender = st.channels.get_mut(chan).and_then(|cs| {
+                        cs.acknowledge_membership(commit_id, epoch, authenticated_sender)
+                            .then_some(authenticated_sender)
+                    });
+                    if let Err(error) = persist_current_direct_state(st) {
+                        if let (Some(cs), Some((head, tail))) =
+                            (st.channels.get_mut(chan), previous)
+                        {
+                            cs.membership_outbox = head;
+                            cs.membership_journal = tail;
+                        }
+                        restore_directory_receive(st, chan, &role_checkpoint);
+                        metrics::log_event("channel_ack_persist_error", &[("e", error)]);
+                        return false;
+                    }
+                    if let Some(cs) = st.channels.get(chan) {
+                        if !cs.membership_pending() {
+                            cs.membership_done.notify_waiters();
                         }
                     }
                     if let Some(member_id) = acknowledged_sender.filter(|member_id| {
@@ -660,7 +675,7 @@ pub(crate) fn deliver_mls(
                         .and_then(|cs| cs.message_outbox.get(&message_id))
                         .cloned();
                     if let Some(cs) = st.channels.get_mut(chan) {
-                        let authenticated = cs.role.pseudonym_for_name(&sender);
+                        let authenticated = Some(authenticated_sender);
                         if let Some(outbox) = cs.message_outbox.get_mut(&message_id) {
                             if let Some(pseudonym) = authenticated {
                                 if outbox.expected.contains_key(&pseudonym) {
@@ -678,11 +693,23 @@ pub(crate) fn deliver_mls(
                             cs.message_outbox.remove(&message_id);
                         }
                     }
+                    let confirmation = if completed {
+                        acknowledged_sender.and_then(|sender| {
+                            st.channels
+                                .get_mut(chan)
+                                .and_then(|cs| cs.invitations.confirm(&message_id, &sender))
+                        })
+                    } else {
+                        None
+                    };
                     // Authenticated ACK consumption and outbox completion are
                     // one durable boundary, regardless of presence opt-in.
                     if let Err(error) = persist_current_direct_state(st) {
                         let owner_seed = channel_seed(st, chan);
                         if let Some(cs) = st.channels.get_mut(chan) {
+                            if let Some(index) = confirmation {
+                                cs.invitations.rollback_confirmation(index);
+                            }
                             if let Some(previous) = previous {
                                 cs.message_outbox.insert(message_id, previous);
                             }
@@ -767,25 +794,16 @@ pub(crate) fn deliver_mls(
                 None => {}
             }
         }
-        Ok(gcoms_mls::ReceiveOutcome::CommitMerged {
-            sender_index: sender_idx,
-        }) => {
-            let ack = st.channels.get(chan).and_then(|cs| {
-                cs.role
-                    .roster()
-                    .into_iter()
-                    .find(|(idx, _)| *idx == sender_idx)
-                    .and_then(|(_, name)| cs.role.pseudonym_for_name(&name))
-                    .map(|sender| {
-                        (
-                            sender,
-                            crate::channel::encode_commit_ack(
-                                id,
-                                cs.role.epoch(),
-                                st.channel_presence_opt_in.contains(chan),
-                            ),
-                        )
-                    })
+        Ok(gcoms_mls::AuthenticatedReceiveOutcome::CommitMerged { sender, .. }) => {
+            let ack = st.channels.get(chan).map(|cs| {
+                (
+                    sender.pseudonym,
+                    crate::channel::encode_commit_ack(
+                        id,
+                        cs.role.epoch(),
+                        st.channel_presence_opt_in.contains(chan),
+                    ),
+                )
             });
             if !commit_channel_receive(st, chan, id, ack, &role_checkpoint, true, None) {
                 return false;
@@ -801,7 +819,7 @@ pub(crate) fn deliver_mls(
                 &[("channel", chan.to_string()), ("node", node_tag)],
             );
         }
-        Ok(gcoms_mls::ReceiveOutcome::Other) => {}
+        Ok(gcoms_mls::AuthenticatedReceiveOutcome::Other) => {}
     }
     was_text
 }
@@ -1306,6 +1324,12 @@ pub(crate) fn join_channel(
     if st.channels.len() >= gcoms_mls::CHANNEL_MAX {
         return Err("channel limit reached".into());
     }
+    let (welcome, bootstrap) = crate::channel_invite::welcome::decode(welcome)?;
+    if !bootstrap.is_empty() {
+        return invitations_admission::join_durable(
+            st, req_id, channel, visibility, welcome, &bootstrap, events,
+        );
+    }
     let prepared = st.prepared.remove(&req_id).ok_or("unknown req")?;
     let member =
         gcoms_mls::ChannelMember::join(prepared.mls, welcome).map_err(|e| e.to_string())?;
@@ -1567,7 +1591,7 @@ fn stage_admission_locked(
         }
         return Err("key package was already used by a different admission".into());
     }
-    if cs.membership_outbox.is_some() {
+    if cs.membership_barrier() {
         return Err("membership change still awaiting acknowledgements".into());
     }
     // Advancing the epoch can make retained application wires (including a
@@ -1575,9 +1599,10 @@ fn stage_admission_locked(
     // authenticated ACKs, not merely for the preceding membership commit.
     // Check before staging MLS or consuming a single-use invitation. Cached
     // Welcomes above remain replayable while this delivery barrier is held.
-    if has_pending_current_recipients(cs) {
+    if !cs.catchup_enabled() && has_pending_current_recipients(cs) {
         return Err("channel messages still awaiting acknowledgements".into());
     }
+    cs.reserve_epoch()?;
     // Membership ACKs can clear before finalize_admission publishes the
     // directory and bootstrap outbox. Keep this transient owner until that
     // function returns; an exact cached Welcome remains replayable above.
@@ -1605,7 +1630,7 @@ fn stage_admission_locked(
     cs.role.merge_pending().map_err(|e| e.to_string())?;
     let epoch = cs.role.epoch();
     if !expected.is_empty() {
-        cs.membership_outbox = Some(crate::channel::MembershipOutbox {
+        cs.retain_membership(crate::channel::MembershipOutbox {
             commit_id: crate::channel::msg_id(channel, &staged.commit),
             epoch,
             commit: staged.commit.clone(),
@@ -1958,6 +1983,29 @@ pub(crate) async fn redeem_invite(
     key_package: &[u8],
     member_name: &str,
 ) -> Result<Vec<u8>, String> {
+    let reusable = state
+        .lock()
+        .unwrap_or_else(|p| p.into_inner())
+        .channels
+        .get(channel)
+        .is_some_and(|cs| {
+            cs.invitations
+                .records
+                .iter()
+                .any(|record| &record.id == invite_id)
+        });
+    if reusable {
+        return redeem_reusable_invite(
+            state,
+            scheduler,
+            channel,
+            invite_id,
+            invite_secret,
+            key_package,
+            member_name,
+            None,
+        );
+    }
     use subtle::ConstantTimeEq;
     if channel.len() > u16::MAX as usize || member_name.len() > u16::MAX as usize {
         return Err("channel or member name too long".into());
@@ -2129,35 +2177,55 @@ pub(crate) async fn service_one_invite(
 ) {
     let deadline =
         std::time::Instant::now() + std::time::Duration::from_secs(INVITE_REDEEM_RETRY_SECS);
-    let result = loop {
-        let outcome = redeem_invite(
-            state,
-            scheduler,
-            &request.channel,
-            &request.invite_id,
-            &request.invite_secret,
-            &request.key_package,
-            &request.member_name,
-        )
-        .await;
-        // A concurrent membership change on this channel is transient: the
-        // invite is not burned, so wait briefly and retry rather than shipping
-        // the internal "still awaiting acknowledgements" string to the friend.
-        match &outcome {
-            Err(e)
-                if (e == "membership change still awaiting acknowledgements"
-                    || e == "channel messages still awaiting acknowledgements")
-                    && std::time::Instant::now() < deadline =>
-            {
-                tokio::time::sleep(std::time::Duration::from_millis(250)).await;
-                continue;
+    let result = match invitations_admission::verify_request(state, &request) {
+        Err(error) => Err(error),
+        Ok(invitations_admission::VerifiedRequest::Challenge(challenge)) => Ok(challenge),
+        Ok(invitations_admission::VerifiedRequest::Admission { package, reusable }) => loop {
+            let outcome = if reusable {
+                redeem_reusable_invite(
+                    state,
+                    scheduler,
+                    &request.channel,
+                    &request.invite_id,
+                    &request.invite_secret,
+                    &package,
+                    &request.member_name,
+                    Some(Sha256::digest(&request.sender_pk).into()),
+                )
+            } else {
+                redeem_invite(
+                    state,
+                    scheduler,
+                    &request.channel,
+                    &request.invite_id,
+                    &request.invite_secret,
+                    &package,
+                    &request.member_name,
+                )
+                .await
+            };
+            // A concurrent membership change on this channel is transient: the
+            // invite is not burned, so wait briefly and retry rather than shipping
+            // the internal "still awaiting acknowledgements" string to the friend.
+            match &outcome {
+                Err(e)
+                    if (e == "membership change still awaiting acknowledgements"
+                        || e == "channel messages still awaiting acknowledgements")
+                        && std::time::Instant::now() < deadline =>
+                {
+                    tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+                    continue;
+                }
+                _ => break outcome,
             }
-            _ => break outcome,
-        }
+        },
     };
     // Remote redemption bypasses Cmd::RedeemChannelInvite. Publish its roster
     // change too, before attempting the reply (which can fail after admission).
-    if result.is_ok() {
+    if result
+        .as_ref()
+        .is_ok_and(|reply| crate::channel_invite::proof::decode_challenge(reply).is_none())
+    {
         if let Some(channel_id) = state
             .lock()
             .unwrap_or_else(|p| p.into_inner())
@@ -2376,7 +2444,7 @@ fn prepare_channel_payload(
         if cs.own_route.aliases.len() != 2 {
             return Err("channel routing is recovering".into());
         }
-        if cs.membership_outbox.is_some() {
+        if cs.membership_barrier() {
             return Err("channel membership is still converging".into());
         }
         if cs.message_outbox.len() >= 64 && !closing {
@@ -2641,7 +2709,7 @@ pub(crate) fn valid_completed_removal_key(key: &str) -> bool {
 }
 
 type PreparedChannelRemoval = (Vec<u8>, Option<crate::channel::ChannelRoute>);
-fn prepare_channel_removal(
+pub(super) fn prepare_channel_removal(
     state: &Arc<Mutex<NodeState>>,
     channel: &str,
     member_id: [u8; 32],
@@ -2653,23 +2721,40 @@ fn prepare_channel_removal(
         let mut st = state.lock().unwrap_or_else(|p| p.into_inner());
         let archive_key = channel_archive_key(&st.identity_seed);
         let owner_seed = channel_seed(&st, channel);
-        let (commit, checkpoint, removed_directory, pending_control_len, removed_target) = {
+        let (
+            commit,
+            checkpoint,
+            removed_directory,
+            pending_control_len,
+            removed_target,
+            old_membership,
+            old_journal,
+            old_messages,
+            old_invitations,
+            old_catchup_members,
+        ) = {
             let Some(cs) = st.channels.get_mut(channel) else {
                 return Err("no channel".into());
             };
             if cs.completed_removals.contains(&removal_key) {
                 return Ok(None);
             }
-            if cs.membership_outbox.is_some() {
+            if cs.membership_barrier() {
                 return Err("membership change still awaiting acknowledgements".into());
             }
             // A voluntary departure must not advance the epoch while an
             // admitted message still needs its ACK. In particular, the old
             // owner must acknowledge the successor's ownership announcement
             // before leaving. Administrative removal remains explicit.
-            if wait_for_messages && has_pending_current_recipients(cs) {
+            if wait_for_messages && !cs.catchup_enabled() && has_pending_current_recipients(cs) {
                 return Err("channel messages still awaiting acknowledgements".into());
             }
+            cs.reserve_epoch_after_removing(Some(member_id))?;
+            let old_membership = cs.membership_outbox.clone();
+            let old_journal = cs.membership_journal.clone();
+            let old_messages = cs.message_outbox.clone();
+            let old_invitations = cs.invitations.clone();
+            let old_catchup_members = cs.catchup_members.clone();
             let expected = cs
                 .directory
                 .values()
@@ -2701,7 +2786,7 @@ fn prepare_channel_removal(
             let staged = cs.role.stage_remove(member_id).map_err(|e| e.to_string())?;
             cs.role.merge_pending().map_err(|e| e.to_string())?;
             if !expected.is_empty() {
-                cs.membership_outbox = Some(crate::channel::MembershipOutbox {
+                cs.retain_membership(crate::channel::MembershipOutbox {
                     commit_id: crate::channel::msg_id(channel, &staged.commit),
                     epoch: cs.role.epoch(),
                     commit: staged.commit.clone(),
@@ -2710,6 +2795,8 @@ fn prepare_channel_removal(
                 });
             }
             cs.completed_removals.insert(removal_key.clone());
+            cs.prune_membership_member(&member_id);
+            cs.remove_enrollment_member(&member_id);
             if let Some(route) = &removed_target {
                 cs.pending_control
                     .push_back((route.clone(), staged.commit.clone()));
@@ -2721,6 +2808,11 @@ fn prepare_channel_removal(
                 removed_directory,
                 pending_control_len,
                 removed_target,
+                old_membership,
+                old_journal,
+                old_messages,
+                old_invitations,
+                old_catchup_members,
             )
         };
         if let Err(error) = persist_current_direct_state(&st) {
@@ -2734,7 +2826,11 @@ fn prepare_channel_removal(
                     gcoms_crypto::IdentityKeypair::from_seed(owner_seed)
                 })
                 .map_err(|restore| format!("{error}; channel rollback failed: {restore}"))?;
-            cs.membership_outbox = None;
+            cs.membership_outbox = old_membership;
+            cs.membership_journal = old_journal;
+            cs.message_outbox = old_messages;
+            cs.invitations = old_invitations;
+            cs.catchup_members = old_catchup_members;
             cs.membership_done.notify_waiters();
             cs.completed_removals.remove(&removal_key);
             cs.directory.extend(removed_directory);

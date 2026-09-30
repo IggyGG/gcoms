@@ -1,3 +1,12 @@
+## IRC/main invitation integration (2026-09-30)
+
+Integrate main's reusable invitations and enrollment without dropping hosted
+channels, contacts or the 64-member limit. IPC26 keeps the released IPC22 recovery
+and IPC23 invitation discriminants; hosted/file operations follow them with
+separate capabilities. Negotiate released IPC23, reject unpublished IPC24/25, and
+retain legacy privilege checks. Fixed-byte invitation/recovery fixtures and an
+actual IPC23 handshake check the merged layout. Full paired checks are pending.
+
 ## IRC parity: retain the 64-member limit (2026-09-30)
 
 The user confirmed the existing limit of **64 members**, including the owner.

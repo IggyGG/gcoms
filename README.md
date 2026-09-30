@@ -12,7 +12,7 @@ Removed members independently authenticate the removal commit and its advertised
 public snapshot from their prior tree and signed policy. They remain excluded
 from new epoch secrets and persist an inactive channel across reopening.
 
-IPC25 adds `sharing_v2` and `ModernFileSharing` for explicit hosted/contact file
+IPC26 adds `sharing_v2` and `ModernFileSharing` for explicit hosted/contact file
 scopes. A separate encrypted `.v2` cache preserves legacy files. Hosted offers
 have their own durable consumer cursor; stable application IDs recover uncertain
 publication responses. Piece transport is bulk, while completion acknowledgments
@@ -264,8 +264,8 @@ yielding; a cryptographic operation or storage write may add to that interval.
 The durable capacity driver reports checkpoint counts so write reduction can be
 measured alongside responsiveness, without changing any receipt or policy check.
 
-IPC25 preserves released IPC22 owner-recovery request/response tags and appends
-hosted channels and modern files. Their distinct capabilities require IPC25.
+IPC26 preserves released IPC22 owner-recovery and IPC23 invitation tags, and appends
+hosted channels and modern files. Their distinct capabilities require IPC26.
 The conflicting, unpublished task IPC23/24 dialects are refused at negotiation;
 existing supported legacy clients retain their versioned operations. Hosted
 profile archives and service HTTP wires are unchanged by this IPC integration.

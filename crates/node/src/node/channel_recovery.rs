@@ -395,12 +395,13 @@ pub(crate) fn import_channel_reconnect(
         .role
         .restore_checkpoint(&key, &checkpoint, || IdentityKeypair::from_seed(seed))
         .map_err(|e| e.to_string())?;
-    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| candidate.receive(wire)))
-        .map_err(|_| "invalid reconnect MLS message")?
-        .map_err(|_| "reconnect authentication failed")?;
-    let gcoms_mls::ReceiveOutcome::Application {
-        sender_index,
-        payload,
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        candidate.receive_authenticated(wire)
+    }))
+    .map_err(|_| "invalid reconnect MLS message")?
+    .map_err(|_| "reconnect authentication failed")?;
+    let gcoms_mls::AuthenticatedReceiveOutcome::Application {
+        sender, payload, ..
     } = result
     else {
         return Err("reconnect must contain a self directory announcement".into());
@@ -410,12 +411,7 @@ pub(crate) fn import_channel_reconnect(
     else {
         return Err("reconnect must contain a self directory announcement".into());
     };
-    let sender = candidate
-        .roster()
-        .into_iter()
-        .find(|(index, _)| *index == sender_index)
-        .map(|(_, name)| name)
-        .ok_or("reconnect sender is not a member")?;
+    let sender = sender.display_name;
     let route = *route;
     let now = now_unix();
     if name != sender
