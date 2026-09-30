@@ -877,3 +877,11 @@ The temporary grant was revoked after owned daemons stopped; see
 A separate 12-profile application smoke is running before the full 500-profile
 protected-network gate. The merged full workspace and durable-runtime campaigns
 remain running; native installed qualification and trunk publication remain open.
+
+The unchanged serial batch02 campaign (`3be4455`, 25ms batches) reached its
+7200-second limit with exit124. All 500 members were admitted in 709.945s; the
+last catch-up marker was 176 clients at 6950.801s. The last resource sample
+recorded 225,198,874,624 bytes written. It did not reach the full message/offline/
+file/churn phases and is not a capacity pass. The source-bound failure receipt is
+`docs/evidence/irc-durable-capacity-20260930/serial-batch-02.json`. The later 75ms
+serial and separately scheduled four-owner campaigns remain unchanged and active.

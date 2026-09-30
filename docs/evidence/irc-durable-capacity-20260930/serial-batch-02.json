@@ -1,0 +1,39 @@
+{
+  "source": "3be4455",
+  "campaign": "original serial durable 500-client replay with 25ms batching",
+  "passed": false,
+  "exit_code": 124,
+  "deadline_seconds": 7200,
+  "admitted_members": 500,
+  "admission_seconds": 709.945,
+  "last_reported_catch_up_clients": 176,
+  "last_reported_catch_up_seconds": 6950.801,
+  "last_resource_sample": {
+    "time_unix": 1790733660,
+    "elapsed_seconds": 7190.606,
+    "io": {
+      "rchar": 174898319714,
+      "wchar": 225045607520,
+      "syscr": 820690,
+      "syscw": 75199,
+      "read_bytes": 1622016,
+      "write_bytes": 225198874624,
+      "cancelled_write_bytes": 0
+    },
+    "VmRSS": "5685684 kB",
+    "VmHWM": "5685684 kB",
+    "Threads": "10"
+  },
+  "binary_sha256": "c9c0fa531ead59b65a092dce039e9b137f251e3ce2bacf4c0fc64aefe1ea340b",
+  "evidence": {
+    ".log": {
+      "path": "test-evidence/irc-parity/runtime-capacity-500-02.log",
+      "sha256": "6c192d5e384a1f0237182834939b090d1dc7f70bfcc0f6ed21eade2d3ea2c431"
+    },
+    "-resources.jsonl": {
+      "path": "test-evidence/irc-parity/runtime-capacity-500-02-resources.jsonl",
+      "sha256": "de1bcb158d8950b9ebb2d14f42e470bb87cda81ef5c46bb9a5fb3a9814c9facf"
+    }
+  },
+  "limits": "Timed out before full recipient, offline, file and churn phases; not a capacity or protected-network pass. Original deadline and source unchanged."
+}
