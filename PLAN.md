@@ -1053,3 +1053,10 @@ Cleanup, grant revocation and original-profile preservation pass. See
 `docs/evidence/irc-durable-capacity-20260930/bootstrap-load-02-control.json`.
 The same binary is now being rolled to the explicit hosted budget before the
 matched repeat; the control failure is retained.
+
+The matched hosted-budget rollout is complete on all eight relays: 2,048
+circuits and 4,096 connections, with the same binary, identity files, original
+configuration and resource ceilings as the control. See
+`docs/evidence/irc-durable-capacity-20260930/relay-hosted-rollout.json`.
+The retained-profile comparison is running; 500-member application qualification
+still remains separate.
