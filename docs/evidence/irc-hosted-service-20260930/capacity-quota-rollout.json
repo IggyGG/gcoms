@@ -1,0 +1,38 @@
+{
+  "source_service_revision": "8687749",
+  "change": "per-channel storage ceiling for 500-member PQ profile",
+  "before_channel_bytes": 268435456,
+  "channel_bytes": 1073741824,
+  "max_total_bytes": 4294967296,
+  "allowlisted_channels": 7,
+  "creation_policy_unchanged": true,
+  "state_files": 13,
+  "retained_state_unchanged": true,
+  "config_sha256": "18efdec767c1621c783a35fe75613593cc8a10093d8188b2385b7fa3e7145a7d",
+  "service_active": true,
+  "https_info": {
+    "kind": "info",
+    "value": {
+      "extensions": [
+        "ciphertext-pieces-v1",
+        "public-directory-v1",
+        "covered-poll-v1"
+      ],
+      "requests_per_second": 1000,
+      "source_requests_per_second": 1000,
+      "version": 1,
+      "profiles": [
+        "hosted-mls-pq-v1"
+      ],
+      "public_creation": false,
+      "max_members": 500,
+      "max_page_records": 128,
+      "max_http_bytes": 4194304,
+      "motd": "Hosted channels are being qualified. Delivery receipts remain covered and can take longer in large rooms.",
+      "rules": "Private channels are the default. Members control admission, moderation and publication.",
+      "operator_contact": "Your installed network administrator"
+    }
+  },
+  "scope": "state-preserving configuration/readiness check; no 500-member network claim",
+  "time_unix": 1790730790
+}

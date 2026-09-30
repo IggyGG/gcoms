@@ -45,7 +45,7 @@ A source mapping does not imply an installed release or a 500-member network pas
 | File sharing and resume | Existing file controls with explicit hosted/contact scope | Implemented; AEAD pieces, Merkle/whole-file verification, retained partial resume and authenticated completion |
 | Service information | `/motd`, `/rules`, `/admin`, `/server-info` | Implemented; scoped info and configured limits, no network topology disclosure |
 | Connectivity probe | `/ping`, `/refresh` | Implemented as authenticated service recovery/round trip |
-| Network operator controls | Service creation allowlist, suspension, source/global rates and storage quotas | Implemented in operator configuration; deployment still open |
+| Network operator controls | Service creation allowlist, suspension, source/global rates and storage quotas | Implemented and deployed to the HEL qualification service; exact allowlist and retained-state restart checks pass |
 | Bots and automation | `crates/application/examples/hosted_bot.rs` | Implemented scoped ordinary-member example; bounded replies and no notice loop |
 | Delivery/recovery status | Pending, ServiceAccepted, Delivered, Failed; durable dedup and retry | Implemented; covered receipt completion may be slower in large rooms, as selected by the user |
 | Load and churn | 500 identities, ten senders, offline recovery, file traffic and removal | MLS component pass retained; durable-client campaign running; full protected-network/GChat gate open |

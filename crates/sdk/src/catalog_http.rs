@@ -40,7 +40,7 @@ mod tests {
     use super::*;
     use crate::ipc::{Capability, Request};
     #[test]
-    fn hosted_capability_and_larger_body_are_scoped_to_ipc22() {
+    fn hosted_capability_and_larger_body_are_scoped_to_ipc25() {
         for suffix in ["/v1/hosted", "/v1/hosted/bulk"] {
             let request = CatalogHttpRequest {
                 method: "POST".into(),
@@ -49,7 +49,7 @@ mod tests {
             };
             request.validate_size().unwrap();
             let request = Request::CatalogHttp(request);
-            assert_eq!(request.minimum_version(), 22);
+            assert_eq!(request.minimum_version(), 25);
             assert_eq!(request.required_capability(), Capability::HostedChannels);
         }
         let old = CatalogHttpRequest {

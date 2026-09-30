@@ -131,6 +131,44 @@ async fn node() -> gcoms_node::node::NodeHandle {
     .unwrap()
 }
 
+#[tokio::test]
+async fn hosted_task_dialects_and_new_capabilities_fail_before_welcome() {
+    let node = node().await;
+    for (version, capability) in [
+        (22, Capability::HostedChannels),
+        (22, Capability::ModernFileSharing),
+        (23, Capability::IdentityRead),
+        (24, Capability::IdentityRead),
+    ] {
+        let (mut peer, stream) = tokio::io::duplex(65536);
+        let server = tokio::spawn(serve_connection(
+            stream,
+            crate::EmbeddedClient::new(node.clone()),
+            vec![capability],
+            None,
+        ));
+        write_frame(
+            &mut peer,
+            &Frame::Hello(Hello {
+                min_version: version,
+                max_version: version,
+                application: "unlanded-hosted-layout".into(),
+                requested_capabilities: vec![capability],
+                component: None,
+            }),
+        )
+        .await
+        .unwrap();
+        assert!(tokio::time::timeout(Duration::from_secs(2), server)
+            .await
+            .unwrap()
+            .unwrap()
+            .is_err());
+        assert!(read_frame(&mut peer).await.is_err());
+    }
+    node.shutdown().await;
+}
+
 fn credentials() -> ComponentCredentials {
     ComponentCredentials {
         component_id: [7; 16],

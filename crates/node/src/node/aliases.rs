@@ -1014,7 +1014,7 @@ pub(crate) fn queue_contact_updates(st: &mut NodeState) -> Result<Vec<DirectDeli
     let mut deliveries = Vec::new();
     for peer in peers {
         if st.pending_1to1.len() >= 1024 {
-            break;
+            return Err("contact update outbox capacity reached".into());
         }
         if !st.peer_routes.contains_key(&peer) {
             continue;
@@ -1054,6 +1054,21 @@ struct InboxReplacement {
     staged_abandon_at: std::time::Instant,
 }
 
+/// Replacement reserves a new draining group. Re-authenticating the retained
+/// owner needs no additional slot and must remain possible at this limit.
+pub(super) fn inbox_replacement_at_capacity(st: &NodeState) -> bool {
+    let now = std::time::Instant::now();
+    st.routing.is_some()
+        && st
+            .draining_contact_aliases
+            .iter()
+            .filter(|g| g.abandon_at > now)
+            .count()
+            + usize::from(st.unannounced_old_contact_aliases.is_some())
+            + usize::from(st.staged_contact_aliases.is_some())
+            > 5
+}
+
 fn preflight_inbox_replacement(st: &NodeState) -> Result<InboxReplacement, String> {
     if st.owner_transition_failed {
         return Err("owner transition requires recovery".into());
@@ -1065,14 +1080,7 @@ fn preflight_inbox_replacement(st: &NodeState) -> Result<InboxReplacement, Strin
     }
     let activated = std::time::Instant::now();
     if st.routing.is_some() {
-        let retained = st
-            .draining_contact_aliases
-            .iter()
-            .filter(|group| group.abandon_at > activated)
-            .count()
-            + usize::from(st.unannounced_old_contact_aliases.is_some())
-            + usize::from(st.staged_contact_aliases.is_some());
-        if retained > 5 {
+        if inbox_replacement_at_capacity(st) {
             return Err("retained inbox cleanup capacity reached".into());
         }
         if st.unannounced_old_contact_aliases.is_some()
@@ -1171,11 +1179,17 @@ pub(crate) async fn install_inbox_relay(
             st.unannounced_contact_deadlines = Some((timing.receive_until, timing.abandon_at));
             Ok(())
         })?;
-        // Installation is complete after the owned queues and their exact
-        // peer updates are durable. The bounded direct maintenance owner will
-        // send those updates on their retained retry schedule. Waiting for a
-        // peer here can exhaust recovery after the replacement already committed.
-        queue_contact_updates(&mut st)?;
+        // The owned queues are already durable. Routed owners must resume
+        // receiving before peer-update backpressure can clear. Every recovery
+        // (including restart) reschedules announcement; admitted records use the
+        // existing durable direct-maintenance retry owner.
+        if let Some(runtime) = &st.routing {
+            runtime
+                .owner_announcement_pending
+                .store(true, std::sync::atomic::Ordering::Release);
+        } else {
+            queue_contact_updates(&mut st)?;
+        }
         (st.info.clone(), st.local_contact_generation)
     };
     let _ = events.send(Ev::IdentityUpdated { info, generation });

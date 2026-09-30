@@ -1,3 +1,7 @@
+## Owner-controlled membership recovery (2026-09-29)
+
+Implemented explicit, durable batch MLS revocation for stuck membership; original message/ACK journals remain. SDK and IPC22 expose a bound preview. Paired GChat recovery and focused protocol validation are recorded in the membership-recovery receipt; installed profile repair is a separate result. See [contract](docs/MEMBERSHIP_RECOVERY.md).
+
 ## Bounded file recovery latency (2026-09-28)
 
 A reopened, already accepted download queries a newly authenticated source without
@@ -804,3 +808,47 @@ retains the source-bound `window-07.json` receipt. The temporary bootstrap-only
 grant was revoked after both daemons stopped; accepted channel logs remain.
 This is a two-client pass, not 500-member or native installed qualification.
 The full workspace and unchanged-bound 500-client campaigns remain running.
+## Inbox recovery at the retained-cleanup bound (2026-09-29)
+
+The live channel repair uncovered an independent recovery loop: after retained
+attempts failed, every later round requested a replacement even when six retained
+cleanup groups made installation impossible. At that bound, a still-live retained
+inbox now gets the existing authenticated restoration path again, inside the same
+outer deadline/backoff. Normal replacement remains available below the bound.
+No queue or message is discarded; sealed authority, expiry, cleanup bounds and
+failed-checkpoint refusal remain unchanged. `codematch=unreachable`.
+
+## Keep receiving while owner announcements are backpressured (2026-09-29)
+
+After explicit provider configuration, live recovery still failed with local
+`direct retained payload admission: relay lane queue is full`. Authenticated
+queue restoration and its durable owner checkpoint had already succeeded; peer
+announcement admission then incorrectly kept all inbox subscriptions paused.
+
+Routed owner recovery/replacement now marks announcement pending and resumes
+receiving after its existing durable authority checks. The normal owner loop
+retries announcement admission without blocking inbox or channel recovery;
+admitted control records still belong to durable direct maintenance. Every
+restoration, including after restart, recreates the announcement intent. Full
+outboxes do not silently mark announcements complete. No retained payload,
+capability, authority deadline, queue bound or delivery ACK is discarded.
+
+### IRC-8 trunk integration and IPC compatibility — 2026-09-30
+
+Integrating current trunk eef71ea preserves owner-controlled legacy membership
+recovery and inbox restoration fixes. IPC25 keeps the published IPC22 recovery
+discriminants, appends hosted/file variants, and rejects the conflicting
+unpublished task IPC23/24 dialects before dispatch. Hosted and modern-file
+capabilities require25. Fixed original recovery bytes, older capability denial
+and handshake refusal regressions are included. Paired merged qualification is
+running; earlier live/archive results retain their original source bindings.
+
+The 500-member admission log measured339,264,618 bytes, exceeding the deployment
+profile's256MiB channel quota. The supplied and installed HEL profile now allows
+1GiB/channel within the unchanged4GiB aggregate ceiling, exact seven-channel
+allowlist and existing rate bounds. Restart preserved all retained state and
+HTTPS Info; see `docs/evidence/irc-hosted-service-20260930/capacity-quota-rollout.json`.
+This corrects storage headroom, not replay latency. The original serial capacity
+campaigns remain unchanged; an additional four-owner concurrent replay campaign
+retains independent validation/archives and all original send/recovery/churn
+assertions, reporting its scheduling separately. No security check is skipped.

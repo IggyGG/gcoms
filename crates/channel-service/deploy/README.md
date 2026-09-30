@@ -11,6 +11,14 @@ Create a system user/group `gcoms-channels` without a login shell. Install
 `StateDirectory`. The supplied configuration denies creation until exact channel
 IDs are provisioned; ordinary channel operators cannot change this network policy.
 
+The supplied profile allows 1 GiB per channel within a 4 GiB aggregate ceiling.
+The measured 500-member PQ admission transcript alone occupies 339,264,618 bytes,
+before chat history or files; a 256 MiB channel quota cannot support that profile.
+These are storage ceilings, not reservations or automatic admission permission.
+Monitor the aggregate bound and provision explicit channel IDs; accepted records
+are never evicted to make a full channel writable. A larger quota does not by
+itself qualify 500-member recovery or protected-network latency.
+
 Install `nginx-locations.conf` as an include in the **existing HTTPS server for
 the signed provider origin**. These are two exact POST routes; the existing
 bootstrap, network defaults and TLS settings continue to serve their own paths.

@@ -530,6 +530,14 @@ impl OwnerSession {
         self.ctx.stage_remove(member_id)
     }
 
+    /// One owner-authorized commit removes the complete selected set.
+    pub fn stage_remove_members(
+        &mut self,
+        members: &[[u8; 32]],
+    ) -> Result<StagedRemoval, MlsError> {
+        self.ctx.stage_remove_members(members)
+    }
+
     pub fn merge_pending(&mut self) -> Result<(), MlsError> {
         self.ctx
             .group
@@ -1347,18 +1355,32 @@ impl Ctx {
         })
     }
     fn stage_remove(&mut self, member_id: [u8; 32]) -> Result<StagedRemoval, MlsError> {
-        if !self.may_remove(Some(self.own_pseudonym())) || self.owner_pseudonym == Some(member_id) {
+        self.stage_remove_members(&[member_id])
+    }
+
+    fn stage_remove_members(&mut self, members: &[[u8; 32]]) -> Result<StagedRemoval, MlsError> {
+        if !self.may_remove(Some(self.own_pseudonym()))
+            || members.is_empty()
+            || members.iter().any(|id| self.owner_pseudonym == Some(*id))
+        {
             return Err(MlsError::Unauthorized);
         }
-        let index = self
-            .group
-            .members()
-            .find(|m: &Member| m.signature_key.as_slice() == member_id)
-            .map(|m| m.index)
-            .ok_or(MlsError::MemberNotFound)?;
+        let mut indices = Vec::new();
+        for member_id in members {
+            let index = self
+                .group
+                .members()
+                .find(|m: &Member| m.signature_key.as_slice() == member_id)
+                .map(|m| m.index)
+                .ok_or(MlsError::MemberNotFound)?;
+            if indices.contains(&index) {
+                return Err(MlsError::Unauthorized);
+            }
+            indices.push(index);
+        }
         let (commit, _welcome, _group_info) = self
             .group
-            .remove_members(&self.backend, &self.signer, &[index])
+            .remove_members(&self.backend, &self.signer, &indices)
             .map_err(|e| MlsError::OpenMls(format!("{e:?}")))?;
         let encoded = commit
             .tls_serialize_detached()

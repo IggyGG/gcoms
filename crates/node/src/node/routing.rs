@@ -123,6 +123,9 @@ pub(crate) struct RoutingRuntime {
     pub service: Mutex<Option<Arc<RelayService>>>,
     pub catalog_origins: Mutex<Vec<String>>,
     pub recovering_owner: AtomicBool,
+    // Every authenticated restore schedules this again, including after restart.
+    // Queued contact records retain their existing durable retry ownership.
+    pub(super) owner_announcement_pending: AtomicBool,
     pub recovery_status: Mutex<RecoveryStatus>,
     pub published: Arc<AtomicBool>,
     #[cfg(feature = "relay-host")]
@@ -290,6 +293,7 @@ impl RoutingRuntime {
             service: Mutex::new(None),
             catalog_origins: Mutex::new(config.catalog_origins),
             recovering_owner: AtomicBool::new(true),
+            owner_announcement_pending: AtomicBool::new(false),
             recovery_status: Mutex::new(RecoveryStatus::default()),
             published: Arc::new(AtomicBool::new(false)),
             #[cfg(feature = "relay-host")]
@@ -682,6 +686,11 @@ pub(crate) fn spawn(
                 }
             }
             if !runtime.recovering_owner.load(Ordering::Acquire) {
+                // Receiving ACKs must resume even when peer-update admission is
+                // full; otherwise the queue which needs those ACKs cannot drain.
+                if let Err(error) = announce_owner(&state, &events, &runtime) {
+                    metrics::log_event("owner_announcement_deferred", &[("e", error)]);
+                }
                 runtime.recovery_observed("recovering channel routes", None);
                 let result = recover_channels(&state, &scheduler, &runtime).await;
                 runtime.recovery_observed(
@@ -944,18 +953,23 @@ async fn recover_channels(
     Ok(())
 }
 
-async fn recover_owner(
+pub(super) async fn recover_owner(
     state: &Arc<Mutex<NodeState>>,
     scheduler: &RelayScheduler,
     events: &broadcast::Sender<Ev>,
     runtime: &RoutingRuntime,
     allow_replacement: bool,
 ) -> Result<(), String> {
-    let current = state
-        .lock()
-        .unwrap_or_else(|p| p.into_inner())
-        .client_relay
-        .clone();
+    let (current, replacement_full) = {
+        let st = state.lock().unwrap_or_else(|p| p.into_inner());
+        if st.owner_transition_failed {
+            return Err("owner transition requires recovery".into());
+        }
+        (
+            st.client_relay.clone(),
+            aliases::inbox_replacement_at_capacity(&st),
+        )
+    };
     let own = runtime.own_introduction();
     let live = !current.aliases.is_empty()
         && current.aliases.iter().all(|a| {
@@ -967,7 +981,10 @@ async fn recover_owner(
     // The caller grants replacement only after the retained recovery rounds
     // failed. Repeating a hung retained attempt here can consume every outer
     // deadline forever, preventing the already-authorized failover entirely.
-    if live && !allow_replacement {
+    // A full cleanup set cannot accept replacement. Keep the existing
+    // authenticated resume path reachable, within the caller's same deadline,
+    // rather than provisioning replacements which installation must refuse.
+    if live && (!allow_replacement || replacement_full) {
         return resume_owner(state, scheduler, events, runtime, &current)
             .await
             .map_err(|error| format!("retained inbox recovery: {error}"));
@@ -989,6 +1006,32 @@ async fn recover_owner(
     install_advertisement(state, introduction.as_deref());
     runtime.recovery_observed("installing replacement inbox", None);
     install_inbox_relay(state, scheduler, events, &card).await
+}
+
+/// Best-effort admission, not best-effort storage: each admitted update is
+/// durable. Failure leaves a retry pending on the normal owner-loop cadence.
+/// This runs only after authenticated owner restoration has durably committed.
+pub(super) fn announce_owner(
+    state: &Arc<Mutex<NodeState>>,
+    events: &broadcast::Sender<Ev>,
+    runtime: &RoutingRuntime,
+) -> Result<(), String> {
+    if !runtime.owner_announcement_pending.load(Ordering::Acquire) {
+        return Ok(());
+    }
+    let mut st = state.lock().unwrap_or_else(|p| p.into_inner());
+    if st.owner_transition_failed {
+        return Err("owner transition requires recovery".into());
+    }
+    queue_contact_updates(&mut st)?;
+    runtime
+        .owner_announcement_pending
+        .store(false, Ordering::Release);
+    let _ = events.send(Ev::IdentityUpdated {
+        info: st.info.clone(),
+        generation: st.local_contact_generation,
+    });
+    Ok(())
 }
 
 /// GC/2 advertisement request options, or empty when the carrier is not
@@ -1090,25 +1133,12 @@ async fn resume_owner(
             st.client_relay = authority;
             restored.apply_retained(st, clock, false)
         })?;
-        // The queue IDs and deadlines remain unchanged; the freshly restored
-        // forwarding authority is announced through existing signed updates.
-        let deliveries = queue_contact_updates(&mut st)?;
+        runtime
+            .owner_announcement_pending
+            .store(true, Ordering::Release);
         let info = st.info.clone();
         let generation = st.local_contact_generation;
         let _ = events.send(Ev::IdentityUpdated { info, generation });
-        for delivery in deliveries {
-            if let Some(destination) = delivery.peer.primary() {
-                for cell in &delivery.cells {
-                    let _ = scheduler.frwd(
-                        ProducerClass::Direct,
-                        delivery.relay.clone(),
-                        destination.clone(),
-                        cell.clone(),
-                        st.frwd_target_policy.clone(),
-                    );
-                }
-            }
-        }
     }
     #[cfg(not(feature = "client-persist"))]
     {
@@ -1123,6 +1153,9 @@ async fn resume_owner(
         }
         st.client_relay = authority;
         refresh_public_info(&mut st);
+        runtime
+            .owner_announcement_pending
+            .store(true, Ordering::Release);
         let _ = events.send(Ev::IdentityUpdated {
             info: st.info.clone(),
             generation: st.local_contact_generation,

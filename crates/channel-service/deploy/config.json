@@ -4,7 +4,7 @@
   "creation": { "kind": "allow_list", "channels": [] },
   "max_channels": 64,
   "max_total_bytes": 4294967296,
-  "channel_bytes": 268435456,
+  "channel_bytes": 1073741824,
   "channel_records": 100000,
   "requests_per_second": 1000,
   "source_requests_per_second": 1000,

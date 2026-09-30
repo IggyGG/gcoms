@@ -1,0 +1,25 @@
+{
+  "scope": "merged hosted runtime release regressions and strict all-target/all-feature Clippy; full capacity pending",
+  "branch_parent": "0c7a6ba",
+  "integrated_trunk": "eef71eaa1a54d28b5b7c50e305f2a08018567719",
+  "ipc_version": 25,
+  "released_recovery_request_tag": 51,
+  "released_recovery_response_tag": 23,
+  "hosted_tests_passed": 27,
+  "explicit_capacity_ignores": 2,
+  "concurrent_smoke_members": 12,
+  "concurrent_replay_owners": 4,
+  "serial_baseline_preserved": true,
+  "five_hundred_qualification": "pending",
+  "source_sha256": {
+    "crates/sdk/src/ipc.rs": "21e4b7cadb6038528b738ba53014c2b4929b8231be2f187b29abd3a8fc79dc3a",
+    "crates/sdk/src/ipc/bootstrap_compat_tests.rs": "9ab0d76218344f32044b136a97c5ef0bef2bea44b92684958299155fb3425115",
+    "crates/sdk/src/catalog_http.rs": "992f2f93d6f396c9e22c3aff7be0bbc37f6ee219ab7139c7fb0a140e5d973ccc",
+    "crates/runtime/src/hosted/tests/capacity.rs": "dba9eac6c0ea411b783162db648f47236011f9f0d4a65dd4627d9d00c0d13975",
+    "crates/channel-service/deploy/config.json": "0eabe635bce566349a8fbe44b6d483517d5a59f6d766a418e458ba93ddc2cbfa"
+  },
+  "log": {
+    "path": "test-evidence/irc-parity/concurrent-build-01.log",
+    "sha256": "2fd125cafb18d87512bd4a40c089cf4aa9f27bf91042af832b5644e77dd18025"
+  }
+}

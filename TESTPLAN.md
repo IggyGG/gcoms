@@ -61,6 +61,9 @@ wrong-code proofs and retry a concurrent refused join with the same leaf
 identity. Accepted members cannot invoke the pending-join reset API. A code's
 private serialization must not appear in public policy. Ordered key rotation
 and revocation require separate policy-change regressions before being enabled.
+## Owner-controlled membership recovery
+
+Run node `membership_recovery::tests`, channel maintenance revocation accounting, MLS and SDK library suites with all features. Require stale/partial/owner refusal, durable-save rollback, original wire/ACK retention through reopen, old-leaf exclusion, fresh same-name admission, removal-history bounds and IPC21/22 capability enforcement. Paired GChat `membership_recovery_invitation_delivery_kick_and_reopen` must exercise real mint/join/redeem, delivery ACK, normal kick and restart.
 
 ## Bounded file recovery latency
 
@@ -727,3 +730,41 @@ receipt includes every archive hash and the untouched source manifests. Live07
 qualifies only its runtime907e54f two-client protected-network journey. Retain
 earlier failed latency results and require separate 500-member and native
 installed results before claiming the full IRC parity release.
+## Retained inbox recovery when replacement is full
+
+With a pinned TLS fixture, populate the six retained cleanup roles and allow
+replacement as after repeated failed recovery rounds. Require actual retained
+admission responses and queue probes, durable restoration, identical queue IDs,
+capabilities and original deadlines, and no application delivery event. The old
+replacement-only branch must fail this case. Retain the capacity-refusal test,
+failed-checkpoint refusal and existing owner-alias restoration/expiry tests.
+The personal-profile invitation/send/kick check is a separate live receipt.
+
+## Owner announcement backpressure
+
+The pinned-transport retained-inbox fixture now includes a peer and fills the
+shared retained-control allowance. The old runtime must fail with the exact
+live `direct retained payload admission` error. The corrected runtime must
+finish authenticated restoration, keep every role/capability and never extend
+its deadline, while announcement stays pending. Releasing capacity then permits
+normal durable announcement; failed storage must leave retry pending without
+an event or new pending record, and a completed retry must not duplicate it.
+Retain ordinary replacement progress, owner checkpoint refusal, contact-update
+encryption/archive checks and the original invalid millisecond equality result
+(deadline conversion may floor a remainder, never increase authority).
+
+For the IPC25 integration, run SDK all-feature tests and strict SDK/runtime
+Clippy. `recovery_is_owner_capability_bounded_and_versioned` decodes and re-encodes
+fixed released IPC22 request/response bytes.
+`hosted_task_dialects_and_new_capabilities_fail_before_welcome` rejects task23/24
+and hosted/file capabilities on22. The retained route-recovery connection test
+also requires hosted dispatch denial under an ordinary legacy admin session.
+Repeat merged GChat Rust/UI/generated checks and paired package consumers.
+
+Retain the serial500-client campaign and its original7200-second bound. The
+separate ignored `five_hundred_concurrent_durable_hosted_clients_ten_senders_offline_and_churn`
+runs at most four independent catch-up owners, with identical commit validation
+and private archives. Run its12-client concurrent smoke first; do not compare
+its wall time as a production-code-only speedup or protected-network result.
+Require a configured channel quota above the measured339,264,618-byte admission
+log; the500-member deployment template uses1GiB with a4GiB aggregate ceiling.

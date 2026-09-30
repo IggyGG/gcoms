@@ -97,8 +97,9 @@ fn restored(dir: &Path, channel: [u8; 32], transport: Arc<dyn Transport>) -> Cli
 fn has_delivery(events: &[api::Event], id: [u8; 32]) -> bool {
     events.iter().any(|e| matches!(e.kind, api::EventKind::Delivery { id: got, state: api::Delivery::Delivered } if got == id))
 }
-async fn run(members: usize) {
+async fn run(members: usize, replay_concurrency: usize) {
     assert!((12..=500).contains(&members));
+    assert!((1..=4).contains(&replay_concurrency));
     let started = Instant::now();
     let server = private_dir();
     let network = transport(server.path());
@@ -134,18 +135,57 @@ async fn run(members: usize) {
     // client now replays ordered commits through its own encrypted sidecar.
     eprintln!("hosted_runtime_capacity stage=admission_complete members={members} seconds={admission_seconds:.3}");
     let mut replay_checkpoints = 0;
-    for (index, client) in clients.iter_mut().enumerate() {
-        let before = client.checkpoint_count();
-        catch_up(client).await;
-        replay_checkpoints += client.checkpoint_count() - before;
-        assert_eq!(client.view().members.len(), members);
-        if index % 25 == 0 {
-            eprintln!(
-                "hosted_runtime_capacity stage=catch_up clients={} checkpoints={replay_checkpoints} seconds={:.3}",
-                index + 1,
-                started.elapsed().as_secs_f64()
-            );
+    if replay_concurrency == 1 {
+        for (index, client) in clients.iter_mut().enumerate() {
+            let before = client.checkpoint_count();
+            catch_up(client).await;
+            replay_checkpoints += client.checkpoint_count() - before;
+            assert_eq!(client.view().members.len(), members);
+            if index % 25 == 0 {
+                eprintln!(
+                    "hosted_runtime_capacity stage=catch_up clients={} checkpoints={replay_checkpoints} seconds={:.3}",
+                    index + 1,
+                    started.elapsed().as_secs_f64()
+                );
+            }
         }
+    } else {
+        // Complement the unchanged serial cost baseline with actual independent
+        // owners recovering concurrently. Each still validates every commit and
+        // writes its own encrypted archive. Bound simultaneous prefetch buffers.
+        let mut waiting = clients.into_iter().enumerate();
+        let mut recovering = tokio::task::JoinSet::new();
+        let mut completed = Vec::with_capacity(members);
+        loop {
+            while recovering.len() < replay_concurrency {
+                let Some((index, mut client)) = waiting.next() else {
+                    break;
+                };
+                recovering.spawn(async move {
+                    let before = client.checkpoint_count();
+                    catch_up(&mut client).await;
+                    assert_eq!(client.view().members.len(), members);
+                    let checkpoints = client.checkpoint_count() - before;
+                    (index, client, checkpoints)
+                });
+            }
+            let Some(result) = recovering.join_next().await else {
+                break;
+            };
+            let (index, client, checkpoints) = result.unwrap();
+            replay_checkpoints += checkpoints;
+            completed.push((index, client));
+            if completed.len() % 25 == 1 {
+                eprintln!(
+                    "hosted_runtime_capacity stage=concurrent_catch_up clients={} concurrency={replay_concurrency} checkpoints={replay_checkpoints} seconds={:.3}",
+                    completed.len(),
+                    started.elapsed().as_secs_f64()
+                );
+            }
+        }
+        completed.sort_by_key(|(index, _)| *index);
+        clients = completed.into_iter().map(|(_, client)| client).collect();
+        assert_eq!(clients.len(), members);
     }
     // A single topic handoff can be queued by the owner during convergence.
     for client in &mut clients {
@@ -298,10 +338,19 @@ async fn run(members: usize) {
 }
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn durable_hosted_capacity_smoke() {
-    run(12).await;
+    run(12, 1).await;
+}
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn durable_hosted_concurrent_capacity_smoke() {
+    run(12, 4).await;
 }
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 #[ignore = "explicit 500-client durable capacity campaign; in-process transport, not a protected-network latency gate"]
 async fn five_hundred_durable_hosted_clients_ten_senders_offline_and_churn() {
-    run(500).await;
+    run(500, 1).await;
+}
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+#[ignore = "explicit concurrent 500-client campaign; complements rather than replaces the serial baseline"]
+async fn five_hundred_concurrent_durable_hosted_clients_ten_senders_offline_and_churn() {
+    run(500, 4).await;
 }

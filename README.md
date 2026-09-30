@@ -4,7 +4,7 @@ the service has no member decryption secrets. Recipient receipts stay on the
 covered channel, and large channels can take longer to show delivery. An offline
 newcomer sees “Topic pending” until an authorized topic writer returns.
 
-IPC23 adds `sharing_v2` and `ModernFileSharing` for explicit hosted/contact file
+IPC25 adds `sharing_v2` and `ModernFileSharing` for explicit hosted/contact file
 scopes. A separate encrypted `.v2` cache preserves legacy files. Hosted offers
 have their own durable consumer cursor; stable application IDs recover uncertain
 publication responses. Piece transport is bulk, while completion acknowledgments
@@ -20,7 +20,9 @@ cancels those waits. Read polling does not interrupt admission preparation.
 File integration is undergoing end-to-end qualification. See the
 [coverage ledger](docs/IRC_PARITY.md) for remaining application, 500-member and
 release gates. An installed HTTPS service origin and explicit creation policy
-are still required; these source changes do not constitute deployment.
+are required; see the ledger for the deployed HEL service and exact live checks.
+
+Owner-controlled [channel recovery](docs/MEMBERSHIP_RECOVERY.md) can revoke explicitly selected unavailable members without clearing message journals or claiming delivery. SDK/local IPC previews bind the exact membership state; ordinary authenticated ACK rules remain.
 
 Retained file downloads query newly authenticated sources immediately and use a
 bounded eight-send window; see [recovery validation](TESTPLAN.md#bounded-file-recovery-latency).
@@ -253,3 +255,9 @@ Replay batches check a 75ms scheduling budget between records before saving and
 yielding; a cryptographic operation or storage write may add to that interval.
 The durable capacity driver reports checkpoint counts so write reduction can be
 measured alongside responsiveness, without changing any receipt or policy check.
+
+IPC25 preserves released IPC22 owner-recovery request/response tags and appends
+hosted channels and modern files. Their distinct capabilities require IPC25.
+The conflicting, unpublished task IPC23/24 dialects are refused at negotiation;
+existing supported legacy clients retain their versioned operations. Hosted
+profile archives and service HTTP wires are unchanged by this IPC integration.

@@ -236,7 +236,7 @@ pub enum Request {
         channel: ChannelId,
         through: u64,
     },
-    /// IPC23: ciphertext-only bulk piece storage; these calls do not ACK chat.
+    /// IPC25: ciphertext-only bulk piece storage; these calls do not ACK chat.
     PutBlob {
         channel: ChannelId,
         reference: crate::hosted::BlobRef,
@@ -246,7 +246,7 @@ pub enum Request {
         channel: ChannelId,
         reference: crate::hosted::BlobRef,
     },
-    /// IPC23: independent durable file-consumer cursor. Event sequences here
+    /// IPC25: independent durable file-consumer cursor. Event sequences here
     /// are service record sequences, not the ordinary local event sequence.
     FileEvents {
         channel: ChannelId,
@@ -262,7 +262,7 @@ pub enum Request {
         id: MessageId,
         content: Content,
     },
-    /// IPC24: browse opt-in public channel names through the protected route.
+    /// IPC25: browse opt-in public channel names through the protected route.
     Directory {
         endpoint: String,
         after: Option<ChannelId>,

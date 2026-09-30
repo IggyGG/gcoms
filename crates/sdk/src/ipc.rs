@@ -29,12 +29,13 @@ use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 #[cfg(all(any(unix, windows), feature = "ipc"))]
 use tokio::sync::{broadcast, mpsc, oneshot, watch, Mutex};
 
-pub const VERSION: u16 = 24;
-// IPC24 appends public hosted directory browsing and publication.
-// IPC22 adds separately authorized routed hosted-profile requests.
+pub const VERSION: u16 = 25;
+// IPC25 appends hosted channels and modern files after released IPC22 recovery.
+// Task-only IPC23/24 layouts are not negotiated.
 
 #[cfg(test)]
 mod metadata_compat;
+// IPC22 appends owner-only membership recovery; previous discriminants are unchanged.
 // IPC21 appends opt-in immutable file metadata and authenticated channel reconnect.
 // IPC20 adds same-scope file reuse; existing request layouts are unchanged.
 // new operations/capabilities/events are never admitted under an older version.
@@ -272,6 +273,10 @@ pub enum Request {
         channel: String,
         code: Option<String>,
     },
+    ChannelRecovery {
+        channel: String,
+        request: Option<crate::MembershipRecoveryRequest>,
+    },
     HostedChannels(crate::hosted_client::Request),
     SharingV2(crate::sharing_v2::Request),
 }
@@ -279,23 +284,9 @@ pub enum Request {
 impl Request {
     pub fn minimum_version(&self) -> u16 {
         match self {
-            Self::HostedChannels(
-                crate::hosted_client::Request::Directory { .. }
-                | crate::hosted_client::Request::Change {
-                    change: crate::hosted_client::Change::Listing(_),
-                    ..
-                },
-            ) => 24,
-            Self::SharingV2(_) => 23,
-            Self::HostedChannels(
-                crate::hosted_client::Request::PutBlob { .. }
-                | crate::hosted_client::Request::GetBlob { .. }
-                | crate::hosted_client::Request::FileEvents { .. }
-                | crate::hosted_client::Request::CommitFileEvents { .. }
-                | crate::hosted_client::Request::SendIdentified { .. },
-            ) => 23,
-            Self::HostedChannels(_) => 22,
-            Self::CatalogHttp(request) if request.is_hosted() => 22,
+            Self::HostedChannels(_) | Self::SharingV2(_) => 25,
+            Self::CatalogHttp(request) if request.is_hosted() => 25,
+            Self::ChannelRecovery { .. } => 22,
             Self::Sharing(crate::sharing::Request::Inspect { .. })
             | Self::ChannelReconnect { .. } => 21,
             Self::Sharing(crate::sharing::Request::CommitReusing { .. }) => 20,
@@ -325,6 +316,7 @@ impl Request {
             Self::SharingV2(_) => Capability::ModernFileSharing,
             Self::HostedChannels(_) => Capability::HostedChannels,
             Self::CatalogHttp(request) if request.is_hosted() => Capability::HostedChannels,
+            Self::ChannelRecovery { .. } => Capability::ChannelAdmin,
             Self::ChannelReconnect { .. } => Capability::ChannelMember,
             Self::Sharing(_) => Capability::FileSharing,
             Self::NetworkStatus => Capability::IdentityRead,
@@ -407,6 +399,14 @@ impl Request {
                     "ciphertext piece reference bounds".into(),
                 ))
             }
+            Self::ChannelRecovery { channel, request }
+                if channel.len() > 256
+                    || request.as_ref().is_some_and(|r| {
+                        r.remove_members.is_empty() || r.remove_members.len() > 256
+                    }) =>
+            {
+                Err(SdkError::Protocol("channel recovery exceeds limit".into()))
+            }
             Self::ChannelReconnect { channel, code }
                 if channel.len() > 256 || code.as_ref().is_some_and(|v| v.len() > 8 * 1024) =>
             {
@@ -470,6 +470,7 @@ pub enum Response {
     Sharing(crate::sharing::Reply),
     NetworkStatus(crate::NetworkStatus),
     ChannelTopic(String),
+    ChannelRecovery(crate::MembershipRecoveryStatus),
     HostedChannels(crate::hosted_client::Reply),
     SharingV2(crate::sharing_v2::Reply),
 }
@@ -1606,6 +1607,25 @@ impl GcClient for IpcClient {
         }
     }
 
+    async fn channel_recovery(
+        &self,
+        channel: &str,
+        request: Option<&crate::MembershipRecoveryRequest>,
+    ) -> Result<crate::MembershipRecoveryStatus, SdkError> {
+        match self
+            .request(Request::ChannelRecovery {
+                channel: channel.into(),
+                request: request.cloned(),
+            })
+            .await?
+        {
+            Response::ChannelRecovery(status) => Ok(status),
+            _ => Err(SdkError::Protocol(
+                "unexpected channel recovery response".into(),
+            )),
+        }
+    }
+
     async fn remove_channel_member(
         &self,
         channel: &str,
@@ -1808,7 +1828,17 @@ where
         return Err(SdkError::Protocol("incompatible IPC hello".into()));
     }
     let mut inbox_lease = InboxLease(None);
-    let version = hello.max_version.min(VERSION);
+    // Versions 23 and 24 existed only on the unlanded hosted task branch and
+    // used the released IPC22 recovery discriminant for another operation.
+    // Negotiate only released legacy layouts or the unified IPC25 layout.
+    let version = if hello.max_version >= VERSION {
+        VERSION
+    } else {
+        hello.max_version.min(22)
+    };
+    if version < hello.min_version {
+        return Err(SdkError::Protocol("incompatible IPC version".into()));
+    }
     // Two shipped branches assigned incompatible request/response tags to IPC17.
     // A plain Hello cannot identify that dialect; reject it before reading any
     // request. ProfileHello authenticates the application-host dialect, whose
@@ -1820,11 +1850,11 @@ where
     }
     // Tag 12 meant BootstrapApplication in the unreleased bootstrap-v13 fork.
     // Never downgrade/filter that Hello: tags 30/31 now mean network sends.
-    if (version < 23
+    if (version < 25
         && hello
             .requested_capabilities
             .contains(&Capability::ModernFileSharing))
-        || (version < 22
+        || (version < 25
             && hello
                 .requested_capabilities
                 .contains(&Capability::HostedChannels))
@@ -1873,8 +1903,8 @@ where
                 && (version >= 11 || *capability != Capability::HostShell)
                 && (version >= 12 || *capability != Capability::VolatileApplication)
                 && (version >= 15 || *capability != Capability::CatalogAccess)
-                && (version >= 23 || *capability != Capability::ModernFileSharing)
-                && (version >= 22 || *capability != Capability::HostedChannels)
+                && (version >= 25 || *capability != Capability::ModernFileSharing)
+                && (version >= 25 || *capability != Capability::HostedChannels)
                 && (version >= 16 || *capability != Capability::BootstrapApplication)
                 && (version >= 18 || *capability != Capability::FileSharing)
                 && (version >= 17 || *capability != Capability::ProfileAdmin)
@@ -2382,6 +2412,10 @@ pub(crate) async fn dispatch<C: GcClient>(
                 .await
                 .map(Response::MessageId)
         }
+        Request::ChannelRecovery { channel, request } => client
+            .channel_recovery(&channel, request.as_ref())
+            .await
+            .map(Response::ChannelRecovery),
         Request::RemoveChannelMember { channel, member_id } => {
             client.remove_channel_member(&channel, member_id).await?;
             Ok(Response::Empty)
@@ -2679,7 +2713,7 @@ mod tests {
             piece: 0,
             bytes: vec![42; 256],
         });
-        assert_eq!(request.minimum_version(), 23);
+        assert_eq!(request.minimum_version(), 25);
         assert_eq!(request.required_capability(), Capability::ModernFileSharing);
         request.zeroize();
         assert!(
@@ -2714,12 +2748,12 @@ mod tests {
                 content: crate::hosted_client::Content::Text("test".into()),
             },
         ] {
-            assert_eq!(Request::HostedChannels(operation).minimum_version(), 23);
+            assert_eq!(Request::HostedChannels(operation).minimum_version(), 25);
         }
     }
 
     #[test]
-    fn hosted_directory_requires_ipc24_and_hosted_authority() {
+    fn hosted_directory_requires_ipc25_and_hosted_authority() {
         for operation in [
             crate::hosted_client::Request::Directory {
                 endpoint: "https://example.invalid/v1/hosted".into(),
@@ -2733,13 +2767,13 @@ mod tests {
             },
         ] {
             let request = Request::HostedChannels(operation);
-            assert_eq!(request.minimum_version(), 24);
+            assert_eq!(request.minimum_version(), 25);
             assert_eq!(request.required_capability(), Capability::HostedChannels);
         }
     }
 
     #[test]
-    fn ciphertext_piece_requests_require_ipc23_and_hosted_authority() {
+    fn ciphertext_piece_requests_require_ipc25_and_hosted_authority() {
         let reference = crate::hosted::BlobRef {
             owner: [1; 32],
             file: [2; 16],
@@ -2757,7 +2791,7 @@ mod tests {
             },
         ] {
             let request = Request::HostedChannels(operation);
-            assert_eq!(request.minimum_version(), 23);
+            assert_eq!(request.minimum_version(), 25);
             assert_eq!(request.required_capability(), Capability::HostedChannels);
             let frame = Frame::Request(RequestEnvelope {
                 version: VERSION,
@@ -2774,13 +2808,65 @@ mod tests {
         assert!(oversized.validate_application_payload().is_err());
         assert_eq!(
             Request::HostedChannels(crate::hosted_client::Request::List).minimum_version(),
-            22
+            25
         );
     }
 
     #[test]
+    fn recovery_is_owner_capability_bounded_and_versioned() {
+        let request = Request::ChannelRecovery {
+            channel: "room".into(),
+            request: None,
+        };
+        assert_eq!(request.minimum_version(), 22);
+        assert_eq!(request.required_capability(), Capability::ChannelAdmin);
+        // Released IPC22 bytes, independent of the current enum encoder.
+        let old_wire = [51, 4, b'r', b'o', b'o', b'm', 0];
+        assert_eq!(postcard::to_allocvec(&request).unwrap(), old_wire);
+        assert_eq!(postcard::from_bytes::<Request>(&old_wire).unwrap(), request);
+        let old_status = crate::MembershipRecoveryStatus {
+            channel_id: [1; 32],
+            epoch: 2,
+            pending_commit: None,
+            revision: [3; 32],
+            members: Vec::new(),
+            retained_messages: 0,
+        };
+        let mut old_reply = vec![23];
+        old_reply.extend_from_slice(&[1; 32]);
+        old_reply.extend_from_slice(&[2, 0]);
+        old_reply.extend_from_slice(&[3; 32]);
+        old_reply.extend_from_slice(&[0, 0]);
+        assert_eq!(
+            postcard::from_bytes::<Response>(&old_reply).unwrap(),
+            Response::ChannelRecovery(old_status.clone())
+        );
+        assert_eq!(
+            postcard::to_allocvec(&Response::ChannelRecovery(old_status)).unwrap(),
+            old_reply
+        );
+        let frame = Frame::Request(RequestEnvelope {
+            version: VERSION,
+            request_id: 1,
+            request,
+        });
+        assert_eq!(decode(&encode(&frame).unwrap()).unwrap(), frame);
+        let request = Request::ChannelRecovery {
+            channel: "room".into(),
+            request: Some(crate::MembershipRecoveryRequest {
+                channel_id: [1; 32],
+                epoch: 2,
+                pending_commit: None,
+                revision: [2; 32],
+                remove_members: vec![[3; 32]; 257],
+            }),
+        };
+        assert!(request.validate_application_payload().is_err());
+    }
+
+    #[test]
     fn requests_declare_required_capability() {
-        assert_eq!(VERSION, 24);
+        assert_eq!(VERSION, 25);
         for request in [
             Request::SubmitDurableOpaque {
                 recipient: ContactCard(Vec::new()),
@@ -3661,9 +3747,30 @@ mod route_recovery_compatibility_tests {
     }
     #[tokio::test]
     async fn route_recovery_preserves_v13_identity_and_requires_v14_owner_capability() {
-        for (version, cap) in [
-            (13, Capability::ChannelAdmin),
-            (14, Capability::ChannelMember),
+        for (version, cap, request) in [
+            (
+                22,
+                Capability::ChannelAdmin,
+                Request::HostedChannels(crate::hosted_client::Request::List),
+            ),
+            (13, Capability::ChannelAdmin, recovery()),
+            (14, Capability::ChannelMember, recovery()),
+            (
+                21,
+                Capability::ChannelAdmin,
+                Request::ChannelRecovery {
+                    channel: "room".into(),
+                    request: None,
+                },
+            ),
+            (
+                22,
+                Capability::ChannelMember,
+                Request::ChannelRecovery {
+                    channel: "room".into(),
+                    request: None,
+                },
+            ),
         ] {
             let node = gcoms_node::node::start(gcoms_node::node::NodeConfig {
                 seed: [77; 32],
@@ -3720,7 +3827,7 @@ mod route_recovery_compatibility_tests {
                 &Frame::Request(RequestEnvelope {
                     version,
                     request_id: 2,
-                    request: recovery(),
+                    request,
                 }),
             )
             .await
