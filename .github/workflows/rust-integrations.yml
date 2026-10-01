@@ -26,6 +26,8 @@ on:
       - 'crates/**'
       - 'examples/rust-integration/**'
       - 'scripts/check-rust-integrations.py'
+      - 'scripts/sdk_size_policy.py'
+      - 'scripts/tests/rust_integration_size_test.py'
       - 'scripts/check-released-facade.py'
       - 'release/contracts/**'
       - 'scripts/prepare-rust-tests.py'
@@ -64,6 +66,8 @@ jobs:
       - name: Prepare short private test directory
         id: tests
         run: ${{ runner.os == 'Windows' && 'python' || 'python3' }} scripts/prepare-rust-tests.py
+      - name: Check feature-release and stable size boundaries
+        run: ${{ runner.os == 'Windows' && 'python' || 'python3' }} -m unittest discover -s scripts/tests -p rust_integration_size_test.py
       - name: Check real native backends
         env:
           CARGO_BUILD_JOBS: '2'

@@ -8,6 +8,7 @@ from pathlib import Path
 import struct
 import subprocess
 import zipfile
+from sdk_size_policy import current_policy, exceeds_limit
 
 ROOT = Path(__file__).resolve().parents[1]
 PROJECT = ROOT / "mobile/android"
@@ -69,7 +70,7 @@ def archive(path):
 
 def packaging_sources():
     names = subprocess.check_output(["git", "ls-files", "-z", "--cached", "--others",
-        "--exclude-standard", "--", "mobile/android", "scripts/qualify-android.py"], cwd=ROOT).decode().split("\0")
+        "--exclude-standard", "--", "mobile/android", "scripts/qualify-android.py", "scripts/sdk_size_policy.py"], cwd=ROOT).decode().split("\0")
     return {name: hashlib.sha256((ROOT / name).read_bytes()).hexdigest()
         for name in sorted(set(names)) if name and (ROOT / name).is_file()}
 
@@ -110,6 +111,7 @@ def main():
     if page_size != 16384:
         raise RuntimeError("Qualification requires the 16 KiB emulator")
     report = {"schema": 1, "role": args.role, "push": push, "revision": summary["revision"],
+        "size_policy": current_policy(),
         "packaging_revision": capture(["git", "-C", ROOT, "rev-parse", "HEAD"]),
         "packaging_source_sha256": sources,
         "ndk": summary["ndk"], "rustc": summary["rustc"], "page_size": page_size,
@@ -151,10 +153,12 @@ def main():
             if previous[field] != report[field]:
                 raise RuntimeError("App baseline toolchain differs: " + field)
         for abi, item in report["delta"].items():
-            if item["bytes"] > previous["delta"][abi]["bytes"] * 1.05:
-                raise RuntimeError("Sample APK delta exceeds the 5 percent gate")
+            if exceeds_limit(item["bytes"], previous["delta"][abi]["bytes"], report['size_policy']):
+                raise RuntimeError(f'Sample APK delta exceeds the {report["size_policy"]["limit_percent"]} percent gate')
     if packaging_sources() != sources:
         raise RuntimeError("Android packaging sources changed during qualification; rerun against settled inputs")
+    if current_policy() != report['size_policy']:
+        raise RuntimeError('SDK size policy changed during qualification')
     (evidence / "summary.json").write_text(json.dumps(report, indent=2) + "\n")
     print(json.dumps(report["delta"], indent=2))
 

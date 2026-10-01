@@ -26,7 +26,7 @@ slots promptly after reconnecting; ordinary direct retry pacing remains. Neither
 local restoration nor hop acceptance counts as an authenticated recipient receipt.
 The complete Linux workspace and unchanged contact-file recovery pass; native
 Linux and Windows backend checks pass on native workers. Mac qualification and
-the 5% SDK size gate remain open in the
+fresh version-bound SDK size qualification remain open in the
 [reopen checkpoint](docs/evidence/stabilization-20261001/durable-reopen.json).
 
 Hosted local mutations interrupt network waits instead of waiting behind replay
@@ -87,6 +87,13 @@ delivery receipt.
 
 # GComs
 
+The initial feature release permits up to 20% growth against the retained
+same-toolchain size baselines, as approved on 2026-10-01. Native consumers, mobile
+libraries and linked mobile applications share `scripts/sdk_size_policy.py`.
+SDK version 1.0 (including prereleases) automatically restores the 5% regression
+ceiling. Size reports retain the policy version, ceiling and source hash. This
+does not waive recovery, compatibility, signing or installed release gates.
+
 The [stable contract preparation](docs/STABLE_CONTRACTS.md) defines the supported
 application facade and the remaining SDK 1.0 gates. Native CI compiles the exact
 released 0.1.49 consumer in all three feature graphs. Contact file sends now retain
@@ -111,7 +118,8 @@ Native CI retains failed backend/size logs and measures isolated consumers even
 when backend tests fail. A separate source/attempt-bound backend log archive
 uploads before the long size builds so failed recovery can be diagnosed promptly.
 The current Linux IPC reduction still exceeds the
-original 5% size ceiling; see the [codec checkpoint](docs/evidence/stabilization-20261001/sdk-codec-size.json).
+original 5% size ceiling; those historical failures remain unchanged under the
+new approved policy. See the [codec checkpoint](docs/evidence/stabilization-20261001/sdk-codec-size.json).
 The [JSON follow-up](docs/evidence/stabilization-20261001/sdk-http-json-size.json)
 retains the original conformance failure, its corrected SDK/consumer checks and
 the still-failed size ceiling. SDK 1.0 remains gated on native acceptance.

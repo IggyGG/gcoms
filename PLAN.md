@@ -1,5 +1,16 @@
 ## Stable SDK release preparation (2026-10-01, in progress)
 
+The owner approved up to **20% same-toolchain size growth for this initial feature
+release**, followed by **5% after SDK 1.0**. All four desktop/native and both mobile
+native/application size checks use one recorded, source-bound policy. The actual
+SDK package version selects the limit; 1.0 prereleases and every stable major
+automatically require 5%. There is no command-line limit override. Missing native
+baselines fail, and exact integer boundaries are checked. Original 5% failures
+remain retained failures; fresh native CI against this policy is required.
+Recovery, compatibility, signing and installed/deployed qualification are unchanged.
+Six focused controls and the full Python/source gates pass; see the
+[policy checkpoint](docs/evidence/stabilization-20261001/sdk-size-policy.json).
+
 Native Windows run 36835572270 receives the second resumed full piece at 236
 seconds, leaving the 41-byte tail beyond the unchanged 240-second deadline.
 Its two unknown-key errors precede reopening by 55 seconds. The durable outbox
@@ -13,9 +24,10 @@ tests with 13 retained ignores, the real contact interrupted-file recovery insid
 its original 240-second bound, Rustdoc, strict workspace Clippy and both minimal
 feature checks. Source-bound native run `36845346885` also passes Linux's 190
 backend tests and Windows's 192 tests, including the real contact interrupted-file
-recovery; verified provider archives retain those original results. Both Mac
-workers remain queued. Linux's ten size comparisons still exceed the original
-5% gate by 10.0–12.8%; SDK 1.0 remains undeclared. See
+recovery; verified provider archives retain those original results. Intel Mac is now running; ARM Mac remains queued. Linux's ten comparisons
+grew 10.0–12.8% and fit the approved 20% allowance. Their original workflow
+failed under 5%; fresh policy-bound native qualification remains required and
+SDK 1.0 remains undeclared. See
 [durable reopen checkpoint](docs/evidence/stabilization-20261001/durable-reopen.json).
 
 The JSON HTTP decoder now uses one byte-slice parser and borrowed envelopes for

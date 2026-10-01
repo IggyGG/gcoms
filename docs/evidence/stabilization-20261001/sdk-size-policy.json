@@ -1,0 +1,61 @@
+{
+  "schema": 1,
+  "scope": "Owner-approved SDK feature-release size policy; fresh native qualification remains required",
+  "policy": {
+    "schema": 1,
+    "sdk_version": "0.1.0",
+    "limit_percent": 20,
+    "scope": "initial feature release",
+    "approved_on": "2026-10-01",
+    "policy_sha256": "efa03d725b80c440e2800e2180f11f588c46f026a133b86c0c654c5fb13460c9"
+  },
+  "controls": {
+    "tests": 6,
+    "passed": true,
+    "feature_boundary_percent": 20,
+    "stable_boundary_percent": 5,
+    "toolchain_binding_required": true,
+    "missing_baseline_rejected": true,
+    "no_cli_override": true
+  },
+  "previous_linux_measurements": [
+    {
+      "path": "test-evidence/stabilization-20261001/native-sdk-36845346885-linux/summary.json",
+      "sha256": "14eb3aff7ec6d6ae944319ed5588528e31d764da100842c565e5983726d8920e",
+      "original_passed": false,
+      "measurements": 10,
+      "growth_percent": [
+        11.768,
+        12.765,
+        12.303,
+        12.034,
+        10.02,
+        10.079,
+        12.722,
+        10.533,
+        10.509,
+        10.522
+      ],
+      "within_new_allowance": true,
+      "original_workflow_conclusion_unchanged": true
+    }
+  ],
+  "source_sha256": {
+    "scripts/sdk_size_policy.py": "efa03d725b80c440e2800e2180f11f588c46f026a133b86c0c654c5fb13460c9",
+    "scripts/check-rust-integrations.py": "fa194577d5bd0aef8e697dba0d462610677e342bfe3d8f2a63e26c81f498b5b8",
+    "scripts/build-mobile.py": "76ac8a857fd74cda5ce4af2362b4e1c1331f9278ff0b9a6bcd0a7fc3264670e8",
+    "scripts/qualify-android.py": "29b8bf91898b6d616903a7d4ef83381bc84f3c2f59c4a61704f92db071e9f198",
+    "scripts/qualify-apple.py": "292367672bb47be9fa1f4ef435e3db8b094fbd6bd8fe46e1cab417764a373db4",
+    "scripts/tests/rust_integration_size_test.py": "5db8150ccd4e73a64dd405e62dcab572326c96e82b0ff9645cd24ec47ad29bcc"
+  },
+  "test_evidence": {
+    "path": "test-evidence/stabilization-20261001/sdk-size-policy-86.log",
+    "sha256": "1747466445c9b1e6dee283332e77bd9151cc7474a978f6383145779b71a092bb"
+  },
+  "open": [
+    "Fresh native desktop size/recovery matrices with the approved policy",
+    "Eight mobile SDK role/platform/push combinations",
+    "Installed native app acceptance and complete fleet rollout",
+    "Subsequent unattended release before SDK 1.0"
+  ]
+}

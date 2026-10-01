@@ -1,5 +1,13 @@
 ## Stable SDK release preparation (2026-10-01)
 
+Run `python3 -m unittest discover -s scripts/tests -p rust_integration_size_test.py`.
+Require the owner-approved feature allowance to pass at exactly 20% and fail one
+byte above it. SDK 1.0 prereleases and later majors must pass at exactly 5% and
+fail one byte above it, without an override. Reject changed toolchains, absent
+consumer baselines, changed policies and invalid measured bytes. Every native
+workflow runs these controls before compiling. Fresh native results must record
+the effective policy; earlier 5% failures retain their original conclusions.
+
 Run reopening_retries_durable_work_without_renewing_or_completing_it against a
 real retained direct session. Restore a 55-second durable retry, deferred record,
 ordinary direct retry and an expired record. Durable work must be due immediately;
@@ -13,7 +21,7 @@ The corrected source passes the complete 1,151-test Linux workspace, 13 retained
 ignores, the unchanged real contact resume, Rustdoc, strict workspace Clippy and
 minimal SDK/core checks. Preserve the original timer's failing control and every
 invalid fixture separately. Verified native run `36845346885` passes Linux/Windows
-backend and contact recovery. Mac runs and the original 5% size gate still require
+backend and contact recovery. Mac runs and fresh approved size qualification still require
 their own source-bound results; see the
 [reopen receipt](docs/evidence/stabilization-20261001/durable-reopen.json).
 
@@ -31,7 +39,7 @@ Retain the original sequence-overacceptance failure and corrected result.
 Run all workspace tests, strict Clippy, Rustdoc, minimal graphs, unchanged released
 facade checks, locked current consumers and eight mobile dependency graphs.
 The size regression requires every measured delta even when two consumers exceed
-5%, preserves the exact threshold and rejects a different toolchain. Native jobs
+the effective version-bound ceiling, preserves its exact boundary and rejects a different toolchain. Native jobs
 retain source and failure logs; isolated size checks still run after backend
 failure. A retained archive or component pass cannot qualify failed native recovery.
 The source/attempt-bound backend archive must be available before size compilation;
@@ -548,7 +556,7 @@ do not establish physical-device or live-provider qualification.
 - Keep the public startup future below 16 KiB and run GChat's complete channel
   journey on the default thread stack, including restored post-quantum identity.
   Native desktop CI compares 3/s/z results with the committed platform baselines
-  and rejects growth above 5% on the same Rust toolchain.
+  and enforces the version-bound 20% feature / 5% stable ceiling on the same Rust toolchain.
 
 - Compile independent `ipc,files` and `embedded,files,gc2-carrier` consumers.
   Reject host/crypto/MLS/RPC dependencies in the IPC graph and forced Tokio

@@ -22,7 +22,7 @@ on:
         default: all
   push:
     branches: [main]
-    paths: ['Cargo.toml', 'Cargo.lock', 'rust-toolchain.toml', 'crates/**', 'mobile/**', 'scripts/build-mobile.py', 'scripts/prepare-android.py', 'scripts/qualify-*.py', 'scripts/mobile_fixture.py', 'scripts/test-android.py', '.github/workflows/mobile-integrations.yml']
+    paths: ['Cargo.toml', 'Cargo.lock', 'rust-toolchain.toml', 'crates/**', 'mobile/**', 'scripts/build-mobile.py', 'scripts/prepare-android.py', 'scripts/qualify-*.py', 'scripts/sdk_size_policy.py', 'scripts/tests/rust_integration_size_test.py', 'scripts/mobile_fixture.py', 'scripts/test-android.py', '.github/workflows/mobile-integrations.yml']
 permissions:
   contents: read
 jobs:
@@ -42,6 +42,7 @@ jobs:
           persist-credentials: false
       - name: Install pinned Rust and Android tools
         run: |
+          python3 -m unittest discover -s scripts/tests -p rust_integration_size_test.py
           python3 -m unittest discover -s scripts/tests -p mobile_elf_test.py
           rustup toolchain install 1.98.0 --profile minimal
           rustup default 1.98.0
@@ -88,6 +89,7 @@ jobs:
           persist-credentials: false
       - name: Install pinned Rust and project generator
         run: |
+          python3 -m unittest discover -s scripts/tests -p rust_integration_size_test.py
           rustup toolchain install 1.98.0 --profile minimal
           rustup default 1.98.0
           brew install xcodegen

@@ -10,6 +10,7 @@ import shutil
 import subprocess
 import struct
 import sys
+from sdk_size_policy import current_policy, exceeds_limit
 
 ROOT = Path(__file__).resolve().parents[1]
 MANIFEST = ROOT / 'examples/rust-integration/Cargo.toml'
@@ -55,6 +56,7 @@ def binary_imports(path):
 
 def compare_baseline(report, path):
     baseline = json.loads(path.read_text())
+    policy = report.setdefault('size_policy', current_policy())
     for field in ('system', 'machine', 'rustc', 'panic', 'lto', 'codegen_units', 'stripped'):
         if baseline[field] != report[field]:
             raise RuntimeError(f'baseline {field} differs; establish a baseline for this toolchain')
@@ -64,14 +66,14 @@ def compare_baseline(report, path):
     for item in report['binaries']:
         key = (item['mode'], item['opt_level'])
         if key not in previous:
-            continue
+            raise RuntimeError(f'{key} has no native size baseline')
         growth = item['bytes'] / previous[key] - 1
         changes.append({'mode': key[0], 'opt_level': key[1], 'growth_percent': round(growth * 100, 3)})
-        if item['bytes'] * 100 > previous[key] * 105:
+        if exceeds_limit(item['bytes'], previous[key], policy):
             oversized.append((key, growth))
     report['baseline_comparison'] = changes
     if oversized:
-        raise RuntimeError('; '.join(f'{key} grew {growth:.1%}; exceeds the 5% size gate'
+        raise RuntimeError('; '.join(f'{key} grew {growth:.1%}; exceeds the {policy["limit_percent"]}% size gate'
                                     for key, growth in oversized))
 
 
@@ -81,7 +83,7 @@ def main():
     parser.add_argument('--profiles', nargs='+', choices=('3', 's', 'z'), default=['3', 's', 'z'])
     parser.add_argument('--modes', nargs='+', choices=('ipc', 'embedded', 'network-client'), default=['ipc', 'embedded', 'network-client'])
     parser.add_argument('--output', type=Path, default=ROOT / 'target/rust-integration-evidence')
-    parser.add_argument('--baseline', type=Path, help='Same-platform/toolchain summary; reject growth above 5 percent')
+    parser.add_argument('--baseline', type=Path, help='Same-platform/toolchain summary; enforce the version-bound SDK size ceiling')
     args = parser.parse_args()
     output = args.output.resolve()
     output.mkdir(parents=True, exist_ok=True)
@@ -95,7 +97,8 @@ def main():
               'rustc': subprocess.check_output(['rustc', '-Vv'], text=True),
               'revision': subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip(),
               'dirty': bool(subprocess.check_output(['git', 'status', '--porcelain'], cwd=ROOT)),
-              'panic': 'unwind', 'lto': True, 'codegen_units': 1, 'stripped': True, 'graphs': {}, 'binaries': []}
+              'panic': 'unwind', 'lto': True, 'codegen_units': 1, 'stripped': True, 'graphs': {}, 'binaries': [],
+              'size_policy': current_policy()}
     # Retain exact consumer code and manifest digest alongside the source revision.
     report['consumer_sha256'] = {str(p.relative_to(ROOT)): hashlib.sha256(p.read_bytes()).hexdigest()
                                  for p in [MANIFEST, MANIFEST.parent / 'src/main.rs']}
@@ -161,6 +164,8 @@ def main():
             compare_baseline(report, args.baseline)
         if any(hashlib.sha256((ROOT / name).read_bytes()).hexdigest() != digest for name, digest in report['source_sha256'].items()):
             raise RuntimeError('Rust source changed during size qualification; rerun after changes settle')
+        if current_policy() != report['size_policy']:
+            raise RuntimeError('SDK size policy changed during qualification')
     except Exception as error:
         report['passed'] = False
         report['error'] = type(error).__name__ + ': ' + str(error)

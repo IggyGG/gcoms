@@ -10,6 +10,7 @@ import plistlib
 import platform
 import subprocess
 from mobile_fixture import relay
+from sdk_size_policy import current_policy, exceeds_limit
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -83,6 +84,7 @@ def qualify(args):
     runtime, device_type = candidates[-1]
     device = capture(["xcrun", "simctl", "create", "GComs qualification", device_type, runtime])
     report = {"schema": 1, "role": args.role, "push": push, "revision": summary["revision"],
+        "size_policy": current_policy(),
         "native_opt_level": next(a["opt_level"] for a in reversed(summary["artifacts"]) if a["role"] == args.role),
         "xcode": capture(["xcodebuild", "-version"]), "runtime": runtime,
         "simulator_arch": platform.machine(), "deployment_postprocessing": not args.test, "apps": {}}
@@ -130,8 +132,10 @@ def qualify(args):
                     for f in ("role", "push", "xcode", "runtime", "simulator_arch", "deployment_postprocessing", "native_opt_level")):
                     raise RuntimeError("App baseline toolchain differs")
                 for field, value in report["delta"].items():
-                    if value > previous["delta"][field] * 1.05:
-                        raise RuntimeError("Linked application delta exceeds the 5 percent gate")
+                    if exceeds_limit(value, previous["delta"][field], report['size_policy']):
+                        raise RuntimeError(f'Linked application delta exceeds the {report["size_policy"]["limit_percent"]} percent gate')
+        if current_policy() != report['size_policy']:
+            raise RuntimeError('SDK size policy changed during qualification')
         (evidence / "summary.json").write_text(json.dumps(report, indent=2) + "\n")
     finally:
         subprocess.run(["xcrun", "simctl", "shutdown", device], check=False)

@@ -25,11 +25,18 @@ Recipient delivery still requires authenticated recipient acknowledgments.
 
 SDK 1.0 is not yet declared. Qualification requires all four native consumer
 matrices and eight Android/Apple client/relay/base/push combinations, archive
-consumers, the existing size limits, installed application recovery and rollback,
+consumers, the version-bound size limits, installed application recovery and rollback,
 fresh deployed relay observations and the automated subsequent release. Original
 failures remain failures. Version reservation or upload alone cannot satisfy
 these gates. Compatibility fixes may continue while these gates run; a breaking
 supported contract requires a new major and a documented coexistence period.
+
+For the initial feature release, the owner approved a maximum 20% size increase
+against the retained same-toolchain baselines on 2026-10-01. The actual SDK package
+version automatically restores a maximum 5% regression at 1.0, including 1.0
+prereleases and subsequent majors. All native/mobile measurements use the shared
+policy and retain its hash and effective ceiling. Original failed workflows are
+not relabeled; the approved policy requires fresh native qualification.
 
 The hosted profile retains 64 members, covered acknowledgments, Topic pending
 while an authorized member is offline, and the ordinary ten-second recovery

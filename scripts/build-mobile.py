@@ -8,6 +8,7 @@ from pathlib import Path
 import platform
 import shutil
 import subprocess
+from sdk_size_policy import current_policy, exceeds_limit
 
 ROOT = Path(__file__).resolve().parents[1]
 MANIFEST = ROOT / 'mobile/native/Cargo.toml'
@@ -26,7 +27,7 @@ def source_hashes():
     names = subprocess.check_output(['git', 'ls-files', '-z', '--cached', '--others', '--exclude-standard'], cwd=ROOT).decode().split('\0')
     return {name: digest(ROOT / name) for name in sorted(set(names)) if name and
         (ROOT / name).is_file() and (name.startswith(('mobile/', 'crates/', 'scripts/qualify-', 'scripts/test-android')) or
-        name in ('Cargo.toml', 'Cargo.lock', 'scripts/build-mobile.py', 'scripts/mobile_fixture.py'))}
+        name in ('Cargo.toml', 'Cargo.lock', 'scripts/build-mobile.py', 'scripts/mobile_fixture.py', 'scripts/sdk_size_policy.py'))}
 
 
 def main():
@@ -36,7 +37,7 @@ def main():
     parser.add_argument('--profiles', nargs='+', choices=['3', 's', 'z'], default=['z'])
     parser.add_argument('--fixtures', action='store_true', help='Non-distributable simulator/emulator qualification build')
     parser.add_argument('--push', action='store_true', help='Separate optional push-enabled distribution')
-    parser.add_argument('--baseline', type=Path, help='Same-toolchain native summary; reject size growth above 5 percent')
+    parser.add_argument('--baseline', type=Path, help='Same-toolchain native summary; enforce the version-bound SDK size ceiling')
     parser.add_argument('--output', type=Path, default=None)
     args = parser.parse_args()
     output = (args.output or ROOT / ('target/mobile-push' if args.push else 'target/mobile')).resolve()
@@ -50,7 +51,8 @@ def main():
         'rustc': subprocess.check_output(['rustc', '-Vv'], text=True),
         'crate_type': 'cdylib' if args.platform == 'android' else 'staticlib',
         'panic': 'unwind', 'lto': not args.fixtures, 'codegen_units': 256 if args.fixtures else 1,
-        'build_profile': 'dev' if args.fixtures else 'release', 'artifacts': [], 'graphs': {}
+        'build_profile': 'dev' if args.fixtures else 'release', 'artifacts': [], 'graphs': {},
+        'size_policy': current_policy()
     }
     report['source_sha256'] = source_hashes()
     if args.platform == 'android':
@@ -145,10 +147,12 @@ def main():
             key = (item['role'], item['target'], item['opt_level'])
             if key not in previous:
                 raise RuntimeError(f'{key} has no native size baseline')
-            if item['bytes'] > previous[key] * 1.05:
-                raise RuntimeError(f'{key} exceeds the 5 percent native size gate')
+            if exceeds_limit(item['bytes'], previous[key], report['size_policy']):
+                raise RuntimeError(f'{key} exceeds the {report["size_policy"]["limit_percent"]} percent native size gate')
     if source_hashes() != report['source_sha256']:
         raise RuntimeError('Mobile source inventory changed during qualification; rerun against settled inputs')
+    if current_policy() != report['size_policy']:
+        raise RuntimeError('SDK size policy changed during qualification')
     (output / 'summary.json').write_text(json.dumps(report, indent=2) + '\n')
     print(json.dumps(report['artifacts'], indent=2))
 
