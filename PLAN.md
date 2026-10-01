@@ -1,5 +1,10 @@
 ## Stable SDK release preparation (2026-10-01, in progress)
 
+Linux channel-service validation passes 18 tests. Its first strict Clippy
+run finds an unused mutable fixture binding; that failure is retained and the
+binding is corrected without changing assertions. Corrected Clippy and native
+Windows full-workspace validation remain required.
+
 Native full Windows packaging run `36852045944` passes GChat qualification but
 fails two channel-service tests on OS error 33: the tests read an exclusively
 locked log through another handle. Unit snapshots now use the owning handle and

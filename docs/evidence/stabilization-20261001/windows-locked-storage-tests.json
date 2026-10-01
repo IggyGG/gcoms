@@ -22,7 +22,7 @@
   "source_sha256": {
     "crates/channel-service/src/lib.rs": "fd4b0cccf200310de571875d574664563e01169f1345592e8de7cbb221d48a23",
     "crates/channel-service/src/receipts.rs": "ee773e54ac20f3208a31f10ac4042e39d123a329f6446e640d53223781e082ad",
-    "crates/channel-service/tests/log.rs": "a9fccf5f85b9d084b412b52da237bdf9f91502590658e34b5afac78c47e1f5fd",
+    "crates/channel-service/tests/log.rs": "f5635c5e3ce17dd10e5834839e6de17f5094a772fe40342abf20734b92e79be9",
     "crates/channel-service/tests/policy.rs": "b1aa5b511c37d2a882c098dda88210a31aa77c41a6bda7764b19d53fc1b4bf95"
   },
   "original_log": {
@@ -30,5 +30,25 @@
     "sha256": "fa37ac731c3d5e2c674c9a50a61a941068991466385206e195fa900662e1d4ef"
   },
   "native_windows_correction": "pending",
-  "linux_channel_checks": "pending"
+  "linux_channel_checks": {
+    "tests_passed": 18,
+    "tests_exit_code": 0,
+    "strict_clippy_first_attempt": "failed: unused mut in snapshot fixture; removed without changing assertions",
+    "corrected_strict_clippy": "pending",
+    "gcoms_commit": "0bce07c849ed99baeff7ceec1333ee577bd6e3fb"
+  },
+  "linux_evidence": [
+    {
+      "path": "test-evidence/stabilization-20261001/windows-lock-tests-92.log",
+      "sha256": "767b3c7a747ae9094f1e0bd6c0ac3439854c84a6d4c0aa359b6d3940145b8135"
+    },
+    {
+      "path": "test-evidence/stabilization-20261001/windows-lock-clippy-92.log",
+      "sha256": "31e2078b27571c9a281252ba719a2ad1efbc6f7cc3de58f3bf98fb1f710418f6"
+    },
+    {
+      "path": "test-evidence/stabilization-20261001/windows-lock-result-92.json",
+      "sha256": "e12d20d67cc2a69945caf4429ea13f99793a8a8250e2f62c18e930f3d190e6f6"
+    }
+  ]
 }

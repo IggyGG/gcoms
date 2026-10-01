@@ -1,5 +1,10 @@
 ## Stable SDK release preparation (2026-10-01)
 
+Linux channel-service validation passes 18 tests. Its first strict Clippy
+run finds an unused mutable fixture binding; that failure is retained and the
+binding is corrected without changing assertions. Corrected Clippy and native
+Windows full-workspace validation remain required.
+
 Run all-feature channel-service tests and strict all-target Clippy. Read unit
 log snapshots through the owning handle and restore the original cursor. Close
 integration logs before raw filesystem snapshots, then reopen through normal

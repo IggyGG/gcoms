@@ -149,7 +149,7 @@ fn invalid_join_and_quota_refusals_preserve_accepted_prefix() {
         records: 1,
         ..limits()
     };
-    let mut log = ChannelLog::create(
+    let log = ChannelLog::create(
         &path,
         owner.policy().clone(),
         channel,
