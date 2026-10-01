@@ -94,11 +94,16 @@ releases capacity without moving the original deadline or advancing a deferred
 record's ratchet counter. GC/2 keeps its existing credited send window.
 
 IPC count/write now share bounded zeroizing storage, and clients link the codecs
-for their message directions. Hosted HTTP replies borrow their JSON envelope;
+for their message directions. Hosted HTTP replies borrow their JSON envelopes,
+including nested records, through one byte-slice decoder. Struct variants retain
+object-only bodies while newtype structs retain their original sequence support;
 wire bytes, public reply shapes, bounds and dependency versions remain unchanged.
 Native CI retains failed backend/size logs and measures isolated consumers even
 when backend tests fail. The current Linux IPC reduction still exceeds the
 original 5% size ceiling; see the [codec checkpoint](docs/evidence/stabilization-20261001/sdk-codec-size.json).
+The [JSON follow-up](docs/evidence/stabilization-20261001/sdk-http-json-size.json)
+retains the original conformance failure, its corrected SDK/consumer checks and
+the still-failed size ceiling. SDK 1.0 remains gated on native acceptance.
 
 Rust applications start with the [`gcoms` application API](crates/application/README.md):
 one dependency for messaging, channels and files. Select `network-client,files`

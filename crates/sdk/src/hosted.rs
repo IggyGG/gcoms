@@ -330,26 +330,151 @@ pub async fn exchange<C: crate::GcClient + ?Sized>(
     decode_reply_json(&response.body)
 }
 
-// Decode the JSON envelope once, then its selected body. Serde's generic tagged
-// enum visitor also instantiates every reply through a buffered Content tree.
-// The HTTP exchange needs only JSON and can borrow the original bounded bytes,
-// retaining field-order independence and duplicate-field/type validation.
-fn decode_reply_json(bytes: &[u8]) -> Result<Reply, crate::SdkError> {
-    use serde_json::value::RawValue;
-    #[derive(Deserialize)]
-    struct Envelope<'a> {
-        #[serde(borrow)]
-        kind: std::borrow::Cow<'a, str>,
-        #[serde(borrow)]
-        value: Option<&'a RawValue>,
+// JSON-only adapters keep Serde's buffered tagged-enum Content tree out of the
+// HTTP client. The public derives remain compatible with every existing codec.
+#[derive(Deserialize)]
+struct JsonEnvelope<'a> {
+    #[serde(borrow)]
+    kind: std::borrow::Cow<'a, str>,
+    #[serde(borrow)]
+    value: Option<&'a serde_json::value::RawValue>,
+}
+
+fn invalid_reply() -> crate::SdkError {
+    crate::SdkError::Protocol("invalid hosted response".into())
+}
+
+fn json_body<'a, T: Deserialize<'a>>(
+    value: Option<&'a serde_json::value::RawValue>,
+) -> Result<T, crate::SdkError> {
+    // Keep one byte-slice parser/visitor specialization throughout.
+    serde_json::from_slice(value.ok_or_else(invalid_reply)?.get().as_bytes())
+        .map_err(|_| invalid_reply())
+}
+
+fn json_object<'a, T: Deserialize<'a>>(
+    value: Option<&'a serde_json::value::RawValue>,
+) -> Result<T, crate::SdkError> {
+    // An adjacent-tag enum's struct variants accept object bodies only. A
+    // standalone derived struct also accepts sequences; do not broaden the wire.
+    let value = value.ok_or_else(invalid_reply)?;
+    if !value.get().trim_ascii_start().starts_with('{') {
+        return Err(invalid_reply());
     }
+    json_body(Some(value))
+}
+
+struct JsonRecordItem(RecordItem);
+impl<'de> Deserialize<'de> for JsonRecordItem {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        #[derive(Deserialize)]
+        struct Deferred {
+            sequence: u64,
+            hash: [u8; 32],
+            wire_bytes: usize,
+        }
+        let envelope = JsonEnvelope::deserialize(deserializer)?;
+        let item = match envelope.kind.as_ref() {
+            "inline" => {
+                RecordItem::Inline(json_body(envelope.value).map_err(serde::de::Error::custom)?)
+            }
+            "deferred" => {
+                let Deferred {
+                    sequence,
+                    hash,
+                    wire_bytes,
+                } = json_object(envelope.value).map_err(serde::de::Error::custom)?;
+                RecordItem::Deferred {
+                    sequence,
+                    hash,
+                    wire_bytes,
+                }
+            }
+            _ => return Err(serde::de::Error::custom("invalid hosted record")),
+        };
+        Ok(Self(item))
+    }
+}
+
+#[derive(Deserialize)]
+struct JsonRecordPage {
+    head: Head,
+    after: u64,
+    next: u64,
+    records: Vec<JsonRecordItem>,
+}
+impl From<JsonRecordPage> for RecordPage {
+    fn from(page: JsonRecordPage) -> Self {
+        Self {
+            head: page.head,
+            after: page.after,
+            next: page.next,
+            records: page.records.into_iter().map(|record| record.0).collect(),
+        }
+    }
+}
+
+struct JsonPublicChange(PublicChange);
+impl<'de> Deserialize<'de> for JsonPublicChange {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let envelope = JsonEnvelope::deserialize(deserializer)?;
+        let body = json_body(envelope.value).map_err(serde::de::Error::custom)?;
+        Ok(Self(match envelope.kind.as_ref() {
+            "membership" => PublicChange::Membership(body),
+            "control" => PublicChange::Control(body),
+            _ => return Err(serde::de::Error::custom("invalid hosted public change")),
+        }))
+    }
+}
+
+#[derive(Deserialize)]
+struct JsonPublicRecord {
+    sequence: u64,
+    accepted_at: u64,
+    change: JsonPublicChange,
+}
+#[derive(Deserialize)]
+struct JsonSnapshotPage {
+    head: Head,
+    after: u64,
+    next: u64,
+    policy: Option<String>,
+    genesis: Option<String>,
+    public_records: Vec<JsonPublicRecord>,
+    group_info: Option<String>,
+}
+impl From<JsonSnapshotPage> for SnapshotPage {
+    fn from(page: JsonSnapshotPage) -> Self {
+        Self {
+            head: page.head,
+            after: page.after,
+            next: page.next,
+            policy: page.policy,
+            genesis: page.genesis,
+            public_records: page
+                .public_records
+                .into_iter()
+                .map(|record| PublicRecord {
+                    sequence: record.sequence,
+                    accepted_at: record.accepted_at,
+                    change: record.change.0,
+                })
+                .collect(),
+            group_info: page.group_info,
+        }
+    }
+}
+
+// Decode each selected body from the original bounded JSON bytes, retaining
+// field-order independence and duplicate-field/type validation.
+fn decode_reply_json(bytes: &[u8]) -> Result<Reply, crate::SdkError> {
     #[derive(Deserialize)]
     struct Created {
         anchor: [u8; 32],
     }
     #[derive(Deserialize)]
     struct Polled {
-        page: RecordPage,
+        page: JsonRecordPage,
         acknowledged: usize,
         receipts: Option<ReceiptPage>,
     }
@@ -368,40 +493,34 @@ fn decode_reply_json(bytes: &[u8]) -> Result<Reply, crate::SdkError> {
         entries: Vec<DirectoryEntry>,
         next: Option<[u8; 32]>,
     }
-    fn invalid() -> crate::SdkError {
-        crate::SdkError::Protocol("invalid hosted response".into())
-    }
-    fn body<'a, T: Deserialize<'a>>(value: Option<&'a RawValue>) -> Result<T, crate::SdkError> {
-        serde_json::from_str(value.ok_or_else(invalid)?.get()).map_err(|_| invalid())
-    }
-    let envelope: Envelope<'_> = serde_json::from_slice(bytes).map_err(|_| invalid())?;
+    let envelope: JsonEnvelope<'_> = serde_json::from_slice(bytes).map_err(|_| invalid_reply())?;
     Ok(match envelope.kind.as_ref() {
-        "info" => Reply::Info(body(envelope.value)?),
+        "info" => Reply::Info(json_body(envelope.value)?),
         "created" => {
-            let Created { anchor } = body(envelope.value)?;
+            let Created { anchor } = json_object(envelope.value)?;
             Reply::Created { anchor }
         }
-        "snapshot" => Reply::Snapshot(body(envelope.value)?),
-        "records" => Reply::Records(body(envelope.value)?),
+        "snapshot" => Reply::Snapshot(json_body::<JsonSnapshotPage>(envelope.value)?.into()),
+        "records" => Reply::Records(json_body::<JsonRecordPage>(envelope.value)?.into()),
         "polled" => {
             let Polled {
                 page,
                 acknowledged,
                 receipts,
-            } = body(envelope.value)?;
+            } = json_object(envelope.value)?;
             Reply::Polled {
-                page,
+                page: page.into(),
                 acknowledged,
                 receipts,
             }
         }
-        "accepted" => Reply::Accepted(body(envelope.value)?),
+        "accepted" => Reply::Accepted(json_body(envelope.value)?),
         "receipts" => {
             let Receipts {
                 after,
                 next,
                 receipts,
-            } = body(envelope.value)?;
+            } = json_object(envelope.value)?;
             Reply::Receipts {
                 after,
                 next,
@@ -410,7 +529,8 @@ fn decode_reply_json(bytes: &[u8]) -> Result<Reply, crate::SdkError> {
         }
         "acknowledged" | "blob_stored" => {
             if let Some(value) = envelope.value {
-                serde_json::from_str::<()>(value.get()).map_err(|_| invalid())?;
+                serde_json::from_slice::<()>(value.get().as_bytes())
+                    .map_err(|_| invalid_reply())?;
             }
             if envelope.kind == "acknowledged" {
                 Reply::Acknowledged
@@ -419,21 +539,33 @@ fn decode_reply_json(bytes: &[u8]) -> Result<Reply, crate::SdkError> {
             }
         }
         "blob" => {
-            let Blob { body } = body(envelope.value)?;
+            let Blob { body } = json_object(envelope.value)?;
             Reply::Blob { body }
         }
-        "fault" => Reply::Fault(body(envelope.value)?),
+        "fault" => Reply::Fault(json_body(envelope.value)?),
         "directory" => {
-            let Directory { entries, next } = body(envelope.value)?;
+            let Directory { entries, next } = json_object(envelope.value)?;
             Reply::Directory { entries, next }
         }
-        _ => return Err(invalid()),
+        _ => return Err(invalid_reply()),
     })
 }
 
 #[cfg(test)]
 mod reply_json_tests {
     use super::*;
+
+    fn equivalent(case: &str) {
+        let original = serde_json::from_str::<Reply>(case);
+        let actual = decode_reply_json(case.as_bytes());
+        assert_eq!(actual.is_ok(), original.is_ok(), "{case}");
+        if let (Ok(original), Ok(actual)) = (original, actual) {
+            assert_eq!(
+                serde_json::to_value(actual).unwrap(),
+                serde_json::to_value(original).unwrap()
+            );
+        }
+    }
 
     #[test]
     fn borrowed_envelope_matches_the_original_json_decoder() {
@@ -459,17 +591,70 @@ mod reply_json_tests {
             r#"{"kind":"unknown","value":{}}"#,
             r#"{"kind":"acknowledged"} false"#,
             r#"["blob",{"body":"sequence"}]"#,
+            r#"["blob",["sequence body"]]"#,
+            r#"{"kind":"receipts","value":[0,0,[]]}"#,
+            r#"{"kind":"directory","value":[[],null]}"#,
         ];
         for case in cases {
-            let original = serde_json::from_str::<Reply>(case);
-            let actual = decode_reply_json(case.as_bytes());
-            assert_eq!(actual.is_ok(), original.is_ok(), "{case}");
-            if let (Ok(original), Ok(actual)) = (original, actual) {
-                assert_eq!(
-                    serde_json::to_value(actual).unwrap(),
-                    serde_json::to_value(original).unwrap()
-                );
+            equivalent(case);
+        }
+    }
+
+    #[test]
+    fn nested_json_records_retain_the_public_decoder_semantics() {
+        let head = serde_json::to_string(&Head {
+            sequence: 1,
+            hash: [7; 32],
+        })
+        .unwrap();
+        let hash = serde_json::to_string(&[9_u8; 32]).unwrap();
+        let mut items = vec![
+            r#"{"kind":"inline","value":"encrypted"}"#.to_string(),
+            r#"{"value":"escaped\nwire","kind":"in\u006cine","unknown":true}"#.into(),
+            r#"["inline","sequence"]"#.into(),
+            format!(
+                r#"{{"kind":"deferred","value":{{"sequence":2,"hash":{hash},"wire_bytes":4097}}}}"#
+            ),
+            format!(r#"["deferred",[2,{hash},4097]]"#),
+        ];
+        for kind in ["inline", "deferred", "unknown", "0", "null"] {
+            let tag = if kind == "0" || kind == "null" {
+                kind.to_string()
+            } else {
+                format!("\"{kind}\"")
+            };
+            for value in ["null", "false", "42", "{}", "[]", "\"wire\""] {
+                items.push(format!(r#"{{"kind":{tag},"value":{value}}}"#));
             }
+        }
+        items.extend([
+            r#"{"kind":"inline"}"#.into(),
+            r#"{"kind":"inline","kind":"inline","value":"duplicate"}"#.into(),
+            r#"{"kind":"inline","value":null,"value":"duplicate"}"#.into(),
+            format!(r#"{{"kind":"deferred","value":{{"sequence":1,"sequence":2,"hash":{hash},"wire_bytes":4097}}}}"#),
+        ]);
+        for item in items {
+            let page = format!(r#"{{"head":{head},"after":0,"next":1,"records":[{item}]}}"#);
+            equivalent(&format!(r#"{{"kind":"records","value":{page}}}"#));
+            equivalent(&format!(
+                r#"{{"kind":"polled","value":{{"page":{page},"acknowledged":1,"receipts":{{"after":0,"next":1,"receipts":["receipt"]}}}}}}"#
+            ));
+        }
+        for change in [
+            r#"{"kind":"membership","value":"commit"}"#,
+            r#"{"value":"control","kind":"control","other":{}}"#,
+            r#"["membership","commit"]"#,
+            r#"{"kind":"control","value":null}"#,
+            r#"{"kind":"control","value":42}"#,
+            r#"{"kind":"unknown","value":"wire"}"#,
+            r#"{"kind":0,"value":"wire"}"#,
+            r#"{"kind":"control","kind":"control","value":"duplicate"}"#,
+            r#"{"kind":"control","value":null,"value":"duplicate"}"#,
+        ] {
+            let record = format!(r#"{{"sequence":1,"accepted_at":2,"change":{change}}}"#);
+            equivalent(&format!(
+                r#"{{"kind":"snapshot","value":{{"head":{head},"after":0,"next":1,"public_records":[{record}],"policy":"policy","genesis":"genesis","group_info":"info"}}}}"#
+            ));
         }
     }
 }

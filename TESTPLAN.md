@@ -6,6 +6,11 @@ and client frames on read, and enforce the unchanged 16 MiB bound before a singl
 zeroizing allocation. Borrowed HTTP reply decoding must match the original JSON
 decoder for all variants, sequence/field order, escaped tags, unknown fields,
 duplicates, missing content, unit/null values and invalid/trailing data.
+Nested inline/deferred records and public membership/control changes must match
+the public decoder through records, polls and snapshots, including escaped tags,
+field order, invalid scalar values and duplicates. Enum struct variants require
+object bodies; standalone newtype structs preserve their sequence semantics.
+Retain the original sequence-overacceptance failure and corrected result.
 Run all workspace tests, strict Clippy, Rustdoc, minimal graphs, unchanged released
 facade checks, locked current consumers and eight mobile dependency graphs.
 The size regression requires every measured delta even when two consumers exceed

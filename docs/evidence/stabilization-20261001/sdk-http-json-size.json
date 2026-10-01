@@ -1,0 +1,134 @@
+{
+  "schema": 1,
+  "scope": "JSON HTTP codec compatibility and Linux opt-3 size component checks; native recovery/fleet/SDK 1.0 gates remain open",
+  "parent": "9d1fce0a9f5ad9224504573c27e459f5ca37d09f",
+  "source_sha256": {
+    "crates/sdk/src/hosted.rs": "c8a86204d5961e2f29bc2c5ed571d51b58f26f5d26967962b740bf04d2156045"
+  },
+  "checks": {
+    "sdk_passed": 80,
+    "strict_workspace_clippy": true,
+    "unchanged_released_consumer_graphs": 3,
+    "current_locked_consumer_graphs": 3,
+    "source_inventory": 972
+  },
+  "behavior": {
+    "public_api_changed": false,
+    "ipc_version": 26,
+    "dependency_versions_changed": false,
+    "public_serde_derives_unchanged": true,
+    "http_object_sequence_semantics_preserved": true,
+    "nested_record_duplicates_rejected": true
+  },
+  "size": {
+    "rust": "1.98.0",
+    "platform": "Linux x86_64 cluster",
+    "profile": "opt-3/LTO/codegen-1/symbol-strip/unwind",
+    "baseline_commit": "e75c72c6934c98d0602be1f80ee0175ca2db62e3",
+    "baseline_bytes": 1149728,
+    "measured_bytes": 1282912,
+    "measured_sha256": "fcc66566deb914e64af4153a6485003cc1199131f1c02f7d5fd33118a62f749e",
+    "growth_percent": 11.584,
+    "limit_percent": 5,
+    "passed": false
+  },
+  "native_parent_run": {
+    "run": 36835572270,
+    "source": "9d1fce0a9f5ad9224504573c27e459f5ca37d09f",
+    "linux_backend_passed": true,
+    "linux_size_gate_passed": false,
+    "linux_size_measurements": 10,
+    "windows_backend_passed": false,
+    "windows_measurement": "in progress",
+    "macos_intel": "queued",
+    "macos_arm": "queued",
+    "linux_archive_id": 11150224690,
+    "linux_archive_sha256": "e4af9e1cd602a2d9fba1b75bb8e53277cd19c07f16306355b4bf3c6689260a51",
+    "linux_size_comparisons": [
+      {
+        "mode": "ipc",
+        "opt_level": "3",
+        "growth_percent": 14.776
+      },
+      {
+        "mode": "ipc",
+        "opt_level": "s",
+        "growth_percent": 16.455
+      },
+      {
+        "mode": "ipc",
+        "opt_level": "z",
+        "growth_percent": 16.353
+      },
+      {
+        "mode": "embedded",
+        "opt_level": "3",
+        "growth_percent": 12.24
+      },
+      {
+        "mode": "embedded",
+        "opt_level": "s",
+        "growth_percent": 10.269
+      },
+      {
+        "mode": "embedded",
+        "opt_level": "z",
+        "growth_percent": 10.354
+      },
+      {
+        "mode": "network-client",
+        "opt_level": "3",
+        "growth_percent": 12.962
+      },
+      {
+        "mode": "network-client",
+        "opt_level": "s",
+        "growth_percent": 10.899
+      },
+      {
+        "mode": "network-client",
+        "opt_level": "z",
+        "growth_percent": 10.863
+      },
+      {
+        "mode": "host",
+        "opt_level": "s",
+        "growth_percent": 10.765
+      }
+    ]
+  },
+  "retained_failures": [
+    "Initial nested decoder accepted a struct-variant sequence body rejected by the public decoder; original SDK test failure retained and object-only parsing corrected",
+    "Original size ceiling still fails; no baseline or deadline changed"
+  ],
+  "evidence": [
+    {
+      "path": "test-evidence/stabilization-20261001/stable-sdk-json-61.tar",
+      "sha256": "b5d5a9a245fa7c8055b0bf06b3973987537a011bc85d9eb40964cc19bd95802c"
+    },
+    {
+      "path": "test-evidence/stabilization-20261001/native-sdk-36835572270-linux.zip",
+      "sha256": "e4af9e1cd602a2d9fba1b75bb8e53277cd19c07f16306355b4bf3c6689260a51"
+    },
+    {
+      "path": "test-evidence/stabilization-20261001/stable-sdk-json-61/stable-sdk-json-tests-59.log",
+      "sha256": "f6324b8b03d147bb9bf671ea7597f586ba8f5330b71370d9a07b0a0a03412691"
+    },
+    {
+      "path": "test-evidence/stabilization-20261001/stable-sdk-json-61/stable-sdk-json-tests-60.log",
+      "sha256": "c13f98ce16eb200259c28966e6dfbae87b25dc838b0032a917ff6794bc327dc9"
+    },
+    {
+      "path": "test-evidence/stabilization-20261001/stable-sdk-json-61/stable-sdk-json-clippy-60.log",
+      "sha256": "83938db64f205acae483acb09a72a12dc5e31354f97d797fb189a8f6d9f994c3"
+    },
+    {
+      "path": "test-evidence/stabilization-20261001/stable-sdk-json-61/stable-sdk-json-workspace-clippy-61.log",
+      "sha256": "11d58e4ec69e5b38e29bee79196251eb00f98f7a8961ffcbed37ab6287cb7763"
+    },
+    {
+      "path": "test-evidence/stabilization-20261001/stable-sdk-json-61/stable-sdk-json-consumers-61.log",
+      "sha256": "4ed1ee07d3c6089e2d7db50ae89207caa803ca4c8a40734b75f037e059b8ec1e"
+    }
+  ]
+}

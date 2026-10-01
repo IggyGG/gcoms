@@ -1,5 +1,19 @@
 ## Stable SDK release preparation (2026-10-01, in progress)
 
+The JSON HTTP decoder now uses one byte-slice parser and borrowed envelopes for
+nested record/public-change variants. Public Serde derives, SDK methods, IPC26
+and dependency versions remain unchanged. Expanded public-decoder comparisons
+found an overaccepted struct-variant sequence body; that original failure is
+retained, and object-only parsing corrects it. SDK tests pass 80 cases, strict
+workspace Clippy passes, and all three unchanged released plus three current
+consumer graphs compile. Linux IPC opt-3 falls further to 1,282,912 bytes, still
+11.6% above the original baseline; the unchanged 5% ceiling remains failed.
+Native parent run `36835572270` passes Linux's backend/contact recovery but fails
+all ten size comparisons (10–16% growth). Windows's backend fails while independent
+measurement continues; both Mac workers are queued. This is not native approval
+of the new JSON source or an SDK 1.0 declaration. See
+[JSON checkpoint](docs/evidence/stabilization-20261001/sdk-http-json-size.json).
+
 SDK codec preparation passes 1,149 workspace tests with 13 retained exclusions,
 strict Clippy, Rustdoc, minimal IPC/core checks, three unchanged released consumer
 graphs, three current locked consumers and eight Android/Apple dependency graphs.
@@ -12,8 +26,8 @@ Native logs and all measured deltas now survive failures, and independent consum
 measurement runs even after backend tests fail. Original compile/Clippy failures
 remain retained. See [codec checkpoint](docs/evidence/stabilization-20261001/sdk-codec-size.json).
 
-Native four-window run `36827922107` still fails contact recovery on Linux,
-Windows and Intel Mac. The cluster recovery passes; its unknown-mix-key event
+Native four-window run `36827922107` still fails contact recovery on all four
+platforms. The cluster recovery passes; its unknown-mix-key event
 occurs during initial simultaneous setup before reopening. That event alone does
 not establish the cause of native missing blocks. Bounded error counters and
 test-only block receive diagnostics will distinguish stale setup from stale file
