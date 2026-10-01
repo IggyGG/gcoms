@@ -1,5 +1,16 @@
 ## Stable SDK release preparation (2026-10-01, in progress)
 
+Native run `36814943114` reproduced the unchanged contact file reopen failure on
+Linux, Windows and both Macs. The failure logs remain retained. Bulk/control
+priority can reorder legacy direct-session DH epochs, leaving encrypted blocks
+undecryptable; legacy initial sends and retained retries now share one FIFO lane.
+GC/2 credited sessions retain bulk isolation. No keys, receipt rules, wire layout
+or deadlines change. The actual contact resume test passes in the cluster in
+92.53 seconds against the original 240-second bound. All 492 node tests pass with
+two retained ignores, including protected bulk files and direct recovery; strict
+workspace Clippy passes. Corrected native qualification is still required. See
+[transport checkpoint](docs/evidence/stabilization-20261001/legacy-lane-recovery.json).
+
 The native failures exposed a stale independent consumer lock and two Windows
 fixture assumptions about held file locks. Preserve the locks and inspect the
 encrypted hosted journal after its clients close. The contact-file worker now

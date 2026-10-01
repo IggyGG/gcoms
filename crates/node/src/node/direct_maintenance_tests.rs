@@ -117,6 +117,51 @@ fn file_records_are_bulk_while_chat_control_and_acknowledgements_stay_interactiv
     }
 }
 
+#[test]
+fn legacy_sessions_preserve_one_lane_even_when_gc2_is_enabled() {
+    let mut node = persist::tests::state();
+    let peer = node.info.clone();
+    let (_, session) = peer_session::initiate(&node, &peer).unwrap();
+    node.sessions.insert(peer.identity_pk.clone(), session);
+    #[cfg(feature = "experimental-gc2")]
+    {
+        node.gc2_sessions = true;
+    }
+    for traffic in [
+        gcoms_core::TrafficClass::Interactive,
+        gcoms_core::TrafficClass::Bulk,
+    ] {
+        assert_eq!(
+            direct_transport_class(&node, &peer.identity_pk, traffic),
+            gcoms_core::TrafficClass::Interactive
+        );
+    }
+}
+
+#[cfg(feature = "experimental-gc2")]
+#[test]
+fn credited_sessions_keep_bulk_and_interactive_initial_and_retry_classes() {
+    let mut node = persist::tests::state();
+    node.gc2_sessions = true;
+    let identity = gcoms_crypto::IdentityKeypair::from_seed([2; 32]);
+    let (bundle, _) = identity.issue_bundle();
+    let mut peer = node.info.clone();
+    peer.identity_pk = identity.public_bytes();
+    peer.bundle = bundle.encode();
+    let (_, session) = peer_session::initiate(&node, &peer).unwrap();
+    assert!(session.tag().is_some());
+    node.sessions.insert(peer.identity_pk.clone(), session);
+    for traffic in [
+        gcoms_core::TrafficClass::Interactive,
+        gcoms_core::TrafficClass::Bulk,
+    ] {
+        assert_eq!(
+            direct_transport_class(&node, &peer.identity_pk, traffic),
+            traffic
+        );
+    }
+}
+
 #[cfg(feature = "experimental-gc2")]
 #[tokio::test]
 async fn gc2_owned_retry_copies_are_charged_before_poll_and_released_on_cancel() {

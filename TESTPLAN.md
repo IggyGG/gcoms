@@ -9,6 +9,12 @@ Run runtime all-feature tests including
 `modern_contact_file_verifies_resumes_and_revokes_without_a_channel`. Require the
 same native Mac and Windows tests; no deadline, byte count, lock requirement or
 assertion may be relaxed to turn the original failures into passes.
+Run all-feature node tests, including the legacy and credited session lane
+regressions, real protected bulk files, direct delivery/reopening and the unchanged
+contact resume test. Legacy session classification must depend on the actual
+retained session, including when GC/2 is enabled for new conversations. GC/2 must
+keep its bulk class. Require corrected native evidence on all four platforms;
+the first failed native run remains failed.
 
 Run the all-feature RPC runtime tests and strict Clippy. The optional-method
 regression compiles an unchanged handler without the new method, returns its

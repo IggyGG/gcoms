@@ -1,0 +1,55 @@
+{
+  "schema": 1,
+  "scope": "legacy direct transport scheduling; native SDK qualification pending",
+  "passed": true,
+  "behavior": {
+    "legacy_session_one_lane": true,
+    "gc2_credited_session_bulk_isolation_preserved": true,
+    "durable_outbox_and_authenticated_receipts_unchanged": true,
+    "ipc_version": 26,
+    "member_limit": 64,
+    "wire_changed": false
+  },
+  "checks": {
+    "node_tests": 492,
+    "node_ignored": 2,
+    "unchanged_contact_resume_seconds": 92.53,
+    "original_deadline_seconds": 240,
+    "strict_workspace_clippy": true,
+    "paired_gchat_source_tests": 201,
+    "paired_gchat_test_sources": "bc8a622 / 500b305"
+  },
+  "original_native_failure": {
+    "run": 36814943114,
+    "platforms": [
+      "ubuntu-24.04",
+      "windows-2022",
+      "macos-15",
+      "macos-15-intel"
+    ],
+    "retained": true,
+    "promoted_to_pass": false
+  },
+  "evidence": [
+    {
+      "path": "test-evidence/stabilization-20261001/stable-node-08.log",
+      "sha256": "f9001c195a07fa5dbb4d62e28b9a1c3dd6c716b1467118881e82b38274c2567c"
+    },
+    {
+      "path": "test-evidence/stabilization-20261001/stable-lanes-02.log",
+      "sha256": "aa5d23dcdb05522dbf1bf550db6f6b58daaaeb5317c0fc7314be3caddecda4d1"
+    },
+    {
+      "path": "test-evidence/stabilization-20261001/stable-contact-recovery-07.log",
+      "sha256": "5b91341ce1185b97d2bf211adaef8109a6b0ff91e4b4a454c035ba1661346fda"
+    },
+    {
+      "path": "test-evidence/stabilization-20261001/stable-clippy-07.log",
+      "sha256": "eb885b694abda5e05f3bef3673d173a3ed2603e96fb9847cc59ac56bc8cc0c11"
+    },
+    {
+      "path": "test-evidence/stabilization-20261001/native-sdk-36814943114.log",
+      "sha256": "fef5bc2b3f4daf5bfc6c54651bec328b6a604d2e8d0cc6cc90e4132a1786f0d8"
+    }
+  ]
+}

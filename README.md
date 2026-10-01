@@ -84,6 +84,10 @@ released 0.1.49 consumer in all three feature graphs. Contact file sends now ret
 up to eight actual transport attempts within a shared 128-action queue; slow sends
 and control interrupts cannot start a second attempt before completion. No new
 dependency, IPC layout or hosted-member limit is introduced.
+Legacy direct sessions keep encrypted data and control frames in one FIFO lane
+so priority changes cannot skip a DH epoch during reopening. GC/2 credited
+sessions preserve separate bulk and interactive traffic, including retained
+retries. Keys and authenticated receipt requirements are unchanged.
 
 Rust applications start with the [`gcoms` application API](crates/application/README.md):
 one dependency for messaging, channels and files. Select `network-client,files`

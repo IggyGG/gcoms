@@ -209,6 +209,7 @@ impl DirectMaintenance {
         traffic: gcoms_core::TrafficClass,
         ack: bool,
     ) -> bool {
+        let traffic = direct_transport_class(st, &delivery.peer.identity_pk, traffic);
         let key = direct_attempt_key(&delivery);
         #[cfg(feature = "experimental-gc2")]
         let natural = natural_client_for(st, traffic);
@@ -2291,7 +2292,7 @@ where
             delivery,
             policy,
             durable,
-            traffic,
+            traffic: direct_transport_class(&st, &peer.identity_pk, traffic),
             #[cfg(feature = "experimental-gc2")]
             natural: natural_client_for(&mut st, traffic),
         }
@@ -2596,6 +2597,23 @@ pub(crate) fn direct_traffic_class(record: &[u8]) -> gcoms_core::TrafficClass {
             gcoms_core::TrafficClass::Bulk
         }
         _ => gcoms_core::TrafficClass::Interactive,
+    }
+}
+
+/// Legacy ratchets cannot skip an entire intervening DH epoch. Moving later
+/// control frames ahead of bulk frames can lose the rotation needed to decrypt
+/// them, especially across reopening. Keep their encrypted frames in one FIFO
+/// lane. GC/2's credited sessions own bounded counter/rotation recovery and keep
+/// the separate traffic classes for both initial sends and retained retries.
+fn direct_transport_class(
+    st: &NodeState,
+    peer: &[u8],
+    traffic: gcoms_core::TrafficClass,
+) -> gcoms_core::TrafficClass {
+    if st.sessions.get(peer).and_then(PeerSession::tag).is_some() {
+        traffic
+    } else {
+        gcoms_core::TrafficClass::Interactive
     }
 }
 
