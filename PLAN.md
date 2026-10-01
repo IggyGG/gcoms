@@ -11,8 +11,11 @@ the correction, including deferred work and expired-authority refusal. Initial
 invalid fixtures remain retained. Corrected Linux source passes 1,151 workspace
 tests with 13 retained ignores, the real contact interrupted-file recovery inside
 its original 240-second bound, Rustdoc, strict workspace Clippy and both minimal
-feature checks. Native Windows/Mac qualification remains pending; the original
-5% size gate remains failed. See
+feature checks. Source-bound native run `36845346885` also passes Linux's 190
+backend tests and Windows's 192 tests, including the real contact interrupted-file
+recovery; verified provider archives retain those original results. Both Mac
+workers remain queued. Linux's ten size comparisons still exceed the original
+5% gate by 10.0–12.8%; SDK 1.0 remains undeclared. See
 [durable reopen checkpoint](docs/evidence/stabilization-20261001/durable-reopen.json).
 
 The JSON HTTP decoder now uses one byte-slice parser and borrowed envelopes for

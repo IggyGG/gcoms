@@ -43,10 +43,84 @@
     "ordinary_control_pacing_unchanged": true,
     "authenticated_receipts_required": true
   },
-  "native_windows_macos": "pending corrected source qualification",
+  "native_windows_macos": "Windows recovery passed; both Mac workers still queued",
   "sdk_size": {
     "limit_percent": 5,
     "passed": false,
-    "declaration": "not SDK 1.0"
+    "declaration": "not SDK 1.0",
+    "linux_comparisons": [
+      {
+        "mode": "ipc",
+        "opt_level": "3",
+        "growth_percent": 11.768
+      },
+      {
+        "mode": "ipc",
+        "opt_level": "s",
+        "growth_percent": 12.765
+      },
+      {
+        "mode": "ipc",
+        "opt_level": "z",
+        "growth_percent": 12.303
+      },
+      {
+        "mode": "embedded",
+        "opt_level": "3",
+        "growth_percent": 12.034
+      },
+      {
+        "mode": "embedded",
+        "opt_level": "s",
+        "growth_percent": 10.02
+      },
+      {
+        "mode": "embedded",
+        "opt_level": "z",
+        "growth_percent": 10.079
+      },
+      {
+        "mode": "network-client",
+        "opt_level": "3",
+        "growth_percent": 12.722
+      },
+      {
+        "mode": "network-client",
+        "opt_level": "s",
+        "growth_percent": 10.533
+      },
+      {
+        "mode": "network-client",
+        "opt_level": "z",
+        "growth_percent": 10.509
+      },
+      {
+        "mode": "host",
+        "opt_level": "s",
+        "growth_percent": 10.522
+      }
+    ]
+  },
+  "native_run": {
+    "run": 36845346885,
+    "source": "7c4af271367caee00ac4f596786d795b416edaf5",
+    "linux": {
+      "passed": 190,
+      "ignored": 4,
+      "backend_passed": true,
+      "contact_recovery_passed": true,
+      "archive_id": 11154738429,
+      "archive_sha256": "195b090b389fbbdfc5598a65e35976d0b318b7304739d19562650390e9283473"
+    },
+    "windows": {
+      "passed": 192,
+      "ignored": 3,
+      "backend_passed": true,
+      "contact_recovery_passed": true,
+      "archive_id": 11153856548,
+      "archive_sha256": "92a5c95cf0de7b32b0baaaab2ca2d7f9aeffef7e588d205500b109c4668fac60"
+    },
+    "macos_intel": "queued",
+    "macos_arm": "queued"
   }
 }

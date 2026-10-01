@@ -25,7 +25,8 @@ retry, using their original ciphertext, ID and expiry. This frees retained outbo
 slots promptly after reconnecting; ordinary direct retry pacing remains. Neither
 local restoration nor hop acceptance counts as an authenticated recipient receipt.
 The complete Linux workspace and unchanged contact-file recovery pass; native
-Windows/Mac qualification and the 5% SDK size gate remain open in the
+Linux and Windows backend checks pass on native workers. Mac qualification and
+the 5% SDK size gate remain open in the
 [reopen checkpoint](docs/evidence/stabilization-20261001/durable-reopen.json).
 
 Hosted local mutations interrupt network waits instead of waiting behind replay
