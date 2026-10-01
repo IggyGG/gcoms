@@ -86,9 +86,11 @@ fn ordered_ciphertext_survives_restart_and_offline_owner() {
     let reply = owner.send_hosted(b"caught up").unwrap();
     log.append_message(&reply, 104).unwrap();
     assert_eq!(bob.receive_hosted(&reply).unwrap(), b"caught up");
+    drop(log);
     let bytes = std::fs::read(&path).unwrap();
     assert!(!bytes.windows(16).any(|w| w == b"owner is offline"));
     assert!(!bytes.windows(32).any(|w| w == [57; 32]));
+    let mut log = ChannelLog::open(&path, channel, limits()).unwrap();
     assert!(log.read(0).unwrap().is_none());
     assert!(log.read(u64::MAX).unwrap().is_none());
 }
@@ -159,19 +161,27 @@ fn invalid_join_and_quota_refusals_preserve_accepted_prefix() {
         .unwrap()
         .join(log.observer(), &JoinPermit::public(), 100)
         .unwrap();
+    drop(log);
     let before = std::fs::read(&path).unwrap();
+    let mut log = ChannelLog::open(&path, channel, limit).unwrap();
     assert!(log
         .append_join(&first, &owner.export_group_info().unwrap(), 100)
         .is_err());
+    drop(log);
     assert_eq!(std::fs::read(&path).unwrap(), before);
+    let mut log = ChannelLog::open(&path, channel, limit).unwrap();
     let msg = owner.send_hosted(b"fills record quota").unwrap();
     let receipt = log.append_message(&msg, 100).unwrap();
+    drop(log);
     let before = std::fs::read(&path).unwrap();
+    let mut log = ChannelLog::open(&path, channel, limit).unwrap();
     assert!(matches!(
         log.append_join(&first, alice.proposed_group_info().unwrap(), 101),
         Err(Error::Full)
     ));
     assert_eq!(log.observer().epoch(), HOSTED_GENESIS_EPOCH);
+    drop(log);
     assert_eq!(std::fs::read(&path).unwrap(), before);
+    let mut log = ChannelLog::open(&path, channel, limit).unwrap();
     assert_eq!(log.append_message(&msg, 101).unwrap(), receipt);
 }

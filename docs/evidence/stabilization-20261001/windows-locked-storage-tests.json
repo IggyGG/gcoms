@@ -1,0 +1,34 @@
+{
+  "schema": 1,
+  "scope": "Windows mandatory file-lock test fixture correction; production locking and public API unchanged",
+  "original_run": 36852045944,
+  "original_sources": {
+    "gchat": "b67090f2754bcfbc392bd2580e37958f93b871f5",
+    "gcoms": "950f3b2c4f9835cfbdadfe92740ccc1eb391d69c"
+  },
+  "original_platform": "windows-x86_64",
+  "original_error_code": 33,
+  "original_failed_checks": [
+    "receipt_log_recovers_only_torn_tail_and_preserves_dedup_quota_and_write_failure",
+    "failed_real_write_poisoned_until_reopen_without_inventing_acceptance"
+  ],
+  "correction": {
+    "production_code_changed": false,
+    "production_exclusive_locks_preserved": true,
+    "unit_snapshots_use_owning_handle_and_restore_cursor": true,
+    "integration_snapshots_release_then_reopen_normal_log": true,
+    "write_failure_poisoning_and_no_invented_acceptance_still_required": true
+  },
+  "source_sha256": {
+    "crates/channel-service/src/lib.rs": "fd4b0cccf200310de571875d574664563e01169f1345592e8de7cbb221d48a23",
+    "crates/channel-service/src/receipts.rs": "ee773e54ac20f3208a31f10ac4042e39d123a329f6446e640d53223781e082ad",
+    "crates/channel-service/tests/log.rs": "a9fccf5f85b9d084b412b52da237bdf9f91502590658e34b5afac78c47e1f5fd",
+    "crates/channel-service/tests/policy.rs": "b1aa5b511c37d2a882c098dda88210a31aa77c41a6bda7764b19d53fc1b4bf95"
+  },
+  "original_log": {
+    "path": "../gchat/test-evidence/stabilization-20261001/windows-gcoms-36852045944.log",
+    "sha256": "fa37ac731c3d5e2c674c9a50a61a941068991466385206e195fa900662e1d4ef"
+  },
+  "native_windows_correction": "pending",
+  "linux_channel_checks": "pending"
+}

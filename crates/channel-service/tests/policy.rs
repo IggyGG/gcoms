@@ -188,6 +188,7 @@ fn roles_moderation_bans_exceptions_and_transfer_are_ordered_and_durable() {
     assert!(log.observer().rules().mode(HostedMode::InviteOnly));
     apply(&mut log, &mut alice, &mut owner, HostedPolicyChange::Close);
     assert!(alice.send_hosted(b"closed").is_err());
+    drop(log);
     let bytes = std::fs::read(&path).unwrap();
     assert!(!bytes.windows(25).any(|w| w == b"private moderation reason"));
 }
@@ -374,6 +375,7 @@ fn single_use_invitation_survives_offline_creator_and_is_consumed_atomically() {
         .verify_read(&proof, HostedReadScope::Snapshot, [7; 32], 102)
         .is_err());
     let secret = invitation.export_secret().unwrap();
+    drop(log);
     assert!(!std::fs::read(path)
         .unwrap()
         .windows(secret.len())

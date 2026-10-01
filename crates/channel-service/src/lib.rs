@@ -562,6 +562,18 @@ impl ChannelLog {
 }
 
 #[cfg(test)]
+fn test_file_bytes(file: &mut File) -> Vec<u8> {
+    // Windows enforces the exclusive byte-range lock for other handles too.
+    // Inspect through the actual owning handle without moving its write cursor.
+    let position = file.stream_position().unwrap();
+    file.seek(SeekFrom::Start(0)).unwrap();
+    let mut bytes = Vec::new();
+    file.read_to_end(&mut bytes).unwrap();
+    file.seek(SeekFrom::Start(position)).unwrap();
+    bytes
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use gcoms_crypto::IdentityKeypair;
@@ -589,7 +601,7 @@ mod tests {
         .unwrap();
         let first = owner.send_hosted(b"accepted").unwrap();
         log.append_message(&first, 100).unwrap();
-        let before = std::fs::read(&path).unwrap();
+        let before = test_file_bytes(&mut log.file);
         // Inject an actual OS write error at the store's file boundary.
         log.file = File::open(&path).unwrap();
         let second = owner.send_hosted(b"not accepted").unwrap();
@@ -602,7 +614,7 @@ mod tests {
             log.append_message(&second, 101),
             Err(Error::Poisoned)
         ));
-        assert_eq!(std::fs::read(&path).unwrap(), before);
+        assert_eq!(test_file_bytes(&mut log.file), before);
         drop(log);
         let mut reopened = ChannelLog::open(&path, channel, limits).unwrap();
         assert_eq!(reopened.len(), 1);

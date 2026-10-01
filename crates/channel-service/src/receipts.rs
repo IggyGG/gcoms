@@ -253,10 +253,10 @@ mod tests {
             Err(Error::Busy)
         ));
         ledger.append(&receipt).unwrap();
-        let before = std::fs::read(&path).unwrap();
+        let before = test_file_bytes(&mut ledger.file);
         ledger.limits.bytes = ledger.bytes;
         ledger.append(&receipt).unwrap();
-        assert_eq!(std::fs::read(&path).unwrap(), before);
+        assert_eq!(test_file_bytes(&mut ledger.file), before);
         assert_eq!(ledger.read(owner.member_id(), 0, 32).unwrap().len(), 1);
         assert!(ledger.read(peer.member_id(), 0, 32).unwrap().is_empty());
         drop(ledger);
@@ -265,7 +265,7 @@ mod tests {
         file.write_all(&[1, 2, 3]).unwrap();
         drop(file);
         let mut ledger = ReceiptLog::open(&path, channel, limits, &mut log).unwrap();
-        assert_eq!(std::fs::read(&path).unwrap(), before);
+        assert_eq!(test_file_bytes(&mut ledger.file), before);
         let message = owner.send_hosted(b"second").unwrap();
         let accepted = log.append_message(&message, 102).unwrap();
         let second = peer
@@ -277,7 +277,7 @@ mod tests {
         ledger.file = File::open(&path).unwrap();
         assert!(matches!(ledger.append(&second), Err(Error::Io(_))));
         assert!(matches!(ledger.append(&second), Err(Error::Poisoned)));
-        assert_eq!(std::fs::read(&path).unwrap(), before);
+        assert_eq!(test_file_bytes(&mut ledger.file), before);
         drop(ledger);
         let mut corrupted = before;
         *corrupted.last_mut().unwrap() ^= 1;

@@ -1,5 +1,14 @@
 ## Stable SDK release preparation (2026-10-01, in progress)
 
+Native full Windows packaging run `36852045944` passes GChat qualification but
+fails two channel-service tests on OS error 33: the tests read an exclusively
+locked log through another handle. Unit snapshots now use the owning handle and
+restore its cursor; integration snapshots release and reopen the normal log.
+Every original integrity, quota, poison, deduplication and lock assertion remains.
+Production code and public API are unchanged. Original native failures are
+retained; Linux and fresh Windows checks remain required. See the
+[locked-storage checkpoint](docs/evidence/stabilization-20261001/windows-locked-storage-tests.json).
+
 The owner approved up to **20% same-toolchain size growth for this initial feature
 release**, followed by **5% after SDK 1.0**. All four desktop/native and both mobile
 native/application size checks use one recorded, source-bound policy. The actual
