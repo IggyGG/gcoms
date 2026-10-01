@@ -1297,7 +1297,27 @@ pub(crate) fn process_frame(
             }
         }
         Err(e) => {
-            metrics::log_event("frame_error", &[("e", e.to_string())]);
+            // Counts distinguish an obsolete setup frame from an epoch that
+            // cannot be recovered. Never log identities, routes or key bytes.
+            let (send_ctr, recv_ctr) = match &st.sessions[&sender_pk] {
+                PeerSession::Legacy(session) => (session.send_ctr(), session.recv_ctr()),
+                #[cfg(feature = "experimental-gc2")]
+                PeerSession::Credited(session) => (
+                    session.window().sent_counter(),
+                    session.window().received_floor(),
+                ),
+            };
+            metrics::log_event(
+                "frame_error",
+                &[
+                    ("e", e.to_string()),
+                    ("counter", frame.ctr.to_string()),
+                    ("previous_counter", frame.pn.to_string()),
+                    ("send_counter", send_ctr.to_string()),
+                    ("receive_counter", recv_ctr.to_string()),
+                    ("mixed", frame.mixed_with.is_some().to_string()),
+                ],
+            );
         }
     }
 }

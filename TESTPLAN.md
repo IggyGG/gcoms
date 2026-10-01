@@ -1,5 +1,22 @@
 ## Stable SDK release preparation (2026-10-01)
 
+Run all SDK tests and fixed-byte IPC fixtures. The client direction must match
+the original Hello/Request/ProfileHello ordinals, reject server frames on write
+and client frames on read, and enforce the unchanged 16 MiB bound before a single
+zeroizing allocation. Borrowed HTTP reply decoding must match the original JSON
+decoder for all variants, sequence/field order, escaped tags, unknown fields,
+duplicates, missing content, unit/null values and invalid/trailing data.
+Run all workspace tests, strict Clippy, Rustdoc, minimal graphs, unchanged released
+facade checks, locked current consumers and eight mobile dependency graphs.
+The size regression requires every measured delta even when two consumers exceed
+5%, preserves the exact threshold and rejects a different toolchain. Native jobs
+retain source and failure logs; isolated size checks still run after backend
+failure. A retained archive or component pass cannot qualify failed native recovery.
+Enable `GCOMS_FILE_RECOVERY_DIAGNOSTICS=1` only in test executions to retain bounded
+block offsets/counts, together with error counter timing, against the unchanged
+contact resume assertions and deadlines. Never infer lost ratchet state solely
+from a stale simultaneous-setup error.
+
 Run `python3 scripts/check-released-facade.py` to compile the unchanged published
 0.1.49 Rust source in IPC, outbound and embedded graphs. The native integration
 matrix also runs it and retains each compiler log. Fixture hash changes fail

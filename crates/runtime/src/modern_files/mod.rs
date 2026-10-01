@@ -820,6 +820,30 @@ impl Backend {
                             } else {
                                 vec![]
                             };
+                        #[cfg(test)]
+                        if std::env::var_os("GCOMS_FILE_RECOVERY_DIAGNOSTICS").is_some() {
+                            match &message {
+                                swarm::Message::Want { piece, offset, .. } => {
+                                    eprintln!(
+                                        "modern file want at {}: piece={piece} offset={offset}",
+                                        now()
+                                    );
+                                }
+                                swarm::Message::Data {
+                                    piece,
+                                    offset,
+                                    bytes,
+                                    ..
+                                } => {
+                                    eprintln!(
+                                        "modern file data at {}: piece={piece} offset={offset} bytes={}",
+                                        now(),
+                                        bytes.len()
+                                    );
+                                }
+                                _ => {}
+                            }
+                        }
                         match self.engine.receive(
                             Peer {
                                 channel: internal.channel,
@@ -829,6 +853,14 @@ impl Backend {
                             now(),
                         ) {
                             Ok(actions) => {
+                                #[cfg(test)]
+                                if std::env::var_os("GCOMS_FILE_RECOVERY_DIAGNOSTICS").is_some() {
+                                    eprintln!(
+                                        "modern file receive result: actions={} diagnostics={:?}",
+                                        actions.len(),
+                                        self.engine.diagnostics()
+                                    );
+                                }
                                 for id in offered {
                                     self.metadata.entries.entry(id).or_insert_with(|| Entry {
                                         scope: scope.clone(),

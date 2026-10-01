@@ -509,21 +509,141 @@ pub enum Frame {
     ProfileHello { hello: Hello, token: [u8; 32] },
 }
 
-// Keep the public Vec-returning codec compatible. Runtime I/O uses the guarded
-// variant: count first, allocate once, then serialize directly into guarded storage.
-fn encode_guarded(frame: &Frame) -> Result<Zeroizing<Vec<u8>>, SdkError> {
+// Count and write with the same serializer type. Two distinct postcard flavors
+// instantiate the complete IPC enum serializer twice, including every optional
+// response. This keeps one encoding implementation while retaining the bounded
+// count-first allocation and zeroizing storage (no secret-bearing reallocation).
+#[derive(Default)]
+struct GuardedFrameStorage {
+    length: usize,
+    payload: Option<Zeroizing<Vec<u8>>>,
+}
+
+impl postcard::ser_flavors::Flavor for GuardedFrameStorage {
+    type Output = Self;
+
+    fn try_push(&mut self, byte: u8) -> postcard::Result<()> {
+        self.try_extend(&[byte])
+    }
+
+    fn try_extend(&mut self, bytes: &[u8]) -> postcard::Result<()> {
+        let end = self
+            .length
+            .checked_add(bytes.len())
+            .filter(|end| *end <= MAX_FRAME_BYTES)
+            .ok_or(postcard::Error::SerializeBufferFull)?;
+        if let Some(payload) = &mut self.payload {
+            let output = payload
+                .get_mut(self.length..end)
+                .ok_or(postcard::Error::SerializeBufferFull)?;
+            output.copy_from_slice(bytes);
+        }
+        self.length = end;
+        Ok(())
+    }
+
+    fn finalize(self) -> postcard::Result<Self> {
+        Ok(self)
+    }
+}
+
+#[inline(never)]
+fn serialize_guarded_frame<T: Serialize>(
+    frame: &T,
+    storage: GuardedFrameStorage,
+) -> Result<GuardedFrameStorage, SdkError> {
+    postcard::serialize_with_flavor(frame, storage).map_err(|error| match error {
+        postcard::Error::SerializeBufferFull => {
+            SdkError::Protocol("IPC frame exceeds limit".into())
+        }
+        _ => SdkError::Protocol(error.to_string()),
+    })
+}
+
+// Keep the public Vec-returning codec compatible. Runtime I/O allocates once
+// after the bounded count and serializes directly into guarded storage.
+fn validate_outgoing(frame: &Frame) -> Result<(), SdkError> {
     if let Frame::Request(request) = frame {
         request.request.validate_application_payload()?;
     }
-    let length = postcard::experimental::serialized_size(frame)
-        .map_err(|error| SdkError::Protocol(error.to_string()))?;
-    if length > MAX_FRAME_BYTES {
+    Ok(())
+}
+
+fn encode_guarded(frame: &Frame) -> Result<Zeroizing<Vec<u8>>, SdkError> {
+    validate_outgoing(frame)?;
+    encode_storage(frame)
+}
+
+fn encode_storage<T: Serialize>(frame: &T) -> Result<Zeroizing<Vec<u8>>, SdkError> {
+    let length = serialize_guarded_frame(frame, GuardedFrameStorage::default())?.length;
+    let output = serialize_guarded_frame(
+        frame,
+        GuardedFrameStorage {
+            length: 0,
+            payload: Some(Zeroizing::new(vec![0; length])),
+        },
+    )?;
+    output
+        .payload
+        .ok_or_else(|| SdkError::Protocol("missing IPC frame storage".into()))
+}
+
+// The client never emits a response or decodes a request. Keep these directions
+// separate so a small IPC consumer does not link the daemon's unused codecs.
+// Explicit ordinals below are the existing Frame ordinals, not a new wire enum.
+#[cfg(all(any(unix, windows), feature = "ipc"))]
+struct ClientFrame<'a>(&'a Frame);
+
+#[cfg(all(any(unix, windows), feature = "ipc"))]
+impl Serialize for ClientFrame<'_> {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        match self.0 {
+            Frame::Hello(hello) => serializer.serialize_newtype_variant("Frame", 0, "Hello", hello),
+            Frame::Request(request) => {
+                serializer.serialize_newtype_variant("Frame", 2, "Request", request)
+            }
+            Frame::ProfileHello { hello, token } => {
+                use serde::ser::SerializeStructVariant;
+                let mut variant =
+                    serializer.serialize_struct_variant("Frame", 5, "ProfileHello", 2)?;
+                variant.serialize_field("hello", hello)?;
+                variant.serialize_field("token", token)?;
+                variant.end()
+            }
+            _ => Err(serde::ser::Error::custom(
+                "unexpected outgoing client frame",
+            )),
+        }
+    }
+}
+
+#[cfg(all(any(unix, windows), feature = "ipc"))]
+fn decode_server_frame(payload: &[u8]) -> Result<Frame, SdkError> {
+    if payload.len() > MAX_FRAME_BYTES {
         return Err(SdkError::Protocol("IPC frame exceeds limit".into()));
     }
-    let mut payload = Zeroizing::new(vec![0; length]);
-    postcard::to_slice(frame, &mut payload)
-        .map_err(|error| SdkError::Protocol(error.to_string()))?;
-    Ok(payload)
+    let error = |error: postcard::Error| SdkError::Protocol(error.to_string());
+    let (ordinal, body) = postcard::take_from_bytes::<u32>(payload).map_err(error)?;
+    let (frame, trailing) = match ordinal {
+        1 => postcard::take_from_bytes(body)
+            .map(|(value, trailing)| (Frame::Welcome(value), trailing))
+            .map_err(error)?,
+        3 => postcard::take_from_bytes(body)
+            .map(|(value, trailing)| (Frame::Response(value), trailing))
+            .map_err(error)?,
+        4 => postcard::take_from_bytes(body)
+            .map(|(value, trailing)| (Frame::Event(value), trailing))
+            .map_err(error)?,
+        _ => {
+            return Err(SdkError::Protocol(
+                "unexpected incoming client frame".into(),
+            ))
+        }
+    };
+    if !trailing.is_empty() {
+        return Err(SdkError::Protocol("trailing IPC bytes".into()));
+    }
+    Ok(frame)
 }
 
 pub fn encode(frame: &Frame) -> Result<Vec<u8>, SdkError> {
@@ -605,6 +725,24 @@ pub fn decode(payload: &[u8]) -> Result<Frame, SdkError> {
 #[cfg(all(any(unix, windows), feature = "ipc"))]
 async fn write_frame<W: AsyncWrite + Unpin>(writer: &mut W, frame: &Frame) -> Result<(), SdkError> {
     let payload = encode_guarded(frame)?;
+    write_payload(writer, &payload).await
+}
+
+#[cfg(all(any(unix, windows), feature = "ipc"))]
+async fn write_client_frame<W: AsyncWrite + Unpin>(
+    writer: &mut W,
+    frame: &Frame,
+) -> Result<(), SdkError> {
+    validate_outgoing(frame)?;
+    let payload = encode_storage(&ClientFrame(frame))?;
+    write_payload(writer, &payload).await
+}
+
+#[cfg(all(any(unix, windows), feature = "ipc"))]
+async fn write_payload<W: AsyncWrite + Unpin>(
+    writer: &mut W,
+    payload: &[u8],
+) -> Result<(), SdkError> {
     let length = u32::try_from(payload.len())
         .map_err(|_| SdkError::Protocol("IPC frame exceeds u32 length".into()))?;
     writer
@@ -612,13 +750,25 @@ async fn write_frame<W: AsyncWrite + Unpin>(writer: &mut W, frame: &Frame) -> Re
         .await
         .map_err(|error| SdkError::Runtime(error.to_string()))?;
     writer
-        .write_all(&payload)
+        .write_all(payload)
         .await
         .map_err(|error| SdkError::Runtime(error.to_string()))
 }
 
 #[cfg(all(any(unix, windows), feature = "ipc"))]
 async fn read_frame<R: AsyncRead + Unpin>(reader: &mut R) -> Result<Frame, SdkError> {
+    decode(&read_payload(reader).await?)
+}
+
+#[cfg(all(any(unix, windows), feature = "ipc"))]
+async fn read_client_frame<R: AsyncRead + Unpin>(reader: &mut R) -> Result<Frame, SdkError> {
+    decode_server_frame(&read_payload(reader).await?)
+}
+
+#[cfg(all(any(unix, windows), feature = "ipc"))]
+async fn read_payload<R: AsyncRead + Unpin>(
+    reader: &mut R,
+) -> Result<Zeroizing<Vec<u8>>, SdkError> {
     let mut length = [0; 4];
     reader
         .read_exact(&mut length)
@@ -639,7 +789,7 @@ async fn read_frame<R: AsyncRead + Unpin>(reader: &mut R) -> Result<Frame, SdkEr
             std::io::ErrorKind::UnexpectedEof => SdkError::ConnectionClosed,
             _ => SdkError::Runtime(error.to_string()),
         })?;
-    decode(&payload)
+    Ok(payload)
 }
 
 #[cfg(all(any(unix, windows), feature = "ipc"))]
@@ -806,9 +956,9 @@ impl IpcClient {
             Some(token) => Frame::ProfileHello { hello, token },
             None => Frame::Hello(hello),
         });
-        write_frame(&mut stream, &frame).await?;
+        write_client_frame(&mut stream, &frame).await?;
         drop(frame);
-        let (granted, event_stream_id) = match read_frame(&mut stream).await? {
+        let (granted, event_stream_id) = match read_client_frame(&mut stream).await? {
             Frame::Welcome(welcome) if welcome.version == VERSION => {
                 (welcome.granted_capabilities, welcome.event_stream_id)
             }
@@ -836,7 +986,7 @@ impl IpcClient {
         let reader_inner = inner.clone();
         let reader_task = tokio::spawn(async move {
             loop {
-                match read_frame(&mut reader).await {
+                match read_client_frame(&mut reader).await {
                     Ok(Frame::Response(response)) if response.version == VERSION => {
                         if let Some(sender) = reader_inner
                             .pending
@@ -970,7 +1120,7 @@ impl IpcClient {
             match writer.as_mut() {
                 Some(writer) if !*closed.borrow() => tokio::select! {
                     _ = closed.changed() => Err(SdkError::ConnectionClosed),
-                    result = write_frame(writer, &frame) => result,
+                    result = write_client_frame(writer, &frame) => result,
                 },
                 _ => Err(SdkError::ConnectionClosed),
             }
@@ -2591,6 +2741,59 @@ mod tests {
         assert_eq!(decode(&guarded).unwrap(), frame);
         frame.zeroize();
         assert_body_cleared(&frame);
+    }
+
+    #[cfg(all(any(unix, windows), feature = "ipc"))]
+    #[test]
+    fn client_direction_codecs_preserve_released_ordinals_and_reject_wrong_direction() {
+        let hello = Hello {
+            component: None,
+            min_version: VERSION,
+            max_version: VERSION,
+            application: "wire compatibility fixture".into(),
+            requested_capabilities: vec![Capability::IdentityRead],
+        };
+        for frame in [
+            Frame::Hello(hello.clone()),
+            Frame::ProfileHello {
+                hello,
+                token: [3; 32],
+            },
+            cleanup_frame(),
+        ] {
+            let actual = encode_storage(&ClientFrame(&frame)).unwrap();
+            assert_eq!(&*actual, &postcard::to_allocvec(&frame).unwrap());
+            assert_eq!(decode(&actual).unwrap(), frame);
+            assert!(decode_server_frame(&actual).is_err());
+        }
+        for frame in [
+            Frame::Welcome(Welcome {
+                version: VERSION,
+                granted_capabilities: vec![Capability::IdentityRead],
+                event_stream_id: [4; 16],
+            }),
+            Frame::Response(ResponseEnvelope {
+                version: VERSION,
+                request_id: 7,
+                result: Ok(Response::Empty),
+            }),
+        ] {
+            let mut actual = postcard::to_allocvec(&frame).unwrap();
+            assert_eq!(decode_server_frame(&actual).unwrap(), frame);
+            actual.push(0);
+            assert!(decode_server_frame(&actual).is_err());
+            assert!(encode_storage(&ClientFrame(&frame)).is_err());
+        }
+        let mut storage = GuardedFrameStorage {
+            length: MAX_FRAME_BYTES,
+            payload: None,
+        };
+        use postcard::ser_flavors::Flavor;
+        assert_eq!(
+            storage.try_push(0),
+            Err(postcard::Error::SerializeBufferFull)
+        );
+        assert_eq!(storage.length, MAX_FRAME_BYTES);
     }
 
     #[cfg(all(any(unix, windows), feature = "ipc"))]

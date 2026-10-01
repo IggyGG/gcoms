@@ -1,5 +1,25 @@
 ## Stable SDK release preparation (2026-10-01, in progress)
 
+SDK codec preparation passes 1,149 workspace tests with 13 retained exclusions,
+strict Clippy, Rustdoc, minimal IPC/core checks, three unchanged released consumer
+graphs, three current locked consumers and eight Android/Apple dependency graphs.
+IPC26 bytes and bounds remain unchanged. Count/write share one bounded zeroizing
+postcard flavor; clients link only their message directions, and HTTP replies use
+a borrowed JSON envelope with the original reply shapes. No dependency version or
+public facade changes. Linux IPC opt-3 falls from 1,561,216 to 1,317,432 bytes,
+still 14.6% above the original 1,149,728-byte baseline: the 5% gate remains failed.
+Native logs and all measured deltas now survive failures, and independent consumer
+measurement runs even after backend tests fail. Original compile/Clippy failures
+remain retained. See [codec checkpoint](docs/evidence/stabilization-20261001/sdk-codec-size.json).
+
+Native four-window run `36827922107` still fails contact recovery on Linux,
+Windows and Intel Mac. The cluster recovery passes; its unknown-mix-key event
+occurs during initial simultaneous setup before reopening. That event alone does
+not establish the cause of native missing blocks. Bounded error counters and
+test-only block receive diagnostics will distinguish stale setup from stale file
+responses without logging identities, keys or routes. Native recovery, all size
+profiles, installed acceptance, fleet activation and SDK 1.0 remain open.
+
 The follow-up native run `36820878112` still failed contact recovery on Windows
 and Intel Mac; Linux recovered the file but failed the unchanged size ceiling
 (IPC opt-3 grew 36%). Those verdicts and logs are retained. Legacy sessions now

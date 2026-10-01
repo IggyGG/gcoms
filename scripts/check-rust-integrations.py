@@ -60,15 +60,19 @@ def compare_baseline(report, path):
             raise RuntimeError(f'baseline {field} differs; establish a baseline for this toolchain')
     previous = {(item['mode'], item['opt_level']): item['bytes'] for item in baseline['binaries']}
     changes = []
+    oversized = []
     for item in report['binaries']:
         key = (item['mode'], item['opt_level'])
         if key not in previous:
             continue
         growth = item['bytes'] / previous[key] - 1
         changes.append({'mode': key[0], 'opt_level': key[1], 'growth_percent': round(growth * 100, 3)})
-        if growth > 0.05:
-            raise RuntimeError(f'{key} grew {growth:.1%}; exceeds the 5% size gate')
+        if item['bytes'] * 100 > previous[key] * 105:
+            oversized.append((key, growth))
     report['baseline_comparison'] = changes
+    if oversized:
+        raise RuntimeError('; '.join(f'{key} grew {growth:.1%}; exceeds the 5% size gate'
+                                    for key, growth in oversized))
 
 
 def main():
@@ -150,13 +154,20 @@ def main():
         report['binaries'].append({'mode': 'host', 'opt_level': 's', 'bytes': len(data),
                                    'sha256': hashlib.sha256(data).hexdigest(), 'artifact': retained.name,
                                    'imports': binary_imports(retained)})
-    if args.baseline:
-        if not args.measure:
-            raise RuntimeError('--baseline requires --measure')
-        compare_baseline(report, args.baseline)
+    try:
+        if args.baseline:
+            if not args.measure:
+                raise RuntimeError('--baseline requires --measure')
+            compare_baseline(report, args.baseline)
+        if any(hashlib.sha256((ROOT / name).read_bytes()).hexdigest() != digest for name, digest in report['source_sha256'].items()):
+            raise RuntimeError('Rust source changed during size qualification; rerun after changes settle')
+    except Exception as error:
+        report['passed'] = False
+        report['error'] = type(error).__name__ + ': ' + str(error)
+        (output / 'summary.json').write_text(json.dumps(report, indent=2) + '\n')
+        raise
+    report['passed'] = True
     (output / 'summary.json').write_text(json.dumps(report, indent=2) + '\n')
-    if any(hashlib.sha256((ROOT / name).read_bytes()).hexdigest() != digest for name, digest in report['source_sha256'].items()):
-        raise RuntimeError('Rust source changed during size qualification; rerun after changes settle')
     print(json.dumps({'graphs': {k: len(v) for k, v in report['graphs'].items()}, 'binaries': report['binaries']}, indent=2))
 
 

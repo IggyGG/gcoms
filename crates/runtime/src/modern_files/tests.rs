@@ -178,6 +178,10 @@ async fn modern_contact_file_verifies_resumes_and_revokes_without_a_channel() {
         .sharing_v2(api::Request::Resume { id })
         .await
         .unwrap();
+    let resume_started_ms = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_millis();
     let resumed = tokio::time::timeout(Duration::from_secs(240), async {
         loop {
             if snapshot(&receiver)
@@ -205,6 +209,7 @@ async fn modern_contact_file_verifies_resumes_and_revokes_without_a_channel() {
         );
         let log = std::fs::read_to_string(&metrics).unwrap();
         let mut events = BTreeMap::<String, usize>::new();
+        let mut frame_errors = Vec::new();
         for line in log.lines() {
             if let Ok(value) = serde_json::from_str::<serde_json::Value>(line) {
                 let label = format!(
@@ -213,9 +218,13 @@ async fn modern_contact_file_verifies_resumes_and_revokes_without_a_channel() {
                     value.get("e").unwrap_or(&serde_json::Value::Null)
                 );
                 *events.entry(label).or_default() += 1;
+                if value["event"] == "frame_error" && frame_errors.len() < 16 {
+                    frame_errors.push(value);
+                }
             }
         }
         eprintln!("node events: {events:?}");
+        eprintln!("resume started at {resume_started_ms} ms; frame errors: {frame_errors:?}");
         eprintln!("resumed source snapshot: {:?}", snapshot(&owner).await);
         eprintln!("resumed target snapshot: {:?}", snapshot(&receiver).await);
         let source = ar.modern_files().await.unwrap();

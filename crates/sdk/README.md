@@ -32,6 +32,12 @@ bodies retain the smaller GC/1 limit. `ComponentLink` in `gcoms-rpc` preserves t
 component grants when transporting typed service calls. Delivery receipts remain
 distinct from an application operation's durable outcome.
 
+Frame counting and serialization share bounded zeroizing storage so encoding
+allocates once without reallocating secret bytes. Client I/O preserves the public
+frame ordinals while compiling only client directions. The hosted HTTP decoder
+borrows the JSON envelope and preserves the public reply shapes and validation.
+These internal changes do not change IPC26 or its released compatibility fixtures.
+
 MIT OR Apache-2.0. This is a developer preview; see the repository security policy.
 
 ## IPC21 file commitments

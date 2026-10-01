@@ -1,0 +1,187 @@
+{
+  "schema": 1,
+  "scope": "SDK codec component qualification and Linux opt-3 size investigation; not SDK 1.0 or native/fleet acceptance",
+  "parent": "e18810e7e585433fa5874aa87db18d139466c565",
+  "source_sha256": {
+    "crates/sdk/Cargo.toml": "cf1e305f1a4317a62c91525313e27ef3e9e3a52a685712d8e3c2ed9a885a92a6",
+    "crates/sdk/src/ipc.rs": "b69eb232742745213be53f09b65927a14ca195287ff42a7cbc7e916b333277eb",
+    "crates/sdk/src/hosted.rs": "b81158db3cf7039e69bd54b4ccabdb384b4d8b357e204cfedec38c4ae93d8227",
+    "crates/node/src/node/direct.rs": "74fe31c8058d6ffd4fc047ca29b6d906e089ca71edb8f3a0ed9a7e4f2fc0e8b1",
+    "crates/runtime/src/modern_files/tests.rs": "338a52024203c2e6f057bc7fac34c6021636c0620524df35654e02ad0754470d",
+    "crates/runtime/src/modern_files/mod.rs": "21ad61902df7193cca0b620818b826d55d2c2f7e810ecd8d0e86cc3336bfd55b"
+  },
+  "checks": {
+    "workspace_passed": 1149,
+    "workspace_ignored": 13,
+    "sdk_passed": 79,
+    "strict_workspace_clippy": true,
+    "rustdoc": true,
+    "minimal_ipc_and_core": true,
+    "unchanged_released_consumer_graphs": 3,
+    "current_locked_consumer_graphs": 3,
+    "locked_android_apple_graphs": 8,
+    "python_passed": 207,
+    "generated_rust_schemas": true,
+    "generated_javascript_clients": true,
+    "npm_check": true,
+    "npm_tests": 8,
+    "npm_build": true,
+    "source_inventory": 971,
+    "research_imports": 7,
+    "cell_vectors": 8
+  },
+  "behavior": {
+    "ipc_version": 26,
+    "frame_bytes": 16777216,
+    "bounded_count_before_allocation": true,
+    "zeroizing_storage_no_reallocation": true,
+    "client_direction_preserves_ordinals": true,
+    "http_reply_preserves_original_json_shapes": true,
+    "api_changed": false,
+    "native_failure_upload_configured": true,
+    "independent_measurement_configured": true,
+    "new_native_workflow_executed": false
+  },
+  "size": {
+    "platform": "Linux x86_64",
+    "rust": "1.98.0",
+    "baseline_commit": "e75c72c6934c98d0602be1f80ee0175ca2db62e3",
+    "baseline_bytes": 1149728,
+    "measured_bytes": 1317432,
+    "measured_sha256": "9dc4fb463a41c2cfe2cecebc29a08de67fbb0d727e27c21c288b519d63b5223c",
+    "growth_percent": 14.586,
+    "limit_percent": 5,
+    "passed": false,
+    "all_platforms_and_profiles_qualified": false,
+    "experiments": [
+      {
+        "name": "original",
+        "bytes": 1561216
+      },
+      {
+        "name": "shared_postcard_flavor",
+        "bytes": 1493744
+      },
+      {
+        "name": "directional_client_codec",
+        "bytes": 1411728
+      },
+      {
+        "name": "borrowed_json_reply",
+        "bytes": 1317432
+      },
+      {
+        "name": "rejected_cold_hint",
+        "bytes": 1317432,
+        "changed_size": false
+      }
+    ]
+  },
+  "retained_failures": [
+    "Original SDK fixture compile used nonexistent Capability::Identity; corrected to IdentityRead",
+    "First strict Clippy rejected a needless borrow; corrected without suppression",
+    "Original 5% size ceiling still fails",
+    "Native run 36827922107 contact recovery fails on all four platforms",
+    "Generated-contract run reached matching Rust schemas then failed because the cluster image lacks Node; unchanged JS generation passes on the workstation after locked npm install"
+  ],
+  "evidence": [
+    {
+      "path": "test-evidence/stabilization-20261001/stable-codec-50.tar",
+      "sha256": "c7ab77b8d82829703798ad333690783b12fa318596c2a8d04d10312f664d5b33"
+    },
+    {
+      "path": "test-evidence/stabilization-20261001/stable-codec-followup-50.tar",
+      "sha256": "ee6348c218abdd05435963fac6d2cede2b1833d4bfe1906fdddf5d849dbca614"
+    },
+    {
+      "path": "test-evidence/stabilization-20261001/stable-python-39.log",
+      "sha256": "4f7b4e0a3edf85eff899096514a6f7285d2eb2210d1fdb96a7215346a1ac4b68"
+    },
+    {
+      "path": "test-evidence/stabilization-20261001/stable-codec-50/work/stable-codec-clippy-44.log",
+      "sha256": "0fddfe270a4665ba2e329258fe07a1d92ea163924c85750d38a3d829f72d7f41"
+    },
+    {
+      "path": "test-evidence/stabilization-20261001/stable-codec-50/work/stable-codec-workspace-46.log",
+      "sha256": "a6511239b7769fe0ace036696fb547d62cc3c16df86ec182221333f7d9d76bbb"
+    },
+    {
+      "path": "test-evidence/stabilization-20261001/stable-codec-50/work/stable-sdk-codec-40.log",
+      "sha256": "c8419033eb3fe7ea9836906383086e515cc70c3176d384981c5e72849cb73295"
+    },
+    {
+      "path": "test-evidence/stabilization-20261001/stable-codec-50/work/stable-codec-clippy-46.log",
+      "sha256": "8301ce8add0ef92f7da41ccd115a00f256c955cb87311fbdf7d094f0f80368cf"
+    },
+    {
+      "path": "test-evidence/stabilization-20261001/stable-codec-50/work/stable-sdk-codec-41.log",
+      "sha256": "a72b2b9b30f8d4f1dd551890069e536e48c5964e5d41372eea8cd5eb684c22b2"
+    },
+    {
+      "path": "test-evidence/stabilization-20261001/native-sdk-36827922107-linux-job.log",
+      "sha256": "b0bee4c875796556f49814c645da1f12e506101c3c7f4b5bee9e2add94fc2fd7"
+    },
+    {
+      "path": "test-evidence/stabilization-20261001/native-sdk-36827922107-windows-job.log",
+      "sha256": "a5c1b0de062fe9b94e97e1206abef3f73a83c95eb562554ed26e2ecbc478be56"
+    },
+    {
+      "path": "test-evidence/stabilization-20261001/native-sdk-36827922107-intel-job.log",
+      "sha256": "42a30467486c9b47265ac3ef16ab202262c1dd46c02aac211389e7b5bdfef1b8"
+    },
+    {
+      "path": "test-evidence/stabilization-20261001/stable-recovery-51/stable-recovery-clippy-51.log",
+      "sha256": "8b0ddc0d4b863442142ba2db3d594e3be2fba53836a70896833a57bffd058824"
+    },
+    {
+      "path": "test-evidence/stabilization-20261001/stable-recovery-51/stable-recovery-contact-51.log",
+      "sha256": "d629b85b590d3ef60a1c43f6bad1697e7c36c53186a74f719ecf57bd96bf5cec"
+    },
+    {
+      "path": "test-evidence/stabilization-20261001/stable-recovery-51/stable-recovery-setup-51.log",
+      "sha256": "7890e92f17de2b54b6dfc7f6f444d3c5a8fbcde412729859755b6599f184fed2"
+    },
+    {
+      "path": "test-evidence/stabilization-20261001/stable-recovery-51.tar",
+      "sha256": "576beed66f03e6051741bf945063f46129fe6f45ccc630f2e0374ace3ba5a81b"
+    },
+    {
+      "path": "test-evidence/stabilization-20261001/native-sdk-36827922107-arm-job.log",
+      "sha256": "cf207ce6d187b0289f21e8bb0e5fc4a7b7b3d5af8dfc6246cb6ad1b015fab1c0"
+    },
+    {
+      "path": "test-evidence/stabilization-20261001/stable-python-52.log",
+      "sha256": "816c2d96b5e132239efa6b089c65453e42387c73ccf15ffc3aa4763e8dd3aa5f"
+    },
+    {
+      "path": "test-evidence/stabilization-20261001/stable-generated-52.log",
+      "sha256": "310f20e21d04cc3fb7ade02360ade84abae57352a8bf6145f0c7cb9cc8b6aab6"
+    },
+    {
+      "path": "test-evidence/stabilization-20261001/stable-npm-53.log",
+      "sha256": "3605e632492de1a9c25d951689569029e3a212b4c91fb7f92908883cb4ab0ad5"
+    },
+    {
+      "path": "test-evidence/stabilization-20261001/stable-js-generated-53.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "test-evidence/stabilization-20261001/stable-node-54.log",
+      "sha256": "a4ee003baae25259f213888c920b5075605970156c1a17a054aba2ae35958186"
+    },
+    {
+      "path": "test-evidence/stabilization-20261001/stable-size-tests-54.log",
+      "sha256": "4c27273a0f98ea0a5305ee3aeadcfe9e65befd1492305bd8bf5f30310627a114"
+    }
+  ],
+  "diagnostics_validation": {
+    "strict_workspace_clippy": true,
+    "contact_recovery_seconds": 161.12,
+    "original_resume_limit_seconds": 240,
+    "slow_send_control_case": true,
+    "simultaneous_setup_case": true,
+    "identities_keys_routes_logged": false,
+    "scope": "focused validation after additive local/test-only diagnostics; SDK source is identical to the full workspace run",
+    "python_tests": 207
+  }
+}

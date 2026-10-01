@@ -93,6 +93,13 @@ encrypted outbox while four ciphertexts await recipient receipts. Each receipt
 releases capacity without moving the original deadline or advancing a deferred
 record's ratchet counter. GC/2 keeps its existing credited send window.
 
+IPC count/write now share bounded zeroizing storage, and clients link the codecs
+for their message directions. Hosted HTTP replies borrow their JSON envelope;
+wire bytes, public reply shapes, bounds and dependency versions remain unchanged.
+Native CI retains failed backend/size logs and measures isolated consumers even
+when backend tests fail. The current Linux IPC reduction still exceeds the
+original 5% size ceiling; see the [codec checkpoint](docs/evidence/stabilization-20261001/sdk-codec-size.json).
+
 Rust applications start with the [`gcoms` application API](crates/application/README.md):
 one dependency for messaging, channels and files. Select `network-client,files`
 for a standalone client, `embedded,files,gc2-carrier` for a built-in relay, or

@@ -327,6 +327,149 @@ pub async fn exchange<C: crate::GcClient + ?Sized>(
             response.status
         )));
     }
-    serde_json::from_slice(&response.body)
-        .map_err(|_| crate::SdkError::Protocol("invalid hosted response".into()))
+    decode_reply_json(&response.body)
+}
+
+// Decode the JSON envelope once, then its selected body. Serde's generic tagged
+// enum visitor also instantiates every reply through a buffered Content tree.
+// The HTTP exchange needs only JSON and can borrow the original bounded bytes,
+// retaining field-order independence and duplicate-field/type validation.
+fn decode_reply_json(bytes: &[u8]) -> Result<Reply, crate::SdkError> {
+    use serde_json::value::RawValue;
+    #[derive(Deserialize)]
+    struct Envelope<'a> {
+        #[serde(borrow)]
+        kind: std::borrow::Cow<'a, str>,
+        #[serde(borrow)]
+        value: Option<&'a RawValue>,
+    }
+    #[derive(Deserialize)]
+    struct Created {
+        anchor: [u8; 32],
+    }
+    #[derive(Deserialize)]
+    struct Polled {
+        page: RecordPage,
+        acknowledged: usize,
+        receipts: Option<ReceiptPage>,
+    }
+    #[derive(Deserialize)]
+    struct Receipts {
+        after: u64,
+        next: u64,
+        receipts: Vec<String>,
+    }
+    #[derive(Deserialize)]
+    struct Blob {
+        body: String,
+    }
+    #[derive(Deserialize)]
+    struct Directory {
+        entries: Vec<DirectoryEntry>,
+        next: Option<[u8; 32]>,
+    }
+    fn invalid() -> crate::SdkError {
+        crate::SdkError::Protocol("invalid hosted response".into())
+    }
+    fn body<'a, T: Deserialize<'a>>(value: Option<&'a RawValue>) -> Result<T, crate::SdkError> {
+        serde_json::from_str(value.ok_or_else(invalid)?.get()).map_err(|_| invalid())
+    }
+    let envelope: Envelope<'_> = serde_json::from_slice(bytes).map_err(|_| invalid())?;
+    Ok(match envelope.kind.as_ref() {
+        "info" => Reply::Info(body(envelope.value)?),
+        "created" => {
+            let Created { anchor } = body(envelope.value)?;
+            Reply::Created { anchor }
+        }
+        "snapshot" => Reply::Snapshot(body(envelope.value)?),
+        "records" => Reply::Records(body(envelope.value)?),
+        "polled" => {
+            let Polled {
+                page,
+                acknowledged,
+                receipts,
+            } = body(envelope.value)?;
+            Reply::Polled {
+                page,
+                acknowledged,
+                receipts,
+            }
+        }
+        "accepted" => Reply::Accepted(body(envelope.value)?),
+        "receipts" => {
+            let Receipts {
+                after,
+                next,
+                receipts,
+            } = body(envelope.value)?;
+            Reply::Receipts {
+                after,
+                next,
+                receipts,
+            }
+        }
+        "acknowledged" | "blob_stored" => {
+            if let Some(value) = envelope.value {
+                serde_json::from_str::<()>(value.get()).map_err(|_| invalid())?;
+            }
+            if envelope.kind == "acknowledged" {
+                Reply::Acknowledged
+            } else {
+                Reply::BlobStored
+            }
+        }
+        "blob" => {
+            let Blob { body } = body(envelope.value)?;
+            Reply::Blob { body }
+        }
+        "fault" => Reply::Fault(body(envelope.value)?),
+        "directory" => {
+            let Directory { entries, next } = body(envelope.value)?;
+            Reply::Directory { entries, next }
+        }
+        _ => return Err(invalid()),
+    })
+}
+
+#[cfg(test)]
+mod reply_json_tests {
+    use super::*;
+
+    #[test]
+    fn borrowed_envelope_matches_the_original_json_decoder() {
+        let cases = [
+            r#"{"kind":"info","value":{"version":1,"profiles":[],"public_creation":false,"max_members":64,"max_page_records":16,"max_http_bytes":1048576,"motd":"","rules":"","operator_contact":""}}"#,
+            r#"{"kind":"created","value":{"anchor":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]}}"#,
+            r#"{"kind":"snapshot","value":{"head":{"sequence":0,"hash":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]},"after":0,"next":0,"policy":null,"genesis":null,"public_records":[],"group_info":null}}"#,
+            r#"{"kind":"records","value":{"head":{"sequence":0,"hash":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]},"after":0,"next":0,"records":[{"kind":"inline","value":"encrypted"}]}}"#,
+            r#"{"kind":"polled","value":{"page":{"head":{"sequence":0,"hash":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]},"after":0,"next":0,"records":[]},"acknowledged":0}}"#,
+            r#"{"kind":"accepted","value":{"sequence":1,"id":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],"record_hash":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]}}"#,
+            r#"{"kind":"receipts","value":{"after":0,"next":0,"receipts":[]}}"#,
+            r#"{"kind":"acknowledged"}"#,
+            r#"{"kind":"blob_stored","value":null}"#,
+            r#"{"value":{"body":"ciphertext"},"kind":"b\u006cob","other":true}"#,
+            r#"{"kind":"fault","value":{"code":"unauthorized","message":"denied"}}"#,
+            r#"{"kind":"directory","value":{"entries":[],"next":null}}"#,
+            r#"{"kind":"blob","value":{"body":"first","body":"duplicate"}}"#,
+            r#"{"kind":"blob","kind":"blob","value":{"body":"duplicate"}}"#,
+            r#"{"kind":"blob","value":null,"value":{"body":"duplicate"}}"#,
+            r#"{"kind":"blob","value":{}}"#,
+            r#"{"kind":"blob","value":{"body":false}}"#,
+            r#"{"kind":"blob_stored","value":42}"#,
+            r#"{"kind":"unknown","value":{}}"#,
+            r#"{"kind":"acknowledged"} false"#,
+            r#"["blob",{"body":"sequence"}]"#,
+        ];
+        for case in cases {
+            let original = serde_json::from_str::<Reply>(case);
+            let actual = decode_reply_json(case.as_bytes());
+            assert_eq!(actual.is_ok(), original.is_ok(), "{case}");
+            if let (Ok(original), Ok(actual)) = (original, actual) {
+                assert_eq!(
+                    serde_json::to_value(actual).unwrap(),
+                    serde_json::to_value(original).unwrap()
+                );
+            }
+        }
+    }
 }
