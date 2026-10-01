@@ -7,6 +7,11 @@ handlers retain source compatibility. The real router regression must return the
 default unsupported result and still reject unauthorized callers. No wire,
 IPC26, component credential or 64-member policy changes are introduced.
 Full native/mobile consumers and the SDK 1.0 declaration remain gated.
+The affected source passes 1,143 all-feature workspace tests with 13 retained
+exclusions, strict Clippy and Rustdoc. All eight locked Android/Apple role/push
+dependency graphs resolve. The first run's stale two-method descriptor assertion
+is retained as a failure; the corrected assertion requires the original IDs and
+the optional method. Live platform packaging remains separately gated.
 
 ## IRC parity 64-member source qualification (2026-09-30)
 
