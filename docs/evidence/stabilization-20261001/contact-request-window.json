@@ -1,0 +1,58 @@
+{
+  "schema": 1,
+  "scope": "Contact file flow control; native qualification still required",
+  "base_commit": "2787d53aa0efab56ae4aaaa2470fa845c88e9b02",
+  "contact_block_window": 4,
+  "general_block_window": 8,
+  "legacy_ciphertext_window": 4,
+  "request_timeout_seconds": 30,
+  "runtime_phase_timeout_seconds": 240,
+  "covered_authenticated_completion_unchanged": true,
+  "public_methods_and_wire_bytes_unchanged": true,
+  "negative_original_window_failed": true,
+  "isolated_corrected_file_tests": 30,
+  "unchanged_real_reopen_passed": true,
+  "total_real_test_seconds": 481.70035314559937,
+  "total_includes_initial_transfer_and_reopen": true,
+  "source_sha256": {
+    "crates/file-transfer/src/swarm/engine.rs": "e9f0cd30eb899ec6cbe64c464177ead309f819f371154d0c5499370e5d5d0966",
+    "crates/file-transfer/tests/contact_window.rs": "9d2181bae5d5774496ca394d89cfc4af9aa37ab1f0bcf8a8de433b6bc2e413c7",
+    "crates/runtime/src/modern_files/tests.rs": "338a52024203c2e6f057bc7fac34c6021636c0620524df35654e02ad0754470d"
+  },
+  "evidence": [
+    {
+      "path": "test-evidence/stabilization-20261001/contact-window-negative-94.log",
+      "sha256": "af7fff399b74f2eded92c70a94da0501e60b12c721e249df59de0d4f8f652318"
+    },
+    {
+      "path": "test-evidence/stabilization-20261001/contact-window-corrected-94.log",
+      "sha256": "0595f75b137a1aed55faf34d3b0398729580dc3801b5d7ad6edac5343f9c6d42"
+    },
+    {
+      "path": "test-evidence/stabilization-20261001/contact-window-result-94.json",
+      "sha256": "26cc4db7bcdc864ca630cc7fbf33aadcc87af5c5c78fe7195beb182406029f2e"
+    },
+    {
+      "path": "test-evidence/stabilization-20261001/contact-window-negative-98.log",
+      "sha256": "e07d2f7ef6e0ef57035c73fadb17b8d96ac128352bd42b289725714c7d264227"
+    },
+    {
+      "path": "test-evidence/stabilization-20261001/contact-window-corrected-98.log",
+      "sha256": "83ceb612928a9c0f2e9d9ec41d64ff860e1e4bc786e606864cee8ddb7628218a"
+    },
+    {
+      "path": "test-evidence/stabilization-20261001/contact-window-runtime-98.log",
+      "sha256": "ecd543de919d17496f45d76294c0d4c48ed5a599b67828dc887d78280c4c3236"
+    },
+    {
+      "path": "test-evidence/stabilization-20261001/contact-window-result-98.json",
+      "sha256": "2456ac72052fb06ed0af5c065bde042224dea7607bb5a3f318551dca2653da5e"
+    }
+  ],
+  "retained_first_attempt": "Shared-output fixture verdicts both failed; independent build targets are authoritative",
+  "remaining": [
+    "Full committed workspace and strict Clippy",
+    "Fresh native recovery on all four desktop platforms",
+    "Installed acceptance and fleet activation"
+  ]
+}

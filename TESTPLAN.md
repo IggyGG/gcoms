@@ -1,5 +1,14 @@
 ## Stable SDK release preparation (2026-10-01)
 
+Run the FIFO contact-request regression against the original eight-block window
+and the four-block correction in separate build targets. Require real piece
+verification, exact exported bytes and authenticated completion within the same
+bound. Preserve both the failing control and first shared-output experiment.
+Then run the unchanged contact reopen test, full serial workspace and strict
+Clippy. Keep the 30-second request timer, 240-second phase deadlines, four-ciphertext
+ratchet window, keys, wire layout and receipt rules unchanged. Fresh native
+Windows and both Mac checks remain mandatory.
+
 Linux channel-service validation passes 18 tests. Its first strict Clippy
 run finds an unused mutable fixture binding; that failure is retained and the
 binding is corrected without changing assertions. Corrected Clippy and native

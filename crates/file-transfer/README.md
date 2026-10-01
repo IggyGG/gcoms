@@ -32,3 +32,9 @@ Authenticated completion receipts also identify candidate sources after a restar
 For an already accepted download, a newly identified source gets the same bounded
 inventory query as an offer. The receipt does not verify local pieces or mark the
 download complete; normal inventory, per-piece and final integrity checks remain.
+
+Contact exchange keeps one piece and four block requests in flight, matching the
+durable legacy transport's four-ciphertext window. Local durable acceptance can
+precede network admission; this bound avoids retry traffic queued behind the
+original requests. General exchange keeps its eight-block window. Request timers,
+cryptographic checks and authenticated file completion remain unchanged.

@@ -8,6 +8,20 @@ across up to four transport attempts, with 1/2/4-second backoff inside the same
 30-second page deadline. Background routing owns recovery; admission writes and
 authenticated policy refusals are not retried by this read path.
 
+Fresh Linux policy run `36859550065` and original Intel Mac run `36845346885`
+still miss the unchanged contact reopen deadline. The eight-block file request
+window exceeded the legacy transport's four-ciphertext admission window; durable
+local acceptance started timers while requests waited in the FIFO. Contact files
+now request four blocks at once. General exchange stays at eight, with the same
+30-second request timer, 240-second recovery phase bound, keys and authenticated
+completion checks. The original-window FIFO control fails and the correction
+passes 30 file tests in independent build targets. The unchanged real reopen,
+whole-file byte comparison and authenticated completion pass; its 318.53-second
+total includes initial transfer and reopening, each bounded independently. The
+first shared-output experiment remains retained. Full workspace/Clippy and fresh
+native qualification remain required; see the
+[request-window checkpoint](docs/evidence/stabilization-20261001/contact-request-window.json).
+
 Linux channel-service validation passes 18 tests. Its first strict Clippy
 run finds an unused mutable fixture binding; that failure is retained and the
 binding is corrected without changing assertions. Corrected Clippy and native

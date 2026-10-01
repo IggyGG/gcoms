@@ -12,6 +12,10 @@ const PIPELINE: usize = 4;
 pub const BLOCK_WINDOW: usize = 8;
 pub const PAYLOAD_BUDGET: usize = 4 * 1024 * 1024;
 const REQUEST_TIMEOUT: u64 = 30;
+// Durable legacy direct transport admits four ciphertexts per peer. Its local
+// acceptance can precede network admission: requesting more blocks starts retry
+// clocks behind that window and creates duplicate response traffic on recovery.
+const CONTACT_BLOCK_WINDOW: usize = 4;
 
 /// Local aggregate observations; contains no share, route, or member identifiers.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -148,9 +152,9 @@ struct BlockAttempt {
     attempts: u8,
 }
 impl Pull {
-    fn fill_window(&mut self, id: ShareId, piece: u32, out: &mut Vec<Action>) {
+    fn fill_window(&mut self, id: ShareId, piece: u32, window: usize, out: &mut Vec<Action>) {
         for block in 0..self.received.len() {
-            if self.outstanding.len() >= BLOCK_WINDOW {
+            if self.outstanding.len() >= window {
                 break;
             }
             if self.received[block] || self.outstanding.contains_key(&block) {
@@ -191,6 +195,7 @@ pub struct Engine {
     pub cache: Cache,
     peer_limit: usize,
     pipeline: usize,
+    block_window: usize,
     members: BTreeMap<[u8; 32], (Member, BTreeSet<Member>)>,
     sources: BTreeMap<ShareId, BTreeSet<Peer>>,
     verified_sources: BTreeMap<ShareId, BTreeSet<Peer>>,
@@ -212,6 +217,7 @@ impl Engine {
             cache,
             peer_limit: MAX_PEERS,
             pipeline: PIPELINE,
+            block_window: BLOCK_WINDOW,
             members: BTreeMap::new(),
             sources: BTreeMap::new(),
             verified_sources: BTreeMap::new(),
@@ -234,6 +240,7 @@ impl Engine {
         let mut engine = Self::new(cache);
         engine.peer_limit = 256;
         engine.pipeline = 1;
+        engine.block_window = CONTACT_BLOCK_WINDOW;
         engine
     }
     pub fn set_members(
@@ -728,7 +735,7 @@ impl Engine {
                         }
                     }
                 } else {
-                    pull.fill_window(id, piece, &mut out);
+                    pull.fill_window(id, piece, self.block_window, &mut out);
                 }
             }
             Message::Unavailable { id, request } => {
@@ -952,7 +959,7 @@ impl Engine {
                     outstanding: BTreeMap::new(),
                     proof: None,
                 };
-                pull.fill_window(*id, piece, &mut out);
+                pull.fill_window(*id, piece, self.block_window, &mut out);
                 self.pulls.insert((*id, piece), pull);
             }
         }
