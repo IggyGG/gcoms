@@ -9,6 +9,7 @@ import platform
 import shutil
 import subprocess
 import struct
+import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 MANIFEST = ROOT / 'examples/rust-integration/Cargo.toml'
@@ -80,6 +81,8 @@ def main():
     args = parser.parse_args()
     output = args.output.resolve()
     output.mkdir(parents=True, exist_ok=True)
+    subprocess.run([sys.executable, str(ROOT / 'scripts/check-released-facade.py'),
+                    '--output', str(output / 'released-facade')], cwd=ROOT, check=True)
     environment = dict(os.environ)
     environment.setdefault('CARGO_BUILD_JOBS', '2')
     environment.setdefault('CARGO_TARGET_DIR', str(ROOT / 'target/rust-integrations'))

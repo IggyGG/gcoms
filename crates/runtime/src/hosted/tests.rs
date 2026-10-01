@@ -303,8 +303,11 @@ async fn profile_lock_authentication_and_uncertain_save_fail_closed() {
     let channel = alice.archive.channel;
     let path = alice_dir.path().join(filename(channel));
     assert!(storage::Storage::open(&path, [99; 32], channel).is_err());
-    // Removing the parent forces atomic replacement failure after ratchet advance.
-    std::fs::rename(alice_dir.path(), alice_dir.path().with_extension("moved")).unwrap();
+    // Block the replacement destination after ratchet advance. Windows refuses
+    // renaming a directory that contains the deliberately held profile lock.
+    let retained = path.with_extension("retained-fixture");
+    std::fs::rename(&path, &retained).unwrap();
+    std::fs::create_dir(&path).unwrap();
     assert!(alice
         .queue_send(api::Content::Text("save fails".into()))
         .is_err());
@@ -312,7 +315,8 @@ async fn profile_lock_authentication_and_uncertain_save_fail_closed() {
         .queue_send(api::Content::Text("must not advance again".into()))
         .is_err());
     assert!(alice.flush_one().await.is_err());
-    std::fs::rename(alice_dir.path().with_extension("moved"), alice_dir.path()).unwrap();
+    std::fs::remove_dir(&path).unwrap();
+    std::fs::rename(&retained, &path).unwrap();
     drop(alice);
     assert!(storage::Storage::open(&path, [98; 32], channel).is_err());
     let mut raw = std::fs::read(&path).unwrap();
@@ -510,6 +514,10 @@ async fn offline_join_shows_pending_topic_until_authorized_encrypted_handoff() {
         "new topic",
         "a handoff cannot overwrite an observed topic update"
     );
+    // The ciphertext journal is exclusively locked while the service is live
+    // on Windows. Inspect the retained bytes after its last owners have closed.
+    drop(alice);
+    drop(bob);
     let stored = std::fs::read(
         server_dir
             .path()

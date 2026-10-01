@@ -20,6 +20,8 @@ use zeroize::Zeroizing;
 
 type Id = legacy::ShareId;
 type Member = [u8; 32];
+const CONTACT_SEND_CONCURRENCY: usize = 8;
+const CONTACT_QUEUE_LIMIT: usize = 128;
 pub(crate) type ClientFactory = Arc<dyn Fn() -> Option<Arc<dyn GcClient>> + Send + Sync>;
 fn error(e: impl std::fmt::Display) -> SdkError {
     SdkError::Runtime(e.to_string())
@@ -85,6 +87,17 @@ impl Default for Metadata {
         }
     }
 }
+struct ContactSend {
+    action: Action,
+    task: Option<tokio::task::JoinHandle<Result<(), SdkError>>>,
+}
+impl Drop for ContactSend {
+    fn drop(&mut self) {
+        if let Some(task) = self.task.take() {
+            task.abort();
+        }
+    }
+}
 struct Backend {
     engine: Engine,
     metadata: Metadata,
@@ -93,6 +106,7 @@ struct Backend {
     hosted: BTreeMap<Member, h::Channel>,
     own: Member,
     pending: VecDeque<Action>,
+    contact_sends: Vec<ContactSend>,
     inbox_cursor: u64,
     enabled: bool,
     next_file: Option<Id>,
@@ -147,6 +161,7 @@ impl ModernFileService {
                 hosted: BTreeMap::new(),
                 own,
                 pending: VecDeque::new(),
+                contact_sends: Vec::new(),
                 inbox_cursor: 0,
                 enabled: true,
                 next_file: None,
@@ -177,19 +192,18 @@ impl ModernFileService {
                 };
                 let mut backend = tokio::select! { _ = stopped.changed() => break, b = service.backend.lock() => b };
                 let Some(b) = backend.as_mut() else { break };
+                if let Err(e) = b.finish_contact_sends().await {
+                    b.error = Some(e.to_string());
+                }
                 if !b.enabled || b.store.check().is_err() {
                     continue;
                 }
                 // Keep retryable network failures local to their transfer. The
                 // independently persisted cache is the resumption authority.
-                let interrupted = tokio::select! { _ = stopped.changed() => break, _ = service.interrupt.notified() => true, result = b.tick(sdk.as_ref()) => { if let Err(e) = result { b.error = Some(e.to_string()); } false } };
-                if interrupted {
-                    // A cancelled durable send has an unknown outcome. Rebuild
-                    // only volatile discovery/pulls so no send token stays stuck.
-                    b.pending.clear();
-                    b.engine.clear_members();
-                    b.members();
-                }
+                // Requests can interrupt discovery and hosted reads. Contact
+                // sends and their engine tokens survive that interruption;
+                // clearing them would admit duplicate durable retries.
+                tokio::select! { _ = stopped.changed() => break, _ = service.interrupt.notified() => {}, result = b.tick(sdk.clone()) => { if let Err(e) = result { b.error = Some(e.to_string()); } } };
                 *service.snapshot.lock().unwrap_or_else(|e| e.into_inner()) = b.snapshot();
             }
         }));
@@ -235,6 +249,11 @@ impl ModernFileService {
         b.store.check()?;
         if let api::Request::SetEnabled(enabled) = request {
             b.enabled = enabled;
+            if !enabled {
+                b.pending.clear();
+                b.contact_sends.clear();
+                b.engine.clear_members();
+            }
             self.active
                 .store(enabled, std::sync::atomic::Ordering::Release);
         } else if !b.enabled {
@@ -251,6 +270,8 @@ impl ModernFileService {
                 b.contacts = contacts;
                 b.members();
                 b.pending.retain(|a| b.engine.action_allowed(a));
+                b.contact_sends
+                    .retain(|send| b.engine.action_allowed(&send.action));
             }
             api::Request::Prepare {
                 id,
@@ -309,7 +330,7 @@ impl ModernFileService {
                 b.metadata.entries.get_mut(&id).unwrap().publish = true;
                 b.save()?;
                 if let api::Scope::Contact { peer } = b.metadata.entries[&id].scope {
-                    if b.pending.len() < 128 {
+                    if b.queued_contacts() < CONTACT_QUEUE_LIMIT {
                         b.pending.push_back(Action::offer(
                             Peer {
                                 channel: manifest.scope.channel,
@@ -364,6 +385,55 @@ impl Drop for ModernFileService {
     }
 }
 impl Backend {
+    fn queued_contacts(&self) -> usize {
+        self.pending.len() + self.contact_sends.len()
+    }
+    async fn finish_contact_sends(&mut self) -> Result<(), SdkError> {
+        while let Some(index) = self
+            .contact_sends
+            .iter()
+            .position(|send| send.task.as_ref().is_some_and(|task| task.is_finished()))
+        {
+            let mut send = self.contact_sends.swap_remove(index);
+            let result = send
+                .task
+                .take()
+                .unwrap()
+                .await
+                .unwrap_or_else(|e| Err(error(e)));
+            if let Err(e) = &result {
+                #[cfg(test)]
+                eprintln!("modern contact send failure: {e}");
+                self.error = Some(e.to_string());
+            }
+            if result.is_ok() {
+                if let swarm::Message::Offers { manifests, .. } = &send.action.message {
+                    let mut changed = false;
+                    for manifest in manifests {
+                        if let Some(entry) = self.metadata.entries.get_mut(&manifest.id) {
+                            if entry.own && entry.publish && !entry.published {
+                                entry.published = true;
+                                changed = true;
+                            }
+                        }
+                    }
+                    if changed {
+                        self.save()?;
+                    }
+                }
+            }
+            self.engine.send_finished(
+                send.action.send_token(),
+                if result.is_ok() {
+                    SendOutcome::HopAccepted
+                } else {
+                    SendOutcome::OutcomeUnknown
+                },
+                now(),
+            );
+        }
+        Ok(())
+    }
     fn save(&mut self) -> Result<(), SdkError> {
         self.store.save(&self.metadata)
     }
@@ -488,20 +558,20 @@ impl Backend {
             error: self.error.clone(),
         }
     }
-    async fn tick(&mut self, sdk: &dyn GcClient) -> Result<(), SdkError> {
+    async fn tick(&mut self, sdk: Arc<dyn GcClient>) -> Result<(), SdkError> {
         self.engine.cache.expire(now()).map_err(error)?;
         self.metadata
             .entries
             .retain(|id, _| self.engine.cache.get(*id).is_ok());
-        self.refresh(sdk).await?;
-        let hosted_error = self.receive_hosted(sdk).await.err();
-        let contact_error = self.receive_contacts(sdk).await.err();
+        self.refresh(sdk.as_ref()).await?;
+        let hosted_error = self.receive_hosted(sdk.as_ref()).await.err();
+        let contact_error = self.receive_contacts(sdk.as_ref()).await.err();
         self.error = hosted_error.or(contact_error).map(|e| e.to_string());
         self.store.check()?;
         for (id, entry) in &self.metadata.entries {
             if let api::Scope::Contact { peer } = entry.scope {
                 if entry.own && entry.publish && !entry.published && self.contacts.contains_key(&peer)
-                    && self.pending.len() < 128 && !self.pending.iter().any(|a| matches!(&a.message, swarm::Message::Offers { manifests, .. } if manifests.iter().any(|m| m.id == *id))) {
+                    && self.queued_contacts() < CONTACT_QUEUE_LIMIT && !self.pending.iter().chain(self.contact_sends.iter().map(|send| &send.action)).any(|a| matches!(&a.message, swarm::Message::Offers { manifests, .. } if manifests.iter().any(|m| m.id == *id))) {
                     if let Ok(state) = self.engine.cache.get(*id) {
                         if state.status == swarm::Status::Complete {
                             self.pending.push_back(Action::offer(Peer { channel: state.manifest.scope.channel, member: peer }, state.manifest.clone()));
@@ -512,7 +582,7 @@ impl Backend {
         }
         let actions = self.engine.tick(now()).map_err(error)?;
         for action in actions {
-            if self.pending.len() < 128 {
+            if self.queued_contacts() < CONTACT_QUEUE_LIMIT {
                 self.pending.push_back(action);
             } else {
                 self.engine.send_finished(
@@ -522,61 +592,40 @@ impl Backend {
                 );
             }
         }
-        for _ in 0..4 {
+        while self.contact_sends.len() < CONTACT_SEND_CONCURRENCY {
             let Some(action) = self.pending.pop_front() else {
                 break;
             };
-            let result = if self.engine.action_allowed(&action) {
-                if let Some(card) = self.contacts.get(&action.peer.member) {
-                    let bytes = action.message.encode().map_err(error)?;
-                    let content_type = if matches!(action.message, swarm::Message::Data { .. }) {
-                        api::DIRECT_TYPE
-                    } else {
-                        api::DIRECT_CONTROL_TYPE
-                    };
-                    tokio::time::timeout(
-                        Duration::from_secs(3),
-                        sdk.submit_durable_opaque(card, content_type, &bytes),
-                    )
-                    .await
-                    .map_err(error)
-                    .and_then(|r| r)
-                } else {
-                    Err(SdkError::PermissionDenied)
-                }
+            if !self.engine.action_allowed(&action)
+                || !self.contacts.contains_key(&action.peer.member)
+            {
+                self.engine.send_finished(
+                    action.send_token(),
+                    SendOutcome::DefinitelyNotSent,
+                    now(),
+                );
+                continue;
+            }
+            let card = self.contacts[&action.peer.member].clone();
+            let bytes = action.message.encode().map_err(error)?;
+            let content_type = if matches!(action.message, swarm::Message::Data { .. }) {
+                api::DIRECT_TYPE
             } else {
-                Err(SdkError::PermissionDenied)
+                api::DIRECT_CONTROL_TYPE
             };
-            if let Err(e) = &result {
-                #[cfg(test)]
-                eprintln!("modern contact send failure: {e}");
-                self.error = Some(e.to_string());
-            }
-            if result.is_ok() {
-                if let swarm::Message::Offers { manifests, .. } = &action.message {
-                    let mut changed = false;
-                    for manifest in manifests {
-                        if let Some(entry) = self.metadata.entries.get_mut(&manifest.id) {
-                            if entry.own && entry.publish && !entry.published {
-                                entry.published = true;
-                                changed = true;
-                            }
-                        }
-                    }
-                    if changed {
-                        self.save()?;
-                    }
-                }
-            }
-            self.engine.send_finished(
-                action.send_token(),
-                if result.is_ok() {
-                    SendOutcome::HopAccepted
-                } else {
-                    SendOutcome::OutcomeUnknown
-                },
-                now(),
-            );
+            let client = sdk.clone();
+            // A local timeout cannot finish an already admitted durable send.
+            // Retain its real completion and token in the bounded window while
+            // leaving the profile worker available for receive/control work.
+            let task = tokio::spawn(async move {
+                client
+                    .submit_durable_opaque(&card, content_type, &bytes)
+                    .await
+            });
+            self.contact_sends.push(ContactSend {
+                action,
+                task: Some(task),
+            });
         }
         let ids: Vec<_> = self
             .metadata
@@ -596,7 +645,7 @@ impl Backend {
             .copied()
         {
             self.next_file = Some(id);
-            if let Err(e) = self.hosted_step(sdk, id).await {
+            if let Err(e) = self.hosted_step(sdk.as_ref(), id).await {
                 let entry = self.metadata.entries.get_mut(&id).unwrap();
                 entry.error = Some(e.to_string());
                 entry.retry_at = now() + 5;
@@ -797,7 +846,7 @@ impl Backend {
                                 }
                                 self.save()?;
                                 for action in actions {
-                                    if self.pending.len() < 128 {
+                                    if self.queued_contacts() < CONTACT_QUEUE_LIMIT {
                                         self.pending.push_back(action);
                                     } else {
                                         self.engine.send_finished(

@@ -1,5 +1,15 @@
 ## Stable SDK release preparation (2026-10-01)
 
+Run `python3 scripts/check-released-facade.py` to compile the unchanged published
+0.1.49 Rust source in IPC, outbound and embedded graphs. The native integration
+matrix also runs it and retains each compiler log. Fixture hash changes fail
+before Cargo; dependency selection uses the current isolated locked consumer.
+Run runtime all-feature tests including
+`slow_contact_sends_remain_bounded_and_survive_control_interrupts` and the unchanged
+`modern_contact_file_verifies_resumes_and_revokes_without_a_channel`. Require the
+same native Mac and Windows tests; no deadline, byte count, lock requirement or
+assertion may be relaxed to turn the original failures into passes.
+
 Run the all-feature RPC runtime tests and strict Clippy. The optional-method
 regression compiles an unchanged handler without the new method, returns its
 default unsupported result through the actual typed client/router and preserves

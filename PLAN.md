@@ -1,5 +1,22 @@
 ## Stable SDK release preparation (2026-10-01, in progress)
 
+The native failures exposed a stale independent consumer lock and two Windows
+fixture assumptions about held file locks. Preserve the locks and inspect the
+encrypted hosted journal after its clients close. The contact-file worker now
+retains eight real durable send completions within the shared 128-action limit;
+neither a three-second wrapper nor a control interrupt can admit a duplicate.
+The unchanged real contact resume test and a delayed-completion/control regression
+pass in the cluster. Updated workspace tests pass 1,144 cases with 13 retained
+ignores. The first documentation stage failed after a concurrent consumer check
+changed the shared dependency cache; the sequential unchanged-source documentation
+and strict workspace Clippy pass. Python runs 205 cases with one skip. All three
+locked consumer graphs and the unchanged released consumer compile checks pass.
+Native qualification remains open. See
+[source checkpoint](docs/evidence/stabilization-20261001/sdk-contract-and-send-window.json).
+Retained SDK 0.1.49 source is now compiled unchanged in all three independent
+consumer graphs. The supported facade and eventual 1.0 gates are documented in
+`docs/STABLE_CONTRACTS.md`; no stable release is declared by these component checks.
+
 Reconcile the independent mobile lockfile's missing SDK serde_json dependency;
 keep locked Android/Apple client, relay and optional push graphs reproducible.
 Allow default implementations for optional typed RPC methods so existing service

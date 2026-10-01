@@ -1,0 +1,54 @@
+{
+  "schema": 1,
+  "base_commit": "ba3fe12210f90ab9fbc9ab7d1cc33960907629d1",
+  "source_files": {
+    "crates/runtime/src/modern_files/mod.rs": "5a97547d4a7afe9015cc56c3b461079f39cd9afad53e77108017a8b0aebd7697",
+    "crates/runtime/src/hosted/tests.rs": "a5ca5329ee52fb6db75a40ef054f7eaa45469a3776e4786767f37d6479f2f3a0",
+    "crates/runtime/src/hosted/tests/modern_files.rs": "50b7346c05e207a30344b962d403c515f8713696ad6470aa18796cd9dfd46942",
+    "examples/rust-integration/Cargo.lock": "2c087f17bf5f207cd17f0775670bee8f8b1eefca91a5acb01459b8206c48d725"
+  },
+  "workspace_tests": {
+    "passed": 1144,
+    "ignored": 13,
+    "suites": 105,
+    "command_passed": false,
+    "failure": "Documentation compilation after a concurrent independent consumer changed the shared dependency cache"
+  },
+  "sequential_documentation": {
+    "passed": true,
+    "suites": 25,
+    "source_unchanged": true
+  },
+  "strict_workspace_clippy": true,
+  "python": {
+    "tests": 205,
+    "passed": 204,
+    "skipped": 1
+  },
+  "retained_0_1_49_consumer": {
+    "passed": true,
+    "modes": [
+      "ipc",
+      "embedded",
+      "network-client"
+    ],
+    "source_unchanged": true
+  },
+  "locked_consumer_graphs": 3,
+  "native_failure_run": 36804937808,
+  "native_platform_qualified": false,
+  "sdk_1_0_declared": false,
+  "evidence": {
+    "integration-locked-embedded.log": "1e062d621f8e5749d134265e929e2595dd5cb40f20c7e1713b69706fd852821b",
+    "stable-slow-01.log": "4224f4c8f52424251def1b9c3985bd7a71bd1eb5de14e3f5f99549b379d97b29",
+    "integration-locked-network-client.log": "f57d61f36579845300f65aa37c1f974c2e5525a171e8e9d73d0ed7b55b7f12f7",
+    "stable-doc-tests-05.log": "dd5b75abf66ce2e62fd7df5426b63116c6f9aced5b3a06c8a91fa094f8db8209",
+    "stable-runtime-03.log": "fa190cf23dfb1f904a8e8de908289aeb5b44d5c73559a67ea145d10d15e485d6",
+    "stable-released-facade-01.log": "2282e0189331cbce9a2d200ed028353d7069c44ca9b7e608552ad2b2f6139cfe",
+    "released-facade.json": "814dbb5f2e97d6673309988b10cc60dc8b771866583bbb25e3c07789671009c7",
+    "stable-clippy-05.log": "7c4bf0e89c6e0c364d28e33be4470a458915a830e3e247cfdb5b3899e4e31df4",
+    "integration-locked-ipc.log": "0127129edc4f98719e6edfbe32c3b97ce10c464b42aea19a0100220942519a13",
+    "stable-gcoms-python-06.log": "233873c965ba9f3b0327ac478f6e84656574a1f1e3a68056851e72d0d0119ebc",
+    "stable-workspace-04.log": "d770bb09c285c1dd9523dafd0bda4ba0c1961e7a009f69b8cab9a77fe60dd13b"
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "schema": 1,
+  "release": "0.1.49",
+  "repository": "https://github.com/IggyGG/gcoms",
+  "commit": "2313cf6da2c7d29f3ab1f47a99cd4d39f5c1207e",
+  "path": "examples/rust-integration/src/main.rs",
+  "sha256": "e8247d0e645a994c7a3dfb9ea0ceeaa04e286488cf444006df67688baf900cc4",
+  "modes": [
+    "ipc",
+    "embedded",
+    "network-client"
+  ],
+  "supported_facade": "gcoms application API",
+  "stable_major_candidate": 1,
+  "stable_major_qualified": false
+}

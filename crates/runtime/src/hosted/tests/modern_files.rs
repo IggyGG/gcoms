@@ -8,6 +8,8 @@ use tokio::sync::Mutex;
 struct FileClient {
     client: Mutex<Client>,
     tamper: AtomicBool,
+    contact_gate: Option<Arc<tokio::sync::Semaphore>>,
+    contact_sends: std::sync::atomic::AtomicUsize,
 }
 #[async_trait]
 impl GcClient for FileClient {
@@ -17,8 +19,8 @@ impl GcClient for FileClient {
             safety_number: "fixture".into(),
         }
     }
-    fn contact_identity(&self, _: &ContactCard) -> Result<Vec<u8>, SdkError> {
-        Ok(vec![1])
+    fn contact_identity(&self, card: &ContactCard) -> Result<Vec<u8>, SdkError> {
+        Ok(card.0.clone())
     }
     fn subscribe_events(&self) -> tokio::sync::mpsc::Receiver<ClientEvent> {
         tokio::sync::mpsc::channel(1).1
@@ -29,6 +31,23 @@ impl GcClient for FileClient {
         _: u16,
     ) -> Result<Vec<ApplicationDelivery>, SdkError> {
         Ok(vec![])
+    }
+    async fn submit_durable_opaque(
+        &self,
+        _: &ContactCard,
+        _: &str,
+        _: &[u8],
+    ) -> Result<(), SdkError> {
+        let gate = self
+            .contact_gate
+            .as_ref()
+            .ok_or(SdkError::PermissionDenied)?;
+        self.contact_sends.fetch_add(1, Ordering::SeqCst);
+        gate.acquire()
+            .await
+            .map_err(|_| SdkError::ConnectionClosed)?
+            .forget();
+        Ok(())
     }
     async fn hosted_channels(&self, request: api::Request) -> Result<api::Reply, SdkError> {
         let mut client = self.client.lock().await;
@@ -204,6 +223,77 @@ async fn wait_file(
     .expect("hosted file state")
 }
 #[tokio::test]
+async fn slow_contact_sends_remain_bounded_and_survive_control_interrupts() {
+    use sha2::Digest as _;
+    let server = private_dir();
+    let home = private_dir();
+    let cache = private_dir();
+    let gate = Arc::new(tokio::sync::Semaphore::new(0));
+    let client = Arc::new(FileClient {
+        client: Mutex::new(owner(home.path(), service(server.path())).await),
+        tamper: AtomicBool::new(false),
+        contact_gate: Some(gate.clone()),
+        contact_sends: Default::default(),
+    });
+    let files = file_service(cache.path(), client.clone()).await;
+    let card = ContactCard(vec![2]);
+    files
+        .request(files::Request::Contacts(vec![card.clone()]))
+        .await
+        .unwrap();
+    let peer = sha2::Sha256::digest(&card.0).into();
+    for value in 1..=12 {
+        let id = [value; 16];
+        files
+            .request(files::Request::Prepare {
+                id,
+                scope: files::Scope::Contact { peer },
+                name: "slow.bin".into(),
+                size_bytes: 1,
+            })
+            .await
+            .unwrap();
+        files
+            .request(files::Request::WritePiece {
+                id,
+                piece: 0,
+                bytes: vec![7],
+            })
+            .await
+            .unwrap();
+        files.request(files::Request::Commit { id }).await.unwrap();
+    }
+    tokio::time::timeout(Duration::from_secs(3), async {
+        while client.contact_sends.load(Ordering::SeqCst) < 8 {
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .expect("bounded concurrent sends start without blocking the profile");
+    // Hold actual transport completion beyond the former three-second wrapper.
+    // Replacing the same authorization must not cancel or duplicate those sends.
+    for _ in 0..4 {
+        tokio::time::timeout(
+            Duration::from_secs(1),
+            files.request(files::Request::Contacts(vec![card.clone()])),
+        )
+        .await
+        .expect("control remains responsive during a slow send")
+        .unwrap();
+        tokio::time::sleep(Duration::from_secs(1)).await;
+    }
+    assert_eq!(client.contact_sends.load(Ordering::SeqCst), 8);
+    gate.add_permits(128);
+    tokio::time::timeout(Duration::from_secs(3), async {
+        while client.contact_sends.load(Ordering::SeqCst) < 12 {
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .expect("real completions release the bounded send window");
+    files.shutdown().await;
+}
+#[tokio::test]
 async fn modern_hosted_file_rejects_tampering_and_resumes_with_publisher_offline() {
     let server = private_dir();
     let a = private_dir();
@@ -219,10 +309,14 @@ async fn modern_hosted_file_rejects_tampering_and_resumes_with_publisher_offline
     let alice = Arc::new(FileClient {
         client: Mutex::new(alice),
         tamper: AtomicBool::new(false),
+        contact_gate: None,
+        contact_sends: Default::default(),
     });
     let bob = Arc::new(FileClient {
         client: Mutex::new(bob),
         tamper: AtomicBool::new(true),
+        contact_gate: None,
+        contact_sends: Default::default(),
     });
     let sender = file_service(fa.path(), alice.clone()).await;
     let receiver = file_service(fb.path(), bob.clone()).await;

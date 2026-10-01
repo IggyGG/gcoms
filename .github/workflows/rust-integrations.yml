@@ -26,6 +26,8 @@ on:
       - 'crates/**'
       - 'examples/rust-integration/**'
       - 'scripts/check-rust-integrations.py'
+      - 'scripts/check-released-facade.py'
+      - 'release/contracts/**'
       - 'scripts/prepare-rust-tests.py'
       - '.github/workflows/rust-integrations.yml'
 permissions:

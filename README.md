@@ -78,6 +78,13 @@ delivery receipt.
 
 # GComs
 
+The [stable contract preparation](docs/STABLE_CONTRACTS.md) defines the supported
+application facade and the remaining SDK 1.0 gates. Native CI compiles the exact
+released 0.1.49 consumer in all three feature graphs. Contact file sends now retain
+up to eight actual transport attempts within a shared 128-action queue; slow sends
+and control interrupts cannot start a second attempt before completion. No new
+dependency, IPC layout or hosted-member limit is introduced.
+
 Rust applications start with the [`gcoms` application API](crates/application/README.md):
 one dependency for messaging, channels and files. Select `network-client,files`
 for a standalone client, `embedded,files,gc2-carrier` for a built-in relay, or
