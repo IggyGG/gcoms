@@ -1,0 +1,52 @@
+{
+  "schema": 1,
+  "scope": "Retained durable application reopen correction; full Linux component gate, native fleet qualification pending",
+  "source": "7c4af271367caee00ac4f596786d795b416edaf5",
+  "source_sha256": {
+    "crates/node/src/node/persist.rs": "72d14fd3b1beb950d6eb74bc5118d5d330538138fea3c772744326886ea57816"
+  },
+  "checks": {
+    "workspace_passed": 1151,
+    "workspace_failed": 0,
+    "workspace_ignored": 13,
+    "real_contact_interrupted_recovery": true,
+    "original_contact_deadline_seconds": 240,
+    "rustdoc": true,
+    "strict_workspace_clippy": true,
+    "minimal_sdk_ipc": true,
+    "minimal_core": true,
+    "real_session_reopen_regression": true,
+    "old_55_second_timer_negative_control_failed": true
+  },
+  "retained_failures": [
+    "Initial malformed fixture runs 63, 64 and 65",
+    "Original production retry with corrected fixture fails in run 67"
+  ],
+  "logs_sha256": {
+    "stable-reopen-negative-62.log": "5d4557c07db7e1cd01b2607e9f7cffb39dee259f0367aa47290f0c64c790c22c",
+    "stable-reopen-negative-63.log": "61be8c567dcdc30e7201a7a1985d026d25b2298bbbd893756b91288894f8cd32",
+    "stable-reopen-node-64.log": "1ded10da19380082de641e6cd9875fdd6d50885987a1272d28e2402994ba4197",
+    "stable-reopen-negative-65.log": "1a46060ba657357dc3f74011a44a92aadb4402054fc9f286d218ac24da338400",
+    "stable-reopen-negative-67.log": "e09f2974b8e4ff55f1ee1985376b3f970cfeae11b14b3dd075b465ab2b8c7519",
+    "stable-reopen-focused-68.log": "cc61eb92b823267d796684338b882bbf1d48c23ade06e33e19e602d83461d9d2",
+    "stable-reopen-workspace-69.log": "263213d274cb05ec23bc048bf433dd504341c07a1b190be2c6455f614809e361",
+    "stable-reopen-doc-69.log": "0869b11e7a30473262ffa552076f62f7020a0ce6dc391022f128cb8bde583ba2",
+    "stable-reopen-clippy-69.log": "b2ecaddd7cf0bc17aaff186b4fed5b0ddd5f2fd1267b71ff0613e8f67287bf74",
+    "stable-reopen-ipc-69.log": "1274204e77bdf88cbb7423fd3ab7262b4c764bd1b881a67cd1d0f235f26f3556",
+    "stable-reopen-core-69.log": "359ccfa5b62eed2d0514f7b74078cdac71c84ae11c8a15a1a95f18ca256cbe12"
+  },
+  "security": {
+    "retained_ciphertexts_unchanged": true,
+    "ratchet_counters_unchanged": true,
+    "sequence_unchanged": true,
+    "authority_expiry_not_renewed": true,
+    "ordinary_control_pacing_unchanged": true,
+    "authenticated_receipts_required": true
+  },
+  "native_windows_macos": "pending corrected source qualification",
+  "sdk_size": {
+    "limit_percent": 5,
+    "passed": false,
+    "declaration": "not SDK 1.0"
+  }
+}

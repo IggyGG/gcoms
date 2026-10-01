@@ -8,8 +8,12 @@ now retries the original durable application records immediately. Exact cells,
 ratchet counters, sequence, expiry and authenticated delivery rules remain.
 The real-session regression fails on the original 55-second timer and passes on
 the correction, including deferred work and expired-authority refusal. Initial
-invalid fixtures remain retained. Full workspace, real file recovery and native
-qualification are pending; the original 5% size gate remains unchanged.
+invalid fixtures remain retained. Corrected Linux source passes 1,151 workspace
+tests with 13 retained ignores, the real contact interrupted-file recovery inside
+its original 240-second bound, Rustdoc, strict workspace Clippy and both minimal
+feature checks. Native Windows/Mac qualification remains pending; the original
+5% size gate remains failed. See
+[durable reopen checkpoint](docs/evidence/stabilization-20261001/durable-reopen.json).
 
 The JSON HTTP decoder now uses one byte-slice parser and borrowed envelopes for
 nested record/public-change variants. Public Serde derives, SDK methods, IPC26

@@ -9,6 +9,13 @@ original timer's failing assertion separately from invalid fixture attempts.
 Then run the unchanged contact-file recovery, full serial workspace gate and
 strict Clippy. A component pass does not replace fresh native recovery.
 
+The corrected source passes the complete 1,151-test Linux workspace, 13 retained
+ignores, the unchanged real contact resume, Rustdoc, strict workspace Clippy and
+minimal SDK/core checks. Preserve the original timer's failing control and every
+invalid fixture separately. Native Windows/Mac runs and the original 5% size gate
+still require their own source-bound results; see the
+[reopen receipt](docs/evidence/stabilization-20261001/durable-reopen.json).
+
 Run all SDK tests and fixed-byte IPC fixtures. The client direction must match
 the original Hello/Request/ProfileHello ordinals, reject server frames on write
 and client frames on read, and enforce the unchanged 16 MiB bound before a single
