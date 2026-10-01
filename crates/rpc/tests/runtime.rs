@@ -10,6 +10,7 @@ use std::sync::{
 #[serde(tag = "code", rename_all = "snake_case")]
 pub enum CounterError {
     TooLarge,
+    Unsupported,
 }
 
 #[gcoms_rpc::service(name = "example.counter", version = 1)]
@@ -18,6 +19,12 @@ pub trait Counter {
     async fn read(&self) -> Result<u32, CounterError>;
     #[rpc(id = "add", kind = "operation")]
     async fn add(&self, context: CallContext, amount: u32) -> Result<u32, CounterError>;
+    // Existing handlers need only their original methods when the service adds
+    // an optional, capability-negotiated method in the same major version.
+    #[rpc(id = "read_details", kind = "query")]
+    async fn read_details(&self) -> Result<String, CounterError> {
+        Err(CounterError::Unsupported)
+    }
 }
 struct CounterImpl(Arc<AtomicU32>);
 #[async_trait]
@@ -59,6 +66,26 @@ fn client(router: Arc<Router>) -> CounterClient<EmbeddedTransport> {
         },
         "instance-a",
     ))
+}
+
+#[tokio::test]
+async fn optional_method_keeps_existing_handlers_and_authorization() {
+    let allowed = Arc::new(AtomicBool::new(true));
+    let original = client(router(
+        Arc::new(MemoryStore::default()),
+        Arc::new(AtomicU32::new(12)),
+        allowed.clone(),
+    ));
+    assert_eq!(original.read().await.unwrap(), 12);
+    assert!(matches!(
+        original.read_details().await,
+        Err(CallError::Service(CounterError::Unsupported))
+    ));
+    allowed.store(false, Ordering::SeqCst);
+    assert!(matches!(
+        original.read_details().await,
+        Err(CallError::Rpc(error)) if error.code == ErrorCode::Unauthorized
+    ));
 }
 
 #[tokio::test]

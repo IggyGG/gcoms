@@ -1,3 +1,13 @@
+## Stable SDK release preparation (2026-10-01)
+
+Run the all-feature RPC runtime tests and strict Clippy. The optional-method
+regression compiles an unchanged handler without the new method, returns its
+default unsupported result through the actual typed client/router and preserves
+authorization. Existing invalid declarations remain rejected.
+Require `cargo tree --locked --manifest-path mobile/native/Cargo.toml
+--no-default-features --features <client|relay|client,push|relay,push-gateway>`
+for Android and Apple targets before their native packaging/size/lifecycle checks.
+
 ## IRC/main invitation integration (2026-09-30)
 
 Integrate main's reusable invitations and enrollment without dropping hosted

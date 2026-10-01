@@ -132,12 +132,11 @@ fn expand(
             || sig.abi.is_some()
             || !sig.generics.params.is_empty()
             || sig.generics.where_clause.is_some()
-            || method.default.is_some()
             || sig.variadic.is_some()
         {
             return Err(err(
                 method,
-                "service methods must be plain async declarations without generics or defaults",
+                "service methods must be plain async methods without generics",
             ));
         }
         if !matches!(sig.inputs.first(), Some(FnArg::Receiver(r)) if r.reference.is_some() && r.mutability.is_none())

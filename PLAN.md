@@ -1,3 +1,13 @@
+## Stable SDK release preparation (2026-10-01, in progress)
+
+Reconcile the independent mobile lockfile's missing SDK serde_json dependency;
+keep locked Android/Apple client, relay and optional push graphs reproducible.
+Allow default implementations for optional typed RPC methods so existing service
+handlers retain source compatibility. The real router regression must return the
+default unsupported result and still reject unauthorized callers. No wire,
+IPC26, component credential or 64-member policy changes are introduced.
+Full native/mobile consumers and the SDK 1.0 declaration remain gated.
+
 ## IRC parity 64-member source qualification (2026-09-30)
 
 Merged source `a460d74` passes 1,142 tests, 13 retained exclusions, strict workspace
