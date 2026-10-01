@@ -87,6 +87,11 @@ delivery receipt.
 
 # GComs
 
+Storage tests inspect locked log bytes through their owning handle, or after
+closing and reopening the normal log. This respects Windows mandatory byte-range
+locks while retaining integrity, quota and real failed-write checks. Production
+locking is unchanged; fresh native Windows qualification is required.
+
 The initial feature release permits up to 20% growth against the retained
 same-toolchain size baselines, as approved on 2026-10-01. Native consumers, mobile
 libraries and linked mobile applications share `scripts/sdk_size_policy.py`.

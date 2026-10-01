@@ -1,5 +1,13 @@
 ## Stable SDK release preparation (2026-10-01)
 
+Run all-feature channel-service tests and strict all-target Clippy. Read unit
+log snapshots through the owning handle and restore the original cursor. Close
+integration logs before raw filesystem snapshots, then reopen through normal
+validation before continuing. Preserve exact byte comparisons, exclusive locking,
+quota/deduplication, torn-tail/corruption and actual OS write-error poisoning.
+The original Windows error-33 failures remain failures; require a fresh native
+Windows full-workspace packaging check. Do not skip these tests on Windows.
+
 Run `python3 -m unittest discover -s scripts/tests -p rust_integration_size_test.py`.
 Require the owner-approved feature allowance to pass at exactly 20% and fail one
 byte above it. SDK 1.0 prereleases and later majors must pass at exactly 5% and
