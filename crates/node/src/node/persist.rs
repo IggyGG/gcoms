@@ -2565,7 +2565,19 @@ pub(super) async fn decode_state_at_startup(
             continue;
         }
         delivery.relay = relay.clone();
-        let remaining_retry = retry_ms.saturating_sub(elapsed_ms).min(remaining_expiry);
+        // Reopening recreates the receive subscriptions and transport. Already
+        // durable application work must get a fresh opportunity on that route,
+        // rather than holding the finite ciphertext window until an old retry
+        // timer expires. Retain the exact record/cells and original expiry;
+        // normal maintenance still owns admission, pacing and authenticated ACKs.
+        let remaining_retry = if logical_record
+            .as_deref()
+            .is_some_and(crate::proto::is_durable_direct_data)
+        {
+            0
+        } else {
+            retry_ms.saturating_sub(elapsed_ms).min(remaining_expiry)
+        };
         pending_direct.push((
             message_id,
             PendingDirect {
@@ -5294,6 +5306,88 @@ pub(in crate::node) mod tests {
             before.pending_1to1[&[0x77; 16]].delivery.cells[0]
         );
         assert!(pending.expires > std::time::Instant::now());
+    }
+
+    #[tokio::test]
+    async fn reopening_retries_durable_work_without_renewing_or_completing_it() {
+        let (mut before, peer, _) = direct_fixture();
+        let instant = std::time::Instant::now();
+        for (n, durable, deferred, expired) in [
+            (1u8, true, false, false),
+            (2, true, true, false),
+            (3, false, false, false),
+            (4, true, false, true),
+        ] {
+            let message_id = [n; 16];
+            let mut retained = delivery(12);
+            retained.peer = before.peer_routes[&peer].clone();
+            if deferred {
+                retained.cells.clear();
+            }
+            let record = if durable {
+                crate::proto::encode_direct_durable_data(message_id, 1, b"retained application")
+            } else {
+                crate::proto::encode_direct_data(message_id, 1, false, b"ordinary direct")
+            };
+            before.pending_1to1.insert(
+                message_id,
+                PendingDirect {
+                    delivery: retained,
+                    logical_record: Some(record),
+                    sequence: u64::from(n),
+                    next_attempt: instant + std::time::Duration::from_secs(55),
+                    expires: if expired {
+                        instant + std::time::Duration::from_secs(1)
+                    } else {
+                        instant + std::time::Duration::from_secs(90)
+                    },
+                    application_event: durable,
+                },
+            );
+        }
+        before.next_direct_sequence = 5;
+        let encoded = encode_state(&before).unwrap();
+        tokio::time::sleep(std::time::Duration::from_millis(1100)).await;
+        let restored = Arc::new(Mutex::new(state()));
+        let scheduler = RelayScheduler::new(Arc::new(Tp1Client::new().unwrap()));
+        decode_state_at_startup(&restored, &scheduler, &encoded)
+            .await
+            .unwrap();
+        let restored = restored.lock().unwrap();
+        let now = std::time::Instant::now();
+        assert_eq!(restored.pending_1to1.len(), 3);
+        assert!(!restored.pending_1to1.contains_key(&[4; 16]));
+        assert_eq!(restored.next_direct_sequence, 5);
+        assert_eq!(
+            restored.sessions[&peer].send_ctr(),
+            before.sessions[&peer].send_ctr()
+        );
+        assert_eq!(
+            restored.sessions[&peer].recv_ctr(),
+            before.sessions[&peer].recv_ctr()
+        );
+        for n in 1..=3 {
+            let original = &before.pending_1to1[&[n; 16]];
+            let pending = &restored.pending_1to1[&[n; 16]];
+            assert_eq!(pending.delivery.cells, original.delivery.cells);
+            assert_eq!(pending.logical_record, original.logical_record);
+            assert_eq!(pending.sequence, original.sequence);
+            assert_eq!(pending.application_event, original.application_event);
+            assert!(pending.expires > now);
+            // Archive clocks have millisecond precision. Reopening cannot issue
+            // another 600-second lifetime or restore already expired authority.
+            assert!(pending.expires <= original.expires + std::time::Duration::from_millis(2));
+            if n <= 2 {
+                assert!(
+                    pending.next_attempt <= now,
+                    "durable work waits for an old timer"
+                );
+            } else {
+                assert!(pending.next_attempt > now + std::time::Duration::from_secs(50));
+            }
+        }
+        assert!(restored.direct_ack_outbox.is_empty());
+        assert!(restored.application_inbox.entries.is_empty());
     }
 
     #[tokio::test]

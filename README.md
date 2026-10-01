@@ -20,6 +20,11 @@ remain covered. Contacts must be explicitly registered again after reopening;
 replacing that set revokes new transfer authority. File completion depends on
 piece authentication, Merkle proofs and the whole-file SHA-256.
 
+Reopening gives already durable direct application records an immediate transport
+retry, using their original ciphertext, ID and expiry. This frees retained outbox
+slots promptly after reconnecting; ordinary direct retry pacing remains. Neither
+local restoration nor hop acceptance counts as an authenticated recipient receipt.
+
 Hosted local mutations interrupt network waits instead of waiting behind replay
 or file-piece I/O. The interrupted operation retries its retained immutable work;
 this does not turn uncertain acceptance into recipient delivery. Shutdown also

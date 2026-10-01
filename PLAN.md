@@ -1,5 +1,16 @@
 ## Stable SDK release preparation (2026-10-01, in progress)
 
+Native Windows run 36835572270 receives the second resumed full piece at 236
+seconds, leaving the 41-byte tail beyond the unchanged 240-second deadline.
+Its two unknown-key errors precede reopening by 55 seconds. The durable outbox
+restored old retry clocks while occupying the four-ciphertext window; reopening
+now retries the original durable application records immediately. Exact cells,
+ratchet counters, sequence, expiry and authenticated delivery rules remain.
+The real-session regression fails on the original 55-second timer and passes on
+the correction, including deferred work and expired-authority refusal. Initial
+invalid fixtures remain retained. Full workspace, real file recovery and native
+qualification are pending; the original 5% size gate remains unchanged.
+
 The JSON HTTP decoder now uses one byte-slice parser and borrowed envelopes for
 nested record/public-change variants. Public Serde derives, SDK methods, IPC26
 and dependency versions remain unchanged. Expanded public-decoder comparisons

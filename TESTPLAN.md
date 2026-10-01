@@ -1,5 +1,14 @@
 ## Stable SDK release preparation (2026-10-01)
 
+Run reopening_retries_durable_work_without_renewing_or_completing_it against a
+real retained direct session. Restore a 55-second durable retry, deferred record,
+ordinary direct retry and an expired record. Durable work must be due immediately;
+ordinary pacing stays intact, expired authority is absent, exact wire/logical IDs
+and counters remain, and no receipt or inbound delivery is fabricated. Retain the
+original timer's failing assertion separately from invalid fixture attempts.
+Then run the unchanged contact-file recovery, full serial workspace gate and
+strict Clippy. A component pass does not replace fresh native recovery.
+
 Run all SDK tests and fixed-byte IPC fixtures. The client direction must match
 the original Hello/Request/ProfileHello ordinals, reject server frames on write
 and client frames on read, and enforce the unchanged 16 MiB bound before a single
