@@ -249,7 +249,14 @@ async fn request_correlation_and_typed_errors() {
         Err(CallError::Service(CounterError::TooLarge))
     ));
     let descriptor = CounterClient::<EmbeddedTransport>::descriptor();
-    assert_eq!(descriptor.methods.len(), 2);
+    assert_eq!(
+        descriptor
+            .methods
+            .iter()
+            .map(|method| method.id.as_str())
+            .collect::<Vec<_>>(),
+        ["read", "add", "read_details"]
+    );
     assert_eq!(descriptor.methods[1].kind, MethodKind::Operation);
     let req = Request {
         rpc: WIRE_VERSION,

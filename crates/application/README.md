@@ -146,12 +146,12 @@ pub trait Search {
 
 The macro generates `SearchContract`, `SearchDispatcher`, and `SearchClient`.
 Register a handler with `.service(Arc::new(SearchDispatcher(handler)), authorize)`
+and register each authenticated peer with `.peer(peer)`. A caller adds
+`.rpc_contract(SearchContract::descriptor())`, then constructs its typed client.
 Optional methods may supply a default implementation returning an unsupported
 application error. Existing handlers then keep compiling within the service
 major. Select optional methods only after checking the service's advertised
 capabilities; every call still passes the normal authorization checks.
-and register each authenticated peer with `.peer(peer)`. A caller adds
-`.rpc_contract(SearchContract::descriptor())`, then constructs its typed client:
 
 ```rust,ignore
 let client = SearchClient::new(app.rpc(&server_peer, "org.example.notes",
