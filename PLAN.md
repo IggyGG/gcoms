@@ -13,6 +13,11 @@ all ten size comparisons (10–16% growth). Windows's backend fails while indepe
 measurement continues; both Mac workers are queued. This is not native approval
 of the new JSON source or an SDK 1.0 declaration. See
 [JSON checkpoint](docs/evidence/stabilization-20261001/sdk-http-json-size.json).
+Backend logs now upload immediately after their real native gate, before the
+long independent size builds. Each attempt has a separate source-bound archive;
+the final complete artifact and original failed job conclusion remain required.
+This makes an early recovery failure available for diagnosis while measurements
+continue; it cannot authorize a release. Workflow execution remains pending.
 
 SDK codec preparation passes 1,149 workspace tests with 13 retained exclusions,
 strict Clippy, Rustdoc, minimal IPC/core checks, three unchanged released consumer

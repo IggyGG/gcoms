@@ -99,7 +99,9 @@ including nested records, through one byte-slice decoder. Struct variants retain
 object-only bodies while newtype structs retain their original sequence support;
 wire bytes, public reply shapes, bounds and dependency versions remain unchanged.
 Native CI retains failed backend/size logs and measures isolated consumers even
-when backend tests fail. The current Linux IPC reduction still exceeds the
+when backend tests fail. A separate source/attempt-bound backend log archive
+uploads before the long size builds so failed recovery can be diagnosed promptly.
+The current Linux IPC reduction still exceeds the
 original 5% size ceiling; see the [codec checkpoint](docs/evidence/stabilization-20261001/sdk-codec-size.json).
 The [JSON follow-up](docs/evidence/stabilization-20261001/sdk-http-json-size.json)
 retains the original conformance failure, its corrected SDK/consumer checks and

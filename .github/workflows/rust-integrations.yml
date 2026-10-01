@@ -78,6 +78,16 @@ jobs:
           result=$?
           tail -100 integration-evidence/native.log
           exit "$result"
+      - name: Retain completed backend diagnostics before size builds
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          retention-days: 30
+          name: native-backend-${{ matrix.runner }}-${{ github.sha }}-${{ github.run_attempt }}
+          path: |
+            integration-evidence/native.log
+            integration-evidence/source.txt
+          if-no-files-found: error
       - name: Check and measure isolated consumer graphs
         if: ${{ !cancelled() && steps.rust.outcome == 'success' && steps.tests.outcome == 'success' }}
         env:

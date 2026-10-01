@@ -17,6 +17,8 @@ The size regression requires every measured delta even when two consumers exceed
 5%, preserves the exact threshold and rejects a different toolchain. Native jobs
 retain source and failure logs; isolated size checks still run after backend
 failure. A retained archive or component pass cannot qualify failed native recovery.
+The source/attempt-bound backend archive must be available before size compilation;
+the final archive must still retain all results and the job's original conclusion.
 Enable `GCOMS_FILE_RECOVERY_DIAGNOSTICS=1` only in test executions to retain bounded
 block offsets/counts, together with error counter timing, against the unchanged
 contact resume assertions and deadlines. Never infer lost ratchet state solely
