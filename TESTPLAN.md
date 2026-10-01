@@ -15,6 +15,14 @@ contact resume test. Legacy session classification must depend on the actual
 retained session, including when GC/2 is enabled for new conversations. GC/2 must
 keep its bulk class. Require corrected native evidence on all four platforms;
 the first failed native run remains failed.
+The legacy window regression prepares six real durable records, verifies that
+four are encrypted and two remain persisted without ratchet advancement, then
+releases one receipt slot and requires exactly one materialization with the
+original deadline. Actual GC/2 sessions must bypass this legacy bound. Run the
+node suite with native CI's `--test-threads=1`; retain the original parallel ACK
+timeout. Keep the failed one-slot file recovery and require fresh native Windows
+and both Mac recovery runs against the four-slot source. Do not increase key
+retention, skip limits, deadlines or retry authority.
 
 Run the all-feature RPC runtime tests and strict Clippy. The optional-method
 regression compiles an unchanged handler without the new method, returns its

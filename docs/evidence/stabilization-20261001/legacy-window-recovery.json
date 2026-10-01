@@ -1,0 +1,89 @@
+{
+  "schema": 1,
+  "scope": "legacy durable send window; full native SDK and size qualification pending",
+  "passed": true,
+  "behavior": {
+    "ciphertext_window_per_legacy_peer": 4,
+    "gc2_credited_window_unchanged": true,
+    "deferred_records_persisted_without_ratchet_advancement": true,
+    "original_message_ids_sequences_and_deadlines_retained": true,
+    "independent_authenticated_acknowledgments": true,
+    "wire_changed": false,
+    "ipc_version": 26,
+    "member_limit": 64
+  },
+  "checks": {
+    "node_tests": 493,
+    "node_ignored": 2,
+    "execution": "native CI serial --test-threads=1",
+    "unchanged_contact_resume_seconds": 171.64,
+    "original_contact_deadline_seconds": 240,
+    "strict_workspace_clippy": true
+  },
+  "original_failures": [
+    {
+      "attempt": 27,
+      "legacy_window": 1,
+      "file_recovery": "missed original 240-second bound",
+      "retained": true,
+      "promoted_to_pass": false
+    },
+    {
+      "attempt": 30,
+      "execution": "parallel default test execution",
+      "failure": "GC2 application ACK timeout",
+      "retained": true,
+      "promoted_to_pass": false
+    },
+    {
+      "native_run": 36820878112,
+      "windows": "contact recovery failed",
+      "intel_mac": "contact recovery failed",
+      "linux": "real backends passed; IPC opt-3 size grew 36% and failed original 5% ceiling",
+      "retained": true,
+      "promoted_to_pass": false
+    }
+  ],
+  "evidence": [
+    {
+      "path": "test-evidence/stabilization-20261001/stable-legacy-window-27.log",
+      "sha256": "7f7fcd299d1dc0478574d1566cb01b06e016006945cdf5ba75ea19db8f3f57b9"
+    },
+    {
+      "path": "test-evidence/stabilization-20261001/stable-contact-recovery-27.log",
+      "sha256": "359fc1f2e9276f6e3cbdb7ba6289d1114543b332936188e7d136e528276bad90"
+    },
+    {
+      "path": "test-evidence/stabilization-20261001/stable-legacy-window-29.log",
+      "sha256": "cd8558f77830a6493250e51718ee8210f87e0e929d26339c46315261caea98cf"
+    },
+    {
+      "path": "test-evidence/stabilization-20261001/stable-contact-recovery-29.log",
+      "sha256": "fae75e3aad9e6081b85ad3ce99bb1db4a2b590596c92406c0a2e2a4e6c8206b5"
+    },
+    {
+      "path": "test-evidence/stabilization-20261001/stable-node-30.log",
+      "sha256": "ac0412909da7e41404cc2bbba54ce0fc57e9419037e6aeb084e413f9db45e9ee"
+    },
+    {
+      "path": "test-evidence/stabilization-20261001/stable-node-31.log",
+      "sha256": "dc5062db8caee8e75d827f73d0b8c602c108ea187e046edec161f7aae5824679"
+    },
+    {
+      "path": "test-evidence/stabilization-20261001/stable-clippy-31.log",
+      "sha256": "753505a29114c14abf3c0b502d87fed0de227698e9e09cb552f45e4058a27d77"
+    },
+    {
+      "path": "test-evidence/stabilization-20261001/native-sdk-36820878112-windows-job.log",
+      "sha256": "acb9dc9091759997d59b376c6b05814787843f16b0f4e910c629e22b92a327c4"
+    },
+    {
+      "path": "test-evidence/stabilization-20261001/native-sdk-36820878112-intel-job.log",
+      "sha256": "e73faa79e87d4609c397084764f0328902d981d43ebab1ecbdebacd8986b0f26"
+    },
+    {
+      "path": "test-evidence/stabilization-20261001/native-sdk-36820878112-linux-job.log",
+      "sha256": "8ca47eefd3bd99805b000ac81318c468dacdf045165c811bc26b3fb03f715a6c"
+    }
+  ]
+}

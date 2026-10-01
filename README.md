@@ -88,6 +88,10 @@ Legacy direct sessions keep encrypted data and control frames in one FIFO lane
 so priority changes cannot skip a DH epoch during reopening. GC/2 credited
 sessions preserve separate bulk and interactive traffic, including retained
 retries. Keys and authenticated receipt requirements are unchanged.
+Legacy sessions retain later durable application records as plaintext in the
+encrypted outbox while four ciphertexts await recipient receipts. Each receipt
+releases capacity without moving the original deadline or advancing a deferred
+record's ratchet counter. GC/2 keeps its existing credited send window.
 
 Rust applications start with the [`gcoms` application API](crates/application/README.md):
 one dependency for messaging, channels and files. Select `network-client,files`

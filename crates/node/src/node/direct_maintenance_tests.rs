@@ -138,6 +138,81 @@ fn legacy_sessions_preserve_one_lane_even_when_gc2_is_enabled() {
     }
 }
 
+#[cfg(feature = "client-persist")]
+#[test]
+fn legacy_durable_backlog_waits_for_a_ciphertext_window_receipt() {
+    let mut node = persist::tests::state();
+    let identity = gcoms_crypto::IdentityKeypair::from_seed([2; 32]);
+    let (bundle, _) = identity.issue_bundle();
+    let mut peer = node.info.clone();
+    peer.identity_pk = identity.public_bytes();
+    peer.bundle = bundle.encode();
+    for alias in &mut peer.aliases {
+        alias.expiry = now_unix() + 3600;
+    }
+    let (_, session) = peer_session::initiate(&node, &peer).unwrap();
+    assert!(session.tag().is_none());
+    node.sessions.insert(peer.identity_pk.clone(), session);
+    node.session_states
+        .insert(peer.identity_pk.clone(), DirectSessionState::Established);
+    let saved = Arc::new(Mutex::new(Vec::new()));
+    let sink = saved.clone();
+    node.durable_state_sink = Some(Arc::new(move |bytes| {
+        *sink.lock().unwrap() = bytes;
+        Ok(())
+    }));
+    let state = Arc::new(Mutex::new(node));
+    let prepare = |body: &'static [u8]| {
+        prepare_direct_record(&state, &peer, None, false, None, |id, sequence| {
+            Ok(crate::proto::encode_direct_durable_data(id, sequence, body))
+        })
+        .unwrap()
+    };
+    let first: Vec<_> = (0..LEGACY_APPLICATION_WINDOW)
+        .map(|_| prepare(b"first"))
+        .collect();
+    assert!(first.iter().all(|p| !p.delivery.cells.is_empty()));
+    let second = prepare(b"second");
+    let third = prepare(b"third");
+    assert!(second.delivery.cells.is_empty());
+    assert!(third.delivery.cells.is_empty());
+    let mut node = state.lock().unwrap();
+    let counter = node.sessions[&peer.identity_pk].send_ctr();
+    let original_deadline = node.pending_1to1[&second.message_id].expires;
+    materialize_deferred(&mut node).unwrap();
+    assert_eq!(node.sessions[&peer.identity_pk].send_ctr(), counter);
+    assert!(node.pending_1to1[&second.message_id]
+        .delivery
+        .cells
+        .is_empty());
+    assert_eq!(
+        node.pending_1to1[&second.message_id].expires,
+        original_deadline
+    );
+    assert!(
+        !saved.lock().unwrap().is_empty(),
+        "deferred records must be durable"
+    );
+
+    // Receipt authentication is exercised by the receive-path tests. Removing
+    // that acknowledged entry releases exactly one retained logical record.
+    node.pending_1to1.remove(&first[0].message_id);
+    materialize_deferred(&mut node).unwrap();
+    assert!(!node.pending_1to1[&second.message_id]
+        .delivery
+        .cells
+        .is_empty());
+    assert!(node.pending_1to1[&third.message_id]
+        .delivery
+        .cells
+        .is_empty());
+    assert_eq!(node.sessions[&peer.identity_pk].send_ctr(), counter + 1);
+    assert_eq!(
+        node.pending_1to1[&second.message_id].expires,
+        original_deadline
+    );
+}
+
 #[cfg(feature = "experimental-gc2")]
 #[test]
 fn credited_sessions_keep_bulk_and_interactive_initial_and_retry_classes() {
@@ -151,6 +226,24 @@ fn credited_sessions_keep_bulk_and_interactive_initial_and_retry_classes() {
     let (_, session) = peer_session::initiate(&node, &peer).unwrap();
     assert!(session.tag().is_some());
     node.sessions.insert(peer.identity_pk.clone(), session);
+    node.pending_1to1.insert(
+        [42; 16],
+        PendingDirect {
+            delivery: DirectDelivery {
+                peer: peer.clone(),
+                relay: node.client_relay.clone(),
+                cells: vec![Cell::new(CellType::Msg, 0, 0, vec![1; 32])],
+            },
+            logical_record: Some(crate::proto::encode_direct_durable_data(
+                [42; 16], 1, b"data",
+            )),
+            sequence: 1,
+            next_attempt: Instant::now(),
+            expires: Instant::now() + Duration::from_secs(600),
+            application_event: false,
+        },
+    );
+    assert!(!legacy_application_window_full(&node, &peer.identity_pk));
     for traffic in [
         gcoms_core::TrafficClass::Interactive,
         gcoms_core::TrafficClass::Bulk,

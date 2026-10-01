@@ -1,5 +1,17 @@
 ## Stable SDK release preparation (2026-10-01, in progress)
 
+The follow-up native run `36820878112` still failed contact recovery on Windows
+and Intel Mac; Linux recovered the file but failed the unchanged size ceiling
+(IPC opt-3 grew 36%). Those verdicts and logs are retained. Legacy sessions now
+keep at most four durable application ciphertexts outstanding per peer, leaving
+later original logical records in the durable outbox until an authenticated
+receipt releases a slot. GC/2's credited window and independent ACK generation
+remain unchanged. A rejected one-slot experiment missed the original 240-second
+file deadline; the four-slot contact recovery passes in 171.64 seconds. The full
+node suite passes with native CI's serial test execution; the first parallel run's
+GC/2 ACK timeout remains a failure. Native qualification and size work remain open.
+See [window checkpoint](docs/evidence/stabilization-20261001/legacy-window-recovery.json).
+
 Native run `36814943114` reproduced the unchanged contact file reopen failure on
 Linux, Windows and both Macs. The failure logs remain retained. Bulk/control
 priority can reorder legacy direct-session DH epochs, leaving encrypted blocks

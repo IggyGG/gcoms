@@ -2130,7 +2130,8 @@ where
         let window_full = st
             .sessions
             .get(&peer.identity_pk)
-            .is_some_and(|s| !s.can_send(&direct));
+            .is_some_and(|s| !s.can_send(&direct))
+            || (durable && legacy_application_window_full(&st, &peer.identity_pk));
         if routing_recovering || awaiting_confirmation || window_full {
             if !(durable
                 || (control
@@ -2407,6 +2408,11 @@ pub(super) fn materialize_deferred(st: &mut NodeState) -> Result<(), String> {
                 .clone()
                 .ok_or("missing deferred application record")?,
         );
+        if crate::proto::is_durable_direct_data(&body)
+            && legacy_application_window_full(st, &peer.identity_pk)
+        {
+            continue;
+        }
         let new_session = !st.sessions.contains_key(&peer.identity_pk);
         let mut first_move = None;
         let mut staged_session = None;
@@ -2605,6 +2611,30 @@ pub(crate) fn direct_traffic_class(record: &[u8]) -> gcoms_core::TrafficClass {
 /// them, especially across reopening. Keep their encrypted frames in one FIFO
 /// lane. GC/2's credited sessions own bounded counter/rotation recovery and keep
 /// the separate traffic classes for both initial sends and retained retries.
+/// GC/1 has no credited receive window across DH epochs. Retain later reliable
+/// applications as logical records once the small legacy window is occupied.
+/// A large application burst must not evict the ratchet keys needed by delayed
+/// ciphertext. ACK generation remains independent so the peer can release slots.
+const LEGACY_APPLICATION_WINDOW: usize = 4;
+
+fn legacy_application_window_full(st: &NodeState, peer: &[u8]) -> bool {
+    st.sessions.get(peer).is_some_and(|s| s.tag().is_none())
+        && st
+            .pending_1to1
+            .values()
+            .filter(|pending| {
+                pending.delivery.peer.identity_pk == peer
+                    && !pending.delivery.cells.is_empty()
+                    && pending
+                        .logical_record
+                        .as_deref()
+                        .is_some_and(crate::proto::is_durable_direct_data)
+            })
+            .take(LEGACY_APPLICATION_WINDOW)
+            .count()
+            == LEGACY_APPLICATION_WINDOW
+}
+
 fn direct_transport_class(
     st: &NodeState,
     peer: &[u8],
