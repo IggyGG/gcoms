@@ -1,3 +1,14 @@
+Clean SDK source `1654677` now has four fully retained Apple role/push results.
+Every provider ZIP size and digest, 562 reported source hashes per result and all
+36 distributable native-library hashes match. The 36 same-toolchain native size
+checks and eight linked application size checks pass the approved 20% feature
+allowance (observed growth 8.07–11.50%). Original Android preflight failures and
+overall failed mobile matrices remain unchanged; fixture static libraries were
+not separately archived. Four Android role/push combinations on corrected source
+`32072fe` remain queued. This does not qualify SDK 1.0, installed apps or the fleet.
+See `docs/evidence/stabilization-20261001/sdk-size-policy.json` and retained
+`operations/apple-sdk-archives-verified-175.json`.
+
 Android SDK runs `37020911991` and `37021726565` fail before tool setup because
 isolated `mobile_elf_test` cannot import `sdk_size_policy`. The test now sets its
 own scripts import path; production size/security checks are unchanged. Its four

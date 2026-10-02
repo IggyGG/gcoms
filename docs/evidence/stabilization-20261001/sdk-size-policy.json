@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "scope": "Owner-approved SDK feature-release size policy; clean four-platform desktop native qualification passed, full release still open",
+  "scope": "Owner-approved SDK feature-release size policy; four desktop platforms and four Apple role/push combinations qualified, full release still open",
   "policy": {
     "schema": 1,
     "sdk_version": "0.1.0",
@@ -53,7 +53,7 @@
     "sha256": "1747466445c9b1e6dee283332e77bd9151cc7474a978f6383145779b71a092bb"
   },
   "open": [
-    "Eight mobile SDK role/platform/push combinations",
+    "Four Android SDK role/push combinations on corrected preflight source 32072fe",
     "Installed native app acceptance and complete fleet rollout",
     "Subsequent unattended release before SDK 1.0"
   ],
@@ -505,7 +505,7 @@
     "runtime_and_api_changed": false,
     "size_security_alignment_limits_unchanged": true,
     "native_emulator_execution_pending": true,
-    "apple_provider_archives_verified": false,
+    "apple_provider_archives_verified": true,
     "source_sha256": {
       "scripts/tests/mobile_elf_test.py": "39f45e6bd08fb033b79c91df5b38ce477a9bef13270f1763846e796cfb7e3f96",
       ".github/workflows/mobile-integrations.yml": "12c83a209de359b3a12bac3c31259b93d2849d57aa93f1d7419ed83070779001"
@@ -567,6 +567,22 @@
     {
       "path": "test-evidence/stabilization-20261001/operations/qualification-consumer-npm-155.json",
       "sha256": "5f0ebfdfc7df36f932cb0817e21a3562efdbb0d09f0d4dd582221d33d585b842"
+    },
+    {
+      "path": "test-evidence/stabilization-20261001/operations/apple-sdk-archives-verified-174.log",
+      "sha256": "80ef465182fa0b8e4d08de7ec11949c493ae06e201170832ce3e7d4674b9d646"
+    },
+    {
+      "path": "test-evidence/stabilization-20261001/operations/apple-sdk-archives-verified-175.json",
+      "sha256": "2f7e6ced29ac3e95f979fdceff35fd1e7e787e64218520719bc50833affa0cbc"
+    },
+    {
+      "path": "test-evidence/stabilization-20261001/operations/apple-sdk-archives-verified-175.log",
+      "sha256": "63b4d3e36097aaf42023442ef7da465a436c7be42261779688e6698d5e8dc729"
+    },
+    {
+      "path": "test-evidence/stabilization-20261001/operations/retained-apple-sdk-161.log",
+      "sha256": "d521f687e0fc8345d4fe557da087fc3335de50211d40c8393cfee6d0517e9e41"
     }
   ],
   "linux_remaining_ci_phases": {
@@ -634,5 +650,123 @@
       144,
       152
     ]
+  },
+  "apple_native_qualification": {
+    "source": "1654677b3bac40977b7048ce0fe06c03fe6076e9",
+    "apple_role_push_combinations": 4,
+    "all_provider_archives_verified": true,
+    "results": [
+      {
+        "role": "client",
+        "push": false,
+        "source": "1654677b3bac40977b7048ce0fe06c03fe6076e9",
+        "run": 37020911991,
+        "artifact_id": 11236029434,
+        "provider_archive_verified": true,
+        "archive": "test-evidence/stabilization-20261001/operations/mobile-apple-client-base-1654677b3bac40977b7048ce0fe06c03fe6076e9.zip",
+        "archive_sha256": "3a03590564c1d49330889458c0069ba627e474824d13fcd3b6f04865f7f6f2c0",
+        "archive_bytes": 114926275,
+        "source_hashes_verified": 562,
+        "native_libraries_verified": 9,
+        "fixture_summary_source_verified": true,
+        "fixture_static_libraries_separately_archived": false,
+        "native_size_comparisons": 9,
+        "native_growth_percent_range": [
+          8.406776921686676,
+          11.21471056077159
+        ],
+        "linked_application_size_comparisons": {
+          "installed_bundle_bytes": 10.848352201529687,
+          "unsigned_device_bundle_bytes": 11.08362196932211
+        },
+        "same_toolchain_baselines": true,
+        "native_test_job_success": true,
+        "overall_mobile_matrix_passed": false
+      },
+      {
+        "role": "client",
+        "push": true,
+        "source": "1654677b3bac40977b7048ce0fe06c03fe6076e9",
+        "run": 37021726565,
+        "artifact_id": 11241881155,
+        "provider_archive_verified": true,
+        "archive": "test-evidence/stabilization-20261001/operations/mobile-apple-client-push-1654677b3bac40977b7048ce0fe06c03fe6076e9.zip",
+        "archive_sha256": "52d0603de6fd0fae30ab5183a3b2ec0dfc82984ddff59546d0418924c8f11739",
+        "archive_bytes": 115380166,
+        "source_hashes_verified": 562,
+        "native_libraries_verified": 9,
+        "fixture_summary_source_verified": true,
+        "fixture_static_libraries_separately_archived": false,
+        "native_size_comparisons": 9,
+        "native_growth_percent_range": [
+          8.65793852996186,
+          11.49527501487444
+        ],
+        "linked_application_size_comparisons": {
+          "installed_bundle_bytes": 11.26466261240353,
+          "unsigned_device_bundle_bytes": 11.23679170231846
+        },
+        "same_toolchain_baselines": true,
+        "native_test_job_success": true,
+        "overall_mobile_matrix_passed": false
+      },
+      {
+        "role": "relay",
+        "push": false,
+        "source": "1654677b3bac40977b7048ce0fe06c03fe6076e9",
+        "run": 37020911991,
+        "artifact_id": 11236342240,
+        "provider_archive_verified": true,
+        "archive": "test-evidence/stabilization-20261001/operations/mobile-apple-relay-base-1654677b3bac40977b7048ce0fe06c03fe6076e9.zip",
+        "archive_sha256": "8d2949f24c81759322c501957595cf56860b0b707803b5a534512850b48df6b9",
+        "archive_bytes": 122120964,
+        "source_hashes_verified": 562,
+        "native_libraries_verified": 9,
+        "fixture_summary_source_verified": true,
+        "fixture_static_libraries_separately_archived": false,
+        "native_size_comparisons": 9,
+        "native_growth_percent_range": [
+          8.073099186160615,
+          10.691852493677168
+        ],
+        "linked_application_size_comparisons": {
+          "installed_bundle_bytes": 10.320415692921415,
+          "unsigned_device_bundle_bytes": 10.272627237737897
+        },
+        "same_toolchain_baselines": true,
+        "native_test_job_success": true,
+        "overall_mobile_matrix_passed": false
+      },
+      {
+        "role": "relay",
+        "push": true,
+        "source": "1654677b3bac40977b7048ce0fe06c03fe6076e9",
+        "run": 37021726565,
+        "artifact_id": 11242492700,
+        "provider_archive_verified": true,
+        "archive": "test-evidence/stabilization-20261001/operations/mobile-apple-relay-push-1654677b3bac40977b7048ce0fe06c03fe6076e9.zip",
+        "archive_sha256": "1afd61c72ddca13bee2f9da750316081566fd2ade64942030632fa3bfdb8cd1d",
+        "archive_bytes": 123110421,
+        "source_hashes_verified": 562,
+        "native_libraries_verified": 9,
+        "fixture_summary_source_verified": true,
+        "fixture_static_libraries_separately_archived": false,
+        "native_size_comparisons": 9,
+        "native_growth_percent_range": [
+          8.476327410906848,
+          11.102559608343675
+        ],
+        "linked_application_size_comparisons": {
+          "installed_bundle_bytes": 10.661391317155843,
+          "unsigned_device_bundle_bytes": 10.612091176492044
+        },
+        "same_toolchain_baselines": true,
+        "native_test_job_success": true,
+        "overall_mobile_matrix_passed": false
+      }
+    ],
+    "original_android_preflight_failures_retained": true,
+    "full_mobile_matrix_qualified": false,
+    "sdk_1_0_qualified": false
   }
 }
