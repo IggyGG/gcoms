@@ -429,5 +429,112 @@
       }
     ],
     "sdk_1_0_qualified": false
-  }
+  },
+  "android_preflight_repair": {
+    "implemented": true,
+    "failed_native_runs": [
+      {
+        "run": 37020911991,
+        "source": "1654677b3bac40977b7048ce0fe06c03fe6076e9",
+        "android_jobs": [
+          {
+            "id": 110883440487,
+            "name": "android (client)",
+            "conclusion": "failure"
+          },
+          {
+            "id": 110883440655,
+            "name": "android (relay)",
+            "conclusion": "failure"
+          }
+        ],
+        "apple_jobs": [
+          {
+            "id": 110883440825,
+            "name": "apple (client)",
+            "conclusion": "success"
+          },
+          {
+            "id": 110883440901,
+            "name": "apple (relay)",
+            "conclusion": "success"
+          }
+        ],
+        "overall_conclusion": "failure",
+        "original_failure_preserved": true,
+        "reason": "Isolated mobile_elf_test could not import sdk_size_policy before Android tools installation"
+      },
+      {
+        "run": 37021726565,
+        "source": "1654677b3bac40977b7048ce0fe06c03fe6076e9",
+        "android_jobs": [
+          {
+            "id": 110886218111,
+            "name": "android (client)",
+            "conclusion": "failure"
+          },
+          {
+            "id": 110886218349,
+            "name": "android (relay)",
+            "conclusion": "failure"
+          }
+        ],
+        "apple_jobs": [
+          {
+            "id": 110886218392,
+            "name": "apple (relay)",
+            "conclusion": "success"
+          },
+          {
+            "id": 110886218424,
+            "name": "apple (client)",
+            "conclusion": "success"
+          }
+        ],
+        "overall_conclusion": "failure",
+        "original_failure_preserved": true,
+        "reason": "Isolated mobile_elf_test could not import sdk_size_policy before Android tools installation"
+      }
+    ],
+    "elf_controls_isolated": 4,
+    "size_policy_controls_isolated": 6,
+    "full_python_tests": 211,
+    "source_paths_checked": 979,
+    "research_files_verified": 7,
+    "python_scope": "Host Python controls include two tiny isolated Rust registry fixtures; product Rust qualification remains native/cluster",
+    "runtime_and_api_changed": false,
+    "size_security_alignment_limits_unchanged": true,
+    "native_emulator_execution_pending": true,
+    "apple_provider_archives_verified": false,
+    "source_sha256": {
+      "scripts/tests/mobile_elf_test.py": "39f45e6bd08fb033b79c91df5b38ce477a9bef13270f1763846e796cfb7e3f96",
+      ".github/workflows/mobile-integrations.yml": "12c83a209de359b3a12bac3c31259b93d2849d57aa93f1d7419ed83070779001"
+    }
+  },
+  "evidence": [
+    {
+      "path": "test-evidence/stabilization-20261001/mobile-elf-156.log",
+      "sha256": "e6ec182765cd965f2837d8eeaef5a64af48a104f245cd1a0b7281559194c57c1"
+    },
+    {
+      "path": "test-evidence/stabilization-20261001/sdk-policy-156.log",
+      "sha256": "c7898f18dd249b374a1833944d38eeddf70146cd940bf3f3e855c78d64db67d1"
+    },
+    {
+      "path": "test-evidence/stabilization-20261001/python-156.log",
+      "sha256": "aaa30a5f8f85f332daf0b689cb60507c6a6790631c99c359e11937810f8200fa"
+    },
+    {
+      "path": "test-evidence/stabilization-20261001/l0-156.log",
+      "sha256": "9d106f4d08b3db19559bc6f2b6301f44af15d71dc67d2d8376f5fecc532e4d91"
+    },
+    {
+      "path": "test-evidence/stabilization-20261001/operations/sdk-mobile-37020911991-logs.zip",
+      "sha256": "a82723900ecfc447410e06ad2d2cb798f972d8a7f9a7b1b604d834c5eec3b384"
+    },
+    {
+      "path": "test-evidence/stabilization-20261001/operations/sdk-mobile-37021726565-logs.zip",
+      "sha256": "25726d05caf1ec9016af1cb39c71758c20e72e359d0c70ccc72e1953e0ce0846"
+    }
+  ]
 }

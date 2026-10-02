@@ -22,7 +22,7 @@ on:
         default: all
   push:
     branches: [main]
-    paths: ['Cargo.toml', 'Cargo.lock', 'rust-toolchain.toml', 'crates/**', 'mobile/**', 'scripts/build-mobile.py', 'scripts/prepare-android.py', 'scripts/qualify-*.py', 'scripts/sdk_size_policy.py', 'scripts/tests/rust_integration_size_test.py', 'scripts/mobile_fixture.py', 'scripts/test-android.py', '.github/workflows/mobile-integrations.yml']
+    paths: ['Cargo.toml', 'Cargo.lock', 'rust-toolchain.toml', 'crates/**', 'mobile/**', 'scripts/build-mobile.py', 'scripts/prepare-android.py', 'scripts/qualify-*.py', 'scripts/sdk_size_policy.py', 'scripts/tests/rust_integration_size_test.py', 'scripts/tests/mobile_elf_test.py', 'scripts/mobile_fixture.py', 'scripts/test-android.py', '.github/workflows/mobile-integrations.yml']
 permissions:
   contents: read
 jobs:

@@ -2,7 +2,10 @@
 import importlib.util
 from pathlib import Path
 import struct
+import sys
 import unittest
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 spec = importlib.util.spec_from_file_location("qualify_android", Path(__file__).resolve().parents[1] / "qualify-android.py")
 qualify = importlib.util.module_from_spec(spec)

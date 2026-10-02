@@ -1,3 +1,14 @@
+Android SDK runs `37020911991` and `37021726565` fail before tool setup because
+isolated `mobile_elf_test` cannot import `sdk_size_policy`. The test now sets its
+own scripts import path; production size/security checks are unchanged. Its four
+ELF controls and six size-policy controls pass independently, and full Python
+passes 211 tests. L0 checks 979 paths and seven research hashes. Mobile CI now
+triggers on this test's changes. The four Apple jobs in those runs succeed, but
+their provider archives still need independent retention/verification. Original
+failed runs remain retained; fresh Android emulator qualification is required.
+No product runtime, API, limits or dependencies change in this repair. See the
+[native policy receipt](docs/evidence/stabilization-20261001/sdk-size-policy.json).
+
 ## Stable SDK release preparation (2026-10-01, in progress)
 
 Source `1654677b3bac40977b7048ce0fe06c03fe6076e9` passes native run
