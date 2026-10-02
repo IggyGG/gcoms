@@ -53,7 +53,7 @@
     "sha256": "1747466445c9b1e6dee283332e77bd9151cc7474a978f6383145779b71a092bb"
   },
   "open": [
-    "Four Android SDK role/push combinations on corrected preflight source 32072fe",
+    "Mac desktop and Apple SDK role/push combinations on exact release source 8f8fdb3",
     "Installed native app acceptance and complete fleet rollout",
     "Subsequent unattended release before SDK 1.0"
   ],
@@ -1173,5 +1173,267 @@
     "sdk_1_0_qualified": false,
     "apple_mobile_current_source_pending": true,
     "raw_evidence": "operations/desktop-32072fe-verified-225.json"
+  },
+  "release_source_native_progress": {
+    "source": "8f8fdb36bc898e6af3fe00dbf044da6f837fb640",
+    "desktop_original_provider_archives": [
+      {
+        "repository": "IggyGG/gcoms",
+        "run": 37065124483,
+        "source": "8f8fdb36bc898e6af3fe00dbf044da6f837fb640",
+        "artifact": 11254175874,
+        "name": "rust-integrations-ubuntu-24.04-8f8fdb36bc898e6af3fe00dbf044da6f837fb640",
+        "archive_sha256": "699f067d23289f7ca5588996461adee80bc5be2f616353e113b7958ad93f3266",
+        "archive_bytes": 42625282,
+        "source_hashes_verified": 426,
+        "source_unchanged": true,
+        "size_comparisons": [
+          {
+            "mode": "ipc",
+            "opt_level": "3",
+            "growth_percent": 11.768
+          },
+          {
+            "mode": "ipc",
+            "opt_level": "s",
+            "growth_percent": 12.765
+          },
+          {
+            "mode": "ipc",
+            "opt_level": "z",
+            "growth_percent": 12.303
+          },
+          {
+            "mode": "embedded",
+            "opt_level": "3",
+            "growth_percent": 12.034
+          },
+          {
+            "mode": "embedded",
+            "opt_level": "s",
+            "growth_percent": 10.023
+          },
+          {
+            "mode": "embedded",
+            "opt_level": "z",
+            "growth_percent": 10.082
+          },
+          {
+            "mode": "network-client",
+            "opt_level": "3",
+            "growth_percent": 12.723
+          },
+          {
+            "mode": "network-client",
+            "opt_level": "s",
+            "growth_percent": 10.535
+          },
+          {
+            "mode": "network-client",
+            "opt_level": "z",
+            "growth_percent": 10.511
+          },
+          {
+            "mode": "host",
+            "opt_level": "s",
+            "growth_percent": 10.524
+          }
+        ],
+        "sdk_1_0_qualified": false
+      },
+      {
+        "repository": "IggyGG/gcoms",
+        "run": 37065124483,
+        "source": "8f8fdb36bc898e6af3fe00dbf044da6f837fb640",
+        "artifact": 11253264721,
+        "name": "rust-integrations-windows-2022-8f8fdb36bc898e6af3fe00dbf044da6f837fb640",
+        "archive_sha256": "95c6ca33cd52d40e46f23c3298d34f60f1a7cc04018d023292bafc4e92fe96f1",
+        "archive_bytes": 42591732,
+        "source_hashes_verified": 426,
+        "source_unchanged": true,
+        "size_comparisons": [
+          {
+            "mode": "ipc",
+            "opt_level": "3",
+            "growth_percent": 5.437
+          },
+          {
+            "mode": "ipc",
+            "opt_level": "s",
+            "growth_percent": 6.944
+          },
+          {
+            "mode": "ipc",
+            "opt_level": "z",
+            "growth_percent": 4.795
+          },
+          {
+            "mode": "embedded",
+            "opt_level": "3",
+            "growth_percent": 13.78
+          },
+          {
+            "mode": "embedded",
+            "opt_level": "s",
+            "growth_percent": 11.199
+          },
+          {
+            "mode": "embedded",
+            "opt_level": "z",
+            "growth_percent": 11.354
+          },
+          {
+            "mode": "network-client",
+            "opt_level": "3",
+            "growth_percent": 14.533
+          },
+          {
+            "mode": "network-client",
+            "opt_level": "s",
+            "growth_percent": 11.597
+          },
+          {
+            "mode": "network-client",
+            "opt_level": "z",
+            "growth_percent": 11.459
+          },
+          {
+            "mode": "host",
+            "opt_level": "s",
+            "growth_percent": 11.555
+          }
+        ],
+        "sdk_1_0_qualified": false
+      }
+    ],
+    "android": {
+      "source": "8f8fdb36bc898e6af3fe00dbf044da6f837fb640",
+      "android_role_push_combinations": 4,
+      "all_downloaded_provider_archives_verified": true,
+      "results": [
+        {
+          "role": "client",
+          "push": false,
+          "source": "8f8fdb36bc898e6af3fe00dbf044da6f837fb640",
+          "run": 37065130853,
+          "artifact_id": 11253097521,
+          "provider_archive_verified": true,
+          "archive": "test-evidence/stabilization-20261001/operations/sdk8-mobile-android-client-base-8f8fdb36bc898e6af3fe00dbf044da6f837fb640.zip",
+          "archive_sha256": "db054d449b7a6b448249c4bbc11ac13d8787c6f3ae49a8eb99523478a1b998fd",
+          "archive_bytes": 62309673,
+          "source_hashes_verified": 562,
+          "packaging_hashes_verified": 31,
+          "native_libraries_verified": 6,
+          "native_size_comparisons": 6,
+          "native_growth_percent_range": [
+            10.787103795401976,
+            13.234370583848754
+          ],
+          "linked_apk_size_comparisons": {
+            "arm64-v8a": 10.71518625230361,
+            "x86_64": 10.97446476313828
+          },
+          "same_toolchain_baselines": true,
+          "native_emulator_job_success": true,
+          "emulator_page_size": 16384,
+          "native_entries_alignment_verified": true,
+          "overall_mobile_matrix_passed": false
+        },
+        {
+          "role": "client",
+          "push": true,
+          "source": "8f8fdb36bc898e6af3fe00dbf044da6f837fb640",
+          "run": 37065137442,
+          "artifact_id": 11253028718,
+          "provider_archive_verified": true,
+          "archive": "test-evidence/stabilization-20261001/operations/sdk8-mobile-android-client-push-8f8fdb36bc898e6af3fe00dbf044da6f837fb640.zip",
+          "archive_sha256": "708fc6bd896bcb787040b6c060a62402ab6f0104373c4248e88c1af16ca1930d",
+          "archive_bytes": 63390977,
+          "source_hashes_verified": 562,
+          "packaging_hashes_verified": 31,
+          "native_libraries_verified": 6,
+          "native_size_comparisons": 6,
+          "native_growth_percent_range": [
+            11.16653062377928,
+            13.58722725431325
+          ],
+          "linked_apk_size_comparisons": {
+            "arm64-v8a": 10.366777031501284,
+            "x86_64": 10.696777123072998
+          },
+          "same_toolchain_baselines": true,
+          "native_emulator_job_success": true,
+          "emulator_page_size": 16384,
+          "native_entries_alignment_verified": true,
+          "overall_mobile_matrix_passed": false
+        },
+        {
+          "role": "relay",
+          "push": false,
+          "source": "8f8fdb36bc898e6af3fe00dbf044da6f837fb640",
+          "run": 37065130853,
+          "artifact_id": 11252884814,
+          "provider_archive_verified": true,
+          "archive": "test-evidence/stabilization-20261001/operations/sdk8-mobile-android-relay-base-8f8fdb36bc898e6af3fe00dbf044da6f837fb640.zip",
+          "archive_sha256": "3911328b02934aaaf965d9e2cc9a0508439678125681168f9592285791d34184",
+          "archive_bytes": 66802822,
+          "source_hashes_verified": 562,
+          "packaging_hashes_verified": 31,
+          "native_libraries_verified": 6,
+          "native_size_comparisons": 6,
+          "native_growth_percent_range": [
+            10.074396914205131,
+            12.476028043966325
+          ],
+          "linked_apk_size_comparisons": {
+            "arm64-v8a": 10.012015643680305,
+            "x86_64": 10.372825106392414
+          },
+          "same_toolchain_baselines": true,
+          "native_emulator_job_success": true,
+          "emulator_page_size": 16384,
+          "native_entries_alignment_verified": true,
+          "overall_mobile_matrix_passed": false
+        },
+        {
+          "role": "relay",
+          "push": true,
+          "source": "8f8fdb36bc898e6af3fe00dbf044da6f837fb640",
+          "run": 37065137442,
+          "artifact_id": 11253007533,
+          "provider_archive_verified": true,
+          "archive": "test-evidence/stabilization-20261001/operations/sdk8-mobile-android-relay-push-8f8fdb36bc898e6af3fe00dbf044da6f837fb640.zip",
+          "archive_sha256": "a19d09ef76e39cfe59017527baad5074ce1ef813f18713aea583a4cbf21e8119",
+          "archive_bytes": 68188327,
+          "source_hashes_verified": 562,
+          "packaging_hashes_verified": 31,
+          "native_libraries_verified": 6,
+          "native_size_comparisons": 6,
+          "native_growth_percent_range": [
+            10.627648640657771,
+            12.95910596372607
+          ],
+          "linked_apk_size_comparisons": {
+            "arm64-v8a": 9.91959262453288,
+            "x86_64": 10.325152368664492
+          },
+          "same_toolchain_baselines": true,
+          "native_emulator_job_success": true,
+          "emulator_page_size": 16384,
+          "native_entries_alignment_verified": true,
+          "overall_mobile_matrix_passed": false
+        }
+      ],
+      "full_mobile_matrix_qualified": false,
+      "sdk_1_0_qualified": false
+    },
+    "native_desktop_platforms_verified": [
+      "linux-x86_64",
+      "windows-x86_64"
+    ],
+    "native_macos_qualification_pending": true,
+    "native_apple_mobile_qualification_pending": true,
+    "complete_current_source_native_matrix_qualified": false,
+    "sdk_1_0_qualified": false
   }
 }

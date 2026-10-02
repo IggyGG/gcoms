@@ -1,4 +1,15 @@
-Current SDK source `32072fe` also passes all four desktop jobs on Linux,
+The release's exact GComs revision `8f8fdb3` passes Linux/Windows SDK jobs and
+all four Android role/push combinations. Independent verification retains all
+six original provider ZIPs, 426 desktop source hashes per platform, 562 source
+and 31 packaging hashes per Android result, 24 native libraries and the actual
+16 KiB emulator/alignment evidence. All 20 desktop, 24 Android native and eight
+linked APK size comparisons pass the approved 20% feature allowance. The Mac
+desktop and Apple mobile jobs remain pending; an Apple job is measuring native
+packages. SDK 1.0 remains unqualified. See the native policy receipt and retained
+`operations/desktop-8f8fdb3-verified-263.json` and
+`operations/android-sdk-archives-verified-264.json`.
+
+Earlier SDK source `32072fe` also passes all four desktop jobs on Linux,
 Windows, Intel Mac and Apple Silicon. Every original provider ZIP size/digest
 and 426 source hashes per platform are independently verified. All 40 native
 same-toolchain size comparisons remain below the approved 20% feature cap
