@@ -1,3 +1,12 @@
+Current SDK source `32072fe` also passes all four desktop jobs on Linux,
+Windows, Intel Mac and Apple Silicon. Every original provider ZIP size/digest
+and 426 source hashes per platform are independently verified. All 40 native
+same-toolchain size comparisons remain below the approved 20% feature cap
+(maximum 14.533%). Its Apple mobile jobs remain queued; no complete current-source
+mobile matrix or SDK 1.0 qualification is claimed. Original failures and the
+post-1.0 5% regression cap remain unchanged. See the native policy receipt and
+retained `operations/desktop-32072fe-verified-225.json`.
+
 Corrected SDK source `32072fe` now passes all four Android client/relay and
 base/push emulator jobs. Full provider ZIPs, 562 source hashes and 31 packaging
 hashes per result, 24 native libraries and eight linked APK size comparisons

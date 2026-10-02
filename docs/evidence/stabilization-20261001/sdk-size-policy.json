@@ -902,5 +902,276 @@
     ],
     "full_mobile_matrix_qualified": false,
     "sdk_1_0_qualified": false
+  },
+  "current_desktop_native_qualification": {
+    "source": "32072fed7addeccfcdf9705e82a6da9b65a9eb5f",
+    "run": 37047037007,
+    "platforms": 4,
+    "all_original_archives_verified": true,
+    "all_reported_source_hashes_verified": true,
+    "size_comparisons": 40,
+    "feature_growth_cap_percent": 20,
+    "maximum_observed_growth_percent": 14.533,
+    "results": [
+      {
+        "repository": "IggyGG/gcoms",
+        "run": 37047037007,
+        "source": "32072fed7addeccfcdf9705e82a6da9b65a9eb5f",
+        "artifact": 11251992582,
+        "name": "rust-integrations-macos-15-32072fed7addeccfcdf9705e82a6da9b65a9eb5f",
+        "archive_sha256": "0f3bd6d0b7e222b03f0d066e9f5c64d08760beecc9d35eddf41c01082603739c",
+        "archive_bytes": 39433860,
+        "source_hashes_verified": 426,
+        "source_unchanged": true,
+        "size_comparisons": [
+          {
+            "mode": "ipc",
+            "opt_level": "3",
+            "growth_percent": 10.872
+          },
+          {
+            "mode": "ipc",
+            "opt_level": "s",
+            "growth_percent": 13.352
+          },
+          {
+            "mode": "ipc",
+            "opt_level": "z",
+            "growth_percent": 11.26
+          },
+          {
+            "mode": "embedded",
+            "opt_level": "3",
+            "growth_percent": 12.208
+          },
+          {
+            "mode": "embedded",
+            "opt_level": "s",
+            "growth_percent": 10.262
+          },
+          {
+            "mode": "embedded",
+            "opt_level": "z",
+            "growth_percent": 9.827
+          },
+          {
+            "mode": "network-client",
+            "opt_level": "3",
+            "growth_percent": 12.952
+          },
+          {
+            "mode": "network-client",
+            "opt_level": "s",
+            "growth_percent": 10.993
+          },
+          {
+            "mode": "network-client",
+            "opt_level": "z",
+            "growth_percent": 9.847
+          },
+          {
+            "mode": "host",
+            "opt_level": "s",
+            "growth_percent": 11.087
+          }
+        ],
+        "sdk_1_0_qualified": false
+      },
+      {
+        "repository": "IggyGG/gcoms",
+        "run": 37047037007,
+        "source": "32072fed7addeccfcdf9705e82a6da9b65a9eb5f",
+        "artifact": 11249819628,
+        "name": "rust-integrations-macos-15-intel-32072fed7addeccfcdf9705e82a6da9b65a9eb5f",
+        "archive_sha256": "bc59c84284ad34305b99dd8741440c29c6ddcf2fc461b7ed0aa9aab5c2498483",
+        "archive_bytes": 41866310,
+        "source_hashes_verified": 426,
+        "source_unchanged": true,
+        "size_comparisons": [
+          {
+            "mode": "ipc",
+            "opt_level": "3",
+            "growth_percent": 11.629
+          },
+          {
+            "mode": "ipc",
+            "opt_level": "s",
+            "growth_percent": 12.815
+          },
+          {
+            "mode": "ipc",
+            "opt_level": "z",
+            "growth_percent": 11.81
+          },
+          {
+            "mode": "embedded",
+            "opt_level": "3",
+            "growth_percent": 11.932
+          },
+          {
+            "mode": "embedded",
+            "opt_level": "s",
+            "growth_percent": 10.401
+          },
+          {
+            "mode": "embedded",
+            "opt_level": "z",
+            "growth_percent": 10.345
+          },
+          {
+            "mode": "network-client",
+            "opt_level": "3",
+            "growth_percent": 12.628
+          },
+          {
+            "mode": "network-client",
+            "opt_level": "s",
+            "growth_percent": 10.948
+          },
+          {
+            "mode": "network-client",
+            "opt_level": "z",
+            "growth_percent": 10.892
+          },
+          {
+            "mode": "host",
+            "opt_level": "s",
+            "growth_percent": 10.794
+          }
+        ],
+        "sdk_1_0_qualified": false
+      },
+      {
+        "repository": "IggyGG/gcoms",
+        "run": 37047037007,
+        "source": "32072fed7addeccfcdf9705e82a6da9b65a9eb5f",
+        "artifact": 11248240584,
+        "name": "rust-integrations-windows-2022-32072fed7addeccfcdf9705e82a6da9b65a9eb5f",
+        "archive_sha256": "82e90f2673bdbd188e810870b51c913956632398579eda7edf65acaf75eb3231",
+        "archive_bytes": 42591752,
+        "source_hashes_verified": 426,
+        "source_unchanged": true,
+        "size_comparisons": [
+          {
+            "mode": "ipc",
+            "opt_level": "3",
+            "growth_percent": 5.437
+          },
+          {
+            "mode": "ipc",
+            "opt_level": "s",
+            "growth_percent": 6.944
+          },
+          {
+            "mode": "ipc",
+            "opt_level": "z",
+            "growth_percent": 4.795
+          },
+          {
+            "mode": "embedded",
+            "opt_level": "3",
+            "growth_percent": 13.78
+          },
+          {
+            "mode": "embedded",
+            "opt_level": "s",
+            "growth_percent": 11.199
+          },
+          {
+            "mode": "embedded",
+            "opt_level": "z",
+            "growth_percent": 11.354
+          },
+          {
+            "mode": "network-client",
+            "opt_level": "3",
+            "growth_percent": 14.533
+          },
+          {
+            "mode": "network-client",
+            "opt_level": "s",
+            "growth_percent": 11.597
+          },
+          {
+            "mode": "network-client",
+            "opt_level": "z",
+            "growth_percent": 11.459
+          },
+          {
+            "mode": "host",
+            "opt_level": "s",
+            "growth_percent": 11.555
+          }
+        ],
+        "sdk_1_0_qualified": false
+      },
+      {
+        "repository": "IggyGG/gcoms",
+        "run": 37047037007,
+        "source": "32072fed7addeccfcdf9705e82a6da9b65a9eb5f",
+        "artifact": 11246737132,
+        "name": "rust-integrations-ubuntu-24.04-32072fed7addeccfcdf9705e82a6da9b65a9eb5f",
+        "archive_sha256": "f17e58acc3c472dc8ebaf0e9bebd758af30802edb75bc5fb759388df01259add",
+        "archive_bytes": 42625316,
+        "source_hashes_verified": 426,
+        "source_unchanged": true,
+        "size_comparisons": [
+          {
+            "mode": "ipc",
+            "opt_level": "3",
+            "growth_percent": 11.768
+          },
+          {
+            "mode": "ipc",
+            "opt_level": "s",
+            "growth_percent": 12.765
+          },
+          {
+            "mode": "ipc",
+            "opt_level": "z",
+            "growth_percent": 12.303
+          },
+          {
+            "mode": "embedded",
+            "opt_level": "3",
+            "growth_percent": 12.034
+          },
+          {
+            "mode": "embedded",
+            "opt_level": "s",
+            "growth_percent": 10.023
+          },
+          {
+            "mode": "embedded",
+            "opt_level": "z",
+            "growth_percent": 10.082
+          },
+          {
+            "mode": "network-client",
+            "opt_level": "3",
+            "growth_percent": 12.723
+          },
+          {
+            "mode": "network-client",
+            "opt_level": "s",
+            "growth_percent": 10.535
+          },
+          {
+            "mode": "network-client",
+            "opt_level": "z",
+            "growth_percent": 10.511
+          },
+          {
+            "mode": "host",
+            "opt_level": "s",
+            "growth_percent": 10.524
+          }
+        ],
+        "sdk_1_0_qualified": false
+      }
+    ],
+    "sdk_1_0_qualified": false,
+    "apple_mobile_current_source_pending": true,
+    "raw_evidence": "operations/desktop-32072fe-verified-225.json"
   }
 }
