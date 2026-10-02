@@ -18,6 +18,16 @@ Both real legacy and GC2 HTTPS tests pass on Linux; fresh full Windows qualifica
 remains required. The original provider archive is verified and retained in the
 [Windows checkpoint](docs/evidence/stabilization-20261001/windows-locked-storage-tests.json).
 
+Verified native run `36881757477` passes Linux, Windows and Apple Silicon backend
+checks and all ten size comparisons on each platform under the approved 20% policy.
+Intel Mac fails contact reopen and its size phase is cancelled; the complete release
+remains unqualified. The historical measurement reports also mark their source dirty
+because backend evidence was written outside the ignored evidence directory. The
+workflow now retains all output under `test-evidence/` and requires a clean checkout
+before backend execution and after measurement, with the exact revision and a clean
+measurement report. Earlier reports remain unchanged; fresh native qualification is
+required. See the [native checkpoint](docs/evidence/stabilization-20261001/sdk-native-90d7eac.json).
+
 Linux channel-service validation passes 18 tests. Its first strict Clippy
 run finds an unused mutable fixture binding; that failure is retained and the
 binding is corrected without changing assertions. Corrected Clippy and native

@@ -33,8 +33,8 @@ For an already accepted download, a newly identified source gets the same bounde
 inventory query as an offer. The receipt does not verify local pieces or mark the
 download complete; normal inventory, per-piece and final integrity checks remain.
 
-Contact exchange keeps one piece and four block requests in flight, matching the
-durable legacy transport's four-ciphertext window. Local durable acceptance can
-precede network admission; this bound avoids retry traffic queued behind the
-original requests. General exchange keeps its eight-block window. Request timers,
+Contact exchange keeps one piece and two block requests in flight, leaving space
+in the durable transport's four-ciphertext window for control and receipts. Local
+durable acceptance can precede network admission; the smaller window prevents
+slow FIFO delivery from amplifying duplicate retries.
 cryptographic checks and authenticated file completion remain unchanged.

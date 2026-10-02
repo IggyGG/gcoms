@@ -1,0 +1,228 @@
+{
+  "schema": 1,
+  "scope": "Verified historical native size results; fresh clean-source qualification required",
+  "source": "90d7eace5011a88068eb604aaf82149f9352c439",
+  "run_id": 36881757477,
+  "original_run_conclusion": "cancelled",
+  "native_backends": {
+    "linux": "passed",
+    "windows": "passed",
+    "macos-arm": "passed",
+    "macos-intel": "failed contact reopen deadline"
+  },
+  "measurements": [
+    {
+      "platform": "linux",
+      "artifact_id": 11175325534,
+      "archive_sha256": "f2b0153b68ae8712184e68669998810bd2825f3ad2725bd2cfeb4789b12e63e4",
+      "archive_size": 42625314,
+      "measurements_passed": true,
+      "measurement_source_dirty": true,
+      "size_policy": {
+        "schema": 1,
+        "sdk_version": "0.1.0",
+        "limit_percent": 20,
+        "scope": "initial feature release",
+        "approved_on": "2026-10-01",
+        "policy_sha256": "efa03d725b80c440e2800e2180f11f588c46f026a133b86c0c654c5fb13460c9"
+      },
+      "comparisons": [
+        {
+          "mode": "ipc",
+          "opt_level": "3",
+          "growth_percent": 11.768
+        },
+        {
+          "mode": "ipc",
+          "opt_level": "s",
+          "growth_percent": 12.765
+        },
+        {
+          "mode": "ipc",
+          "opt_level": "z",
+          "growth_percent": 12.303
+        },
+        {
+          "mode": "embedded",
+          "opt_level": "3",
+          "growth_percent": 12.034
+        },
+        {
+          "mode": "embedded",
+          "opt_level": "s",
+          "growth_percent": 10.023
+        },
+        {
+          "mode": "embedded",
+          "opt_level": "z",
+          "growth_percent": 10.082
+        },
+        {
+          "mode": "network-client",
+          "opt_level": "3",
+          "growth_percent": 12.723
+        },
+        {
+          "mode": "network-client",
+          "opt_level": "s",
+          "growth_percent": 10.535
+        },
+        {
+          "mode": "network-client",
+          "opt_level": "z",
+          "growth_percent": 10.511
+        },
+        {
+          "mode": "host",
+          "opt_level": "s",
+          "growth_percent": 10.524
+        }
+      ],
+      "verified_report_sha256": "3d533d5efc9e9afa7d955f75a5e41d9480a95dd089effeeeef16d96cf1c03573"
+    },
+    {
+      "platform": "windows",
+      "artifact_id": 11174784726,
+      "archive_sha256": "36de927f7d4e3b98ab6f1483b31eacf1dd14555bd990bc478363f0648fe36627",
+      "archive_size": 42591703,
+      "measurements_passed": true,
+      "measurement_source_dirty": true,
+      "size_policy": {
+        "schema": 1,
+        "sdk_version": "0.1.0",
+        "limit_percent": 20,
+        "scope": "initial feature release",
+        "approved_on": "2026-10-01",
+        "policy_sha256": "efa03d725b80c440e2800e2180f11f588c46f026a133b86c0c654c5fb13460c9"
+      },
+      "comparisons": [
+        {
+          "mode": "ipc",
+          "opt_level": "3",
+          "growth_percent": 5.437
+        },
+        {
+          "mode": "ipc",
+          "opt_level": "s",
+          "growth_percent": 6.944
+        },
+        {
+          "mode": "ipc",
+          "opt_level": "z",
+          "growth_percent": 4.795
+        },
+        {
+          "mode": "embedded",
+          "opt_level": "3",
+          "growth_percent": 13.78
+        },
+        {
+          "mode": "embedded",
+          "opt_level": "s",
+          "growth_percent": 11.199
+        },
+        {
+          "mode": "embedded",
+          "opt_level": "z",
+          "growth_percent": 11.354
+        },
+        {
+          "mode": "network-client",
+          "opt_level": "3",
+          "growth_percent": 14.533
+        },
+        {
+          "mode": "network-client",
+          "opt_level": "s",
+          "growth_percent": 11.597
+        },
+        {
+          "mode": "network-client",
+          "opt_level": "z",
+          "growth_percent": 11.459
+        },
+        {
+          "mode": "host",
+          "opt_level": "s",
+          "growth_percent": 11.555
+        }
+      ],
+      "verified_report_sha256": "6555756c78b25147d0bdbd3ccaf0717b0a47e1b4de16b7c13635defd3e8b7eea"
+    },
+    {
+      "platform": "macos-arm",
+      "artifact_id": 11189735128,
+      "archive_sha256": "970375c57490c261fb216346099f41a05c1f96e33ca161625e2dd0c0fefb46fa",
+      "archive_size": 39433822,
+      "measurements_passed": true,
+      "measurement_source_dirty": true,
+      "size_policy": {
+        "schema": 1,
+        "sdk_version": "0.1.0",
+        "limit_percent": 20,
+        "scope": "initial feature release",
+        "approved_on": "2026-10-01",
+        "policy_sha256": "efa03d725b80c440e2800e2180f11f588c46f026a133b86c0c654c5fb13460c9"
+      },
+      "comparisons": [
+        {
+          "mode": "ipc",
+          "opt_level": "3",
+          "growth_percent": 10.872
+        },
+        {
+          "mode": "ipc",
+          "opt_level": "s",
+          "growth_percent": 13.352
+        },
+        {
+          "mode": "ipc",
+          "opt_level": "z",
+          "growth_percent": 11.26
+        },
+        {
+          "mode": "embedded",
+          "opt_level": "3",
+          "growth_percent": 12.208
+        },
+        {
+          "mode": "embedded",
+          "opt_level": "s",
+          "growth_percent": 10.262
+        },
+        {
+          "mode": "embedded",
+          "opt_level": "z",
+          "growth_percent": 9.827
+        },
+        {
+          "mode": "network-client",
+          "opt_level": "3",
+          "growth_percent": 12.952
+        },
+        {
+          "mode": "network-client",
+          "opt_level": "s",
+          "growth_percent": 10.993
+        },
+        {
+          "mode": "network-client",
+          "opt_level": "z",
+          "growth_percent": 9.847
+        },
+        {
+          "mode": "host",
+          "opt_level": "s",
+          "growth_percent": 11.087
+        }
+      ],
+      "verified_report_sha256": "a82ceabd8558f3ebf5c272c24e81e1d0fe604df1ef01e5550c22cb637d9ea106"
+    }
+  ],
+  "all_platform_release_qualified": false,
+  "sdk_1_0_declared": false,
+  "original_dirty_reports_preserved": true,
+  "new_workflow_requires_clean_sources_before_and_after_measurement": true,
+  "new_workflow_retains_output_under_ignored_test_evidence": true,
+  "source_sha256": "4ddd4df6e42914e72317ea1f96189c4e913a11616dfae10544d6966532bca9e1"
+}

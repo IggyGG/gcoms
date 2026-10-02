@@ -68,6 +68,8 @@ jobs:
         run: ${{ runner.os == 'Windows' && 'python' || 'python3' }} scripts/prepare-rust-tests.py
       - name: Check feature-release and stable size boundaries
         run: ${{ runner.os == 'Windows' && 'python' || 'python3' }} -m unittest discover -s scripts/tests -p rust_integration_size_test.py
+      - name: Require clean source before native qualification
+        run: ${{ runner.os == 'Windows' && 'python' || 'python3' }} -c "import subprocess; assert not subprocess.check_output(['git', 'status', '--porcelain']), 'native source is not clean'"
       - name: Check real native backends
         env:
           CARGO_BUILD_JOBS: '2'
@@ -75,12 +77,12 @@ jobs:
           GCOMS_FILE_RECOVERY_DIAGNOSTICS: '1'
         shell: bash
         run: |
-          mkdir -p integration-evidence
-          git rev-parse HEAD > integration-evidence/source.txt
+          mkdir -p test-evidence/integration-evidence
+          git rev-parse HEAD > test-evidence/integration-evidence/source.txt
           set +e
-          cargo test --locked -p gcoms -p gcoms-runtime -p gcoms-sdk -p gcoms-file-transfer --all-features -- --test-threads=1 > integration-evidence/native.log 2>&1
+          cargo test --locked -p gcoms -p gcoms-runtime -p gcoms-sdk -p gcoms-file-transfer --all-features -- --test-threads=1 > test-evidence/integration-evidence/native.log 2>&1
           result=$?
-          tail -100 integration-evidence/native.log
+          tail -100 test-evidence/integration-evidence/native.log
           exit "$result"
       - name: Retain completed backend diagnostics before size builds
         if: always()
@@ -89,20 +91,23 @@ jobs:
           retention-days: 30
           name: native-backend-${{ matrix.runner }}-${{ github.sha }}-${{ github.run_attempt }}
           path: |
-            integration-evidence/native.log
-            integration-evidence/source.txt
+            test-evidence/integration-evidence/native.log
+            test-evidence/integration-evidence/source.txt
           if-no-files-found: error
       - name: Check and measure isolated consumer graphs
         if: ${{ !cancelled() && steps.rust.outcome == 'success' && steps.tests.outcome == 'success' }}
         env:
           CARGO_BUILD_JOBS: '2'
-        run: ${{ runner.os == 'Windows' && 'python' || 'python3' }} scripts/check-rust-integrations.py --measure --output integration-evidence --baseline docs/evidence/rust-integrations-20260921/${{ matrix.baseline }}.json
+        run: ${{ runner.os == 'Windows' && 'python' || 'python3' }} scripts/check-rust-integrations.py --measure --output test-evidence/integration-evidence --baseline docs/evidence/rust-integrations-20260921/${{ matrix.baseline }}.json
+      - name: Verify clean measurement source and exact revision
+        if: ${{ !cancelled() && steps.rust.outcome == 'success' && steps.tests.outcome == 'success' }}
+        run: ${{ runner.os == 'Windows' && 'python' || 'python3' }} -c "import json,os,pathlib,subprocess; report=json.loads(pathlib.Path('test-evidence/integration-evidence/summary.json').read_text()); assert report['revision']==os.environ['GITHUB_SHA'] and report['dirty'] is False and report['passed'] is True; assert not subprocess.check_output(['git','status','--porcelain'])"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: always()
         with:
           retention-days: 30
           name: rust-integrations-${{ matrix.runner }}-${{ github.sha }}
-          path: integration-evidence/
+          path: test-evidence/integration-evidence/
           if-no-files-found: error
 
   subscription-diagnostic:
