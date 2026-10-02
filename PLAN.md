@@ -1,3 +1,11 @@
+The original protected Linux job for release 0.1.98 passes both full native
+GChat/GComs CI commands on exact sources `52d28d7`/`8f8fdb3`. Its original provider
+ZIP, both source bindings, derived Rust/npm inputs and all linked logs verify
+through the unchanged qualification handler. GComs records 211 passing Python
+checks, zero failed Rust checks and a successful dependency audit. The original
+failed/split Linux attempts remain retained; this is a new full native pass.
+Signed packaging and installed-network/fleet acceptance remain required.
+
 The release's exact GComs revision `8f8fdb3` passes Linux/Windows SDK jobs and
 all four Android role/push combinations. Independent verification retains all
 six original provider ZIPs, 426 desktop source hashes per platform, 562 source

@@ -1435,5 +1435,86 @@
     "native_apple_mobile_qualification_pending": true,
     "complete_current_source_native_matrix_qualified": false,
     "sdk_1_0_qualified": false
+  },
+  "release_source_full_linux_ci": {
+    "scope": "Both full native workspace CI gates in original protected Linux qualification job",
+    "passed": true,
+    "original_workflow_run": 37065209078,
+    "original_job": 111031242429,
+    "original_artifact": 11255988101,
+    "archive_sha256": "4e6421add8c027d7059362b4da320aacd73a26d70bcf20142de77e0a16347d09",
+    "archive_bytes": 225178,
+    "report": {
+      "inputs": {
+        "path": "paired-gchat/inputs.json",
+        "sha256": "826c57b94c6ffadd3e24913e154149063a77f4f7d53ba9cd1edffeea8e92cdda"
+      },
+      "kind": "linux_native_qualification",
+      "manifest_sha256": "d157fe2335047dd20eadb5f923e6fd3f75af61a2fc60841d3e3d64b6ffb73969",
+      "native_ci": {
+        "path": "paired-gchat/native-ci.json",
+        "sha256": "7d2d5ddd7bd303ac3e9b1efb5976d73e0720ff865f4daa5399d4792d5585ded8"
+      },
+      "native_target": "x86_64-unknown-linux-gnu",
+      "passed": true,
+      "platform": "linux-x86_64",
+      "provider": {
+        "repository": "IggyGG/gchat",
+        "run_attempt": 1,
+        "run_id": "37065209078",
+        "workflow_commit": "52d28d733cfef44df5e5e6db984d51178955f5ab"
+      },
+      "release_id": "f8ae216bf9016d59f17a4dad836806b5a31fbe3c4b57d35dba12d4f3f2f64852",
+      "schema": 1,
+      "source_unchanged": true,
+      "sources": {
+        "gchat": {
+          "commit": "52d28d733cfef44df5e5e6db984d51178955f5ab",
+          "tree": "d58be23a243d449ff3e03031f497dbed8c3763b5"
+        },
+        "gcoms": {
+          "commit": "8f8fdb36bc898e6af3fe00dbf044da6f837fb640",
+          "tree": "f0cab6c74e9f1075b8344ded39d2303c00f0dd24"
+        }
+      },
+      "steps": [
+        {
+          "command": [
+            "python3",
+            "gchat/scripts/ci.py",
+            "--gcoms",
+            "gcoms",
+            "--provenance-output",
+            "native-evidence/paired-gchat"
+          ],
+          "exit_code": 0,
+          "log": {
+            "path": "native-0.log",
+            "sha256": "23030eb98f327f50e18438eebce125b96d87f2ef8f824db07691a7280fe7294a"
+          }
+        },
+        {
+          "command": [
+            "python3",
+            "gcoms/scripts/ci.py"
+          ],
+          "exit_code": 0,
+          "log": {
+            "path": "native-1.log",
+            "sha256": "af9b168a3694404b6a24808186f60e56a480ea5c3a5744e730d0c22a3b85b7dd"
+          }
+        }
+      ]
+    },
+    "verified_by_original_source_qualification_handler": true,
+    "retained_rust_npm_input_archives_verified": true,
+    "whole_workflow_complete": false,
+    "signing_infrastructure_and_native_acceptance_pending": true,
+    "gcoms_python_checks": 211,
+    "gcoms_python_skipped": 0,
+    "both_dependency_audits_passed": true,
+    "sdk_1_0_qualified": false,
+    "raw_evidence_in_companion_gchat": "operations/linux-qualification-independent-274.json",
+    "raw_evidence_sha256": "a93896b6cc9389072ee577dca74fb91278ad48eafa897104b4387f391bdc78f4"
   }
 }
