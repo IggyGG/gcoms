@@ -16,7 +16,7 @@ fn cache() -> (tempfile::TempDir, Cache) {
 // scheduler's observed delays. An accepted request's original 30-second timer
 // runs while its ciphertext waits in that FIFO; its real response is verified
 // through the engine and cache, without fabricating transport or file receipts.
-fn transfer(contacts: bool) -> (u64, u64) {
+fn transfer(contacts: bool, drain_seconds: u64) -> (u64, u64) {
     let (_source_dir, mut source) = cache();
     let (_target_dir, target) = cache();
     let bytes: Vec<_> = (0..PIECE_BYTES).map(|i| (i % 251) as u8).collect();
@@ -78,7 +78,7 @@ fn transfer(contacts: bool) -> (u64, u64) {
                 }
             }
         }
-        if now % 4 == 0 {
+        if now % drain_seconds == 0 {
             for from in 0..2 {
                 if let Some(action) = queues[from].pop_front() {
                     // Already admitted durable traffic cannot be withdrawn while
@@ -121,12 +121,18 @@ fn transfer(contacts: bool) -> (u64, u64) {
 
 #[test]
 fn contact_requests_fit_durable_fifo_without_duplicate_block_retries() {
-    let (contact_retries, contact_seconds) = transfer(true);
-    let (larger_retries, larger_seconds) = transfer(false);
+    let (contact_retries, contact_seconds) = transfer(true, 4);
+    let (larger_retries, larger_seconds) = transfer(false, 4);
     assert_eq!(contact_retries, 0);
     assert!(
         larger_retries > 0,
         "the larger window must expose the backlog"
     );
     assert!(contact_seconds < larger_seconds);
+}
+
+#[test]
+fn contact_requests_leave_room_for_slow_durable_transport() {
+    let (retries, _) = transfer(true, 7);
+    assert_eq!(retries, 0);
 }

@@ -2,7 +2,7 @@
   "schema": 1,
   "scope": "Contact file flow control; native qualification still required",
   "base_commit": "2787d53aa0efab56ae4aaaa2470fa845c88e9b02",
-  "contact_block_window": 4,
+  "contact_block_window": 2,
   "general_block_window": 8,
   "legacy_ciphertext_window": 4,
   "request_timeout_seconds": 30,
@@ -10,13 +10,13 @@
   "covered_authenticated_completion_unchanged": true,
   "public_methods_and_wire_bytes_unchanged": true,
   "negative_original_window_failed": true,
-  "isolated_corrected_file_tests": 30,
+  "isolated_corrected_file_tests": 31,
   "unchanged_real_reopen_passed": true,
-  "total_real_test_seconds": 481.70035314559937,
+  "total_real_test_seconds": 191.85,
   "total_includes_initial_transfer_and_reopen": true,
   "source_sha256": {
-    "crates/file-transfer/src/swarm/engine.rs": "e9f0cd30eb899ec6cbe64c464177ead309f819f371154d0c5499370e5d5d0966",
-    "crates/file-transfer/tests/contact_window.rs": "9d2181bae5d5774496ca394d89cfc4af9aa37ab1f0bcf8a8de433b6bc2e413c7",
+    "crates/file-transfer/src/swarm/engine.rs": "2ed7a0658711acc1a28d6db6247c622a6d6fa3ee900bf86b5d039f3308e181ce",
+    "crates/file-transfer/tests/contact_window.rs": "e71d4a6abb4c9102c2b97a400b5652a2480288f1b5ba8d15fbc7fb5714c4d58f",
     "crates/runtime/src/modern_files/tests.rs": "338a52024203c2e6f057bc7fac34c6021636c0620524df35654e02ad0754470d"
   },
   "evidence": [
@@ -47,6 +47,38 @@
     {
       "path": "test-evidence/stabilization-20261001/contact-window-result-98.json",
       "sha256": "2456ac72052fb06ed0af5c065bde042224dea7607bb5a3f318551dca2653da5e"
+    },
+    {
+      "path": "test-evidence/stabilization-20261001/contact-two-111-result.json",
+      "sha256": "03285dd67f7e949cc6b94c0eaf09b26f3d46da8e9c19132c2dc86ea89ac855d9"
+    },
+    {
+      "path": "test-evidence/stabilization-20261001/contact-two-111-negative.log",
+      "sha256": "f9b8bc0a5ebb11e9f344be33abf14f752c326f0e48cf1cc45682de95d3d325f6"
+    },
+    {
+      "path": "test-evidence/stabilization-20261001/contact-two-112-result.json",
+      "sha256": "d9a0b80294440b745bfcc836692a5ce8414292cbfaa0b5ab9471c3ad88b98a75"
+    },
+    {
+      "path": "test-evidence/stabilization-20261001/contact-two-112-negative.log",
+      "sha256": "129d386dbd4c3456391e26155753c422b33061d177440088b9c93defb37487c2"
+    },
+    {
+      "path": "test-evidence/stabilization-20261001/contact-two-112-files.log",
+      "sha256": "43c80cb77ecb0faad9716da9bd8d5b011822e7803ef0e7b0dedc0a7891df089e"
+    },
+    {
+      "path": "test-evidence/stabilization-20261001/contact-two-112-clippy.log",
+      "sha256": "eec1a14601554bd55f12a6e25e875cf3d5675d0a2a4ce21c038b66c3b4cfd949"
+    },
+    {
+      "path": "test-evidence/stabilization-20261001/contact-two-112-runtime.log",
+      "sha256": "72177060ce98e0b1f2428fe35c1a6df3084aac3a58a6f8db9147a2a93fd8eb47"
+    },
+    {
+      "path": "test-evidence/stabilization-20261001/native-intel-90d7-complete.log",
+      "sha256": "ad8eec5dc465f2912b927ab694c01f24f13584ddccfdb9da4cd8787ec804c164"
     }
   ],
   "retained_first_attempt": "Shared-output fixture verdicts both failed; independent build targets are authoritative",
@@ -54,5 +86,104 @@
     "Full committed workspace and strict Clippy",
     "Fresh native recovery on all four desktop platforms",
     "Installed acceptance and fleet activation"
-  ]
+  ],
+  "qualification_command_seconds_including_compilation": 329.0074510574341,
+  "earlier_windows": [
+    {
+      "schema": 1,
+      "scope": "Contact file flow control; native qualification still required",
+      "base_commit": "2787d53aa0efab56ae4aaaa2470fa845c88e9b02",
+      "contact_block_window": 4,
+      "general_block_window": 8,
+      "legacy_ciphertext_window": 4,
+      "request_timeout_seconds": 30,
+      "runtime_phase_timeout_seconds": 240,
+      "covered_authenticated_completion_unchanged": true,
+      "public_methods_and_wire_bytes_unchanged": true,
+      "negative_original_window_failed": true,
+      "isolated_corrected_file_tests": 30,
+      "unchanged_real_reopen_passed": true,
+      "total_real_test_seconds": 318.53,
+      "total_includes_initial_transfer_and_reopen": true,
+      "source_sha256": {
+        "crates/file-transfer/src/swarm/engine.rs": "2ed7a0658711acc1a28d6db6247c622a6d6fa3ee900bf86b5d039f3308e181ce",
+        "crates/file-transfer/tests/contact_window.rs": "e71d4a6abb4c9102c2b97a400b5652a2480288f1b5ba8d15fbc7fb5714c4d58f",
+        "crates/runtime/src/modern_files/tests.rs": "338a52024203c2e6f057bc7fac34c6021636c0620524df35654e02ad0754470d"
+      },
+      "evidence": [
+        {
+          "path": "test-evidence/stabilization-20261001/contact-window-negative-94.log",
+          "sha256": "af7fff399b74f2eded92c70a94da0501e60b12c721e249df59de0d4f8f652318"
+        },
+        {
+          "path": "test-evidence/stabilization-20261001/contact-window-corrected-94.log",
+          "sha256": "0595f75b137a1aed55faf34d3b0398729580dc3801b5d7ad6edac5343f9c6d42"
+        },
+        {
+          "path": "test-evidence/stabilization-20261001/contact-window-result-94.json",
+          "sha256": "26cc4db7bcdc864ca630cc7fbf33aadcc87af5c5c78fe7195beb182406029f2e"
+        },
+        {
+          "path": "test-evidence/stabilization-20261001/contact-window-negative-98.log",
+          "sha256": "e07d2f7ef6e0ef57035c73fadb17b8d96ac128352bd42b289725714c7d264227"
+        },
+        {
+          "path": "test-evidence/stabilization-20261001/contact-window-corrected-98.log",
+          "sha256": "83ceb612928a9c0f2e9d9ec41d64ff860e1e4bc786e606864cee8ddb7628218a"
+        },
+        {
+          "path": "test-evidence/stabilization-20261001/contact-window-runtime-98.log",
+          "sha256": "ecd543de919d17496f45d76294c0d4c48ed5a599b67828dc887d78280c4c3236"
+        },
+        {
+          "path": "test-evidence/stabilization-20261001/contact-window-result-98.json",
+          "sha256": "2456ac72052fb06ed0af5c065bde042224dea7607bb5a3f318551dca2653da5e"
+        },
+        {
+          "path": "test-evidence/stabilization-20261001/contact-two-111-result.json",
+          "sha256": "03285dd67f7e949cc6b94c0eaf09b26f3d46da8e9c19132c2dc86ea89ac855d9"
+        },
+        {
+          "path": "test-evidence/stabilization-20261001/contact-two-111-negative.log",
+          "sha256": "f9b8bc0a5ebb11e9f344be33abf14f752c326f0e48cf1cc45682de95d3d325f6"
+        },
+        {
+          "path": "test-evidence/stabilization-20261001/contact-two-112-result.json",
+          "sha256": "d9a0b80294440b745bfcc836692a5ce8414292cbfaa0b5ab9471c3ad88b98a75"
+        },
+        {
+          "path": "test-evidence/stabilization-20261001/contact-two-112-negative.log",
+          "sha256": "129d386dbd4c3456391e26155753c422b33061d177440088b9c93defb37487c2"
+        },
+        {
+          "path": "test-evidence/stabilization-20261001/contact-two-112-files.log",
+          "sha256": "43c80cb77ecb0faad9716da9bd8d5b011822e7803ef0e7b0dedc0a7891df089e"
+        },
+        {
+          "path": "test-evidence/stabilization-20261001/contact-two-112-clippy.log",
+          "sha256": "eec1a14601554bd55f12a6e25e875cf3d5675d0a2a4ce21c038b66c3b4cfd949"
+        },
+        {
+          "path": "test-evidence/stabilization-20261001/contact-two-112-runtime.log",
+          "sha256": "72177060ce98e0b1f2428fe35c1a6df3084aac3a58a6f8db9147a2a93fd8eb47"
+        },
+        {
+          "path": "test-evidence/stabilization-20261001/native-intel-90d7-complete.log",
+          "sha256": "ad8eec5dc465f2912b927ab694c01f24f13584ddccfdb9da4cd8787ec804c164"
+        }
+      ],
+      "retained_first_attempt": "Shared-output fixture verdicts both failed; independent build targets are authoritative",
+      "remaining": [
+        "Full committed workspace and strict Clippy",
+        "Fresh native recovery on all four desktop platforms",
+        "Installed acceptance and fleet activation"
+      ],
+      "qualification_command_seconds_including_compilation": 481.70035314559937
+    }
+  ],
+  "slower_fifo_seconds_per_direction": 7,
+  "original_four_request_window_failed": true,
+  "corrected_clippy_passed": true,
+  "original_intel_native_failure_run": 36881757477,
+  "first_six_second_simulation_reproduced_failure": false
 }

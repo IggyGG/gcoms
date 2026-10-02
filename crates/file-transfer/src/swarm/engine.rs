@@ -13,9 +13,9 @@ pub const BLOCK_WINDOW: usize = 8;
 pub const PAYLOAD_BUDGET: usize = 4 * 1024 * 1024;
 const REQUEST_TIMEOUT: u64 = 30;
 // Durable legacy direct transport admits four ciphertexts per peer. Its local
-// acceptance can precede network admission: requesting more blocks starts retry
-// clocks behind that window and creates duplicate response traffic on recovery.
-const CONTACT_BLOCK_WINDOW: usize = 4;
+// acceptance can precede network admission. Leave half the window available for
+// control and receipts so block retries do not amplify a slow recovery backlog.
+const CONTACT_BLOCK_WINDOW: usize = 2;
 
 /// Local aggregate observations; contains no share, route, or member identifiers.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
