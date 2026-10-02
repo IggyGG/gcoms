@@ -365,6 +365,9 @@ mod tests {
                     } else {
                         io.get_mut().write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\n{}").await.unwrap();
                     }
+                    // Complete the fixture's TLS stream before dropping TCP.
+                    // The client must keep rejecting truncated TLS responses.
+                    io.get_mut().shutdown().await.unwrap();
                 }
             }
         });

@@ -1,18 +1,25 @@
 ## Stable SDK release preparation (2026-10-01, in progress)
 
-Fresh Linux policy run `36859550065` and original Intel Mac run `36845346885`
-still miss the unchanged contact reopen deadline. The eight-block file request
-window exceeded the legacy transport's four-ciphertext admission window; durable
-local acceptance started timers while requests waited in the FIFO. Contact files
-now request four blocks at once. General exchange stays at eight, with the same
-30-second request timer, 240-second recovery phase bound, keys and authenticated
-completion checks. The original-window FIFO control fails and the correction
-passes 30 file tests in independent build targets. The unchanged real reopen,
-whole-file byte comparison and authenticated completion pass; its 318.53-second
-total includes initial transfer and reopening, each bounded independently. The
-first shared-output experiment remains retained. Full workspace/Clippy and fresh
-native qualification remain required; see the
+Native Intel run `36881757477` still misses the original contact reopen deadline
+with a four-block window: it receives 15 resumed blocks and makes 11 retries.
+Contact files now request two blocks, leaving transport capacity for control and
+receipts. General exchange remains at eight. The 30-second timer, four-ciphertext
+ratchet window, 240-second phase bounds, public methods, keys and wire are unchanged.
+A seven-second FIFO reproduces the four-request backlog and passes with two requests;
+the earlier six-second simulation did not reproduce it and is retained separately.
+The correction passes 31 file tests, strict file-transfer Clippy and the unchanged
+real encrypted reopen, byte comparison and authenticated completion in 191.85
+seconds total. Earlier eight/four-window evidence is preserved. Full committed
+workspace and fresh four-platform native qualification remain open; see the
 [request-window checkpoint](docs/evidence/stabilization-20261001/contact-request-window.json).
+
+Full Windows worker `36863200902` retains a GC2 catalog test failure: its private
+TLS origin dropped TCP without sending `close_notify`. The test origin now shuts
+down its TLS stream normally after writing the complete response. Production TLS,
+certificate/hostname refusals, remote DNS and bulk-body assertions are unchanged.
+Both real legacy and GC2 HTTPS tests pass on Linux; fresh full Windows qualification
+remains required. The original provider archive is verified and retained in the
+[Windows checkpoint](docs/evidence/stabilization-20261001/windows-locked-storage-tests.json).
 
 Linux channel-service validation passes 18 tests. Its first strict Clippy
 run finds an unused mutable fixture binding; that failure is retained and the

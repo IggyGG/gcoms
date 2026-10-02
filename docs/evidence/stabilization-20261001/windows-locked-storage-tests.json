@@ -50,5 +50,31 @@
       "path": "test-evidence/stabilization-20261001/windows-lock-result-92.json",
       "sha256": "e12d20d67cc2a69945caf4429ea13f99793a8a8250e2f62c18e930f3d190e6f6"
     }
-  ]
+  ],
+  "supplementary_tls_fixture": {
+    "failed_full_native_run": 36863200902,
+    "gchat_source": "3deef66a82690619df02647d60bdbf9aeb80dc2f",
+    "gcoms_source": "0bce07c849ed99baeff7ceec1333ee577bd6e3fb",
+    "provider_archive_sha256": "de533e662e31cb377c963982823081ee2109d4b0151ca6d2ffde8942eaa79027",
+    "failure": "catalog GC2 HTTPS response ended without TLS close_notify",
+    "fixture_shutdown_now_graceful": true,
+    "production_certificate_and_hostname_checks_unchanged": true,
+    "linux_legacy_and_gc2_https_tests_passed": 2,
+    "native_windows_rerun": "pending",
+    "source_sha256": "94ef0b94f33e0fb2f39d7754c49bd7f7316011995b2a40a47a25c627010108c1",
+    "evidence": [
+      {
+        "path": "test-evidence/stabilization-20261001/windows-gchat-36863200902-verified.json",
+        "sha256": "0d3b06beecefde70360a31ffbe7b519494198cff3e39e2263955d2cc5e72e26e"
+      },
+      {
+        "path": "test-evidence/stabilization-20261001/contact-two-112-routing.log",
+        "sha256": "2b34f7557f5f3f41f537667501faad9f66df5a67425eb72c23f86a07b7d1a05e"
+      },
+      {
+        "path": "test-evidence/stabilization-20261001/contact-two-112-result.json",
+        "sha256": "d9a0b80294440b745bfcc836692a5ce8414292cbfaa0b5ab9471c3ad88b98a75"
+      }
+    ]
+  }
 }

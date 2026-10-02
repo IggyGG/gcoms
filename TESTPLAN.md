@@ -1,13 +1,22 @@
 ## Stable SDK release preparation (2026-10-01)
 
-Run the FIFO contact-request regression against the original eight-block window
-and the four-block correction in separate build targets. Require real piece
-verification, exact exported bytes and authenticated completion within the same
-bound. Preserve both the failing control and first shared-output experiment.
-Then run the unchanged contact reopen test, full serial workspace and strict
-Clippy. Keep the 30-second request timer, 240-second phase deadlines, four-ciphertext
-ratchet window, keys, wire layout and receipt rules unchanged. Fresh native
-Windows and both Mac checks remain mandatory.
+Run the FIFO request regression in separate original/corrected build targets.
+The seven-second transport drain must reproduce duplicate block retries with four
+requests and verify the file and authenticated completion with two requests and
+zero retries. The earlier six-second model did not reproduce the native backlog;
+retain that original result. Then run all file tests, strict Clippy and the unchanged
+real encrypted contact reopen/byte comparison/completion assertions. Preserve
+30-second request timers, 240-second phase bounds, the four-ciphertext ratchet window,
+keys, wire bytes and receipt rules. Fresh four-platform native qualification and
+full committed workspace validation remain mandatory.
+
+Full Windows worker `36863200902` retains a GC2 catalog test failure: its private
+TLS origin dropped TCP without sending `close_notify`. The test origin now shuts
+down its TLS stream normally after writing the complete response. Production TLS,
+certificate/hostname refusals, remote DNS and bulk-body assertions are unchanged.
+Both real legacy and GC2 HTTPS tests pass on Linux; fresh full Windows qualification
+remains required. The original provider archive is verified and retained in the
+[Windows checkpoint](docs/evidence/stabilization-20261001/windows-locked-storage-tests.json).
 
 Linux channel-service validation passes 18 tests. Its first strict Clippy
 run finds an unused mutable fixture binding; that failure is retained and the
