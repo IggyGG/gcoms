@@ -1,11 +1,21 @@
+Corrected SDK source `32072fe` now passes all four Android client/relay and
+base/push emulator jobs. Full provider ZIPs, 562 source hashes and 31 packaging
+hashes per result, 24 native libraries and eight linked APK size comparisons
+are independently verified. The real emulator uses 16 KiB pages; alignment and
+same-toolchain size checks pass the approved 20% allowance (native growth
+10.07–13.59%). Apple jobs on this source remain queued, so these results do not
+qualify its complete mobile matrices or SDK 1.0. Original failures are retained.
+Evidence: `docs/evidence/stabilization-20261001/sdk-size-policy.json` and retained
+`operations/android-sdk-archives-verified-190.json`.
+
 Clean SDK source `1654677` now has four fully retained Apple role/push results.
 Every provider ZIP size and digest, 562 reported source hashes per result and all
 36 distributable native-library hashes match. The 36 same-toolchain native size
 checks and eight linked application size checks pass the approved 20% feature
 allowance (observed growth 8.07–11.50%). Original Android preflight failures and
 overall failed mobile matrices remain unchanged; fixture static libraries were
-not separately archived. Four Android role/push combinations on corrected source
-`32072fe` remain queued. This does not qualify SDK 1.0, installed apps or the fleet.
+not separately archived. All four Android role/push combinations on corrected source
+`32072fe` now pass; their independent verification is recorded above. This does not qualify SDK 1.0, installed apps or the fleet.
 See `docs/evidence/stabilization-20261001/sdk-size-policy.json` and retained
 `operations/apple-sdk-archives-verified-175.json`.
 
@@ -15,8 +25,8 @@ own scripts import path; production size/security checks are unchanged. Its four
 ELF controls and six size-policy controls pass independently, and full Python
 passes 211 tests. L0 checks 979 paths and seven research hashes. Mobile CI now
 triggers on this test's changes. The four Apple jobs in those runs succeed, but
-their provider archives still need independent retention/verification. Original
-failed runs remain retained; fresh Android emulator qualification is required.
+their provider archives are independently retained and verified. Original
+failed runs remain retained; corrected Android emulator qualification passes above.
 No product runtime, API, limits or dependencies change in this repair. See the
 [native policy receipt](docs/evidence/stabilization-20261001/sdk-size-policy.json).
 

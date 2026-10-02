@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "scope": "Owner-approved SDK feature-release size policy; four desktop platforms and four Apple role/push combinations qualified, full release still open",
+  "scope": "Owner-approved SDK feature-release size policy; four desktop, four Apple and four Android role/push results qualified separately; current complete release still open",
   "policy": {
     "schema": 1,
     "sdk_version": "0.1.0",
@@ -504,12 +504,13 @@
     "python_scope": "Host Python controls include two tiny isolated Rust registry fixtures; product Rust qualification remains native/cluster",
     "runtime_and_api_changed": false,
     "size_security_alignment_limits_unchanged": true,
-    "native_emulator_execution_pending": true,
+    "native_emulator_execution_pending": false,
     "apple_provider_archives_verified": true,
     "source_sha256": {
       "scripts/tests/mobile_elf_test.py": "39f45e6bd08fb033b79c91df5b38ce477a9bef13270f1763846e796cfb7e3f96",
       ".github/workflows/mobile-integrations.yml": "12c83a209de359b3a12bac3c31259b93d2849d57aa93f1d7419ed83070779001"
-    }
+    },
+    "current_source_apple_matrix_pending": true
   },
   "evidence": [
     {
@@ -583,6 +584,18 @@
     {
       "path": "test-evidence/stabilization-20261001/operations/retained-apple-sdk-161.log",
       "sha256": "d521f687e0fc8345d4fe557da087fc3335de50211d40c8393cfee6d0517e9e41"
+    },
+    {
+      "path": "test-evidence/stabilization-20261001/operations/android-sdk-archives-verified-190.json",
+      "sha256": "8e1a7bd2e4af913f324543c6e16acffae3e064ef4cc2345dbccec987411154c7"
+    },
+    {
+      "path": "test-evidence/stabilization-20261001/operations/android-sdk-archives-verified-190.log",
+      "sha256": "380d2af69ac9776982ebc9e4fb931cc10b63ad684901944a48af504fb71d2625"
+    },
+    {
+      "path": "test-evidence/stabilization-20261001/operations/retained-android-sdk-186.log",
+      "sha256": "8fe20037b80b088b2ebe73ea64ee8b28fa811f0e5b2cd13af5a8ab156894dddb"
     }
   ],
   "linux_remaining_ci_phases": {
@@ -766,6 +779,127 @@
       }
     ],
     "original_android_preflight_failures_retained": true,
+    "full_mobile_matrix_qualified": false,
+    "sdk_1_0_qualified": false
+  },
+  "android_native_qualification": {
+    "source": "32072fed7addeccfcdf9705e82a6da9b65a9eb5f",
+    "android_role_push_combinations": 4,
+    "all_downloaded_provider_archives_verified": true,
+    "results": [
+      {
+        "role": "client",
+        "push": false,
+        "source": "32072fed7addeccfcdf9705e82a6da9b65a9eb5f",
+        "run": 37046033620,
+        "artifact_id": 11245726524,
+        "provider_archive_verified": true,
+        "archive": "test-evidence/stabilization-20261001/operations/mobile-android-client-base-32072fed7addeccfcdf9705e82a6da9b65a9eb5f.zip",
+        "archive_sha256": "9428aa1b37fedcbd7008cff11d8f39970480eb6ebf7ea213415378ff167a5715",
+        "archive_bytes": 62323889,
+        "source_hashes_verified": 562,
+        "packaging_hashes_verified": 31,
+        "native_libraries_verified": 6,
+        "native_size_comparisons": 6,
+        "native_growth_percent_range": [
+          10.787103795401976,
+          13.234370583848754
+        ],
+        "linked_apk_size_comparisons": {
+          "arm64-v8a": 10.71518625230361,
+          "x86_64": 10.97446476313828
+        },
+        "same_toolchain_baselines": true,
+        "native_emulator_job_success": true,
+        "emulator_page_size": 16384,
+        "native_entries_alignment_verified": true,
+        "overall_mobile_matrix_passed": false
+      },
+      {
+        "role": "client",
+        "push": true,
+        "source": "32072fed7addeccfcdf9705e82a6da9b65a9eb5f",
+        "run": 37047048192,
+        "artifact_id": 11246606496,
+        "provider_archive_verified": true,
+        "archive": "test-evidence/stabilization-20261001/operations/mobile-android-client-push-32072fed7addeccfcdf9705e82a6da9b65a9eb5f.zip",
+        "archive_sha256": "be6c4cd7a64983ece6eecd560f038e5b3c431b687990b336d3f2b8ae8831d64f",
+        "archive_bytes": 63371027,
+        "source_hashes_verified": 562,
+        "packaging_hashes_verified": 31,
+        "native_libraries_verified": 6,
+        "native_size_comparisons": 6,
+        "native_growth_percent_range": [
+          11.16653062377928,
+          13.58722725431325
+        ],
+        "linked_apk_size_comparisons": {
+          "arm64-v8a": 10.366777031501284,
+          "x86_64": 10.696777123072998
+        },
+        "same_toolchain_baselines": true,
+        "native_emulator_job_success": true,
+        "emulator_page_size": 16384,
+        "native_entries_alignment_verified": true,
+        "overall_mobile_matrix_passed": false
+      },
+      {
+        "role": "relay",
+        "push": false,
+        "source": "32072fed7addeccfcdf9705e82a6da9b65a9eb5f",
+        "run": 37046033620,
+        "artifact_id": 11245732309,
+        "provider_archive_verified": true,
+        "archive": "test-evidence/stabilization-20261001/operations/mobile-android-relay-base-32072fed7addeccfcdf9705e82a6da9b65a9eb5f.zip",
+        "archive_sha256": "549d03e2d7fe79f9981e7493832580a454ed02c9a1c04b43c37abb296ca74664",
+        "archive_bytes": 66808640,
+        "source_hashes_verified": 562,
+        "packaging_hashes_verified": 31,
+        "native_libraries_verified": 6,
+        "native_size_comparisons": 6,
+        "native_growth_percent_range": [
+          10.074396914205131,
+          12.476028043966325
+        ],
+        "linked_apk_size_comparisons": {
+          "arm64-v8a": 10.012015643680305,
+          "x86_64": 10.372825106392414
+        },
+        "same_toolchain_baselines": true,
+        "native_emulator_job_success": true,
+        "emulator_page_size": 16384,
+        "native_entries_alignment_verified": true,
+        "overall_mobile_matrix_passed": false
+      },
+      {
+        "role": "relay",
+        "push": true,
+        "source": "32072fed7addeccfcdf9705e82a6da9b65a9eb5f",
+        "run": 37047048192,
+        "artifact_id": 11246870918,
+        "provider_archive_verified": true,
+        "archive": "test-evidence/stabilization-20261001/operations/mobile-android-relay-push-32072fed7addeccfcdf9705e82a6da9b65a9eb5f.zip",
+        "archive_sha256": "192fc51995a72e2f82f4badecf4dc06c36f0ff9631b896d13d246bf7fec71b23",
+        "archive_bytes": 68186759,
+        "source_hashes_verified": 562,
+        "packaging_hashes_verified": 31,
+        "native_libraries_verified": 6,
+        "native_size_comparisons": 6,
+        "native_growth_percent_range": [
+          10.627648640657771,
+          12.95910596372607
+        ],
+        "linked_apk_size_comparisons": {
+          "arm64-v8a": 9.91959262453288,
+          "x86_64": 10.325152368664492
+        },
+        "same_toolchain_baselines": true,
+        "native_emulator_job_success": true,
+        "emulator_page_size": 16384,
+        "native_entries_alignment_verified": true,
+        "overall_mobile_matrix_passed": false
+      }
+    ],
     "full_mobile_matrix_qualified": false,
     "sdk_1_0_qualified": false
   }
