@@ -12,10 +12,14 @@ six original provider ZIPs, 426 desktop source hashes per platform, 562 source
 and 31 packaging hashes per Android result, 24 native libraries and the actual
 16 KiB emulator/alignment evidence. All 20 desktop, 24 Android native and eight
 linked APK size comparisons pass the approved 20% feature allowance. The Mac
-desktop and Apple mobile jobs remain pending; an Apple job is measuring native
-packages. SDK 1.0 remains unqualified. See the native policy receipt and retained
-`operations/desktop-8f8fdb3-verified-263.json` and
-`operations/android-sdk-archives-verified-264.json`.
+desktop jobs remain pending. The Apple client/base job passes; its original
+114,926,219-byte provider ZIP, 562 source hashes and nine production libraries
+verify independently. Nine native and two linked application size comparisons
+pass (maximum 11.215% growth), with matching toolchains. The remaining three
+Apple combinations are pending, so SDK 1.0 remains unqualified. See the native
+policy receipt and retained `operations/desktop-8f8fdb3-verified-263.json`,
+`operations/android-sdk-archives-verified-264.json` and
+`operations/apple-sdk-archives-verified-277.json`.
 
 Earlier SDK source `32072fe` also passes all four desktop jobs on Linux,
 Windows, Intel Mac and Apple Silicon. Every original provider ZIP size/digest
