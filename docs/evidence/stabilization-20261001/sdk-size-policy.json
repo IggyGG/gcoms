@@ -535,6 +535,104 @@
     {
       "path": "test-evidence/stabilization-20261001/operations/sdk-mobile-37021726565-logs.zip",
       "sha256": "25726d05caf1ec9016af1cb39c71758c20e72e359d0c70ccc72e1953e0ce0846"
+    },
+    {
+      "path": "test-evidence/stabilization-20261001/operations/qualification-1654677-consumers-audit-159.json",
+      "sha256": "501654047dbf1f26819e8d7ca96790ca2805558ea7435650a641fd28a776c29b"
+    },
+    {
+      "path": "test-evidence/stabilization-20261001/operations/qualification-1654677-consumers-audit-159.log",
+      "sha256": "a523ba205793b725ebbd4a9c2245a7e6b42551591f957a45b5c1c240a6b93170"
+    },
+    {
+      "path": "test-evidence/stabilization-20261001/operations/qualification-consumers-runner-159.log",
+      "sha256": "35ccbf8570be18778bc051e0a41e48ee27db8e85c95c753e2dccba6dfdf96040"
+    },
+    {
+      "path": "test-evidence/stabilization-20261001/operations/qualification-consumer-archives-159/summary.json",
+      "sha256": "02b2be0d47351948f68d51701b21e8ab85e12a22cff419d2250e76bc81f4db87"
+    },
+    {
+      "path": "test-evidence/stabilization-20261001/operations/qualification-released-facade-159/summary.json",
+      "sha256": "a408cc6d8e3d16671c25b1ea53acaa17ccd65362a1f14651d1e4711112fd897e"
+    },
+    {
+      "path": "test-evidence/stabilization-20261001/operations/qualification-consumers-159-complete.json",
+      "sha256": "1b0035be139b40bc06b57c802b6f539cfa0528d26c3520512024afaf2c7fc517"
+    },
+    {
+      "path": "test-evidence/stabilization-20261001/operations/qualification-python312-144-binding.json",
+      "sha256": "7d2f6559856a32a33e20595912da8d5991e5d84547583d25d16536408e672a03"
+    },
+    {
+      "path": "test-evidence/stabilization-20261001/operations/qualification-consumer-npm-155.json",
+      "sha256": "5f0ebfdfc7df36f932cb0817e21a3562efdbb0d09f0d4dd582221d33d585b842"
     }
-  ]
+  ],
+  "linux_remaining_ci_phases": {
+    "source": "1654677b3bac40977b7048ce0fe06c03fe6076e9",
+    "consumer_and_audit_job": "gchat-archive-consumers-159",
+    "passed": true,
+    "source_unchanged": true,
+    "rust_archives": 20,
+    "npm_archives": 2,
+    "released_consumer_graphs": 3,
+    "commands": [
+      {
+        "command": [
+          "python3",
+          "scripts/check-consumers.py",
+          "--offline",
+          "--release",
+          "--consumer-target-dir",
+          "/work/qualification-90d7eac-target",
+          "--output",
+          "/work/qualification-consumer-archives-159"
+        ],
+        "exit_code": 0
+      },
+      {
+        "command": [
+          "python3",
+          "scripts/check-released-facade.py",
+          "--output",
+          "/work/qualification-released-facade-159"
+        ],
+        "exit_code": 0
+      },
+      {
+        "command": [
+          "cargo",
+          "deny",
+          "--offline",
+          "check"
+        ],
+        "exit_code": 0
+      }
+    ],
+    "registry_capture_sha256": "738d29caa683fa91058e2056cb72cf739cbc6c06b67663035213cb9a97439542",
+    "npm_registry_capture_sha256": "efabf93fdc2aec1b7e59e919da89bd5ad0f40b7c64d324831d59e091f8fb6517",
+    "advisory_revision": "117edb3bed98e9be112f277b7615eea3252e7c43",
+    "runner_python": "3.12.15 (main, Oct  1 2026, 21:50:06) [GCC 12.2.0]",
+    "seconds": 126.30386471748352,
+    "advisories_bans_licenses_sources": "pass",
+    "full_ci_original_failure_preserved": true,
+    "single_full_ci_run_claimed": false,
+    "earlier_source_bound_phases": [
+      "117: complete workspace, Rustdoc, strict Clippy",
+      "129: JavaScript checks/tests/build, vectors, generated files, minimal SDK/core"
+    ],
+    "earlier_129_report_archive_field_erratum": {
+      "original_field_incorrect": true,
+      "correct_original_archive_sha256": "17e8b36fe1f7e68e12246c3adbbcea43646dca11399a2ffff839f4274052d380",
+      "original_report_unmodified": true
+    },
+    "original_runner_failures_retained": [
+      117,
+      129,
+      135,
+      144,
+      152
+    ]
+  }
 }

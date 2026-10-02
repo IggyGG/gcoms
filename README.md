@@ -29,10 +29,12 @@ see the [native policy receipt](docs/evidence/stabilization-20261001/sdk-size-po
 The complete Linux workspace, Rustdoc and strict Clippy also pass on this source.
 The original full CI run then fails at npm because the isolated lab has no upstream
 DNS. Verified locked dependencies unblock JavaScript checks (eight tests), build,
-vectors, generated files and minimal SDK/core graphs. Archive consumer packaging
-still needs a normal registry cache, and dependency auditing remains open. These
-partial runner results are retained; they do not qualify full release activation
-or declare SDK 1.0. Mobile SDK combinations, installed acceptance, fleet activation
+vectors, generated files and minimal SDK/core graphs. A pinned Python 3.12 runner
+with verified official registry caches now passes all 20 Rust/two npm archives,
+three unchanged released-consumer feature graphs and dependency auditing in
+126.30 seconds, with the original checkout unchanged. All stages are retained
+separately; the original full CI failure is not relabelled as a single passing run.
+These checks do not qualify full release activation or declare SDK 1.0. Mobile SDK combinations, installed acceptance, fleet activation
 and a subsequent unattended release remain required.
 
 Native Intel run `36881757477` still misses the original contact reopen deadline
