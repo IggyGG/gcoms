@@ -1,5 +1,21 @@
 ## Stable SDK release preparation (2026-10-01)
 
+Source `1654677b3bac40977b7048ce0fe06c03fe6076e9` passes native run
+`37020912213` on Linux, Windows, Intel Mac and Apple Silicon. All four backend
+stages and 40 same-toolchain size comparisons pass under the approved 20% feature
+allowance. Each source is clean; every one of the 426 reported file hashes on each
+platform matches its committed Git blob. Full provider archives are verified and
+retained. The 5% SDK 1.0 rule, original failed runs and baselines are unchanged;
+see the [native policy receipt](docs/evidence/stabilization-20261001/sdk-size-policy.json).
+The complete Linux workspace, Rustdoc and strict Clippy also pass on this source.
+The original full CI run then fails at npm because the isolated lab has no upstream
+DNS. Verified locked dependencies unblock JavaScript checks (eight tests), build,
+vectors, generated files and minimal SDK/core graphs. Archive consumer packaging
+still needs a normal registry cache, and dependency auditing remains open. These
+partial runner results are retained; they do not qualify full release activation
+or declare SDK 1.0. Mobile SDK combinations, installed acceptance, fleet activation
+and a subsequent unattended release remain required.
+
 Run the FIFO request regression in separate original/corrected build targets.
 The seven-second transport drain must reproduce duplicate block retries with four
 requests and verify the file and authenticated completion with two requests and

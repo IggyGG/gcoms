@@ -36,5 +36,6 @@ download complete; normal inventory, per-piece and final integrity checks remain
 Contact exchange keeps one piece and two block requests in flight, leaving space
 in the durable transport's four-ciphertext window for control and receipts. Local
 durable acceptance can precede network admission; the smaller window prevents
-slow FIFO delivery from amplifying duplicate retries.
-cryptographic checks and authenticated file completion remain unchanged.
+slow FIFO delivery from amplifying duplicate retries. General exchange keeps its
+eight-block window. Request timers, cryptographic checks and authenticated file
+completion remain unchanged.
