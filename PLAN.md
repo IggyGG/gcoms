@@ -1,3 +1,11 @@
+Current release, 2026-10-03: SDK 0.1.98 is published with all 12 original desktop/mobile qualification archives. Its exact build inputs match qualified source 32072fe; original archive names and source labels are retained. The newer SDK 0.1.102 pointer remains available. All 17 infrastructure targets and four GChat desktop platforms are deployed or published. GChat mobile installed acceptance and SDK 1.0 remain incomplete; the 64-member limit, covered receipts and version-bound 20%/5% size policy are unchanged.
+
+See the [immutable SDK index](https://gchat.boo/updates/sdk/f8ae216bf9016d59f17a4dad836806b5a31fbe3c4b57d35dba12d4f3f2f64852/index.json) and [current launch evidence](https://github.com/IggyGG/gchat/blob/main/docs/evidence/stabilization-20261001/launch-simplification.json). Routine releases follow an authoritative Forgejo main push automatically.
+
+## Retained earlier checkpoints
+
+The current release status above supersedes earlier pending matrix observations. Original outcomes and evidence remain below.
+
 The shared native evidence policy now records the three existing explicit
 64-member MLS/durable-client capacity tests under the mandatory stress.mls64
 gate. Native package qualification continues to reject unknown or cross-project
