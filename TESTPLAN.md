@@ -1,3 +1,17 @@
+The shared native evidence policy now records the three existing explicit
+64-member MLS/durable-client capacity tests under the mandatory stress.mls64
+gate. Native package qualification continues to reject unknown or cross-project
+exclusions; a missing capacity receipt still blocks release. All 22 policy
+controls pass in both repositories. No application API or runtime changed.
+
+The exact release SDK source 8f8fdb3 passes all four original base mobile jobs.
+The second Apple archive (relay/base, 122,121,384 bytes) independently verifies
+its provider digest, 562 source hashes, nine production-library hashes and nine
+native plus two linked size comparisons. Native growth is 8.07–10.69%, within
+the approved 20% feature allowance. Both Apple base combinations are verified;
+the push Apple jobs and Mac desktop SDK jobs remain pending. SDK 1.0 remains
+unqualified and the post-1.0 5% limit is unchanged.
+
 The original protected Linux job for release 0.1.98 passes both full native
 GChat/GComs CI commands on exact sources `52d28d7`/`8f8fdb3`. Its original provider
 ZIP, both source bindings, derived Rust/npm inputs and all linked logs verify
@@ -15,8 +29,8 @@ linked APK size comparisons pass the approved 20% feature allowance. The Mac
 desktop jobs remain pending. The Apple client/base job passes; its original
 114,926,219-byte provider ZIP, 562 source hashes and nine production libraries
 verify independently. Nine native and two linked application size comparisons
-pass (maximum 11.215% growth), with matching toolchains. The remaining three
-Apple combinations are pending, so SDK 1.0 remains unqualified. See the native
+pass (maximum 11.215% growth), with matching toolchains. The remaining two
+Apple push combinations are pending, so SDK 1.0 remains unqualified. See the native
 policy receipt and retained `operations/desktop-8f8fdb3-verified-263.json`,
 `operations/android-sdk-archives-verified-264.json` and
 `operations/apple-sdk-archives-verified-277.json`.

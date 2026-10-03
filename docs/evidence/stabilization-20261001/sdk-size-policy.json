@@ -1437,7 +1437,7 @@
     "sdk_1_0_qualified": false,
     "apple_mobile_original_provider_archives": {
       "source": "8f8fdb36bc898e6af3fe00dbf044da6f837fb640",
-      "apple_role_push_combinations": 1,
+      "apple_role_push_combinations": 2,
       "all_provider_archives_verified": true,
       "results": [
         {
@@ -1466,12 +1466,41 @@
           "same_toolchain_baselines": true,
           "native_test_job_success": true,
           "overall_mobile_matrix_passed": false
+        },
+        {
+          "role": "relay",
+          "push": false,
+          "source": "8f8fdb36bc898e6af3fe00dbf044da6f837fb640",
+          "run": 37065130853,
+          "artifact_id": 11256809689,
+          "provider_archive_verified": true,
+          "archive": "test-evidence/stabilization-20261001/operations/sdk8-mobile-apple-relay-base-8f8fdb36bc898e6af3fe00dbf044da6f837fb640.zip",
+          "archive_sha256": "a1542687294a9630d5cc25d121494becae4f2a42a9500cf3ab107f2c1aae8c42",
+          "archive_bytes": 122121384,
+          "source_hashes_verified": 562,
+          "native_libraries_verified": 9,
+          "fixture_summary_source_verified": true,
+          "fixture_static_libraries_separately_archived": false,
+          "native_size_comparisons": 9,
+          "native_growth_percent_range": [
+            8.073099186160615,
+            10.691852493677168
+          ],
+          "linked_application_size_comparisons": {
+            "installed_bundle_bytes": 10.320415692921415,
+            "unsigned_device_bundle_bytes": 10.272627237737897
+          },
+          "same_toolchain_baselines": true,
+          "native_test_job_success": true,
+          "overall_mobile_matrix_passed": false
         }
       ],
       "original_android_preflight_failures_retained": true,
       "full_mobile_matrix_qualified": false,
       "sdk_1_0_qualified": false
-    }
+    },
+    "original_base_mobile_matrix_passed": true,
+    "apple_combinations_verified": 2
   },
   "release_source_full_linux_ci": {
     "scope": "Both full native workspace CI gates in original protected Linux qualification job",

@@ -180,6 +180,33 @@ class EvidenceTests(unittest.TestCase):
         self.save(other)
         self.assertTrue(any("reviewed qualification policy" in error for error in self.errors()))
 
+    def test_existing_64_member_exclusions_keep_the_separate_capacity_gate(self):
+        names = (
+            "sixty_four_real_members_and_ten_concurrent_senders",
+            "hosted::tests::capacity::sixty_four_durable_hosted_clients_ten_senders_offline_and_churn",
+            "hosted::tests::capacity::sixty_four_concurrent_durable_hosted_clients_ten_senders_offline_and_churn",
+        )
+        check = "native.gcoms.windows-x86_64"
+        report = self.reports[check]
+        report["tests"].update(ignored=3, excluded=[
+            {"name": name, "reason": "explicit separate release-mode 64-member capacity campaign"}
+            for name in names])
+        self.save(check)
+        self.assertEqual(self.errors(), [])
+        report["tests"]["excluded"][0]["name"] += "_unexpected"
+        self.save(check)
+        self.assertTrue(any("reviewed qualification policy" in error for error in self.errors()))
+        report["tests"]["excluded"][0]["name"] = names[0]
+        self.save(check)
+        capacity = self.candidate["checks"].pop("stress.mls64")
+        self.assertTrue(any("stress.mls64: no report" in error for error in self.errors()))
+        self.candidate["checks"]["stress.mls64"] = capacity
+        other = "native.gchat.windows-x86_64"
+        self.reports[other]["tests"].update(ignored=1, excluded=[
+            {"name": names[0], "reason": "not a GChat exclusion"}])
+        self.save(other)
+        self.assertTrue(any("reviewed qualification policy" in error for error in self.errors()))
+
     def test_changed_log_and_artifact_bytes_block_release(self):
         (self.base / "native.gcoms.linux-x86_64.log").write_text("altered")
         self.assertTrue(any("hash mismatch" in error for error in self.errors()))

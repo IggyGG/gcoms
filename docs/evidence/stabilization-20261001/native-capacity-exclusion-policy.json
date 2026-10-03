@@ -1,0 +1,18 @@
+{
+  "scope": "Shared native evidence policy only; capacity and installed acceptance remain separate gates",
+  "policy_sha256": "80fb52a4571c7fbdfa5a5893b177efba9f31ef128627ebac732d2e1351b8dea1",
+  "registered_existing_exclusions": [
+    "sixty_four_real_members_and_ten_concurrent_senders",
+    "hosted::tests::capacity::sixty_four_durable_hosted_clients_ten_senders_offline_and_churn",
+    "hosted::tests::capacity::sixty_four_concurrent_durable_hosted_clients_ten_senders_offline_and_churn"
+  ],
+  "required_capacity_gate": "stress.mls64",
+  "unreviewed_exclusions_refused": true,
+  "cross_project_exclusions_refused": true,
+  "missing_capacity_report_refused": true,
+  "focused_controls": 22,
+  "api_or_runtime_changed": false,
+  "sdk_1_0_qualified": false,
+  "companion_original_desktop_archive_verification": "gchat/docs/evidence/stabilization-20261001/native-desktop-artifacts-verified.json",
+  "L0_source_paths": 980
+}

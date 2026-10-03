@@ -44,6 +44,9 @@ RUST_CRATES = {
 EXCLUSIONS = {
     "gib_import_resume_export_is_streaming": "stress.files-streaming",
     "sixty_four_member_channel": "stress.mls64",
+    "sixty_four_real_members_and_ten_concurrent_senders": "stress.mls64",
+    "hosted::tests::capacity::sixty_four_durable_hosted_clients_ten_senders_offline_and_churn": "stress.mls64",
+    "hosted::tests::capacity::sixty_four_concurrent_durable_hosted_clients_ten_senders_offline_and_churn": "stress.mls64",
     "connectivity::privilege_tests::real_denied_low_port_falls_back_without_privileges": "stress.low-port",
     "native_c_handshake_accepts_only_the_pinned_relay_and_h2": "private external TLS probe",
     "native_c_deadline_bounds_stalled_and_trickling_peers": "private external TLS probe",
