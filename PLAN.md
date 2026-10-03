@@ -5,12 +5,12 @@ exclusions; a missing capacity receipt still blocks release. All 22 policy
 controls pass in both repositories. No application API or runtime changed.
 
 The exact release SDK source 8f8fdb3 passes all four original base mobile jobs.
-The second Apple archive (relay/base, 122,121,384 bytes) independently verifies
-its provider digest, 562 source hashes, nine production-library hashes and nine
-native plus two linked size comparisons. Native growth is 8.07–10.69%, within
-the approved 20% feature allowance. Both Apple base combinations are verified;
-the push Apple jobs and Mac desktop SDK jobs remain pending. SDK 1.0 remains
-unqualified and the post-1.0 5% limit is unchanged.
+Three Apple combinations (client/base, relay/base and relay/push) independently
+verify their provider digests, 562 source hashes and nine production libraries
+each. Their native and linked size comparisons pass the approved 20% feature
+allowance. Apple client/push and both Mac desktop SDK jobs remain pending.
+SDK 1.0 remains unqualified and the post-1.0 5% limit is unchanged. See
+`docs/evidence/stabilization-20261001/sdk-apple-8f8fdb3.json`.
 
 The original protected Linux job for release 0.1.98 passes both full native
 GChat/GComs CI commands on exact sources `52d28d7`/`8f8fdb3`. Its original provider

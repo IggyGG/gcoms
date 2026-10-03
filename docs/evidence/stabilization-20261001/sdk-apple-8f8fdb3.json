@@ -1,0 +1,85 @@
+{
+  "schema": 1,
+  "source": "8f8fdb36bc898e6af3fe00dbf044da6f837fb640",
+  "combinations": 3,
+  "raw_report_sha256": "f87a5ba57f3bbe43d9ae1975b06bfc03b437a968ee297fab9e5374db94a7dcd5",
+  "all_retained_provider_archives_verified": true,
+  "results": [
+    {
+      "role": "client",
+      "push": false,
+      "source": "8f8fdb36bc898e6af3fe00dbf044da6f837fb640",
+      "run": 37065130853,
+      "artifact_id": 11256340564,
+      "provider_archive_verified": true,
+      "archive_sha256": "c0cc9284c7899cffbf87b90d6ef328e89e3269f9b9678fe365de93f2e3817c79",
+      "archive_bytes": 114926219,
+      "source_hashes_verified": 562,
+      "native_libraries_verified": 9,
+      "native_size_comparisons": 9,
+      "native_growth_percent_range": [
+        8.406776921686676,
+        11.21471056077159
+      ],
+      "linked_application_size_comparisons": {
+        "installed_bundle_bytes": 10.848352201529687,
+        "unsigned_device_bundle_bytes": 11.08362196932211
+      },
+      "same_toolchain_baselines": true,
+      "native_test_job_success": true,
+      "overall_mobile_matrix_passed": false
+    },
+    {
+      "role": "relay",
+      "push": false,
+      "source": "8f8fdb36bc898e6af3fe00dbf044da6f837fb640",
+      "run": 37065130853,
+      "artifact_id": 11256809689,
+      "provider_archive_verified": true,
+      "archive_sha256": "a1542687294a9630d5cc25d121494becae4f2a42a9500cf3ab107f2c1aae8c42",
+      "archive_bytes": 122121384,
+      "source_hashes_verified": 562,
+      "native_libraries_verified": 9,
+      "native_size_comparisons": 9,
+      "native_growth_percent_range": [
+        8.073099186160615,
+        10.691852493677168
+      ],
+      "linked_application_size_comparisons": {
+        "installed_bundle_bytes": 10.320415692921415,
+        "unsigned_device_bundle_bytes": 10.272627237737897
+      },
+      "same_toolchain_baselines": true,
+      "native_test_job_success": true,
+      "overall_mobile_matrix_passed": false
+    },
+    {
+      "role": "relay",
+      "push": true,
+      "source": "8f8fdb36bc898e6af3fe00dbf044da6f837fb640",
+      "run": 37065137442,
+      "artifact_id": 11258672858,
+      "provider_archive_verified": true,
+      "archive_sha256": "bec8e6a47ea5046f37f547d38d57e8f89d10fff9045445111351a005a8a59ae4",
+      "archive_bytes": 123110841,
+      "source_hashes_verified": 562,
+      "native_libraries_verified": 9,
+      "native_size_comparisons": 9,
+      "native_growth_percent_range": [
+        8.476327410906848,
+        11.102559608343675
+      ],
+      "linked_application_size_comparisons": {
+        "installed_bundle_bytes": 10.661391317155843,
+        "unsigned_device_bundle_bytes": 10.612091176492044
+      },
+      "same_toolchain_baselines": true,
+      "native_test_job_success": true,
+      "overall_mobile_matrix_passed": false
+    }
+  ],
+  "full_sdk_matrix_complete": false,
+  "sdk_1_0_qualified": false,
+  "feature_growth_limit_percent": 20,
+  "after_1_0_growth_limit_percent": 5
+}
