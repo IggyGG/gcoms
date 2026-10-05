@@ -51,8 +51,8 @@ const ADMIN_INTERVAL: Duration = Duration::from_millis(250);
 const MAINTENANCE_MIN_MS: u64 = 2250;
 const MAINTENANCE_MAX_MS: u64 = 3750;
 const LANE_CAPACITY: usize = 1024;
-/// Extra jobs Administration/ChannelControl producers may enqueue beyond a
-/// full data queue, so recovery and control work always have room.
+/// Extra queue positions for Administration/ChannelControl producers beyond
+/// a full data queue. The shared node job and byte budgets still apply.
 const CONTROL_HEADROOM: usize = 64;
 const CLASS_COUNT: usize = 5;
 const LANE_SWEEP_INTERVAL: Duration = Duration::from_secs(30);
@@ -2211,6 +2211,41 @@ mod tests {
             SemanticJob::Forward { push, .. } => push.as_cell().payload[42],
             _ => unreachable!(),
         }
+    }
+
+    #[test]
+    fn saturated_data_leaves_bounded_control_headroom() {
+        let mut queue = FairQueue::new(3);
+        for class in [
+            ProducerClass::Direct,
+            ProducerClass::ChannelData,
+            ProducerClass::Forward,
+        ] {
+            let (_, job) = queued(1, class);
+            assert!(queue.push(class, job));
+        }
+        for index in 0..CONTROL_HEADROOM {
+            let class = if index % 2 == 0 {
+                ProducerClass::Administration
+            } else {
+                ProducerClass::ChannelControl
+            };
+            let (_, job) = queued(2, class);
+            assert!(queue.push(class, job));
+            let (class, job) = queued(3, ProducerClass::Forward);
+            assert!(!queue.push(class, job));
+        }
+        for class in [ProducerClass::Administration, ProducerClass::ChannelControl] {
+            let (_, job) = queued(4, class);
+            assert!(!queue.push(class, job));
+        }
+        assert_eq!(queue.len, 3 + CONTROL_HEADROOM);
+        let mut count = 0;
+        while queue.pop().is_some() {
+            count += 1;
+        }
+        assert_eq!(count, 3 + CONTROL_HEADROOM);
+        assert_eq!(queue.len, 0);
     }
 
     #[test]

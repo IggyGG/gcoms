@@ -5,7 +5,7 @@ use super::*;
 use crate::scheduler::EnqueueError;
 use std::sync::{MutexGuard, TryLockError};
 
-// With two production cover allowances these leave at least 2 MiB / 1920
+// With two production cover allowances these leave 44 MiB / 1024
 // dispatch slots. Ordinary producers also leave 1 MiB / 512 retained slots for
 // receiving, transport credit and application acknowledgements.
 const RETAINED_LIMIT: PayloadUsage = PayloadUsage {
