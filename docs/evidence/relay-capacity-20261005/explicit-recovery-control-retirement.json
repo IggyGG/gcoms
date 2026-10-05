@@ -1,0 +1,176 @@
+{
+  "schema": 1,
+  "date": "2026-10-05",
+  "subject": "Explicit membership recovery retires obsolete control records for selected revoked leaves",
+  "baseline_revision": "e7dd17ccea03db17715b0a8f5e7fc087be49195e",
+  "patched_source_revision": "45770a7a52b9d95aeeb371aae1dbb239177345cd",
+  "baseline": {
+    "test": "owner_recovery_retires_full_control_backlog_before_fresh_enrollment",
+    "result": "expected failure reproduced",
+    "error": "channel bootstrap queue is full",
+    "exit_code": 101,
+    "seconds": 28.2231183599215,
+    "log": "/run/media/user/SSD-2/retained/gchat-recovery-gate-20261005/baseline.log",
+    "log_sha256": "62e875a3aa23675831d0480ce6b7848904af95447b6586bacc5614a109162863"
+  },
+  "validation_status": "18 focused tests passed; baseline causal failure retained",
+  "source_sha256": {
+    "crates/node/src/node/membership_recovery.rs": "9565bf039f6a054e5ae1578cf4a2ca5cd5b32da7002aa01113a8577a1337b1e1",
+    "crates/node/src/node/channel_maintenance.rs": "e4a79ae2fc627a35747893028a0f5ace47789580390ee0f4877404ba4f0c945e"
+  },
+  "scope": {
+    "public_api_changed": false,
+    "capacity_limits_changed": false,
+    "ordinary_message_acknowledgments_changed": false,
+    "live_membership_changed": false
+  },
+  "preserved": [
+    "exact survivor controls",
+    "ordinary application ciphertext and expected/acknowledged recipient sets",
+    "normal kick removal notices",
+    "already admitted receipt accounting",
+    "durable rollback and MLS survivor ordering"
+  ],
+  "required_checks": [
+    "node::membership_recovery::tests",
+    "node::channels::maintenance::tests"
+  ],
+  "l0": {
+    "format": "passed",
+    "source_paths": 1001,
+    "independent_cell_fixtures": 8,
+    "research_hashes": 7,
+    "receipt": {
+      "path": "/run/media/user/SSD-2/retained/gchat-recovery-gate-20261005/l0-final.json",
+      "sha256": "8e533e6429a5b8838257dec8871176a197edc9b2f5e28a4b8c86ba76ecba9671"
+    }
+  },
+  "independent_review": "passed; exact-key retirement and failed/successful old receipt settlement reviewed",
+  "prior_invitation_and_pressure_validation": {
+    "sources": {
+      "gchat_base": "150915e78324b166ef169db87ad0ca9287f9b1c2",
+      "gchat_files": {
+        "crates/core/src/runtime.rs": "a381c008f1476d2dcf6d1581b52afb3241346c1b2424524ffd1105a09689b76e",
+        "crates/core/src/chat_service/host.rs": "f75dbaf475b8e5ac646ec540a14b8e6d72e36f3415ca1b642d3b436df537a99c"
+      },
+      "gcoms_final": "39e2bf83e4cc972e8791fecaf657aac29bb80667",
+      "independent_controls_gcoms_revision": "83622d750c0fe7fcb5288a3c5997394791cc1da3"
+    },
+    "focused_tests_passed": 6,
+    "results": [
+      {
+        "test": "node::persist::invitations_tests::reusable_invitation_management_is_durable_and_storage_failure_rolls_back",
+        "passed": true,
+        "test_seconds": 0.96,
+        "evidence": {
+          "path": "/run/media/user/SSD-2/retained/gchat-scope-final-20261005/attempt02/remaining-0.log",
+          "sha256": "8dd95adfb18058220abf39c89664f9f18ecd2c1462ec51652a9cedf43a9a5a90"
+        }
+      },
+      {
+        "test": "node::commands::machine_migration_tests::completion_chain_orders_successors_and_releases_on_cancellation",
+        "passed": true,
+        "test_seconds": 0.03,
+        "evidence": {
+          "path": "/run/media/user/SSD-2/retained/gchat-scope-final-20261005/attempt02/remaining-1.log",
+          "sha256": "540cd8244adaec9aa2b35101f399623210fa110515787a43b73521ce27bbc0a5"
+        }
+      },
+      {
+        "test": "node::persist::tests::gc2_runtime_restore_reserves_before_publishing_and_reclaims_on_drop",
+        "passed": true,
+        "test_seconds": 0.92,
+        "evidence": {
+          "path": "/run/media/user/SSD-2/retained/gchat-scope-final-20261005/attempt02/remaining-2.log",
+          "sha256": "7e7ca225515f86c61dd1a21d57bb5c46eb1daf74a8c599549e87e90dcc5b40c2"
+        }
+      },
+      {
+        "test": "node::persist::tests::gc2_runtime_deferred_materialization_waits_for_budget_without_pausing_node",
+        "passed": true,
+        "test_seconds": 0.75,
+        "evidence": {
+          "path": "/run/media/user/SSD-2/retained/gchat-scope-final-20261005/attempt02/remaining-3.log",
+          "sha256": "06f28d197d27e867c1b9f7052730171e6c6a5500b9945b74970dd5a7034f8334"
+        }
+      },
+      {
+        "test": "chat_service::host::retained_scope_tests::embedded_desktop_host_keeps_deferred_relay_sharing_off_after_reopen",
+        "passed": true,
+        "test_seconds": 42.87,
+        "evidence": {
+          "path": "/run/media/user/SSD-2/retained/gchat-scope-final-20261005/attempt02/remaining-4.log",
+          "sha256": "3b7aa9b632c70a24baf40a6a56788f0a80ccf603e51a0bc362458973e6d3ab5d"
+        }
+      },
+      {
+        "test": "node::commands::channel_application_tests::reusable_invitation_does_not_wait_for_prior_channel_delivery",
+        "passed": true,
+        "test_seconds": 0.83,
+        "evidence": {
+          "path": "/run/media/user/SSD-2/retained/gchat-scope-final-20261005/attempt02/invitation-final.log",
+          "sha256": "ac73c5d17b1f83338cb3b32e7f3b7b2dee7ac628a8002ea36986f50add581126"
+        }
+      }
+    ],
+    "note": "Retained earlier scope results; the final invitation fixture changed after the four independent node controls and paired GChat control passed. These are not new current-source gate runs."
+  },
+  "codematch": "unreachable",
+  "tests": [
+    {
+      "group": "node::membership_recovery::tests",
+      "command": [
+        "cargo",
+        "test",
+        "--offline",
+        "--locked",
+        "-p",
+        "gcoms-node",
+        "--all-features",
+        "--lib",
+        "node::membership_recovery::tests",
+        "--",
+        "--test-threads=1",
+        "--nocapture"
+      ],
+      "returncode": 0,
+      "seconds": 31.07544286106713,
+      "log": "/run/media/user/SSD-2/retained/gchat-recovery-gate-20261005/membership_recovery-patched2.log",
+      "log_sha256": "a87f5d0695bcb7abdd0068f61229d7653bb3117caa5a7617c07e823f5fd0d597",
+      "passed_tests": 8
+    },
+    {
+      "group": "node::channels::maintenance::tests",
+      "command": [
+        "cargo",
+        "test",
+        "--offline",
+        "--locked",
+        "-p",
+        "gcoms-node",
+        "--all-features",
+        "--lib",
+        "node::channels::maintenance::tests",
+        "--",
+        "--test-threads=1",
+        "--nocapture"
+      ],
+      "returncode": 0,
+      "ran_tests": true,
+      "seconds": 3.2707907089497894,
+      "log": "/run/media/user/SSD-2/retained/gchat-recovery-gate-20261005/maintenance-correct-filter.log",
+      "log_sha256": "34b3c1c1a2efabafb0896157abf705024747a9527958d9f0a5e778bc773c56be",
+      "passed_tests": 10
+    }
+  ],
+  "total_passed": 18,
+  "passed": true,
+  "final_receipt": {
+    "path": "/run/media/user/SSD-2/retained/gchat-recovery-gate-20261005/final-validation.json",
+    "sha256": "d2fbefbec923e5f74f75b5fe8b9a8ae12d839f9b5e81812c421321563f1db8af"
+  },
+  "nonqualification": [
+    "39259d2 test-only compile error retained in patched-report.json",
+    "Initial node::channel_maintenance::tests filter matched zero; corrected module alias ran10 tests"
+  ]
+}

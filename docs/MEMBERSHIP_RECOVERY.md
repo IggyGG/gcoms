@@ -19,7 +19,9 @@ unconfirmed message blocks the change. Surviving members still owe an authentica
 ACK for the new commit. No elapsed-time rule removes members automatically.
 
 The new group state, retained membership outbox, directory, and revocation records
-commit durably before success; a failed checkpoint restores the original state.
+commit durably before success. Recovery retires existing control records addressed
+to the explicitly selected leaves and preserves survivor controls. A failed
+checkpoint restores the original state, including the exact control journal.
 A stale preview or concurrent admission is rejected. Repeating a completed removal
 is inert, including after reopen. The archive removal-history bound is enforced
 before writing a state that could not reopen.
@@ -27,7 +29,9 @@ before writing a state that could not reopen.
 Old message IDs, ciphertext, expected recipients and ACK sets remain intact.
 Revocation never counts as delivery. Unadmitted message retries to revoked leaves
 stop; already admitted work can finish with its original accounting. Ordinary kick
-control notices still transmit. Existing queue/byte bounds remain; recovery does
+control notices still transmit. Staged controls stop unadmitted fragments only when
+their exact retained record has been retired; admitted receipts cannot recreate it.
+Existing queue/byte bounds remain; recovery does
 not clear a full message journal or promise delivery of earlier messages.
 
 A revoked leaf cannot replay a cached admission Welcome, including through a
