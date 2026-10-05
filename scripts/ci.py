@@ -12,6 +12,10 @@ def run(args):
     subprocess.run(args,cwd=root,check=True)
 run([sys.executable,'scripts/check-source.py'])
 run([sys.executable,'scripts/check-research-import.py'])
+# Resolve every independent consumer before the expensive native suite. Their
+# locks are separate from the workspace lock and must stay current as features grow.
+for manifest in ('examples/rust-integration/Cargo.toml', 'mobile/native/Cargo.toml', 'fuzz/Cargo.toml'):
+    run(['cargo','tree','--locked','--manifest-path',manifest,'--depth','0'])
 run([sys.executable,'-m','unittest','discover','-s','scripts/tests','-p','*_test.py'])
 run(['cargo','fmt','--all','--','--check'])
 with disposable_mac_ports():

@@ -1,0 +1,30 @@
+{
+  "schema": 1,
+  "at": "2026-10-05T16:41:38.679659+00:00",
+  "base_commit": "a12af6b335ccabd7adc48da1116730776319d1c5",
+  "original_failure_run": 37341731674,
+  "changes": [
+    "Refresh separate mobile/native lock for the already-pinned signal-hook-registry 1.4.8",
+    "Resolve all isolated locks before native CI tests to fail stale inputs early"
+  ],
+  "passed": true,
+  "validation": {
+    "locked_graph_checks": 20,
+    "mobile_target_role_push_fixture_combinations": 16,
+    "tracked_lockfiles": [
+      "Cargo.lock",
+      "examples/rust-integration/Cargo.lock",
+      "fuzz/Cargo.lock",
+      "mobile/native/Cargo.lock"
+    ],
+    "all_inputs_unchanged": true,
+    "compilation_performed": false
+  },
+  "source_sha256": {
+    "mobile/native/Cargo.lock": "7ec04defe51d887b26c524b8abe8d0db285b1a77e6c35f861642c1078e361c30",
+    "scripts/ci.py": "c794ed4dadc0c43ca931e02c299d2f2b4c3bb1879a4f8d940ef72f72a3dba3d4"
+  },
+  "retained_evidence": "/run/media/user/SSD-2/retained/gcoms-release-portability-20261005/all-locked-graphs.json",
+  "evidence_sha256": "09b0332a2ce4d8f25efb1c2efa68c2cbbf79579e34c2f73c83e39f8609170351",
+  "release_qualified": false
+}
