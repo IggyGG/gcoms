@@ -1,0 +1,153 @@
+{
+  "api_or_wire_changes": false,
+  "bounds": {
+    "aggregate_queued_payload_bytes": 268435456,
+    "control_headroom_cells": 64,
+    "data_lane_cells": 1024,
+    "default_lease_bytes": 16777216,
+    "default_lease_cells": 1024,
+    "legacy_scheduler_lanes": 512,
+    "maximum_queues": 1024,
+    "scheduler_combined_bytes": 67108864,
+    "scheduler_jobs": 4096,
+    "subscription_replay_nonces_per_queue": 4096
+  },
+  "bounds_notes": [
+    "Interactive and bulk GC/2 queues retain independent authenticated FIFO order and shared lease limits.",
+    "Scheduler bytes are shared across endpoint and transit, not allocated independently to each.",
+    "Per-queue control headroom remains subject to global byte and job limits.",
+    "Replay bookkeeping is bounded separately from queued payload bytes.",
+    "Previously negotiated leases retain their limits until normal provisioning or renewal."
+  ],
+  "codematch": "unreachable",
+  "commands": [
+    {
+      "argv": [
+        "cargo",
+        "test",
+        "--locked",
+        "--offline",
+        "-p",
+        "gcoms-node",
+        "--all-features",
+        "--lib",
+        "scheduler::",
+        "--",
+        "--test-threads=1"
+      ],
+      "exit_code": 0,
+      "log_sha256": "1979605969a8f216e5926ed9824836c334eb68edf697ed94bcd91c8478ab852a",
+      "seconds": 108.533217394026
+    },
+    {
+      "argv": [
+        "cargo",
+        "test",
+        "--locked",
+        "--offline",
+        "-p",
+        "gcoms-node",
+        "--all-features",
+        "--lib",
+        "queues::",
+        "--",
+        "--test-threads=1"
+      ],
+      "exit_code": 0,
+      "log_sha256": "a1d468769c908488fb07d53d5eeecef8dcadedb5debe36627abe7365bbb70547",
+      "seconds": 1.6674281258601695
+    },
+    {
+      "argv": [
+        "cargo",
+        "test",
+        "--locked",
+        "--offline",
+        "-p",
+        "gcoms-node",
+        "--all-features",
+        "--lib",
+        "node::relay_service::",
+        "--",
+        "--test-threads=1"
+      ],
+      "exit_code": 0,
+      "log_sha256": "1c8e4eb692d2e1cf837469dda7c74f1bbff2cf04292bbb95c3d2c441259a14ab",
+      "seconds": 5.575750250834972
+    },
+    {
+      "argv": [
+        "cargo",
+        "clippy",
+        "--locked",
+        "--offline",
+        "-p",
+        "gcoms-node",
+        "--all-features",
+        "--all-targets",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "exit_code": 0,
+      "log_sha256": "53253583c7699530ad46b8a484d2fe25de089c20c32ef1db557de0d527baa9e4",
+      "seconds": 66.65468409680761
+    },
+    {
+      "argv": [
+        "cargo",
+        "test",
+        "--locked",
+        "--offline",
+        "-p",
+        "gcoms-node",
+        "--all-features",
+        "--test",
+        "gc2_queues",
+        "--",
+        "--test-threads=1"
+      ],
+      "exit_code": 0,
+      "log_sha256": "ed13336591bbab3e0555b9fd01f3d14279e2d191b8998cf2bfae4336c6e45f5e",
+      "seconds": 13.34264841512777
+    }
+  ],
+  "date": "2026-10-05",
+  "live_status": {
+    "managed_qualification": false,
+    "manual_binary_sha256": "a54a317de4068715512bcae2ff7512a49070c9f4421e00bb79d57019adbea21a",
+    "provenance": "operator report and parent-agent observations; not established by these local tests",
+    "relay_circuits": 2048,
+    "relay_connections": 4096,
+    "relay_count": 8
+  },
+  "member_limit": 64,
+  "merge_commit": "10a6f897ed4f93f81b1a921a2edc23ebf6e68beb",
+  "port_commit": "5d61b757c91254ad8e7a90a5a11afad235211d97",
+  "remaining": [
+    "source-paired Linux and desktop qualification",
+    "64-client 30-minute relay campaign",
+    "managed fleet deployment and live delivery acceptance"
+  ],
+  "schema": 1,
+  "scope": "Merged deployed capacity port; targeted source validation, not managed release qualification",
+  "source_files_sha256": {
+    "crates/node/src/lease.rs": "c43fe0231799a14e21f2da9a2c80c7be3b5beb59e13b176ec7408cdbe5aacfa3",
+    "crates/node/src/node/relay_service.rs": "2c4653c4450314e62836f5fd375366c43810c97ed7db6558e64b2fb8e018f7d4",
+    "crates/node/src/queues.rs": "b00ee0025f4a137a504044da747c68d2ef67bbcaf26ac74503f305197a1581cf",
+    "crates/node/src/scheduler.rs": "7a6a2a9f26cc6cd4256c20871ee8e63b1fbd5a08108328d926bd06bf36ab8cf3",
+    "crates/node/src/scheduler/budget.rs": "2f236a16aa00606bd12a26f141bcd5caacfb31f164fda5c6c543149cedda8a5d",
+    "crates/node/src/scheduler/retained.rs": "f6a7a0569eeecb1bf7c7d4c5cb271a9d98b51507d8db1a97e09c4e6fbb8db735"
+  },
+  "strict_clippy_passed": true,
+  "test_results": {
+    "failed": 0,
+    "gc2_queues": 10,
+    "ignored": 0,
+    "queues": 28,
+    "relay_service": 18,
+    "scheduler": 39,
+    "total_passed": 95
+  },
+  "validated_commit": "fb8a8b5c4258a9d028bfa2254c92d67812e1efd7"
+}
