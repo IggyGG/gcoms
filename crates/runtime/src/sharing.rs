@@ -226,7 +226,7 @@ pub(crate) async fn eligibility() -> Result<(), &'static str> {
                 return Err("Paused while this device is busy");
             }
         }
-        return Ok(());
+        Ok(())
     }
     #[cfg(target_os = "windows")]
     {
@@ -244,13 +244,14 @@ pub(crate) async fn eligibility() -> Result<(), &'static str> {
                 out.status.success() && String::from_utf8_lossy(&out.stdout).trim() == "eligible"
             })
         }) {
-            return Ok(());
+            Ok(())
+        } else {
+            Err("Waiting for external power, an unmetered network and available resources")
         }
-        return Err("Waiting for external power, an unmetered network and available resources");
     }
     #[cfg(target_os = "macos")]
     {
-        return super::sharing_macos::eligibility().await;
+        super::sharing_macos::eligibility().await
     }
     #[cfg(not(any(target_os = "linux", target_os = "windows", target_os = "macos")))]
     Err("Relay sharing is unavailable on this device")
