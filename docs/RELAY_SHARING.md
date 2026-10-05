@@ -35,8 +35,8 @@ five-hop protected routes, a 5,235,248-byte file, authenticated channel delivery
 and a relay restart over 30 minutes. It measures recipient p95 under five
 seconds, refusal errors below one percent, exact file hashes and process health.
 Shorter `--load-seconds` runs are diagnostic and cannot qualify the release.
-Independent channels prepare their members concurrently, retaining serial MLS
-admission within each channel. Recipient latency is measured at the first
+Channel setup retains the original serial admissions. Recipient latency is
+measured at the first
 successful history observation in its own worker, without waiting for unrelated
 submission RPCs. Commands still require exact identity, authorship, every
 recipient and the sender’s authenticated delivery state.

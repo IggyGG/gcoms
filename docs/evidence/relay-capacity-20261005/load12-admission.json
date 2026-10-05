@@ -1,0 +1,21 @@
+{
+  "schema": 1,
+  "passed": false,
+  "sources": {
+    "gcoms": {
+      "revision": "2f65855a8f6e6442932ef79dbe629d6ec871af84",
+      "snapshot_sha256": "1ebf27fd7da3ec2ac8bc349b811b7e01220e6077cc8aea032fd2d924f3fe0cd4"
+    },
+    "gchat": {
+      "revision": "753b7cc6c7348bc03327c7fe5e992e8b15a00625",
+      "snapshot_sha256": "6eb78703ca6b33db3e7e07bca1a8ace4631cef1d64842761543803b9559d8aa2"
+    }
+  },
+  "clients_started": 64,
+  "channel_members_confirmed": 53,
+  "campaign_started": false,
+  "failure": "RuntimeError: invitation join did not confirm channel membership: error runtime: TP-1 hop unauthenticated: 404",
+  "children_stopped": true,
+  "report_sha256": "14e9d970d8bafb5474c2e920b5cb23a8d6a71b679fedef309b6dd402af9a143b",
+  "disposition": "Concurrent invitation preparation failed before traffic. Restore the original serial channel setup that admitted all 64 members in load11; retain independent delivery observations and every original deadline and release threshold. Authentication failure root cause is not proven."
+}

@@ -46,18 +46,6 @@ def validated_load_delivery(seen, members, sender, sent):
         raise RuntimeError('command identity or authorship changed')
     return message if message.get('delivery') == 'delivered' else None
 
-def admit_load_channels(groups, invitation, join, joined):
-    def populate(group):
-        for client in group['members'][1:]:
-            code=invitation(group['channel'])
-            if join(client,code,f'participant{client}')['conversation'] != group['channel']:
-                raise RuntimeError('participant joined another channel')
-            joined(client,group['index'])
-    # Each MLS channel retains serial admission and its original barriers.
-    # Independent channels can prepare their members concurrently.
-    with concurrent.futures.ThreadPoolExecutor(max_workers=len(groups)) as pool:
-        list(pool.map(populate,groups))
-
 def observe_load_recipient(item, client, history):
     rows=history(client,item['channel'],item['token'])
     observed=time.monotonic()
@@ -763,10 +751,11 @@ class Journey(base.Worker):
         for index,members in enumerate(load_channel_members(self.spec['config']['load_topology'])):
             channel=self.submit(0,f'/create #relay-load{index} operator')['conversation']
             groups.append({'index':index,'channel':channel,'members':members})
-        admit_load_channels(groups,
-            lambda channel:until(lambda:self.remote_invitation(channel),setup,'64-client invitation'),
-            self.join_invitation,
-            lambda client,index:self.event('load_member_joined',client=client,channel_index=index))
+            for client in members[1:]:
+                code=until(lambda:self.remote_invitation(channel),setup,'64-client invitation')
+                if self.join_invitation(client,code,f'participant{client}')['conversation'] != channel:
+                    raise RuntimeError('participant joined another channel')
+                self.event('load_member_joined',client=client,channel_index=index)
         self.expected_subscriptions=4
         for i in clients:
             expected=2+2*len(groups) if i==0 else 4
