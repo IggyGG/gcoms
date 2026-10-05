@@ -94,7 +94,32 @@
     },
     "format": true,
     "source_audit": true,
-    "research_hashes": 7
+    "research_hashes": 7,
+    "strict_clippy_changed_test_target": {
+      "passed": true,
+      "command": [
+        "cargo",
+        "clippy",
+        "--offline",
+        "--locked",
+        "-p",
+        "gcoms-node",
+        "--all-features",
+        "--test",
+        "gc2_queue_service",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "report": {
+        "path": "/run/media/user/SSD-2/retained/gchat-role-fixture-gate-20261005/clippy-report.json",
+        "sha256": "475da40d45b0617bc53420871189c93261e78d22d950d23421967730e39b9448"
+      },
+      "log": {
+        "path": "/run/media/user/SSD-2/retained/gchat-role-fixture-gate-20261005/clippy.log",
+        "sha256": "d140e95e07a7c56335e5d2be779526c5ebbab27d19191139f79c02fdfd5e341d"
+      }
+    }
   },
   "retained_nonqualifying_attempt": {
     "report": {
