@@ -1,0 +1,123 @@
+{
+  "schema": 1,
+  "date": "2026-10-05",
+  "scope": "Source-bound client correction; original relay-load152 failure remains retained and a new full64 campaign is required.",
+  "baseline": {
+    "schema": 1,
+    "revision": "d7e070631ffe4b8fdd6e6ad8525561f6fc3296f7",
+    "command": [
+      "cargo",
+      "test",
+      "--offline",
+      "--locked",
+      "-p",
+      "gcoms-transport",
+      "--test",
+      "tp1",
+      "unknown_path_retirement",
+      "--",
+      "--test-threads=1",
+      "--nocapture"
+    ],
+    "returncode": 101,
+    "seconds": 28.08795911609195,
+    "log": "/run/media/user/SSD-2/retained/gchat-transport-retirement-gate-20261005/baseline.log",
+    "log_sha256": "da27237f1dbc93843bd2fd24682b0c9603a69442c268bcc348e4bac3303d09d8"
+  },
+  "baseline_failures": [
+    "Eight clients retain unknown-path HTTP404 connections and exhaust unchanged pre-authentication source slots; a ninth fresh private request fails: terminal TLS handshake: Connection reset by peer (os error104).",
+    "A404 response leaves one cached connection instead of retiring it."
+  ],
+  "change": {
+    "revision": "d221cb19a64f367deefce56718bd8389ea8cacf5",
+    "behavior": "On HTTP404, remove only the exact pooled connection before returning the original response and lease. Existing subscribers retain their connection driver through their leases. No request replay.",
+    "unchanged": [
+      "HTTP status and body",
+      "authentication and capability validation",
+      "connection and stream capacity limits",
+      "request and idle deadlines",
+      "wire and public API",
+      "64-member limit"
+    ]
+  },
+  "validation": {
+    "schema": 1,
+    "revision": "d221cb19a64f367deefce56718bd8389ea8cacf5",
+    "checks": [
+      {
+        "group": "unknown_path_retirement",
+        "command": [
+          "cargo",
+          "test",
+          "--offline",
+          "--locked",
+          "-p",
+          "gcoms-transport",
+          "--test",
+          "tp1",
+          "unknown_path_retirement",
+          "--",
+          "--test-threads=1",
+          "--nocapture"
+        ],
+        "returncode": 0,
+        "passed": true,
+        "seconds": 3.6215317470487207,
+        "log": "/run/media/user/SSD-2/retained/gchat-transport-retirement-gate-20261005/unknown_path_retirement-patched.log",
+        "log_sha256": "c0aa98fb87eba9db288067311ba8b73fb1941fdbbf0eac1c2be3402446fb85e2"
+      },
+      {
+        "group": "missing_reply_headers_retire_only",
+        "command": [
+          "cargo",
+          "test",
+          "--offline",
+          "--locked",
+          "-p",
+          "gcoms-transport",
+          "--test",
+          "tp1",
+          "missing_reply_headers_retire_only",
+          "--",
+          "--test-threads=1",
+          "--nocapture"
+        ],
+        "returncode": 0,
+        "passed": true,
+        "seconds": 0.5149594489485025,
+        "log": "/run/media/user/SSD-2/retained/gchat-transport-retirement-gate-20261005/missing_reply_headers_retire_only-patched.log",
+        "log_sha256": "d506b6ac40170b406de837b50a65992e61c4373492d3291b9148144cb8c7fd70"
+      },
+      {
+        "group": "finite_request_deadline_includes_response_body",
+        "command": [
+          "cargo",
+          "test",
+          "--offline",
+          "--locked",
+          "-p",
+          "gcoms-transport",
+          "--test",
+          "tp1",
+          "finite_request_deadline_includes_response_body",
+          "--",
+          "--test-threads=1",
+          "--nocapture"
+        ],
+        "returncode": 0,
+        "passed": true,
+        "seconds": 1.1160851949825883,
+        "log": "/run/media/user/SSD-2/retained/gchat-transport-retirement-gate-20261005/finite_request_deadline_includes_response_body-patched.log",
+        "log_sha256": "aab783ccbf91845a3fdb28453e027c684d646906ff5277eb5f08c5c6ae6d2a8a"
+      }
+    ],
+    "passed": true
+  },
+  "checks_passed": 4,
+  "server_source": "Unchanged during isolated client validation; separate server hardening is not needed to make these four tests pass.",
+  "evidence": {
+    "baseline_report_sha256": "c854bdb775d7e1e7d87ae095196a8c2893e2fae86fca1a6eb86f5edcc29822d9",
+    "client_report_sha256": "ade3af345f7ae7f1ba81517db56d6d70f1ba9338a0e47353447e01da362100d2"
+  },
+  "release_qualified": false
+}
