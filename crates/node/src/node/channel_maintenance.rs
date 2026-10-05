@@ -112,6 +112,93 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn retired_control_stops_unadmitted_work_but_keeps_queued_removal_notice() {
+        let (state, scheduler) = fixture(&["control"]);
+        let mut route = state.lock().unwrap().channels["control"]
+            .own_route
+            .public
+            .clone();
+        route.pseudonym = [81; 32];
+        let retired = vec![7; 40 * 1024];
+        let notice = vec![8; 64];
+        let retired_key = control_key(&route, &retired);
+        let notice_key = control_key(&route, &notice);
+        {
+            let mut st = state.lock().unwrap();
+            let cs = st.channels.get_mut("control").unwrap();
+            cs.pending_control
+                .extend([(route.clone(), retired), (route.clone(), notice.clone())]);
+        }
+        let mut maintenance = ChannelMaintenance::control();
+        maintenance.stage(&state, &scheduler);
+        assert!(maintenance
+            .plans
+            .iter()
+            .any(|p| p.work == Work::Control(retired_key) && !p.fully_admitted()));
+        let retired_cells = maintenance
+            .plans
+            .iter()
+            .find(|p| p.work == Work::Control(retired_key))
+            .unwrap()
+            .cells
+            .clone();
+        let mut admitted = None;
+        maintenance.admit_with(|_, cell| {
+            if admitted.is_none() && retired_cells.contains(cell) {
+                let (send, receipt) = Receipt::test_channel();
+                admitted = Some(send);
+                Ok(receipt)
+            } else {
+                Err(EnqueueError::Full)
+            }
+        });
+        // The recovery transaction retires one exact record. A deliberate
+        // removal notice for that same revoked leaf remains in the journal.
+        {
+            let mut st = state.lock().unwrap();
+            let cs = st.channels.get_mut("control").unwrap();
+            cs.pending_control
+                .retain(|(r, w)| control_key(r, w) != retired_key);
+            cs.completed_removals
+                .insert(super::super::completed_member_removal_key(&route.pseudonym));
+        }
+        maintenance.stage(&state, &scheduler);
+        let notice_cells = maintenance
+            .plans
+            .iter()
+            .find(|p| p.work == Work::Control(notice_key))
+            .unwrap()
+            .cells
+            .clone();
+        let mut attempts = 0;
+        maintenance.admit_with(|_, cell| {
+            assert!(notice_cells.contains(cell));
+            attempts += 1;
+            Err(EnqueueError::Full)
+        });
+        assert!(attempts > 0, "the queued removal notice remains eligible");
+        admitted
+            .unwrap()
+            .send(JobResult::HopAccepted(bytes::Bytes::new()))
+            .unwrap();
+        maintenance.complete_next(&state).await;
+        assert!(!maintenance
+            .plans
+            .iter()
+            .any(|p| p.work == Work::Control(retired_key)));
+        assert_eq!(
+            state.lock().unwrap().channels["control"]
+                .pending_control
+                .iter()
+                .cloned()
+                .collect::<Vec<_>>(),
+            vec![(route, notice)]
+        );
+        drop(maintenance);
+        scheduler.shutdown();
+    }
+
+    #[tokio::test]
     async fn empty_control_rounds_remain_idle() {
         let (state, scheduler) = fixture(&["idle"]);
         let mut maintenance = ChannelMaintenance::control();
@@ -582,6 +669,18 @@ impl ChannelMaintenance {
         }
         for plan in &mut self.plans {
             if let Some(cs) = st.channels.get(&plan.channel) {
+                if let Work::Control(key) = plan.work {
+                    if !cs
+                        .pending_control
+                        .iter()
+                        .any(|(route, wire)| control_key(route, wire) == key)
+                    {
+                        // Explicit recovery can retire the retained record.
+                        // Stop only fragments not yet admitted; existing receipts
+                        // still settle, and queued removal notices remain valid.
+                        plan.next.fill(plan.cells.len());
+                    }
+                }
                 if matches!(plan.work, Work::Message(_)) {
                     for (target, peer) in plan.targets.iter().enumerate() {
                         if cs

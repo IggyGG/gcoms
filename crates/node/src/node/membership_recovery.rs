@@ -194,6 +194,7 @@ pub(crate) fn recover(
     let old_membership = cs.membership_outbox.take();
     let old_journal = std::mem::take(&mut cs.membership_journal);
     let old_directory = cs.directory.clone();
+    let old_pending_control = cs.pending_control.clone();
     let old_removals = cs.completed_removals.clone();
     let old_messages = cs.message_outbox.clone();
     let old_invitations = cs.invitations.clone();
@@ -209,6 +210,11 @@ pub(crate) fn recover(
     }
     cs.directory
         .retain(|_, route| !removed.contains(&route.pseudonym));
+    // Explicit recovery abandons these selected leaves' old control traffic.
+    // This does not acknowledge their application messages. Ordinary /kick
+    // retains its separate removal notice through the normal removal path.
+    cs.pending_control
+        .retain(|(route, _)| !removed.contains(&route.pseudonym));
     for id in &removed {
         cs.remove_enrollment_member(id);
         cs.completed_removals
@@ -222,6 +228,7 @@ pub(crate) fn recover(
         cs.membership_outbox = old_membership;
         cs.membership_journal = old_journal;
         cs.directory = old_directory;
+        cs.pending_control = old_pending_control;
         cs.completed_removals = old_removals;
         cs.message_outbox = old_messages;
         cs.invitations = old_invitations;
@@ -547,6 +554,7 @@ mod tests {
             .unwrap()
             .0
             .pseudonym;
+        let survivor_control;
         {
             let cs = st.channels.get_mut(CHANNEL).unwrap();
             let pending = cs.membership_outbox.as_mut().unwrap();
@@ -555,6 +563,14 @@ mod tests {
             for message in cs.message_outbox.values_mut() {
                 message.acknowledged.insert(first);
             }
+            let wire = cs
+                .role
+                .send(&crate::channel::encode_dir("owner", &cs.own_route.public))
+                .unwrap();
+            survivor_control = (cs.directory["first"].clone(), wire.clone());
+            cs.pending_control.push_back(survivor_control.clone());
+            cs.pending_control
+                .push_back((cs.directory["second"].clone(), wire));
         }
         let mut req = request(&st);
         req.remove_members = vec![second];
@@ -563,6 +579,10 @@ mod tests {
         assert_eq!(after.members.len(), 2);
         assert!(after.pending_commit.is_some());
         let cs = st.channels.get_mut(CHANNEL).unwrap();
+        assert_eq!(
+            cs.pending_control.iter().cloned().collect::<Vec<_>>(),
+            vec![survivor_control]
+        );
         let pending = cs.membership_outbox.as_ref().unwrap();
         assert_eq!(
             pending.expected.keys().copied().collect::<Vec<_>>(),
@@ -605,6 +625,15 @@ mod tests {
     #[tokio::test]
     async fn owner_recovery_reopen_retains_wire_revocation_and_idempotency() {
         let (mut st, _, _) = fixture();
+        {
+            let cs = st.channels.get_mut(CHANNEL).unwrap();
+            let wire = cs
+                .role
+                .send(&crate::channel::encode_dir("owner", &cs.own_route.public))
+                .unwrap();
+            cs.pending_control
+                .push_back((cs.directory["first"].clone(), wire));
+        }
         let request = request(&st);
         let (events, _) = broadcast::channel(8);
         let before: Vec<_> = st.channels[CHANNEL]
@@ -613,6 +642,7 @@ mod tests {
             .map(|(id, p)| (*id, p.wire.clone(), p.expected.len()))
             .collect();
         recover(&mut st, CHANNEL, &request, &events).unwrap();
+        assert!(st.channels[CHANNEL].pending_control.is_empty());
         let encoded = persist::encode_state(&st).unwrap();
         let mut fresh = state();
         fresh.routing = Some(
@@ -638,6 +668,7 @@ mod tests {
                 3
             );
             assert_eq!(status(&restored, CHANNEL).unwrap().members.len(), 1);
+            assert!(restored.channels[CHANNEL].pending_control.is_empty());
             for (id, wire, count) in before {
                 let p = &restored.channels[CHANNEL].message_outbox[&id];
                 assert_eq!(p.wire, wire);
@@ -675,6 +706,18 @@ mod tests {
     #[tokio::test]
     async fn owner_recovery_failed_save_rolls_back_every_membership_field() {
         let (mut st, _, _) = fixture();
+        {
+            let cs = st.channels.get_mut(CHANNEL).unwrap();
+            let wire = cs
+                .role
+                .send(&crate::channel::encode_dir("owner", &cs.own_route.public))
+                .unwrap();
+            for name in ["first", "second"] {
+                cs.pending_control
+                    .push_back((cs.directory[name].clone(), wire.clone()));
+            }
+        }
+        let old_control = st.channels[CHANNEL].pending_control.clone();
         let original = request(&st);
         let old = st.channels[CHANNEL]
             .membership_outbox
@@ -697,6 +740,7 @@ mod tests {
             old
         );
         assert!(st.channels[CHANNEL].completed_removals.is_empty());
+        assert_eq!(st.channels[CHANNEL].pending_control, old_control);
         assert!(receiver.try_recv().is_err());
         st.scheduler.shutdown();
     }
