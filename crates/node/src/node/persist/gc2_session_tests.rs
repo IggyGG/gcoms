@@ -245,7 +245,9 @@ async fn gc2_runtime_restore_reserves_before_publishing_and_reclaims_on_drop() {
     let fresh=Arc::new(Mutex::new(gc2_node(47)));
     let fresh_scheduler=fresh.lock().unwrap().scheduler.clone();
     // A queued/live request competes atomically with a cold-restored outbox.
-    let pressure=fresh_scheduler.retain_attempt_payload(7*1024*1024).unwrap();
+    let data_capacity=crate::scheduler::MAX_QUEUED_BYTES-crate::scheduler::MAX_LANES*16*1024;
+    let pressure=fresh_scheduler.retain_attempt_payload(data_capacity-fresh_scheduler.resource_snapshot().bytes).unwrap();
+    assert!(matches!(fresh_scheduler.retain_attempt_payload(1),Err(EnqueueError::Full)));
     assert!(decode_state_at_startup(&fresh,&fresh_scheduler,&bytes).await.unwrap_err().contains("direct retained payload admission"));
     assert!(fresh.lock().unwrap().sessions.is_empty());
     assert!(fresh.lock().unwrap().pending_1to1.is_empty());
@@ -276,7 +278,10 @@ async fn gc2_runtime_deferred_materialization_waits_for_budget_without_pausing_n
     let expires=a.pending_1to1[&deferred].expires;
     let sequence=a.pending_1to1[&deferred].sequence;
     let counter=a.sessions[&bob.info.identity_pk].send_ctr();
-    let pressure=scheduler.retain_attempt_payload(7*1024*1024-scheduler.resource_snapshot().bytes).unwrap();
+    // A standalone production scheduler keeps one 16 KiB cover allowance per lane.
+    let data_capacity=crate::scheduler::MAX_QUEUED_BYTES-crate::scheduler::MAX_LANES*16*1024;
+    let pressure=scheduler.retain_attempt_payload(data_capacity-scheduler.resource_snapshot().bytes).unwrap();
+    assert!(matches!(scheduler.retain_attempt_payload(1),Err(EnqueueError::Full)));
     materialize_deferred(&mut a).unwrap();
     assert!(!a.owner_transition_failed);
     assert!(a.pending_1to1[&deferred].delivery.cells.is_empty());
