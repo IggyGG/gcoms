@@ -43,14 +43,17 @@ pub const LANE_IDLE_TTL: Duration = Duration::from_secs(15 * 60);
 /// Upper bound on concurrent lanes. Beyond it `open_lane`/`enqueue` fail
 /// with `EnqueueError::Full` so a remote party cannot grow lane count
 /// without bound.
-pub const MAX_LANES: usize = 64;
+pub const MAX_LANES: usize = 512;
 /// GC/2 has separate interactive and bulk lanes. This is a count ceiling only;
 /// all queued and running work still shares the original node memory budget.
 pub const MAX_GC2_ENDPOINT_LANES: usize = 512;
 const ADMIN_INTERVAL: Duration = Duration::from_millis(250);
 const MAINTENANCE_MIN_MS: u64 = 2250;
 const MAINTENANCE_MAX_MS: u64 = 3750;
-const LANE_CAPACITY: usize = 256;
+const LANE_CAPACITY: usize = 1024;
+/// Extra jobs Administration/ChannelControl producers may enqueue beyond a
+/// full data queue, so recovery and control work always have room.
+const CONTROL_HEADROOM: usize = 64;
 const CLASS_COUNT: usize = 5;
 const LANE_SWEEP_INTERVAL: Duration = Duration::from_secs(30);
 
@@ -488,7 +491,15 @@ impl FairQueue {
     }
 
     fn push(&mut self, class: ProducerClass, job: QueuedJob) -> bool {
-        if self.len >= self.capacity {
+        let limit = if matches!(
+            class,
+            ProducerClass::Administration | ProducerClass::ChannelControl
+        ) {
+            self.capacity.saturating_add(CONTROL_HEADROOM)
+        } else {
+            self.capacity
+        };
+        if self.len >= limit {
             return false;
         }
         let queues = &mut self.classes[class.index()];
@@ -1096,7 +1107,7 @@ impl RelayScheduler {
             .map(|(_, lane)| lane.authority.clone())
             .unwrap_or_default();
         let capacity = if key.administrative {
-            32
+            128
         } else {
             LANE_CAPACITY
         };
@@ -2458,21 +2469,23 @@ mod tests {
             Arc::new(Tp1Client::new().unwrap()),
             SchedulerProfile::fixture(),
         );
-        let contact = |byte: u8| AliasContact {
+        let contact = |index: usize| AliasContact {
             target: RelayTarget {
-                address: format!("192.0.2.{byte}:443").parse().unwrap(),
-                relay_service_id: [byte; 32],
+                address: format!("192.0.2.{}:{}", (index % 250) + 1, 1000 + index / 250)
+                    .parse()
+                    .unwrap(),
+                relay_service_id: [(index % 251) as u8; 32],
             },
-            queue_id: [byte; 32],
+            queue_id: [(index % 251) as u8; 32],
             epoch: 1,
-            push_cap: [byte; 32],
+            push_cap: [((index + 1) % 251) as u8; 32],
             expiry: u64::MAX,
         };
-        for byte in 1..=MAX_LANES as u8 {
+        for index in 0..MAX_LANES {
             scheduler
                 .open_lane(
                     LaneAuth::Push {
-                        contact: contact(byte),
+                        contact: contact(index),
                     },
                     false,
                 )
@@ -2482,7 +2495,7 @@ mod tests {
         assert_eq!(
             scheduler.open_lane(
                 LaneAuth::Push {
-                    contact: contact(200)
+                    contact: contact(MAX_LANES)
                 },
                 false
             ),

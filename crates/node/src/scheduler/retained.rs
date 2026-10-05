@@ -155,8 +155,14 @@ mod tests {
             account.stage(PayloadUsage::default(), RetainedPriority::Control),
             Err(EnqueueError::Pending)
         ));
-        let remaining = 3 * 1024 * 1024;
-        let running = transit.reserve(remaining, Some([7; 32])).unwrap();
+        let mut running = Vec::new();
+        loop {
+            match transit.reserve(1024 * 1024, None) {
+                Ok(reservation) => running.push(reservation),
+                Err(EnqueueError::Full) => break,
+                Err(error) => panic!("unexpected reserve error: {error:?}"),
+            }
+        }
         assert!(matches!(transit.reserve(1, None), Err(EnqueueError::Full)));
         let covers: Vec<_> = (0..crate::scheduler::MAX_LANES)
             .flat_map(|_| {
@@ -193,7 +199,15 @@ mod tests {
             .stage(RETAINED_LIMIT, RetainedPriority::Control)
             .unwrap()
             .commit();
-        let dispatch = transit.reserve(2 * 1024 * 1024, None).unwrap();
+        let mut dispatch = Vec::new();
+        loop {
+            match transit.reserve(1024 * 1024, None) {
+                Ok(reservation) => dispatch.push(reservation),
+                Err(EnqueueError::Full) => break,
+                Err(error) => panic!("unexpected reserve error: {error:?}"),
+            }
+        }
+        let dispatch_bytes = transit.snapshot().bytes;
         assert!(matches!(transit.reserve(1, None), Err(EnqueueError::Full)));
         let shrinking = account
             .stage(PayloadUsage::default(), RetainedPriority::Control)
@@ -206,7 +220,7 @@ mod tests {
             .unwrap()
             .commit();
         assert_eq!(endpoint.snapshot().bytes, 0);
-        assert_eq!(transit.snapshot().bytes, 2 * 1024 * 1024);
+        assert_eq!(transit.snapshot().bytes, dispatch_bytes);
         drop((account, dispatch));
         assert_eq!(endpoint.combined_snapshot().bytes, 0);
     }
