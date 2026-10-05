@@ -324,6 +324,93 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn owner_recovery_retires_full_control_backlog_before_fresh_enrollment() {
+        let (mut st, mut old_members, _) = fixture();
+        let cs = st.channels.get_mut(CHANNEL).unwrap();
+        let target = cs.directory["first"].clone();
+        assert!(cs.pending_control.is_empty());
+        for _ in 0..crate::channel::CHANNEL_ACK_LIMIT {
+            let announcement = crate::channel::encode_dir("owner", &cs.own_route.public);
+            let wire = cs.role.send(&announcement).unwrap();
+            cs.pending_control.push_back((target.clone(), wire));
+        }
+        assert_eq!(cs.pending_control.len(), 64);
+        let original_messages = cs
+            .message_outbox
+            .iter()
+            .map(|(id, p)| {
+                (
+                    *id,
+                    p.wire.clone(),
+                    p.expected.clone(),
+                    p.acknowledged.clone(),
+                )
+            })
+            .collect::<Vec<_>>();
+        let req = request(&st);
+        let (events, mut receiver) = broadcast::channel(16);
+        let after = recover(&mut st, CHANNEL, &req, &events).unwrap();
+        assert_eq!(after.epoch, 3);
+        assert_eq!(after.members.len(), 1);
+        assert!(after.pending_commit.is_none());
+        for (id, wire, expected, acknowledged) in &original_messages {
+            let p = &st.channels[CHANNEL].message_outbox[id];
+            assert_eq!(&p.wire, wire);
+            assert_eq!(&p.expected, expected);
+            assert_eq!(&p.acknowledged, acknowledged);
+        }
+        while let Ok(event) = receiver.try_recv() {
+            assert!(!matches!(event, Ev::ChannelDelivery { .. }));
+        }
+        let private_wire = st
+            .channels
+            .get_mut(CHANNEL)
+            .unwrap()
+            .role
+            .send(b"owner only")
+            .unwrap();
+        for member in &mut old_members {
+            assert!(member.receive_outcome(&private_wire).is_err());
+        }
+        let scheduler = st.scheduler.clone();
+        let state = Arc::new(Mutex::new(st));
+        let issued = invitations::create(
+            &state,
+            CHANNEL,
+            crate::channel_invite::policy::InvitationPolicy {
+                expires_at: Some(now_unix() + 3600),
+                max_admissions: Some(1),
+            },
+        )
+        .unwrap();
+        let fresh = gcoms_mls::ChannelMember::prepare("fresh").unwrap();
+        let package = gcoms_mls::ChannelMember::key_package_bytes(&fresh).unwrap();
+        let route = owned_channel_route(
+            85,
+            gcoms_mls::ChannelMember::prepared_pseudonym(&fresh),
+            [85; 32],
+        );
+        let package = crate::channel::encode_join_package(&package, &route.public);
+        let welcome = super::super::invitations_admission::redeem_reusable_invite(
+            &state,
+            &scheduler,
+            CHANNEL,
+            &issued.summary.id,
+            &issued.secret,
+            &package,
+            "fresh",
+            Some([99; 32]),
+        )
+        .unwrap();
+        assert!(!welcome.is_empty());
+        let st = state.lock().unwrap();
+        assert_eq!(st.channels[CHANNEL].role.epoch(), 4);
+        assert!(st.channels[CHANNEL].pending_control.is_empty());
+        drop(st);
+        scheduler.shutdown();
+    }
+
+    #[tokio::test]
     async fn owner_recovery_revokes_stalled_members_without_ack_or_wire_loss() {
         let (mut st, mut members, packages) = fixture();
         let req = request(&st);
