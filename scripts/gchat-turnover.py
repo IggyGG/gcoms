@@ -325,7 +325,7 @@ class Journey(base.Worker):
             endpoint.unlink()
         command = [host['path'], 'serve', '--home', folder,
             '--passphrase-file', self.root / 'pass', '--network', self.root / 'network.json',
-            '--listen', f'127.0.0.1:{24600+i}']
+            '--listen', f'127.0.0.1:{24600+i}', '--fixture-invitations']
         environment = {
             'GCHAT_FIXTURE_NETNS': self.result['boundary']['observer_netns' if i == 0 else 'fixture_netns'],
             'GCHAT_FIXTURE_HOST_NETNS': self.spec['host_netns'],
@@ -400,6 +400,29 @@ class Journey(base.Worker):
             raise RuntimeError('invitation join did not confirm channel membership')
         self.event('operation_response', client=i, operation_id=operation, command='network_join')
         return result
+
+    def remote_invitation(self, channel):
+        if self.spec.get('fixture_host'):
+            # The disconnected fixture has no HTTPS invitation provider.
+            # Exercise the released single-use SDK admission path for setup;
+            # this does not qualify provider-backed reusable invitations.
+            snapshot = self.request(0, 'snapshot')['snapshot']
+            name = next(row['name'].lstrip('#') for row in snapshot['conversations'] if row['id'] == channel)
+            with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as stream:
+                remaining = self.rpc_deadline-time.monotonic() if self.rpc_deadline else 30
+                stream.settimeout(max(.001, remaining))
+                stream.connect(str(self.root/'c0/fixture-invitations.sock'))
+                stream.sendall(json.dumps({'channel':name}).encode())
+                stream.shutdown(socket.SHUT_WR)
+                chunks=[]
+                while chunk := stream.recv(65536): chunks.append(chunk)
+            value=json.loads(b''.join(chunks))
+            if 'error' in value: raise RuntimeError(value['error'])
+        else:
+            value=self.submit(0, '/invite person', channel)['output']
+        if 'link' not in value or 'localOnly' not in value:
+            raise AssertionError('invitation response did not contain a routable invitation')
+        return value['link'] if not value['localOnly'] else None
 
     def chat(self, channel, token, seconds=120):
         started = time.monotonic()
@@ -599,10 +622,7 @@ class Journey(base.Worker):
         channel = self.submit(0, '/create #participants participant0')['conversation']
         joins = []
         for i in clients[1:]:
-            def invitation():
-                output = self.submit(0, '/invite', channel)['output']
-                return output['link'] if not output.get('localOnly', True) else None
-            code = until(invitation, deadline, 'participant remote invitation')
+            code = until(lambda:self.remote_invitation(channel), deadline, 'participant remote invitation')
             started = time.monotonic()
             result = self.join_invitation(i, code, f'participant{i}')
             if result['conversation'] != channel:
@@ -670,10 +690,7 @@ class Journey(base.Worker):
         for i in (0,1): self.files(i,'configure',quota_bytes=str(32*1024*1024),retention_days=7)
         channel=self.submit(0,'/create #relay-load operator')['conversation']
         for i in clients[1:]:
-            def invitation():
-                value=self.submit(0,'/invite',channel)['output']
-                return value['link'] if not value.get('localOnly',True) else None
-            code=until(invitation,setup,'64-member invitation')
+            code=until(lambda:self.remote_invitation(channel),setup,'64-member invitation')
             if self.join_invitation(i,code,f'participant{i}')['conversation']!=channel:
                 raise RuntimeError('participant joined another channel')
             self.event('load_member_joined',client=i)
@@ -772,10 +789,7 @@ class Journey(base.Worker):
             self.files(i,'configure',quota_bytes=str(quota),retention_days=7)
             until(lambda i=i:self.readiness(i),setup_deadline,'protected both-class readiness')
         channel=self.submit(0,'/create #turnover sender')['conversation']
-        def invite():
-            value=self.submit(0,'/invite',channel)['output']
-            return value['link'] if not value.get('localOnly',True) else None
-        self.join_invitation(1,until(invite,setup_deadline,'remote invite'),'receiver')
+        self.join_invitation(1,until(lambda:self.remote_invitation(channel),setup_deadline,'remote invite'),'receiver')
         self.expected_subscriptions=4
         for i in (0,1): until(lambda i=i:self.readiness(i),setup_deadline,'contact AND channel, both classes')
         self.rpc_deadline=None

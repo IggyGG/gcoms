@@ -284,6 +284,15 @@ class ControllerTests(unittest.TestCase):
         self.assertTrue(join['operation_id'])
         self.assertNotIn(code,(self.root/'events.jsonl').read_text())
 
+    def test_invitation_options_fail_setup_immediately_instead_of_polling(self):
+        self.worker.spec.pop('fixture_host', None)
+        with mock.patch.object(self.worker, 'submit', return_value={
+                'output': {'kind': 'invitation_options'}}) as submit:
+            with self.assertRaisesRegex(AssertionError, 'routable invitation'):
+                turnover.until(lambda:self.worker.remote_invitation('channel'),
+                               turnover.time.monotonic()+1, 'invitation')
+        submit.assert_called_once_with(0, '/invite person', 'channel')
+
     def test_fixture_never_silently_accepts_another_network(self):
         preview={'response':{'kind':'preview','preview':{'newNetwork':True,'network':{'id':'other'}}}}
         with mock.patch.object(self.worker,'request',return_value=preview) as request:
