@@ -1184,7 +1184,9 @@ impl IpcClient {
                 },
                 _ => Err(SdkError::ConnectionClosed),
             };
-            let broken = writer.as_ref().is_some_and(|writer| writer.stream.is_none());
+            let broken = writer
+                .as_ref()
+                .is_some_and(|writer| writer.stream.is_none());
             (sent, broken)
         };
         if let Err(error) = sent {
@@ -3545,9 +3547,10 @@ mod interrupted_write_tests {
             let (mut peer, stream) = tokio::io::duplex(1);
             let writer = Arc::new(Mutex::new(ClientWriter::new(stream)));
             let first_writer = writer.clone();
-            let first = tokio::spawn(async move {
-                first_writer.lock().await.write_frame(&request(41)).await
-            });
+            let first =
+                tokio::spawn(
+                    async move { first_writer.lock().await.write_frame(&request(41)).await },
+                );
             // Capacity one proves the first request has started but cannot yet
             // finish its length prefix. Cancel without sleeps or scheduler luck.
             let mut length = [0; 4];
@@ -3560,9 +3563,10 @@ mod interrupted_write_tests {
             first.abort();
             assert!(first.await.unwrap_err().is_cancelled());
             let next_writer = writer.clone();
-            let next = tokio::spawn(async move {
-                next_writer.lock().await.write_frame(&request(42)).await
-            });
+            let next =
+                tokio::spawn(
+                    async move { next_writer.lock().await.write_frame(&request(42)).await },
+                );
             if !in_body {
                 peer.read_exact(&mut length[2..]).await.unwrap();
             }
