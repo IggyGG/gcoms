@@ -1,3 +1,5 @@
+Retained channel setup coalesces an already-admitted exact ciphertext with maintenance. Invitation completion does not acknowledge delivery; the original outbox and authenticated receipt requirements still apply.
+
 Relay load tooling: the 64-client `relay-load` campaign models the live operator fleet at 2048 circuits and 4096 connections per relay and verifies the forwarding pools before traffic. Capacity overrides are bounded by the node's existing limits. Desktop contribution budgets and the mandatory delivery, refusal, file, restart and duration thresholds stay unchanged.
 
 Current release, 2026-10-03: SDK 0.1.98 is published with all 12 original desktop/mobile qualification archives. Its exact build inputs match qualified source 32072fe; original archive names and source labels are retained. The newer SDK 0.1.102 pointer remains available. All 17 infrastructure targets and four GChat desktop platforms are deployed or published. GChat mobile installed acceptance and SDK 1.0 remain incomplete; the 64-member limit, covered receipts and version-bound 20%/5% size policy are unchanged.

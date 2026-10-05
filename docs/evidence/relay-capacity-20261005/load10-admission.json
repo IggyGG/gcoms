@@ -1,0 +1,22 @@
+{
+  "schema": 1,
+  "passed": false,
+  "sources": {
+    "gcoms": {
+      "revision": "bce6f09e7a8fbd913ff2650a9918f4346a55e199",
+      "snapshot_sha256": "2c7390b08d38aea0d580c0321dd9bf8d4c360c7ab83c5539d5d6a7840ca5b306"
+    },
+    "gchat": {
+      "revision": "753b7cc6c7348bc03327c7fe5e992e8b15a00625",
+      "snapshot_sha256": "6eb78703ca6b33db3e7e07bca1a8ace4631cef1d64842761543803b9559d8aa2"
+    }
+  },
+  "topology": "fleet-four-channels",
+  "clients_started": 64,
+  "channel_members_confirmed": 34,
+  "campaign_started": false,
+  "failure": "RuntimeError: invitation join did not confirm channel membership: error runtime: the same ciphertext already has an active relay attempt",
+  "children_stopped": true,
+  "report_sha256": "6c028f91e886a42d8a3060aa0018426f12d8567a2940a89ee728ede96869182d",
+  "disposition": "A maintenance attempt for the exact retained channel ciphertext raced invitation finalization. Pending must preserve the existing attempt and authenticated outbox, rather than report failed admission. This run does not qualify release."
+}

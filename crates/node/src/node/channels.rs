@@ -1470,12 +1470,26 @@ pub(crate) fn enqueue_broadcast_chan(
     let cells = crate::proto::encode_chan_cells(channel, mls_wire)?;
     for target in targets {
         for cell in &cells {
-            scheduler
-                .push(class, target.control.clone(), cell.clone())
-                .map_err(|error| error.to_string())?;
+            enqueue_retained_channel_cell(scheduler, class, target.control.clone(), cell.clone())?;
         }
     }
     Ok(())
+}
+
+/// Maintenance may admit this retained wire before its command finalizer.
+/// Pending means the exact destination, authority, class and ciphertext already
+/// have a local attempt. It is neither a failed admission nor a delivery ACK.
+/// The retained channel outbox still owns recovery and authenticated receipts.
+fn enqueue_retained_channel_cell(
+    scheduler: &RelayScheduler,
+    class: ProducerClass,
+    contact: AliasContact,
+    cell: Cell,
+) -> Result<(), String> {
+    match scheduler.push(class, contact, cell) {
+        Ok(_) | Err(EnqueueError::Pending) => Ok(()),
+        Err(error) => Err(error.to_string()),
+    }
 }
 
 pub(crate) fn retain_channel_wire(state: &Arc<Mutex<NodeState>>, channel: &str, wire: &[u8]) {
@@ -1805,13 +1819,12 @@ async fn finalize_admission(
             0,
             crate::proto::encode_chan(channel, &wire),
         );
-        scheduler
-            .push(
-                ProducerClass::ChannelControl,
-                member_route.control.clone(),
-                cell,
-            )
-            .map_err(|error| error.to_string())?;
+        enqueue_retained_channel_cell(
+            scheduler,
+            ProducerClass::ChannelControl,
+            member_route.control.clone(),
+            cell,
+        )?;
     }
     queue_channel_metadata_snapshot(state, channel, member_route)?;
     metrics::log_event(
@@ -2901,6 +2914,66 @@ mod membership_wait_tests {
     use std::task::{Context, Poll, Waker};
     use tokio::sync::Notify;
     use tokio::time::{Duration, Instant};
+
+    #[tokio::test]
+    async fn retained_channel_admission_accepts_existing_attempt_without_a_second_job() {
+        use super::*;
+        struct HeldDial;
+        impl gcoms_transport::connector::Connector for HeldDial {
+            fn connect(
+                &self,
+                _: std::net::SocketAddr,
+                _: [u8; 32],
+            ) -> gcoms_transport::connector::ConnectFuture<'_> {
+                Box::pin(std::future::pending())
+            }
+        }
+        let scheduler = RelayScheduler::with_profile(
+            Arc::new(gcoms_transport::Tp1Client::with_connector(Arc::new(HeldDial)).unwrap()),
+            crate::scheduler::SchedulerProfile::fixture().with_pipelining(),
+        );
+        let contact = AliasContact {
+            target: crate::relay::RelayTarget {
+                address: "192.0.2.1:443".parse().unwrap(),
+                relay_service_id: [1; 32],
+            },
+            queue_id: [2; 32],
+            epoch: 1,
+            push_cap: [3; 32],
+            expiry: u64::MAX,
+        };
+        let cell = Cell::new(CellType::Msg, 0, 0, b"retained bootstrap".to_vec());
+        // Model maintenance winning the race before the admission finalizer.
+        let original = scheduler
+            .push(ProducerClass::ChannelControl, contact.clone(), cell.clone())
+            .unwrap();
+        assert_eq!(original.state(), crate::scheduler::CompletionState::Queued);
+        assert_eq!(scheduler.resource_snapshot().jobs, 1);
+        enqueue_retained_channel_cell(
+            &scheduler,
+            ProducerClass::ChannelControl,
+            contact.clone(),
+            cell.clone(),
+        )
+        .expect("an existing exact attempt must not fail invitation finalization");
+        assert_eq!(scheduler.resource_snapshot().jobs, 1);
+        assert_eq!(original.state(), crate::scheduler::CompletionState::Queued);
+        // Different ciphertext still needs an independent admission.
+        let different = Cell::new(CellType::Msg, 0, 0, b"different bootstrap".to_vec());
+        enqueue_retained_channel_cell(
+            &scheduler,
+            ProducerClass::ChannelControl,
+            contact.clone(),
+            different,
+        )
+        .unwrap();
+        assert_eq!(scheduler.resource_snapshot().jobs, 2);
+        scheduler.shutdown();
+        assert_eq!(
+            enqueue_retained_channel_cell(&scheduler, ProducerClass::ChannelControl, contact, cell),
+            Err(EnqueueError::Shutdown.to_string())
+        );
+    }
 
     #[cfg(feature = "client-persist")]
     #[tokio::test]
