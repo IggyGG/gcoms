@@ -175,6 +175,14 @@ struct DirectAttempt {
     ack: bool,
     destination: Option<AliasContact>,
     accepted: bool,
+    route_unavailable: bool,
+}
+
+fn local_route_unavailable(result: &Result<(), String>) -> bool {
+    result
+        .as_ref()
+        .err()
+        .is_some_and(|error| error == "no ready independent GC/2 route")
 }
 
 /// Own all maintenance receipts without holding up later ticks. ACKs remain in
@@ -226,7 +234,7 @@ impl DirectMaintenance {
         let scheduler = scheduler.clone();
         let policy = st.frwd_target_policy.clone();
         self.completions.push(Box::pin(async move {
-            let accepted = deliver_direct_reserved(
+            let result = deliver_direct_reserved(
                 &scheduler,
                 &delivery,
                 &policy,
@@ -234,13 +242,13 @@ impl DirectMaintenance {
                 traffic,
                 natural.as_ref(),
             )
-            .await
-            .is_ok();
+            .await;
             DirectAttempt {
                 key,
                 ack,
                 destination: delivery.peer.primary().cloned(),
-                accepted,
+                accepted: result.is_ok(),
+                route_unavailable: local_route_unavailable(&result),
             }
         }));
         true
@@ -438,6 +446,25 @@ impl DirectMaintenance {
         if let Some(attempt) = self.completions.next().await {
             self.active.remove(&attempt.key);
             if !attempt.ack {
+                if attempt.route_unavailable {
+                    // No circuit was selected, so no request was dispatched.
+                    // A ready-set change may have arrived while this attempt
+                    // still owned the key. Do not leave its exact ciphertext
+                    // on the longer schedule used to await recipient ACKs.
+                    let retry =
+                        std::time::Instant::now() + jittered(std::time::Duration::from_secs(5));
+                    let mut st = state.lock().unwrap_or_else(|p| p.into_inner());
+                    for pending in st.pending_1to1.values_mut() {
+                        if direct_attempt_key(&pending.delivery) == attempt.key {
+                            pending.next_attempt = pending.next_attempt.min(retry);
+                        }
+                    }
+                    #[cfg(feature = "experimental-gc2")]
+                    if let Some(due) = self.repair_due.get_mut(&attempt.key) {
+                        *due = (*due).min(retry);
+                    }
+                    metrics::log_event("direct_retry_local_route_unavailable", &[]);
+                }
                 return;
             }
             let mut st = state.lock().unwrap_or_else(|p| p.into_inner());

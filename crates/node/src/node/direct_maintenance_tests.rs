@@ -27,6 +27,67 @@ fn pending(delivery: DirectDelivery, sequence: u64, now: Instant) -> PendingDire
     }
 }
 
+#[tokio::test]
+async fn local_route_failure_retries_exact_work_without_shortening_unknown_outcomes() {
+    for failure in [
+        Some("no ready independent GC/2 route"),
+        Some("tp1 request timed out"),
+        Some("GC/2 terminal deposit refused: Internal"),
+        None,
+    ] {
+        let mut node = persist::tests::state();
+        let scheduler = node.scheduler.clone();
+        let now = Instant::now();
+        let work = delivery(&node, 1);
+        let key = direct_attempt_key(&work);
+        let mut retained = pending(work.clone(), 1, now);
+        retained.next_attempt = now + Duration::from_secs(60);
+        let deadline = retained.expires;
+        node.pending_1to1.insert([1; 16], retained);
+        let mut rewritten = pending(work.clone(), 2, now);
+        rewritten.delivery.cells[0].payload[0] ^= 1;
+        rewritten.next_attempt = now + Duration::from_secs(60);
+        node.pending_1to1.insert([2; 16], rewritten);
+        let state = Arc::new(Mutex::new(node));
+        let mut owner = DirectMaintenance::default();
+        owner.active.insert(key, false);
+        #[cfg(feature = "experimental-gc2")]
+        owner.repair_due.insert(key, now + Duration::from_secs(60));
+        let result = failure.map_or(Ok(()), |error| Err(error.into()));
+        owner.completions.push(Box::pin(async move {
+            DirectAttempt {
+                key,
+                ack: false,
+                destination: work.peer.primary().cloned(),
+                accepted: result.is_ok(),
+                route_unavailable: local_route_unavailable(&result),
+            }
+        }));
+        owner.complete_next(&state).await;
+        assert!(owner.active.is_empty());
+        let st = state.lock().unwrap();
+        let retained = &st.pending_1to1[&[1; 16]];
+        assert_eq!(retained.expires, deadline);
+        assert_eq!(retained.delivery.cells[0].payload, vec![1; 32]);
+        assert_eq!(
+            st.pending_1to1[&[2; 16]].next_attempt,
+            now + Duration::from_secs(60)
+        );
+        if failure == Some("no ready independent GC/2 route") {
+            assert!(retained.next_attempt >= now + Duration::from_secs(4));
+            assert!(retained.next_attempt < now + Duration::from_secs(7));
+            #[cfg(feature = "experimental-gc2")]
+            assert_eq!(owner.repair_due[&key], retained.next_attempt);
+        } else {
+            assert_eq!(retained.next_attempt, now + Duration::from_secs(60));
+            #[cfg(feature = "experimental-gc2")]
+            assert_eq!(owner.repair_due[&key], retained.next_attempt);
+        }
+        drop(st);
+        scheduler.shutdown();
+    }
+}
+
 fn component_record(kind: &str, body: &[u8]) -> Vec<u8> {
     let mut application = b"GCAPP1".to_vec();
     application.extend_from_slice(&(kind.len() as u16).to_be_bytes());

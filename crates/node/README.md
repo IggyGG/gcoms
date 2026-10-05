@@ -72,3 +72,9 @@ Authenticated control status exposes `relay_diagnostics` with scheduler and
 forwarding admission counters. `GC_RELAY_DEBUG=1` enables a default metrics file
 beside the keystore unless `--metrics` supplies a path. Metrics rotate at 16 MiB
 with three backups; refusal journal entries are rate limited.
+
+A direct outbox attempt that cannot select a ready GC/2 route retries its exact
+ciphertext after about five seconds, with jitter. This also covers a ready-set
+change arriving before the failed attempt completes. Recipient acknowledgement
+waits, uncertain network outcomes, expiry and rekeyed work keep their existing
+retry schedule. No retry opens an entry or uses a direct fallback.

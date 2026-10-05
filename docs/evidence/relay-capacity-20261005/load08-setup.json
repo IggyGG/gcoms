@@ -1,0 +1,27 @@
+{
+  "schema": 1,
+  "passed": false,
+  "source": {
+    "gcoms": {
+      "revision": "53f2ee056e51fc5c65ac245599162b57eec16a44",
+      "snapshot_sha256": "bee0d5986a1820498a15e3a55dd8411795fa772adc7c95aee74abd04f12efd83"
+    },
+    "gchat": {
+      "revision": "753b7cc6c7348bc03327c7fe5e992e8b15a00625",
+      "snapshot_sha256": "6eb78703ca6b33db3e7e07bca1a8ace4631cef1d64842761543803b9559d8aa2"
+    }
+  },
+  "joined_participants": 28,
+  "member_limit": 64,
+  "campaign_started": false,
+  "failure": "RuntimeError: invitation join did not confirm channel membership: error runtime: timed out waiting for the owner (they may be offline)",
+  "children_stopped": true,
+  "owner_transport_header_timeouts": 0,
+  "owner_errors": {
+    "the same ciphertext already has an active relay attempt": 7,
+    "no ready independent GC/2 route": 37
+  },
+  "relay_refusals": 0,
+  "report_sha256": "d9ef6f89a42f17dc282c0875085c4f1a753d9d195b253b17fd709797a1f6c449",
+  "note": "Setup failed after owner admission. The 64-client workload did not start and is not qualified."
+}
