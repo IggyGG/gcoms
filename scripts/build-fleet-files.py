@@ -51,12 +51,14 @@ def main():
         env = dict(os.environ, CARGO_TARGET_DIR=str(args.target_dir.resolve()))
         env.setdefault('CARGO_BUILD_JOBS', '4')
         commands = [
-            ('gcoms', ['cargo', 'build', '--release', '--offline', '--locked', '-p', 'gcoms-node', '--bin', 'gcnode', '--features', 'client-persist,experimental-gc2']),
-            # Select the client and both qualification hosts together, so Cargo
-            # resolves their common feature graph and compiles shared crates once.
+            # Select the relay, client and both qualification hosts together, so
+            # Cargo compiles their common feature graph once. The relay package
+            # is the source-patched dependency from the frozen companion tree.
             ('gchat', ['cargo', 'build', '--release', '--offline', '--config', str(patch),
-                       '-p', 'gchat-tui', '-p', 'gchat-core', '--bin', 'gchat',
-                       '--example', 'fleet_probe', '--example', 'turnover_daemon', '--features', 'gc2-carrier']),
+                       '-p', 'gcoms-node', '-p', 'gchat-tui', '-p', 'gchat-core',
+                       '--bin', 'gcnode', '--bin', 'gchat', '--example', 'fleet_probe',
+                       '--example', 'turnover_daemon', '--features',
+                       'gc2-carrier,gcoms-node/client-persist,gcoms-node/experimental-gc2']),
         ]
         for name, command in commands:
             report['commands'].append({'repository': name, 'argv': command})
