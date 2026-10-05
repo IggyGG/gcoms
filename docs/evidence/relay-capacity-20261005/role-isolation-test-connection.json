@@ -1,0 +1,116 @@
+{
+  "schema": 1,
+  "date": "2026-10-05",
+  "scope": "Test-only repair of the physical connection fixture; no production, wire, API or capacity changes.",
+  "baseline_revision": "0410725361b494c0160839bbd40b0fb5bb23aff7",
+  "changed_sources": [
+    "crates/node/tests/gc2_queue_service.rs"
+  ],
+  "production_sources_unchanged": true,
+  "source_bindings_checked": 434,
+  "original_ci": {
+    "run_id": 37361580754,
+    "job_id": 111937648342,
+    "artifact_id": 11367538028,
+    "artifact_name": "linux-qualification-gcoms-1",
+    "artifact_bytes": 24570,
+    "archive": {
+      "path": "/run/media/user/SSD-2/retained/gchat-release148-monitor-20261005/candidate153-critical/linux-gcoms-original.zip",
+      "sha256": "6c822e80d609f060b77863c75f869f9282eec46561ed8303508de072ca8be717"
+    },
+    "qualification": {
+      "path": "/run/media/user/SSD-2/retained/gchat-release148-monitor-20261005/candidate153-critical/qualification.json",
+      "sha256": "5a8c4f0ef698a442c39ebe3e1b80da53a8bcdd78d13d380e3191ea8169698d96"
+    },
+    "log": {
+      "path": "/run/media/user/SSD-2/retained/gchat-release148-monitor-20261005/candidate153-critical/native-1.log",
+      "sha256": "39155845ca60b8c1430d3ea46ef381151fe3d2fdc883026df659f8650d220981"
+    },
+    "test": "composed_terminal_and_relay_services_cannot_switch_connection_roles",
+    "first_failure": "crates/node/tests/gc2_queue_service.rs:78:14: Error { kind: Reset(StreamId(1), CANCEL, Remote) }",
+    "suite_passed": 6,
+    "suite_failed": 1
+  },
+  "cause": "The fixture reused Tp1Client for three cross-role probes, assuming each stayed on its terminal-bound physical connection. The first correct 404 now retires that pool entry, allowing the second probe to open a fresh connection with its own permitted role and reject the invalid probe body. The retained raw TLS/H2 connection restores the original security invariant being tested.",
+  "preserved_assertions": [
+    "An authenticated control connection cannot become a terminal: 404 with no queue or subscription mutation.",
+    "An authenticated terminal push is accepted and exactly one message is queued.",
+    "The same physical terminal connection rejects all three entry, transit and reentry capabilities with 404.",
+    "The same physical terminal connection subsequently accepts an authenticated subscription and returns the exact queued message wire.",
+    "Dropping the subscription releases active state and leaves zero relay circuits.",
+    "The owned server and raw connection driver are joined during cleanup."
+  ],
+  "request_bound_seconds": 60,
+  "local_baseline": {
+    "passed": 0,
+    "failed": 1,
+    "same_failure_as_original_ci": true,
+    "report": {
+      "path": "/run/media/user/SSD-2/retained/gchat-role-fixture-gate-20261005/baseline-report.json",
+      "sha256": "f02c5c923a4c3f1f0976f7c3822e194b31eb81ab65b81e45780fd780903e820a"
+    },
+    "source_bindings": {
+      "path": "/run/media/user/SSD-2/retained/gchat-role-fixture-gate-20261005/baseline-source.json",
+      "sha256": "7d151a1471e8b87059ea2935bfc8e6db83e77b6e9d98f045416b78d81faa2797"
+    },
+    "log": {
+      "path": "/run/media/user/SSD-2/retained/gchat-role-fixture-gate-20261005/baseline.log",
+      "sha256": "4cc5a95270ac92b94cf08d858e6f5bef32ada6a40a4150ae27a1db183e67a8ca"
+    }
+  },
+  "validation": {
+    "full_gc2_queue_service": {
+      "passed": 7,
+      "failed": 0,
+      "report": {
+        "path": "/run/media/user/SSD-2/retained/gchat-role-fixture-gate-20261005/final-report.json",
+        "sha256": "975d6d8faeec277a71ffb2ac43671f08e2c87f1a0fdc253c04b69939f6ad2734"
+      },
+      "source_bindings": {
+        "path": "/run/media/user/SSD-2/retained/gchat-role-fixture-gate-20261005/final-source.json",
+        "sha256": "ffa5cbecf3376e894a0d85405c775f783b7b088ae19b8e8d13dd7c03570df889"
+      },
+      "log": {
+        "path": "/run/media/user/SSD-2/retained/gchat-role-fixture-gate-20261005/final.log",
+        "sha256": "5910158fb8d8b42cdd1c1e15e215d81b6100b300ef086c84d6d1814e459f4a40"
+      }
+    },
+    "final_bounded_request_fixture": {
+      "passed": 1,
+      "failed": 0,
+      "report": {
+        "path": "/run/media/user/SSD-2/retained/gchat-role-fixture-gate-20261005/bounded-report.json",
+        "sha256": "d09c528e723b855aaab472be82921959bf7627cbadc4e8f018f7f91f9c3e891e"
+      },
+      "source_bindings": {
+        "path": "/run/media/user/SSD-2/retained/gchat-role-fixture-gate-20261005/bounded-source.json",
+        "sha256": "70910f7c3c78c75ed8bdce1045b6bc2879cca23418ed6d598ccc56ccc63676f2"
+      },
+      "log": {
+        "path": "/run/media/user/SSD-2/retained/gchat-role-fixture-gate-20261005/bounded.log",
+        "sha256": "816f7f145917464eac85a82147579e93b9e43e906a4729a24d155e70931cd2ba"
+      },
+      "delta_after_full_suite": "Only adds the original 60-second deadline around raw request readiness and response; reruns the one affected test. The other six tests are unchanged."
+    },
+    "format": true,
+    "source_audit": true,
+    "research_hashes": 7
+  },
+  "retained_nonqualifying_attempt": {
+    "report": {
+      "path": "/run/media/user/SSD-2/retained/gchat-role-fixture-gate-20261005/patched-report.json",
+      "sha256": "8c2432f8204f623dc8bdd1c825f2cb4b14e177f0fa21f8bc02b76481c57672e9"
+    },
+    "source_bindings": {
+      "path": "/run/media/user/SSD-2/retained/gchat-role-fixture-gate-20261005/patched-source.json",
+      "sha256": "18a7a5c117257d0256b92b22e9eb0f8bdbb04b5fe4210b6bc33a41c7cd74cd7c"
+    },
+    "log": {
+      "path": "/run/media/user/SSD-2/retained/gchat-role-fixture-gate-20261005/patched.log",
+      "sha256": "d220c798e99ce77527b3866e8287a1cad5f3c803355633d950ceacc0864fb451"
+    },
+    "reason": "All role-isolation assertions reached; a new driver cleanup assertion rejected the expected TLS EOF from fixture shutdown. Matched existing raw dispatch cleanup by joining the driver without requiring TLS close_notify."
+  },
+  "release_qualified": false,
+  "fleet_deployed": false
+}

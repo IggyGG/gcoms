@@ -13,7 +13,8 @@ use gcoms_routing::{
     Directory, RelayService, ServicePolicy,
 };
 use gcoms_transport::{
-    gc2::{NaturalOutcome, NaturalRoute, NaturalStream},
+    gc2::{parse_status, status_cell, NaturalOutcome, NaturalRoute, NaturalStream},
+    hop::HopReply,
     server::Tp1Server,
     tls::{self, TlsIdentity},
     TokenRegistry, Tp1Client,
@@ -27,6 +28,7 @@ use std::{
     time::Duration,
 };
 use tokio::{
+    io::AsyncReadExt,
     sync::oneshot,
     task::{AbortHandle, JoinSet},
     time::{timeout, Instant},
@@ -40,6 +42,27 @@ const CAPS: Capabilities = Capabilities {
 };
 const I: TrafficClass = TrafficClass::Interactive;
 const B: TrafficClass = TrafficClass::Bulk;
+
+async fn retained_natural_post(
+    sender: &h2::client::SendRequest<Bytes>,
+    address: SocketAddr,
+    token: &str,
+    cell: NaturalCell,
+) -> (http::Response<h2::RecvStream>, h2::SendStream<Bytes>) {
+    timeout(Duration::from_secs(60), async {
+        let mut sender = sender.clone().ready().await.unwrap();
+        let request = http::Request::builder()
+            .method("POST")
+            .uri(format!("https://{address}/{token}"))
+            .body(())
+            .unwrap();
+        let (response, mut send) = sender.send_request(request, false).unwrap();
+        send.send_data(Bytes::from(cell.encode()), true).unwrap();
+        (response.await.unwrap(), send)
+    })
+    .await
+    .expect("retained request must finish within the client request bound")
+}
 
 #[tokio::test]
 async fn composed_terminal_and_relay_services_cannot_switch_connection_roles() {
@@ -59,10 +82,34 @@ async fn composed_terminal_and_relay_services_cannot_switch_connection_roles() {
         0
     );
     assert_eq!(fixture.service.active_subscriptions(), 0);
-    let terminal = Tp1Client::new().unwrap();
+    // Role isolation belongs to one physical connection. Retain raw TLS/H2
+    // across every rejection: Tp1Client now retires its pool entry after 404.
+    let socket = tokio::net::TcpStream::connect(fixture.address)
+        .await
+        .unwrap();
+    let tls =
+        tokio_rustls::TlsConnector::from(Arc::new(tls::client_config_pinned(fixture.pin).unwrap()))
+            .connect(tls::server_name_ip(fixture.address.ip()), socket)
+            .await
+            .unwrap();
+    let (terminal, connection) = h2::client::handshake(tls).await.unwrap();
+    let driver = tokio::spawn(async move {
+        let _ = connection.await;
+    });
+    let (response, _) = retained_natural_post(
+        &terminal,
+        fixture.address,
+        &queue_token(&QUEUE),
+        push.encode(&CAPS.push, &fixture.pin).unwrap(),
+    )
+    .await;
+    assert_eq!(response.status(), http::StatusCode::OK);
+    let body = gcoms_transport::server::read_body(&mut response.into_body(), 16 * 1024)
+        .await
+        .unwrap();
     assert_eq!(
-        fixture.deposit(&terminal, &push).await,
-        NaturalOutcome::Accepted(None)
+        parse_status(&NaturalCell::decode(&body).unwrap()),
+        Some(HopReply::Accepted)
     );
     assert_eq!(
         fixture.store.lock().unwrap().queue_len(&QUEUE, now_unix()),
@@ -70,23 +117,50 @@ async fn composed_terminal_and_relay_services_cannot_switch_connection_roles() {
     );
     for cap in [intro.entry_cap, intro.transit_cap, intro.reentry_cap] {
         let token = gcoms_transport::encode_b64url(&cap);
-        let result = terminal
-            .post_natural_prepared(fixture.route(&token, I), || {
-                Ok(NaturalCell::new(CellType::Pex, 0, b"GCD2".to_vec())?)
-            })
+        let (response, _) = retained_natural_post(
+            &terminal,
+            fixture.address,
+            &token,
+            NaturalCell::new(CellType::Pex, 0, b"GCD2".to_vec()).unwrap(),
+        )
+        .await;
+        assert_eq!(response.status(), http::StatusCode::NOT_FOUND);
+        gcoms_transport::server::read_body(&mut response.into_body(), 16 * 1024)
             .await
             .unwrap();
-        assert_eq!(result, NaturalOutcome::Decoy(404));
     }
-    let mut subscription = fixture.subscribe(&terminal, B, 91).await;
-    assert_eq!(
-        subscription.recv().await.unwrap().unwrap(),
-        push.msg.unwrap()
-    );
+    let sub = Subscription {
+        class: B,
+        queue_id: QUEUE,
+        epoch: 1,
+        expiry: now_unix() + 100,
+        nonce: [91; 16],
+    };
+    let (response, send) = retained_natural_post(
+        &terminal,
+        fixture.address,
+        &queue_token(&QUEUE),
+        sub.encode(&CAPS.sub, &fixture.pin).unwrap(),
+    )
+    .await;
+    assert_eq!(response.status(), http::StatusCode::OK);
+    let mut subscription = gcoms_transport::duplex::H2Stream::new(response.into_body(), send);
+    let mut expected = status_cell(HopReply::Accepted).encode();
+    expected.extend(push.msg.unwrap().encode());
+    let mut received = vec![0; expected.len()];
+    timeout(
+        Duration::from_secs(60),
+        subscription.read_exact(&mut received),
+    )
+    .await
+    .unwrap()
+    .unwrap();
+    assert_eq!(received, expected);
     drop(subscription);
     fixture.inactive().await;
     assert_eq!(fixture.terminal_relay.active_circuits(), 0);
     fixture.finish().await;
+    driver.await.unwrap();
 }
 
 struct Fixture {
