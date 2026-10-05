@@ -9,3 +9,8 @@ The crate documentation is generated from this package's source. Applications
 normally begin with `gcoms-rpc` for typed services or `gcoms-sdk` for messaging.
 Lower layers are implementation components and have no independent stability
 promise during the developer preview.
+
+Set `GCOMS_TRANSPORT_DIAGNOSTICS=1` for local timeout attribution: connection,
+request admission, HTTP/2 credit, or reply headers/body. These records contain no
+addresses, capabilities or payloads. Request deadlines and public errors remain
+unchanged.

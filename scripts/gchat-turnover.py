@@ -330,6 +330,7 @@ class Journey(base.Worker):
             'GCHAT_FIXTURE_NETNS': self.result['boundary']['observer_netns' if i == 0 else 'fixture_netns'],
             'GCHAT_FIXTURE_HOST_NETNS': self.spec['host_netns'],
             'GCHAT_FILE_DIAGNOSTICS': '1', 'GCHAT_PROTOCOL_METRICS': str(folder / 'metrics.jsonl'),
+            'GCOMS_TRANSPORT_DIAGNOSTICS': '1',
         }
         if fresh:
             command += ['--create', '--inbox-card', folder / 'card']
@@ -397,7 +398,9 @@ class Journey(base.Worker):
             raise RuntimeError('invitation did not return the accepted network')
         result = response['response']
         if result.get('kind') != 'applied' or not result.get('conversation'):
-            raise RuntimeError('invitation join did not confirm channel membership')
+            message = str(result.get('message', result.get('notice', ''))).replace(code, '[private invitation]')
+            raise RuntimeError('invitation join did not confirm channel membership: '
+                               + str(result.get('kind')) + ' ' + message[:240])
         self.event('operation_response', client=i, operation_id=operation, command='network_join')
         return result
 

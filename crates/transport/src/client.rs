@@ -51,6 +51,41 @@ enum RequestBody<'a> {
     Prepare(Option<Box<dyn FnOnce() -> Result<Bytes> + Send + 'a>>),
 }
 
+/// Local, payload-free timeout attribution. Keep the public error and the
+/// original deadline unchanged; diagnostics never expose a route or capability.
+struct RequestProgress {
+    finite: bool,
+    stage: AtomicUsize,
+}
+
+impl RequestProgress {
+    fn new(finite: bool) -> Self {
+        Self {
+            finite,
+            stage: AtomicUsize::new(0),
+        }
+    }
+
+    fn set(&self, stage: usize) {
+        self.stage.store(stage, Ordering::Relaxed);
+    }
+
+    fn timeout(&self) -> Box<dyn Error + Send + Sync> {
+        if std::env::var_os("GCOMS_TRANSPORT_DIAGNOSTICS").is_some_and(|value| value == "1") {
+            let stage = match self.stage.load(Ordering::Relaxed) {
+                0 => "connection",
+                1 => "request_admission",
+                2 => "http2_credit",
+                3 => "request_body",
+                4 => "reply_headers",
+                _ => "reply_body",
+            };
+            eprintln!("tp1_request_timeout stage={stage} finite={}", self.finite);
+        }
+        "transport request timed out".into()
+    }
+}
+
 impl RequestBody<'_> {
     fn materialize(&mut self) -> Result<Option<Bytes>> {
         if let Self::Prepare(make) = self {
@@ -495,14 +530,15 @@ impl Tp1Client {
         body: RequestBody<'_>,
         class: TrafficClass,
     ) -> Result<(Response<h2::RecvStream>, ConnectionLease)> {
+        let progress = RequestProgress::new(false);
         match tokio::time::timeout(
             REQUEST_TIMEOUT,
-            self.request_inner(route, method, path, body, false, class),
+            self.request_inner(route, method, path, body, &progress, class),
         )
         .await
         {
             Ok(result) => result,
-            Err(_) => Err("transport request timed out".into()),
+            Err(_) => Err(progress.timeout()),
         }
     }
 
@@ -514,10 +550,12 @@ impl Tp1Client {
         body: RequestBody<'_>,
         class: TrafficClass,
     ) -> Result<(StatusCode, Bytes)> {
+        let progress = RequestProgress::new(true);
         let result = tokio::time::timeout(REQUEST_TIMEOUT, async {
             let (response, _connection) = self
-                .request_inner(route, method, path, body, true, class)
+                .request_inner(route, method, path, body, &progress, class)
                 .await?;
+            progress.set(5);
             let status = response.status();
             let mut body = response.into_body();
             Ok::<_, Box<dyn Error + Send + Sync>>((status, read_body(&mut body).await?))
@@ -527,7 +565,7 @@ impl Tp1Client {
             Ok(result) => result,
             // A queued request or a slow response is not evidence that the
             // connection failed. Cancellation drops only this stream's lease.
-            Err(_) => Err("transport request timed out".into()),
+            Err(_) => Err(progress.timeout()),
         }
     }
 
@@ -537,14 +575,17 @@ impl Tp1Client {
         method: Method,
         path: &str,
         mut body: RequestBody<'_>,
-        finite: bool,
+        progress: &RequestProgress,
         class: TrafficClass,
     ) -> Result<(Response<h2::RecvStream>, ConnectionLease)> {
         let pool_key = route.key(self.bind_traffic_classes.then_some(class))?;
         let addr = route.addr;
         for attempt in 0..2 {
+            progress.set(0);
             let connection = self.connection(route, class).await?;
-            let lease = connection.lease(finite, class).await?;
+            progress.set(1);
+            let lease = connection.lease(progress.finite, class).await?;
+            progress.set(2);
             let mut client = match connection.sender.clone().ready().await {
                 Ok(client) => client,
                 Err(_) => {
@@ -581,6 +622,7 @@ impl Tp1Client {
             // idempotent, so evict the stale connection and retry once on a
             // fresh one rather than surface a transient transport error.
             if let Some(b) = body_bytes {
+                progress.set(3);
                 if let Err(error) = send.send_data(b, true) {
                     self.remove_connection(pool_key, &connection).await;
                     if attempt == 0 {
@@ -589,6 +631,7 @@ impl Tp1Client {
                     return Err(error.into());
                 }
             }
+            progress.set(4);
             match response.await {
                 Ok(response) => return Ok((response, lease)),
                 Err(error) => {
