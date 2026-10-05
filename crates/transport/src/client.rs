@@ -56,6 +56,7 @@ enum RequestBody<'a> {
 struct RequestProgress {
     finite: bool,
     stage: AtomicUsize,
+    connection: std::sync::Mutex<Option<Weak<PooledConnection>>>,
 }
 
 impl RequestProgress {
@@ -63,11 +64,17 @@ impl RequestProgress {
         Self {
             finite,
             stage: AtomicUsize::new(0),
+            connection: std::sync::Mutex::new(None),
         }
     }
 
     fn set(&self, stage: usize) {
         self.stage.store(stage, Ordering::Relaxed);
+    }
+
+    fn connection(&self, connection: &Arc<PooledConnection>) {
+        *self.connection.lock().unwrap_or_else(|p| p.into_inner()) =
+            Some(Arc::downgrade(connection));
     }
 
     fn timeout(&self) -> Box<dyn Error + Send + Sync> {
@@ -538,7 +545,7 @@ impl Tp1Client {
         .await
         {
             Ok(result) => result,
-            Err(_) => Err(progress.timeout()),
+            Err(_) => self.request_timeout(route, class, &progress).await,
         }
     }
 
@@ -563,10 +570,37 @@ impl Tp1Client {
         .await;
         match result {
             Ok(result) => result,
-            // A queued request or a slow response is not evidence that the
-            // connection failed. Cancellation drops only this stream's lease.
-            Err(_) => Err(progress.timeout()),
+            Err(_) => self.request_timeout(route, class, &progress).await,
         }
+    }
+
+    async fn request_timeout<T>(
+        &self,
+        route: Route<'_>,
+        class: TrafficClass,
+        progress: &RequestProgress,
+    ) -> Result<T> {
+        // Queueing or a partially received body does not condemn a healthy
+        // connection. A submitted request that never receives headers must not
+        // keep later work pinned to the same stalled circuit. Retire only that
+        // pool entry; existing stream leases retain their driver. Do not replay
+        // the request or reinterpret its uncertain outcome as a refusal.
+        if progress.stage.load(Ordering::Relaxed) == 4 {
+            let connection = progress
+                .connection
+                .lock()
+                .unwrap_or_else(|p| p.into_inner())
+                .as_ref()
+                .and_then(Weak::upgrade);
+            if let Some(connection) = connection {
+                self.remove_connection(
+                    route.key(self.bind_traffic_classes.then_some(class))?,
+                    &connection,
+                )
+                .await;
+            }
+        }
+        Err(progress.timeout())
     }
 
     async fn request_inner(
@@ -583,6 +617,7 @@ impl Tp1Client {
         for attempt in 0..2 {
             progress.set(0);
             let connection = self.connection(route, class).await?;
+            progress.connection(&connection);
             progress.set(1);
             let lease = connection.lease(progress.finite, class).await?;
             progress.set(2);

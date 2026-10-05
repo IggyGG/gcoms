@@ -14,3 +14,9 @@ Set `GCOMS_TRANSPORT_DIAGNOSTICS=1` for local timeout attribution: connection,
 request admission, HTTP/2 credit, or reply headers/body. These records contain no
 addresses, capabilities or payloads. Request deadlines and public errors remain
 unchanged.
+
+If a submitted request reaches that deadline without receiving reply headers,
+the client retires its exact cached connection so later work can reconnect.
+The timed-out request is not replayed, and its outcome remains uncertain.
+Existing subscribers keep their connection driver. Waiting for admission or a
+partially received response body does not evict an otherwise healthy connection.

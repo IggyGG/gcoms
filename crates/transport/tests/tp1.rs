@@ -113,32 +113,138 @@ async fn stalled_handshake_does_not_block_an_unrelated_destination() {
     stalled.abort();
 }
 
-#[tokio::test(start_paused = true)]
+#[tokio::test(flavor = "current_thread")]
 async fn finite_request_deadline_includes_response_body() {
     let identity = TlsIdentity::generate().unwrap();
     let service_id = identity.service_id();
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
     let tls = TlsAcceptor::from(Arc::new(identity.server_config().unwrap()));
+    let (headers_tx, headers_rx) = tokio::sync::oneshot::channel();
     tokio::spawn(async move {
         let (tcp, _) = listener.accept().await.unwrap();
         let tls = tls.accept(tcp).await.unwrap();
         let mut connection = h2::server::handshake(tls).await.unwrap();
         let (_request, mut respond) = connection.accept().await.unwrap().unwrap();
         let response = Response::builder().status(StatusCode::OK).body(()).unwrap();
-        let _unfinished_body = respond.send_response(response, false).unwrap();
-        while connection.accept().await.is_some() {}
+        let mut unfinished_body = respond.send_response(response, false).unwrap();
+        unfinished_body
+            .send_data(Bytes::from_static(b"partial"), false)
+            .unwrap();
+        headers_tx.send(()).unwrap();
+        while let Some(Ok((_request, mut respond))) = connection.accept().await {
+            let response = Response::builder().status(StatusCode::OK).body(()).unwrap();
+            respond.send_response(response, true).unwrap();
+        }
     });
 
-    let client = Tp1Client::new().unwrap();
-    let result = tokio::time::timeout(
-        std::time::Duration::from_secs(61),
-        client.get_pinned(addr, service_id, "/"),
+    let client = Arc::new(Tp1Client::new().unwrap());
+    let body_client = client.clone();
+    let body = tokio::spawn(async move { body_client.get_pinned(addr, service_id, "/").await });
+    headers_rx.await.unwrap();
+    // A second reply follows the first headers and partial body on the same
+    // driven connection. Finish real socket I/O before advancing test time.
+    client.get_pinned(addr, service_id, "/ready").await.unwrap();
+    tokio::task::yield_now().await;
+    tokio::time::pause();
+    tokio::time::advance(std::time::Duration::from_secs(61)).await;
+    tokio::time::resume();
+    let result = body.await.unwrap().unwrap_err();
+    assert_eq!(result.to_string(), "transport request timed out");
+    assert_eq!(client.pooled_connections().await, 1);
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn missing_reply_headers_retire_only_the_stalled_connection_without_replay() {
+    let identity = TlsIdentity::generate().unwrap();
+    let service_id = identity.service_id();
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    let tls = TlsAcceptor::from(Arc::new(identity.server_config().unwrap()));
+    let connections = Arc::new(AtomicUsize::new(0));
+    let requests = Arc::new(AtomicUsize::new(0));
+    let (stream_tx, mut stream_rx) = mpsc::unbounded_channel();
+    let (seen_tx, mut seen_rx) = mpsc::unbounded_channel();
+    let accepted = connections.clone();
+    let submitted = requests.clone();
+    let server = tokio::spawn(async move {
+        while let Ok((tcp, _)) = listener.accept().await {
+            accepted.fetch_add(1, Ordering::Relaxed);
+            let tls = tls.clone();
+            let submitted = submitted.clone();
+            let stream_tx = stream_tx.clone();
+            let seen_tx = seen_tx.clone();
+            tokio::spawn(async move {
+                let tls = tls.accept(tcp).await.unwrap();
+                let mut connection = h2::server::handshake(tls).await.unwrap();
+                let mut unanswered = Vec::new();
+                while let Some(Ok((request, mut respond))) = connection.accept().await {
+                    let response = Response::builder().status(StatusCode::OK).body(()).unwrap();
+                    match request.uri().path() {
+                        "/live" => {
+                            let body = respond.send_response(response, false).unwrap();
+                            stream_tx.send(body).unwrap();
+                        }
+                        "/stalled" => {
+                            submitted.fetch_add(1, Ordering::Relaxed);
+                            unanswered.push(respond);
+                            seen_tx.send(()).unwrap();
+                        }
+                        "/fresh" => {
+                            respond.send_response(response, true).unwrap();
+                        }
+                        path => panic!("unexpected path: {path}"),
+                    }
+                }
+            });
+        }
+    });
+
+    let client = Arc::new(Tp1Client::new().unwrap());
+    let mut live = client
+        .open_stream_body_pinned(addr, service_id, "live", None)
+        .await
+        .unwrap();
+    let mut live_body = stream_rx.recv().await.unwrap();
+    let stalled_client = client.clone();
+    let stalled = tokio::spawn(async move {
+        stalled_client
+            .get_pinned(addr, service_id, "/stalled")
+            .await
+    });
+    // Finish socket I/O before advancing the unchanged request deadline.
+    seen_rx.recv().await.unwrap();
+    tokio::time::pause();
+    tokio::time::advance(std::time::Duration::from_secs(61)).await;
+    tokio::time::resume();
+    let error = stalled.await.unwrap().unwrap_err();
+    assert_eq!(error.to_string(), "transport request timed out");
+    assert_eq!(client.pooled_connections().await, 0);
+
+    // Removing a pool entry preserves existing subscribers and their driver.
+    let expected = Cell::new(CellType::Msg, 0, 9, vec![4; 100]);
+    live_body
+        .send_data(Bytes::from(expected.encode_wire().unwrap()), false)
+        .unwrap();
+    let received = tokio::time::timeout(std::time::Duration::from_secs(5), live.recv())
+        .await
+        .expect("retirement keeps the existing subscriber alive")
+        .unwrap()
+        .unwrap();
+    assert_eq!(received, expected);
+
+    let fresh = tokio::time::timeout(
+        std::time::Duration::from_secs(5),
+        client.get_pinned(addr, service_id, "/fresh"),
     )
     .await
-    .expect("the client's own deadline fires before the test guard")
-    .unwrap_err();
-    assert_eq!(result.to_string(), "transport request timed out");
+    .expect("later work reconnects")
+    .unwrap();
+    assert_eq!(fresh.0, StatusCode::OK);
+    assert_eq!(connections.load(Ordering::Relaxed), 2);
+    assert_eq!(requests.load(Ordering::Relaxed), 1);
+    assert_eq!(client.pooled_connections().await, 1);
+    server.abort();
 }
 
 #[tokio::test(flavor = "current_thread")]

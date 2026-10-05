@@ -1,0 +1,36 @@
+{
+  "schema": 1,
+  "date": "2026-10-05",
+  "source_parent": "f868700dbc3de8607c34a1da4f6b1edcee66df2e",
+  "diagnosis": {
+    "load": "load-05",
+    "report_sha256": "f6709de0856c0c70c4eff8d47b4766507e6f936821942daf1108ec2cbfee7a5b",
+    "observed_timeout_stage": "reply_headers",
+    "finite": true,
+    "underlying_cause_proven": false
+  },
+  "change": {
+    "retire_exact_cached_connection": true,
+    "existing_subscribers_retained": true,
+    "automatic_timeout_replay": false,
+    "uncertain_outcome_preserved": true,
+    "request_deadline_seconds": 60,
+    "public_error": "transport request timed out"
+  },
+  "tests": {
+    "command": "cargo test --offline -p gcoms-transport --all-features --test tp1 -- --test-threads=4",
+    "passed": 31,
+    "failed": 0,
+    "ignored": 0,
+    "clippy_all_features_all_targets": true,
+    "format": true
+  },
+  "retained_first_regression_attempt": {
+    "passed": 30,
+    "failed": 1,
+    "reason": "body timeout test advanced paused time before reply headers arrived; explicit same-connection I/O synchronization added"
+  },
+  "release_qualified": false,
+  "fleet_deployed": false,
+  "codematch": "unreachable"
+}
