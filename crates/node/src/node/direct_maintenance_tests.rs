@@ -63,7 +63,9 @@ async fn local_route_failure_retries_exact_work_without_shortening_unknown_outco
                 route_unavailable: local_route_unavailable(&result),
             }
         }));
+        let before_completion = Instant::now();
         owner.complete_next(&state).await;
+        let after_completion = Instant::now();
         assert!(owner.active.is_empty());
         let st = state.lock().unwrap();
         let retained = &st.pending_1to1[&[1; 16]];
@@ -74,8 +76,8 @@ async fn local_route_failure_retries_exact_work_without_shortening_unknown_outco
             now + Duration::from_secs(60)
         );
         if failure == Some("no ready independent GC/2 route") {
-            assert!(retained.next_attempt >= now + Duration::from_secs(4));
-            assert!(retained.next_attempt < now + Duration::from_secs(7));
+            assert!(retained.next_attempt >= before_completion + Duration::from_millis(3750));
+            assert!(retained.next_attempt <= after_completion + Duration::from_millis(6250));
             #[cfg(feature = "experimental-gc2")]
             assert_eq!(owner.repair_due[&key], retained.next_attempt);
         } else {

@@ -1,4 +1,4 @@
-Direct recovery regression: `cargo test --offline --locked -p gcoms-node --all-features --lib direct_maintenance_tests -- --test-threads=1` must release the completed attempt, retry confirmed local route failure within 4–7 seconds, preserve exact bytes and original expiry, and leave timeout, Internal, accepted and rekeyed work on their original schedule. No deadline or load gate changes.
+Direct recovery regression: `cargo test --offline --locked -p gcoms-node --all-features --lib node::direct::maintenance_tests -- --test-threads=1` must release the completed attempt, retry confirmed local route failure within the existing 3.75–6.25-second jitter bounds, preserve exact bytes and original expiry, and leave timeout, Internal, accepted and rekeyed work on their original schedule. No deadline or load gate changes.
 
 Bandwidth regression: `cargo test --offline --locked -p gcoms-routing --all-features --lib service::bandwidth::tests -- --test-threads=1` requires opposite-direction admission to preserve a blocked read or write wake-up, shared aggregate credit and byte accounting, and clean pause errors. Keep the before-fix failure and interrupted load-07 evidence.
 
