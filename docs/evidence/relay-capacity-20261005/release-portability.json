@@ -1,0 +1,46 @@
+{
+  "schema": 1,
+  "at": "2026-10-05T16:28:12.299986+00:00",
+  "base_commit": "370b4c735f6fc2f66e3c6edc58231ca8a3a6eb33",
+  "reused_mobile_fix": "9e57d2f179d7050648eec83cab94a640a1cf1cb7",
+  "cherry_pick": "09b6a0ac1eedab13dfa852350f3cef03dc52aad7",
+  "changes": [
+    "Compile contact_backing_off in experimental-gc2 outbound-only builds",
+    "Refresh isolated consumer lock for existing tokio signal feature; only adds already-pinned signal-hook-registry 1.4.8"
+  ],
+  "validation": {
+    "released_0_1_49_unchanged_source_modes": [
+      "ipc",
+      "embedded",
+      "network-client"
+    ],
+    "isolated_consumer_graph_packages": {
+      "ipc": 54,
+      "embedded": 253,
+      "network-client": 252
+    },
+    "network_client_relay_host_absent": true,
+    "all_locked": true,
+    "size_measured": false,
+    "l0_source_paths": 998,
+    "research_hashes": 7
+  },
+  "original_failures": {
+    "android": 37338274084,
+    "ios": 37338267042,
+    "sdk": 37334201400
+  },
+  "source_sha256": {
+    "crates/node/src/scheduler.rs": "3160bcb9f31c56fc5871c8721ffbba9abd1eba5f63f5a782b006b26d2abc76bd",
+    "examples/rust-integration/Cargo.lock": "5e91861bcd56d58d6e4d5d043b1167b82e750aa6b9389d1bcba80f2e08d33723"
+  },
+  "retained_evidence": "/run/media/user/SSD-2/retained/gcoms-release-portability-20261005",
+  "logs": {
+    "released-facade/summary.json": "acc86a313ce110117a762527a70ad31d8d3023244ee6e71d89a437f25282792b",
+    "consumer-graphs/summary.json": "f3bbe2d32883837fe0088e469f58739a840f37c5cf5f856ae304272ab3d76423",
+    "consumer-lock-update.log": "c26aeef3e1d4069e9b32ba348324c0213ceb5049938d5772bab80544df5b22a6"
+  },
+  "codematch": "unreachable",
+  "release_qualified": false,
+  "passed": true
+}
