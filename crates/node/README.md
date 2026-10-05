@@ -78,3 +78,8 @@ ciphertext after about five seconds, with jitter. This also covers a ready-set
 change arriving before the failed attempt completes. Recipient acknowledgement
 waits, uncertain network outcomes, expiry and rekeyed work keep their existing
 retry schedule. No retry opens an entry or uses a direct fallback.
+
+Fleet qualification uses 64 simultaneous clients across four operator channels,
+with 63 recipient deliveries per round, a full file transfer and a relay restart.
+The separate single-channel 64-member admission diagnostic remains available.
+Its retained timeout is not a capacity qualification pass.

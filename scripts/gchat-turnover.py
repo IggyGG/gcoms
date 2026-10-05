@@ -24,6 +24,28 @@ def load_relay_capacity(config):
         raise ValueError('relay capacity requires 1..4096 circuits and twice that many connections, at most 8192')
     return ['--relay-circuits', str(circuits), '--relay-connections', str(connections)]
 
+def load_channel_members(topology='fleet-four-channels'):
+    if topology == 'single-channel':
+        return [list(range(64))]
+    if topology != 'fleet-four-channels':
+        raise ValueError('unknown load topology')
+    # The operator belongs to every fleet channel; the other 63 clients each
+    # belong to one. Both topologies deliver to 63 recipients per round.
+    return [[0, *range(1+index,64,4)] for index in range(4)]
+
+def validated_load_delivery(seen, members, sender, sent):
+    if sender not in members or len(set(members)) != len(members):
+        raise ValueError('invalid load channel membership')
+    if set(seen) != set(members) or not sent:
+        return None
+    if len(sent) != 1:
+        raise RuntimeError('duplicated application command')
+    message=sent[0]
+    if any(row['id'] != message['id'] or row['mine'] != (client == sender)
+           for client,row in seen.items()) or message['mine'] is not True:
+        raise RuntimeError('command identity or authorship changed')
+    return message if message.get('delivery') == 'delivered' else None
+
 def fixture_links(rows, routes):
     """Allow only the kernel's inert IPIP fallback in addition to fixture links.
 
@@ -376,9 +398,10 @@ class Journey(base.Worker):
             except (ValueError, KeyError): pass
         return None
 
-    def readiness(self, i):
+    def readiness(self, i, subscriptions=None):
         status = self.status(i)
-        return status if status and status.get('profile_id') == 46 and status.get('bootstrap_version') == 2 and status.get('usable_terminal_routes', 0) > 0 and status.get('interactive_subscriptions', 0) >= getattr(self, 'expected_subscriptions', 2) and status.get('bulk_subscriptions', 0) >= getattr(self, 'expected_subscriptions', 2) else None
+        expected=subscriptions if subscriptions is not None else getattr(self, 'expected_subscriptions', 2)
+        return status if status and status.get('profile_id') == 46 and status.get('bootstrap_version') == 2 and status.get('usable_terminal_routes', 0) > 0 and status.get('interactive_subscriptions', 0) >= expected and status.get('bulk_subscriptions', 0) >= expected else None
 
     def sample(self):
         self.event('transport_sample', clients=[self.status(i) for i in (0,1)])
@@ -716,45 +739,62 @@ class Journey(base.Worker):
             until(lambda i=i:self.request(i,'snapshot'),setup,'64-client IPC startup')
             until(lambda i=i:self.readiness(i),setup,'64-client protected readiness')
         for i in (0,1): self.files(i,'configure',quota_bytes=str(32*1024*1024),retention_days=7)
-        channel=self.submit(0,'/create #relay-load operator')['conversation']
-        for i in clients[1:]:
-            code=until(lambda:self.remote_invitation(channel),setup,'64-member invitation')
-            if self.join_invitation(i,code,f'participant{i}')['conversation']!=channel:
-                raise RuntimeError('participant joined another channel')
-            self.event('load_member_joined',client=i)
+        groups=[]
+        for index,members in enumerate(load_channel_members(self.spec['config']['load_topology'])):
+            channel=self.submit(0,f'/create #relay-load{index} operator')['conversation']
+            groups.append({'index':index,'channel':channel,'members':members})
+            for i in members[1:]:
+                code=until(lambda:self.remote_invitation(channel),setup,'64-client invitation')
+                if self.join_invitation(i,code,f'participant{i}')['conversation']!=channel:
+                    raise RuntimeError('participant joined another channel')
+                self.event('load_member_joined',client=i,channel_index=index)
         self.expected_subscriptions=4
-        for i in clients: until(lambda i=i:self.readiness(i),setup,'64-member subscription readiness')
+        for i in clients:
+            expected=2+2*len(groups) if i==0 else 4
+            until(lambda i=i,expected=expected:self.readiness(i,expected),setup,'64-client subscription readiness')
         duration=self.spec['config']['load_seconds']
         began=time.monotonic(); end=began+duration; began_unix=time.time()
         self.rpc_deadline=end+120
         records=[]; attempts=0; refused=0; pending=[]; restart=False
-        transfer=self.start_file(channel,self.spec['config']['file_bytes'],'release-payload')
-        self.event('relay_load_started',clients=64,contributions=32,seconds=duration,file=transfer)
+        transfer=self.start_file(groups[0]['channel'],self.spec['config']['file_bytes'],'release-payload')
+        self.event('relay_load_started',clients=64,contributions=32,seconds=duration,file=transfer,
+            channels=len(groups),channel_members=[len(g['members']) for g in groups])
         next_send=began; sender=0
         while time.monotonic()<end or pending:
             now=time.monotonic()
             if now>end+120: raise TimeoutError('load delivery did not drain within its bound')
             if now<end and now>=next_send:
-                token=f'@all relay-load:{sender}:{uuid.uuid4().hex}'
-                started=time.monotonic(); attempts+=1
-                try:
-                    self.submit(sender%64,token,channel)
-                    pending.append({'sender':sender%64,'token':token,'started':started,'seen':{}})
-                except RuntimeError as error:
-                    if not any(word in str(error).lower() for word in ('overloaded','full','refused','backing off')): raise
-                    refused+=1
+                def send(group):
+                    source=group['members'][sender%len(group['members'])]
+                    item={**group,'sender':source,'token':f'@all relay-load:{sender}:{uuid.uuid4().hex}',
+                        'started':time.monotonic(),'seen':{}}
+                    try:
+                        self.submit(source,item['token'],group['channel'])
+                        return item
+                    except RuntimeError as error:
+                        if not any(word in str(error).lower() for word in ('overloaded','full','refused','backing off')): raise
+                        return None
+                # Four simultaneous channel commands keep the original 63
+                # recipient deliveries every ten seconds, with the same ACKs.
+                with concurrent.futures.ThreadPoolExecutor(max_workers=len(groups)) as pool:
+                    batch=list(pool.map(send,groups))
+                attempts+=len(groups)
+                refused+=sum(item is None for item in batch)
+                pending.extend(item for item in batch if item is not None)
                 sender+=1; next_send=began+sender*10
             for item in list(pending):
-                for i in clients:
+                for i in item['members']:
                     if i in item['seen']: continue
-                    rows=self.history(i,channel,item['token'])
+                    rows=self.history(i,item['channel'],item['token'])
                     if rows:
                         if len(rows)!=1: raise RuntimeError('duplicated application command')
-                        item['seen'][i]={'id':rows[0]['id'],'seconds':time.monotonic()-item['started']}
-                sent=self.history(item['sender'],channel,item['token'])
-                if len(item['seen'])==64 and sent and sent[0].get('delivery')=='delivered':
-                    if len({row['id'] for row in item['seen'].values()})!=1: raise RuntimeError('command identity changed')
-                    record={'sender':item['sender'],'recipients':63,'id':sent[0]['id'],
+                        item['seen'][i]={'id':rows[0]['id'],'mine':rows[0]['mine'],
+                            'seconds':time.monotonic()-item['started']}
+                sent=self.history(item['sender'],item['channel'],item['token'])
+                message=validated_load_delivery(item['seen'],item['members'],item['sender'],sent)
+                if message:
+                    record={'sender':item['sender'],'channel_index':item['index'],
+                        'recipients':len(item['members'])-1,'id':message['id'],
                         'recipient_seconds':[row['seconds'] for i,row in item['seen'].items() if i!=item['sender']],
                         'authenticated_ack_seconds':time.monotonic()-item['started']}
                     records.append(record); pending.remove(item)
@@ -785,6 +825,8 @@ class Journey(base.Worker):
                         and row.get('reason') in ('queue_full','store_capacity','replay_capacity')): relay_refusals+=1
         relay_fraction=relay_refusals/max(1,data_accepted+forwarding_accepted+relay_refusals)
         self.result['relay_load']={'clients':64,'seconds':duration,'commands':len(records),'attempts':attempts,
+            'topology':self.spec['config']['load_topology'],'channels':len(groups),
+            'channel_members':[len(g['members']) for g in groups],'recipient_deliveries_per_round':63,
             'application_refusals':refused,'application_refusal_fraction':refused/max(1,attempts),'recipient_p95_seconds':p95,
             'authenticated_commands':records,'file':transfer,'relay_restart':restart,'contribution_transferred_bytes':carried,
             'relay_data_accepted':data_accepted,'relay_forwarding_accepted':forwarding_accepted,'relay_refusals':relay_refusals,'relay_refusal_fraction':relay_fraction,
@@ -946,6 +988,7 @@ def main():
     parser.add_argument('--expiries',type=int,default=3,choices=(1,2,3))
     parser.add_argument('--mode',choices=('smoke','file-recovery','archive-failure','credential-expiry','carrier-cap','entry-loss','multi-party','relay-load'),default='credential-expiry')
     parser.add_argument('--load-seconds',type=int,default=1800,help='relay-load only; shorter runs cannot qualify the release')
+    parser.add_argument('--load-single-channel',action='store_true',help='retain the separate 64-member admission diagnostic')
     parser.add_argument('--load-relay-circuits',type=int,
                         help='relay-load only; default 2048 matches the live operator fleet')
     parser.add_argument('--load-relay-connections',type=int,
@@ -963,7 +1006,7 @@ def main():
             args.file_bytes not in (None,16*1024*1024) or args.file_completion_seconds not in (None,180)):
         parser.error('release check requires file-recovery with 16 MiB and 180 seconds')
     if args.mode=='relay-load' and (not args.fixture_host or not 60<=args.load_seconds<=1800): parser.error('relay-load requires the fixture host and 60..1800 seconds')
-    if args.mode != 'relay-load' and (args.load_relay_circuits is not None or args.load_relay_connections is not None):
+    if args.mode != 'relay-load' and (args.load_single_channel or args.load_relay_circuits is not None or args.load_relay_connections is not None):
         parser.error('relay capacity overrides require relay-load')
     if args.mode == 'relay-load':
         args.load_relay_circuits = 2048 if args.load_relay_circuits is None else args.load_relay_circuits
@@ -985,6 +1028,7 @@ def main():
     before=links();tool_hash=sha256(Path(__file__));helper_hash=sha256(HELPER)
     config={'release_check':args.release_check,'mode':args.mode,'lifecycle_diagnostics':args.mode in ('carrier-cap','entry-loss'),'expiries':args.expiries,'file_bytes':args.file_bytes,'file_completion_seconds':args.file_completion_seconds,'production_credential_seconds':3600,'production_carrier_cap_seconds':1800,'recovery_seconds':300}
     if args.mode=='relay-load': config.update(load_seconds=args.load_seconds,relay_schedule='gc2',
+        load_topology='single-channel' if args.load_single_channel else 'fleet-four-channels',
         relay_circuits=args.load_relay_circuits,relay_connections=args.load_relay_connections)
     spec={'out':str(root),'build':build,'config':config,'workload':'turnover','seed':20260920,
           'uid':os.getuid(),'gid':os.getgid(),'run_nonce':uuid.uuid4().hex,

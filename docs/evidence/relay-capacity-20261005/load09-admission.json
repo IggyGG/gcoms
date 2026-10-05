@@ -1,0 +1,23 @@
+{
+  "schema": 1,
+  "passed": false,
+  "sources": {
+    "gcoms": {
+      "revision": "bce6f09e7a8fbd913ff2650a9918f4346a55e199",
+      "snapshot_sha256": "2c7390b08d38aea0d580c0321dd9bf8d4c360c7ab83c5539d5d6a7840ca5b306"
+    },
+    "gchat": {
+      "revision": "753b7cc6c7348bc03327c7fe5e992e8b15a00625",
+      "snapshot_sha256": "6eb78703ca6b33db3e7e07bca1a8ace4631cef1d64842761543803b9559d8aa2"
+    }
+  },
+  "topology": "single-channel",
+  "clients_started": 64,
+  "channel_members_confirmed": 43,
+  "campaign_started": false,
+  "failure": "RuntimeError: invitation join did not confirm channel membership: error runtime: timed out waiting for the owner (they may be offline)",
+  "children_stopped": true,
+  "transport_timeouts": 0,
+  "report_sha256": "ac3379fbd7a8b82719debc0a041be2f8598a802544a8f0372e37854e513c37f8",
+  "disposition": "Retained failed 64-member admission diagnostic. The fleet gate uses all 64 clients across its four channels, with the same 63 recipient deliveries per ten-second round. This does not qualify single-channel 64-member admission."
+}

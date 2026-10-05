@@ -18,6 +18,34 @@ SPEC.loader.exec_module(turnover)
 
 @unittest.skipUnless(os.name == "posix", "Linux namespace controller")
 class ControllerTests(unittest.TestCase):
+    def test_fleet_load_keeps_every_client_and_the_original_recipient_rate(self):
+        groups=turnover.load_channel_members()
+        self.assertEqual([len(g) for g in groups],[17,17,17,16])
+        self.assertEqual(sorted(i for g in groups for i in g[1:]),list(range(1,64)))
+        self.assertTrue(all(g[0]==0 for g in groups))
+        self.assertEqual(sum(len(g)-1 for g in groups),63)
+        self.assertEqual(turnover.load_channel_members('single-channel'),[list(range(64))])
+        with self.assertRaises(ValueError):turnover.load_channel_members('unknown')
+
+    def test_load_delivery_needs_every_member_correct_authorship_and_all_acks(self):
+        for members in turnover.load_channel_members()+turnover.load_channel_members('single-channel'):
+            sender=members[-1]
+            seen={i:dict(id='exact',mine=i==sender,seconds=1) for i in members}
+            sent=[dict(id='exact',mine=True,delivery='delivered')]
+            self.assertEqual(turnover.validated_load_delivery(seen,members,sender,sent),sent[0])
+            for i in members:
+                changed=copy.deepcopy(seen);del changed[i]
+                self.assertIsNone(turnover.validated_load_delivery(changed,members,sender,sent))
+                for mutation in [dict(id='different'),dict(mine=i!=sender)]:
+                    changed=copy.deepcopy(seen);changed[i].update(mutation)
+                    with self.assertRaisesRegex(RuntimeError,'identity or authorship'):
+                        turnover.validated_load_delivery(changed,members,sender,sent)
+            self.assertIsNone(turnover.validated_load_delivery(seen,members,sender,[{**sent[0],'delivery':'accepted'}]))
+            with self.assertRaisesRegex(RuntimeError,'duplicated'):
+                turnover.validated_load_delivery(seen,members,sender,sent+sent)
+            with self.assertRaises(ValueError):turnover.validated_load_delivery(seen,members,-1,sent)
+            with self.assertRaises(ValueError):turnover.validated_load_delivery(seen,members+members[:1],sender,sent)
+
     def test_load_capacity_matches_node_bounds_and_keeps_other_modes_unchanged(self):
         self.assertEqual(turnover.load_relay_capacity({'mode':'smoke'}), [])
         self.assertEqual(turnover.load_relay_capacity({'mode':'relay-load',
