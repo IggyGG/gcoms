@@ -801,3 +801,7 @@ async fn read_body_inner(
     }
     Ok(Bytes::from(buf))
 }
+
+#[cfg(test)]
+#[path = "server_lifetime_tests.rs"]
+mod lifetime_tests;
