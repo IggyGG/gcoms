@@ -209,7 +209,15 @@ async fn reusable_invitation_does_not_wait_for_prior_channel_delivery() {
         .unwrap()
         .unwrap();
     command_loop.await.unwrap();
-    assert!(text_result.await.unwrap().is_err());
+    // Shutdown ends the first-hop attempt, not the durable message's local
+    // acceptance. It remains in the outbox until an authenticated member ACK.
+    text_result.await.unwrap().unwrap();
+    assert_eq!(
+        state.lock().unwrap().channels["invites"]
+            .message_outbox
+            .len(),
+        1
+    );
     drop(held_reply);
     server.abort();
     let _ = server.await;
