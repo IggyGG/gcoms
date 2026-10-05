@@ -793,13 +793,29 @@ async fn read_payload<R: AsyncRead + Unpin>(
 }
 
 #[cfg(all(any(unix, windows), feature = "ipc"))]
+struct ClientWriter<W> {
+    stream: W,
+}
+
+#[cfg(all(any(unix, windows), feature = "ipc"))]
+impl<W: AsyncWrite + Unpin> ClientWriter<W> {
+    fn new(stream: W) -> Self {
+        Self { stream }
+    }
+
+    async fn write_frame(&mut self, frame: &Frame) -> Result<(), SdkError> {
+        write_client_frame(&mut self.stream, frame).await
+    }
+}
+
+#[cfg(all(any(unix, windows), feature = "ipc"))]
 struct IpcInner {
     component_scoped: bool,
     authenticated_component_id: Option<[u8; 16]>,
     identity: std::sync::OnceLock<Identity>,
     granted: Vec<Capability>,
     event_stream_id: [u8; 16],
-    writer: Mutex<Option<tokio::io::WriteHalf<ClientStream>>>,
+    writer: Mutex<Option<ClientWriter<tokio::io::WriteHalf<ClientStream>>>>,
     pending: Mutex<HashMap<u64, oneshot::Sender<Result<Response, SdkError>>>>,
     events: broadcast::Sender<EventEnvelope>,
     closed: watch::Sender<bool>,
@@ -975,7 +991,7 @@ impl IpcClient {
             identity: std::sync::OnceLock::new(),
             granted,
             event_stream_id,
-            writer: Mutex::new(Some(writer)),
+            writer: Mutex::new(Some(ClientWriter::new(writer))),
             pending: Mutex::new(HashMap::new()),
             events,
             closed: watch::channel(false).0,
@@ -1120,7 +1136,7 @@ impl IpcClient {
             match writer.as_mut() {
                 Some(writer) if !*closed.borrow() => tokio::select! {
                     _ = closed.changed() => Err(SdkError::ConnectionClosed),
-                    result = write_client_frame(writer, &frame) => result,
+                    result = writer.write_frame(&frame) => result,
                 },
                 _ => Err(SdkError::ConnectionClosed),
             }
@@ -3423,6 +3439,49 @@ mod interrupted_read_tests {
             frame,
             Frame::Request(RequestEnvelope { request_id: 42, .. })
         ));
+    }
+}
+
+#[cfg(all(test, any(unix, windows), feature = "ipc"))]
+mod interrupted_write_tests {
+    use super::*;
+
+    fn request(id: u64) -> Frame {
+        Frame::Request(RequestEnvelope {
+            version: VERSION,
+            request_id: id,
+            request: Request::Identity,
+        })
+    }
+
+    #[tokio::test]
+    async fn cancelled_partial_request_finishes_before_the_next_frame() {
+        tokio::time::timeout(std::time::Duration::from_secs(5), async {
+            let (mut peer, stream) = tokio::io::duplex(1);
+            let writer = Arc::new(Mutex::new(ClientWriter::new(stream)));
+            let first_writer = writer.clone();
+            let first = tokio::spawn(async move {
+                first_writer.lock().await.write_frame(&request(41)).await
+            });
+            // Capacity one proves the first request has started but cannot yet
+            // finish its length prefix. Cancel without sleeps or scheduler luck.
+            let mut length = [0; 4];
+            peer.read_exact(&mut length[..2]).await.unwrap();
+            first.abort();
+            assert!(first.await.unwrap_err().is_cancelled());
+            let next_writer = writer.clone();
+            let next = tokio::spawn(async move {
+                next_writer.lock().await.write_frame(&request(42)).await
+            });
+            peer.read_exact(&mut length[2..]).await.unwrap();
+            let mut payload = vec![0; u32::from_be_bytes(length) as usize];
+            peer.read_exact(&mut payload).await.unwrap();
+            assert_eq!(decode(&payload).unwrap(), request(41));
+            assert_eq!(read_frame(&mut peer).await.unwrap(), request(42));
+            next.await.unwrap().unwrap();
+        })
+        .await
+        .expect("cancelled writes cannot corrupt or wedge the next request");
     }
 }
 
