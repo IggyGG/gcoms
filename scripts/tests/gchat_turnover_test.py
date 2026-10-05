@@ -19,6 +19,80 @@ SPEC.loader.exec_module(turnover)
 
 @unittest.skipUnless(os.name == "posix", "Linux namespace controller")
 class ControllerTests(unittest.TestCase):
+    @staticmethod
+    def introduction(identity, expiry=3600, epoch=1):
+        return bytes([identity])*83+bytes([epoch])*64+expiry.to_bytes(8,'big')
+
+    def test_routing_renewal_preserves_identity_and_hourly_authority(self):
+        old=[self.introduction(1),self.introduction(2)]
+        fresh=[self.introduction(1,7200,2),self.introduction(2,7200,2)]
+        self.assertEqual(turnover.renewed_records(old,old,3599),old)
+        with self.assertRaises(TimeoutError):turnover.renewed_records(old,old,3600)
+        self.assertEqual(turnover.renewed_records(old,fresh,3601),fresh)
+        for offset in (0,19,51):
+            changed=bytearray(fresh[0]);changed[offset]^=1
+            with self.subTest(offset=offset),self.assertRaisesRegex(ValueError,'identity'):
+                turnover.renewed_records(old,[bytes(changed),fresh[1]],3601)
+        with self.assertRaisesRegex(ValueError,'within one epoch'):
+            turnover.renewed_records(old,[self.introduction(1,3600,2),old[1]],3599)
+        with self.assertRaisesRegex(ValueError,'lifetime or rollback'):
+            turnover.renewed_records(fresh,old,3599)
+        with self.assertRaisesRegex(ValueError,'lifetime or rollback'):
+            turnover.renewed_records(old,fresh,3599)
+
+    def test_routing_bundles_are_bounded_and_unambiguous(self):
+        raw=turnover.bootstrap_bytes([self.introduction(1)])
+        self.assertEqual(turnover.bootstrap_records(raw),[self.introduction(1)])
+        for invalid in (raw[:-1],raw+b'x',b'',b'GCRB\x02\x00',
+                        b'GCRB\x02\x09'+raw[6:]*9):
+            with self.subTest(length=len(invalid)),self.assertRaises(ValueError):
+                turnover.bootstrap_records(invalid)
+        with self.assertRaisesRegex(ValueError,'duplicate'):
+            turnover.bootstrap_bytes([self.introduction(1)]*2)
+
+    def test_routing_refresh_replaces_every_bundle_without_changing_client_routes(self):
+        old=[self.introduction(i) for i in range(1,7)]
+        fresh=[self.introduction(i,7200,2) for i in range(1,7)]
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory)
+            (root/'bootstrap').write_bytes(turnover.bootstrap_bytes(old))
+            for client in range(2):
+                (root/f'c{client}').mkdir()
+                (root/f'c{client}/bootstrap').write_bytes(turnover.bootstrap_bytes(old[:client+1]))
+            def control(i,command):
+                self.assertEqual(command,'routing_bootstrap')
+                return {'routing_bundle_b64':base64.urlsafe_b64encode(turnover.bootstrap_bytes([fresh[i]])).decode().rstrip('=')}
+            renewal=turnover.FixtureRoutingRenewal(root,2,0,control,os.getuid(),os.getgid())
+            renewal.refresh(now=3601)
+            for path,expected in [(root/'bootstrap',fresh),(root/'c0/bootstrap',fresh[:1]),
+                                  (root/'c1/bootstrap',fresh[:2])]:
+                self.assertEqual(turnover.bootstrap_records(path.read_bytes()),expected)
+                self.assertEqual(path.stat().st_mode&0o777,0o600)
+            self.assertEqual(renewal.receipt['changed_bundles'],3)
+            renewal.refresh(now=3602)
+            self.assertEqual(renewal.receipt['changed_bundles'],3)
+            renewal.close();self.assertTrue(renewal.receipt['stopped'])
+            renewal.error='producer failed'
+            with self.assertRaisesRegex(RuntimeError,'producer failed'):renewal.check()
+
+    def test_failed_atomic_refresh_retains_the_complete_original(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path=Path(directory)/'bootstrap';path.write_bytes(b'old')
+            with mock.patch.object(turnover.os,'replace',side_effect=OSError('disk failure')):
+                with self.assertRaises(OSError):turnover.replace_private(path,b'new',os.getuid(),os.getgid())
+            self.assertEqual(path.read_bytes(),b'old')
+            self.assertEqual(list(path.parent.iterdir()),[path])
+
+    def test_routing_worker_surfaces_rejected_authority_and_stops(self):
+        renewal=turnover.FixtureRoutingRenewal.__new__(turnover.FixtureRoutingRenewal)
+        renewal.stop=threading.Event();renewal.thread=None;renewal.error=None;renewal.receipt={}
+        renewal.refresh=mock.Mock(side_effect=[None,ValueError('changed identity')])
+        with mock.patch.object(renewal.stop,'wait',return_value=False):
+            renewal.start();renewal.thread.join(timeout=2)
+        self.assertFalse(renewal.thread.is_alive())
+        with self.assertRaisesRegex(RuntimeError,'changed identity'):renewal.close()
+        self.assertTrue(renewal.receipt['stopped'])
+
     def test_receiver_observation_precedes_collection_of_unrelated_slow_work(self):
         release=threading.Event(); held=threading.Event()
         item=dict(channel='channel',token='command',started=10)

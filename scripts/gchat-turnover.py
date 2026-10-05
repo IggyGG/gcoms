@@ -2,7 +2,7 @@
 """Disconnected real-daemon turnover journey; no privacy/fleet qualification."""
 import argparse, base64, concurrent.futures, hashlib, importlib.util, json, os
 from pathlib import Path
-import select, signal, socket, subprocess, sys, threading, time, uuid
+import select, signal, socket, subprocess, sys, tempfile, threading, time, uuid
 ROOT = next(parent for parent in Path(__file__).resolve().parents if (parent / 'scripts/privacy-client-capture.py').is_file())
 HELPER = ROOT / 'scripts/privacy-client-capture.py'
 sys.path.insert(0, str(HELPER.parent))
@@ -13,6 +13,115 @@ FIXTURE, FIXTURE6 = base.FIXTURE, base.FIXTURE6
 RELAYS = tuple(f'11.231.97.{n}' for n in range(10, 16))
 CLIENT, CLIENT6 = base.CLIENT, base.CLIENT6
 SCOPE = 'actual_gchat_disconnected_fivehop_turnover_v2'
+
+def bootstrap_records(raw):
+    if len(raw)<6 or raw[:5]!=b'GCRB\x02' or not 1<=raw[5]<=8 or len(raw)!=6+155*raw[5]:
+        raise ValueError('invalid bounded fixture routing bundle')
+    records=[raw[6+i*155:6+(i+1)*155] for i in range(raw[5])]
+    if len({r[:83] for r in records})!=len(records):
+        raise ValueError('duplicate fixture routing identity')
+    return records
+
+def bootstrap_bytes(records):
+    raw=b'GCRB\x02'+bytes([len(records)])+b''.join(records)
+    bootstrap_records(raw)
+    return raw
+
+def renewed_records(previous, incoming, now):
+    # Address, service principal and stable re-entry authority are retained.
+    # Entry/transit authority rotates at the production hour boundary.
+    if [r[:83] for r in incoming]!=[r[:83] for r in previous]:
+        raise ValueError('fixture introduction changed its verified relay identity')
+    for old,new in zip(previous,incoming):
+        expiry=int.from_bytes(new[147:155],'big')
+        if expiry<=now:
+            raise TimeoutError('fixture routing introductions expired')
+        if expiry>now+3600 or expiry<int.from_bytes(old[147:155],'big'):
+            raise ValueError('fixture routing introduction lifetime or rollback')
+        if expiry==int.from_bytes(old[147:155],'big') and old!=new:
+            raise ValueError('fixture routing authority changed within one epoch')
+    return incoming
+
+def replace_private(path, raw, uid, gid):
+    # Readers always observe a complete owner-only bundle, including rollover.
+    with tempfile.NamedTemporaryFile(dir=path.parent,delete=False) as out:
+        temporary=Path(out.name)
+        try:
+            os.fchmod(out.fileno(),0o600);os.fchown(out.fileno(),uid,gid)
+            out.write(raw);out.flush()
+            os.replace(temporary,path)
+        finally:
+            temporary.unlink(missing_ok=True)
+
+class FixtureRoutingRenewal:
+    def __init__(self, root, clients, contributions, control, uid, gid):
+        self.root,self.control,self.uid,self.gid=root,control,uid,gid
+        self.contributions=contributions
+        self.operator=bootstrap_records((root/'bootstrap').read_bytes())
+        self.contributed=[bootstrap_records((root/f'c{i+2}/contribution').read_bytes())[0]
+                          for i in range(contributions)]
+        self.clients={root/f'c{i}/bootstrap':bootstrap_records((root/f'c{i}/bootstrap').read_bytes())
+                      for i in range(clients)}
+        self.stop=threading.Event();self.error=None;self.thread=None
+        self.receipt={'cycles':0,'changed_bundles':0,'operator_relays':len(self.operator),
+                      'contributions':contributions,'clients':clients,'stopped':False}
+
+    def refresh(self, now=None):
+        now=time.time() if now is None else now
+        operators=[]
+        for i in range(len(self.operator)):
+            encoded=self.control(i,'routing_bootstrap')['routing_bundle_b64']
+            operators.append(bootstrap_records(base64.urlsafe_b64decode(encoded+'='*(-len(encoded)%4)))[0])
+        operators=renewed_records(self.operator,operators,now)
+        contributions=renewed_records(self.contributed,
+            [bootstrap_records((self.root/f'c{i+2}/contribution').read_bytes())[0]
+             for i in range(self.contributions)],now)
+        by_identity={r[:83]:r for r in operators+contributions}
+        bundles={self.root/'bootstrap':operators}
+        bundles.update({path:[by_identity[r[:83]] for r in old] for path,old in self.clients.items()})
+        for path,records in bundles.items():
+            raw=bootstrap_bytes(records)
+            if path.read_bytes()!=raw:
+                replace_private(path,raw,self.uid,self.gid)
+                self.receipt['changed_bundles']+=1
+        self.operator,self.contributed=operators,contributions
+        self.receipt.update(cycles=self.receipt['cycles']+1,
+            expires_at=min(int.from_bytes(r[147:155],'big') for r in operators+contributions))
+
+    def start(self):
+        deadline=time.monotonic()+30
+        while True:
+            try:
+                self.refresh();break
+            except (OSError,RuntimeError):
+                if time.monotonic()>=deadline:raise
+                time.sleep(1)
+        def run():
+            unavailable=None
+            while not self.stop.wait(5 if unavailable is None else 1):
+                try:
+                    self.refresh();unavailable=None
+                except (OSError,RuntimeError) as error:
+                    unavailable=time.monotonic() if unavailable is None else unavailable
+                    if time.monotonic()-unavailable<30:continue
+                    self.error=f'fixture routing refresh unavailable for 30 seconds: {type(error).__name__}'
+                    return
+                except Exception as error:
+                    self.error=f'fixture routing refresh rejected: {error}'
+                    return
+        self.thread=threading.Thread(target=run,name='fixture-routing-renewal',daemon=True)
+        self.thread.start()
+
+    def check(self):
+        if self.error:raise RuntimeError(self.error)
+
+    def close(self):
+        self.stop.set()
+        if self.thread:
+            self.thread.join(timeout=10)
+            if self.thread.is_alive():raise RuntimeError('fixture routing renewal did not stop')
+        self.receipt['stopped']=True
+        self.check()
 
 def load_relay_capacity(config):
     if config.get('mode') != 'relay-load':
@@ -204,6 +313,12 @@ class Journey(base.Worker):
                 'connections': self.spec['config']['relay_connections'], 'forwarding_pools': pools}
             self.event('load_relay_capacity_verified', circuits=self.spec['config']['relay_circuits'],
                        connections=self.spec['config']['relay_connections'], relays=len(pools))
+        if self.spec.get('fixture_host') and self.spec['config']['mode'] in ('relay-load','relay-preflight'):
+            load=self.spec['config']['mode']=='relay-load'
+            self.routing_renewal=FixtureRoutingRenewal(self.root,64 if load else 2,32 if load else 0,
+                                                      self.control,self.uid,self.gid)
+            self.routing_renewal.start()
+            self.result['fixture_routing_renewal']=self.routing_renewal.receipt
 
     def prepare_contributions(self):
         host = self.spec['fixture_host']['path']
@@ -406,12 +521,20 @@ class Journey(base.Worker):
             except (ValueError, KeyError): pass
         return None
 
+    def request(self, i, kind, **values):
+        renewal=getattr(self,'routing_renewal',None)
+        if renewal:renewal.check()
+        response=super().request(i,kind,**values)
+        if renewal:renewal.check()
+        return response
+
     def readiness(self, i, subscriptions=None):
         status = self.status(i)
         expected=subscriptions if subscriptions is not None else getattr(self, 'expected_subscriptions', 2)
         return status if status and status.get('profile_id') == 46 and status.get('bootstrap_version') == 2 and status.get('usable_terminal_routes', 0) > 0 and status.get('interactive_subscriptions', 0) >= expected and status.get('bulk_subscriptions', 0) >= expected else None
 
     def sample(self):
+        if renewal:=getattr(self,'routing_renewal',None):renewal.check()
         self.event('transport_sample', clients=[self.status(i) for i in (0,1)])
         if int(time.time()) // 30 != getattr(self, 'directory_sample', None):
             self.directory_sample = int(time.time()) // 30
@@ -853,6 +976,12 @@ class Journey(base.Worker):
         self.result['completed']=True
 
     def exercise(self):
+        try:
+            return self.exercise_with_renewal()
+        finally:
+            if renewal:=getattr(self,'routing_renewal',None):renewal.close()
+
+    def exercise_with_renewal(self):
         # Header-only connection lifecycle evidence. This does not replace the
         # all-packet privacy observer or label encrypted flows as entry drivers.
         capture_log=(self.root/'connections.capture.log').open('xb')
@@ -880,6 +1009,18 @@ class Journey(base.Worker):
         for i in (0,1): until(lambda i=i:self.readiness(i),setup_deadline,'contact AND channel, both classes')
         self.rpc_deadline=None
         self.chat(channel,'turnover:warmup')
+        if self.spec['config'].get('mode')=='relay-preflight':
+            transfer=self.start_file(channel,5235248,'release-preflight')
+            process=next(p for role,p in reversed(self.children) if role.startswith('relay0') and p.poll() is None)
+            self.stop(process);self.relay(0,self.root/'bootstrap')
+            self.chat(channel,'turnover:preflight-restarted',120)
+            self.finish_file(transfer,180)
+            self.routing_renewal.check()
+            self.result['relay_preflight']={'clients':2,'file':transfer,'relay_restart':True,
+                'chat_acknowledged':self.chat_count,'credential_rollover_qualified':False}
+            self.result['boundary']['after']=self.inventory();self.assert_topology(self.result['boundary']['after'])
+            self.result['completed']=True
+            return
         if self.spec['config'].get('mode') == 'archive-failure':
             self.archive_failure(channel)
             self.result['boundary']['after']=self.inventory();self.assert_topology(self.result['boundary']['after'])
@@ -1002,7 +1143,7 @@ def main():
     parser.add_argument('--build',type=Path,required=True)
     parser.add_argument('--out',type=Path,required=True)
     parser.add_argument('--expiries',type=int,default=3,choices=(1,2,3))
-    parser.add_argument('--mode',choices=('smoke','file-recovery','archive-failure','credential-expiry','carrier-cap','entry-loss','multi-party','relay-load'),default='credential-expiry')
+    parser.add_argument('--mode',choices=('smoke','file-recovery','archive-failure','credential-expiry','carrier-cap','entry-loss','multi-party','relay-load','relay-preflight'),default='credential-expiry')
     parser.add_argument('--load-seconds',type=int,default=1800,help='relay-load only; shorter runs cannot qualify the release')
     parser.add_argument('--load-single-channel',action='store_true',help='retain the separate 64-member admission diagnostic')
     parser.add_argument('--load-relay-circuits',type=int,
@@ -1022,6 +1163,7 @@ def main():
             args.file_bytes not in (None,16*1024*1024) or args.file_completion_seconds not in (None,180)):
         parser.error('release check requires file-recovery with 16 MiB and 180 seconds')
     if args.mode=='relay-load' and (not args.fixture_host or not 60<=args.load_seconds<=1800): parser.error('relay-load requires the fixture host and 60..1800 seconds')
+    if args.mode=='relay-preflight' and not args.fixture_host:parser.error('relay-preflight requires the fixture host')
     if args.mode != 'relay-load' and (args.load_single_channel or args.load_relay_circuits is not None or args.load_relay_connections is not None):
         parser.error('relay capacity overrides require relay-load')
     if args.mode == 'relay-load':
@@ -1032,10 +1174,10 @@ def main():
                                  'relay_connections':args.load_relay_connections})
         except ValueError as error:
             parser.error(str(error))
-    if args.file_bytes is None: args.file_bytes=5235248 if args.mode=='relay-load' else 16*1024*1024 if args.release_check else 256*1024*1024
+    if args.file_bytes is None: args.file_bytes=5235248 if args.mode in ('relay-load','relay-preflight') else 16*1024*1024 if args.release_check else 256*1024*1024
     if args.file_completion_seconds is None: args.file_completion_seconds=180 if args.release_check else 1200
     maximum=1024*1024*1024 if args.mode=='file-recovery' else 256*1024*1024
-    minimum=5235248 if args.mode=='relay-load' else 16*1024*1024 if args.release_check else 64*1024*1024
+    minimum=5235248 if args.mode in ('relay-load','relay-preflight') else 16*1024*1024 if args.release_check else 64*1024*1024
     if not minimum<=args.file_bytes<=maximum: parser.error('file size exceeds the selected fixture bounds')
     if not 60<=args.file_completion_seconds<=3600: parser.error('file completion budget must be between 60 and 3600 seconds')
     if args.mode!='file-recovery' and args.file_completion_seconds!=1200: parser.error('custom file completion budget is only for file-recovery')
@@ -1058,6 +1200,7 @@ def main():
     timeout=1800 if args.mode in ('entry-loss','multi-party') else 900 if args.mode in ('smoke','archive-failure') else 1200+args.file_completion_seconds if args.mode=='file-recovery' else 3600*(args.expiries+1)+900
     if args.release_check: timeout=600
     if args.mode=='relay-load': timeout=2400+args.load_seconds+300
+    if args.mode=='relay-preflight':timeout=300
     command=['sudo','-n','timeout','--signal=TERM','--kill-after=20',str(timeout),
              'unshare','--net','--mount','--pid','--fork','--mount-proc','--kill-child','--propagation','private','--',
              sys.executable,str(Path(__file__).resolve()),'--worker',str(root/'spec.json')]
