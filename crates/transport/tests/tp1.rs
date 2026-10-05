@@ -390,6 +390,124 @@ async fn post_unknown_token_gets_decoy() {
 }
 
 #[tokio::test]
+async fn unknown_path_retirement_releases_source_slots_for_fresh_private_requests() {
+    let registry = TokenRegistry::new();
+    let token = generate_token();
+    registry.insert_post(&token);
+    let endpoint = spawn_server(registry, echo_handler(), no_streams()).await;
+    let mut stale_clients = Vec::new();
+    // Retain every client, as real queue retry loops do after a relay loses
+    // their old private paths. Each connection uses the same source IP.
+    for _ in 0..gcoms_transport::server::MAX_CONNECTIONS_PER_IP {
+        let client = Tp1Client::new().unwrap();
+        assert_eq!(
+            post(&client, endpoint, "expired-private-path", sample_cell()).await,
+            HopOutcome::Decoy(404)
+        );
+        stale_clients.push(client);
+    }
+    let fresh = Tp1Client::new().unwrap();
+    let response = tokio::time::timeout(
+        std::time::Duration::from_secs(5),
+        fresh.post_cell_pinned(endpoint.0, endpoint.1, &token, sample_cell().into()),
+    )
+    .await
+    .expect("retired unknown paths release admission promptly")
+    .expect("a fresh private request must not receive a terminal TLS EOF");
+    assert!(matches!(response, HopOutcome::Accepted(Some(_))));
+    for client in stale_clients {
+        assert_eq!(client.pooled_connections().await, 0);
+    }
+}
+
+#[tokio::test]
+async fn unknown_path_retirement_preserves_live_stream_without_replay() {
+    let identity = TlsIdentity::generate().unwrap();
+    let service_id = identity.service_id();
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    let tls = TlsAcceptor::from(Arc::new(identity.server_config().unwrap()));
+    let connections = Arc::new(AtomicUsize::new(0));
+    let requests = Arc::new(AtomicUsize::new(0));
+    let (stream_tx, mut stream_rx) = mpsc::unbounded_channel();
+    let accepted = connections.clone();
+    let submitted = requests.clone();
+    let server = tokio::spawn(async move {
+        while let Ok((tcp, _)) = listener.accept().await {
+            accepted.fetch_add(1, Ordering::Relaxed);
+            let tls = tls.clone();
+            let submitted = submitted.clone();
+            let stream_tx = stream_tx.clone();
+            tokio::spawn(async move {
+                let tls = tls.accept(tcp).await.unwrap();
+                let mut connection = h2::server::handshake(tls).await.unwrap();
+                while let Some(Ok((request, mut respond))) = connection.accept().await {
+                    let status = if request.uri().path() == "/expired" {
+                        StatusCode::NOT_FOUND
+                    } else {
+                        StatusCode::OK
+                    };
+                    let response = Response::builder().status(status).body(()).unwrap();
+                    match request.uri().path() {
+                        "/live" => {
+                            stream_tx
+                                .send(respond.send_response(response, false).unwrap())
+                                .unwrap();
+                        }
+                        "/expired" => {
+                            submitted.fetch_add(1, Ordering::Relaxed);
+                            respond.send_response(response, true).unwrap();
+                        }
+                        "/fresh" => {
+                            respond.send_response(response, true).unwrap();
+                        }
+                        path => panic!("unexpected path: {path}"),
+                    }
+                }
+            });
+        }
+    });
+    let client = Tp1Client::new().unwrap();
+    let mut live = client
+        .open_stream_body_pinned(addr, service_id, "live", None)
+        .await
+        .unwrap();
+    let mut live_body = stream_rx.recv().await.unwrap();
+    let outcome = client
+        .post_cell_pinned(addr, service_id, "expired", sample_cell().into())
+        .await
+        .unwrap();
+    assert_eq!(outcome, HopOutcome::Decoy(404));
+    assert_eq!(client.pooled_connections().await, 0);
+
+    let expected = Cell::new(CellType::Msg, 0, 9, vec![4; 100]);
+    live_body
+        .send_data(Bytes::from(expected.encode_wire().unwrap()), false)
+        .unwrap();
+    let received = tokio::time::timeout(std::time::Duration::from_secs(5), live.recv())
+        .await
+        .expect("retirement keeps an existing subscriber alive")
+        .unwrap()
+        .unwrap();
+    assert_eq!(received, expected);
+    assert_eq!(
+        client
+            .get_pinned(addr, service_id, "/fresh")
+            .await
+            .unwrap()
+            .0,
+        StatusCode::OK
+    );
+    assert_eq!(connections.load(Ordering::Relaxed), 2);
+    assert_eq!(
+        requests.load(Ordering::Relaxed),
+        1,
+        "the refused request is not replayed"
+    );
+    server.abort();
+}
+
+#[tokio::test]
 async fn post_valid_token_roundtrips_cell() {
     let registry = TokenRegistry::new();
     let token = generate_token();
