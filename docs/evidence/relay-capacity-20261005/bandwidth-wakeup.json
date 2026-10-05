@@ -1,0 +1,32 @@
+{
+  "schema": 1,
+  "date": "2026-10-05",
+  "source_parent": "87b03ee86245f33411c2f65575b420688edbcb1b",
+  "before_fix": {
+    "test": "service::bandwidth::tests::opposite_direction_admission_preserves_a_pending_budget_wakeup",
+    "exit_code": 101,
+    "log_sha256": "96285d22e38185a230d04f5f23c571ab0d37479b430ef42f7867fe66285c7b2e",
+    "missing_read_wakeup_proven": true
+  },
+  "after_fix": {
+    "bandwidth_tests_passed": 3,
+    "failed": 0,
+    "read_and_write_wakeups_verified": true,
+    "strict_clippy_all_features_all_targets": true,
+    "bandwidth_and_protocol_limits_unchanged": true
+  },
+  "interrupted_load": {
+    "attempt": "load-07",
+    "operator_circuits": 2048,
+    "operator_connections": 4096,
+    "joined_clients": 16,
+    "stopped_after_reproducing_defect": true,
+    "children_stopped": true,
+    "host_links_unchanged": true,
+    "report_sha256": "b8f9c55257d771a49d0316a0a95ea868ab88c1e952f1475fb47939a8cd223377"
+  },
+  "load_failure_causality_confirmed": false,
+  "release_qualified": false,
+  "fleet_deployed": false,
+  "codematch": "unreachable"
+}

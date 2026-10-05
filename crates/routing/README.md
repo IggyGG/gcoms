@@ -21,3 +21,8 @@ off to five minutes if it stays incomplete. Failed requests keep their existing
 60-second initial backoff. Complete directories keep the five-minute schedule.
 Neither application traffic nor a missing referral opens additional guard
 connections or extends an introduction's authority.
+
+Desktop contribution streams share one aggregate bandwidth budget. Read and
+write each retain their own retry timer: admitting one direction cannot cancel
+a pending wake-up in the other direction. The limiter preserves the existing
+rate, burst, byte accounting and pause behavior.

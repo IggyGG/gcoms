@@ -72,7 +72,8 @@ pub(super) fn wrap(
         io,
         budget,
         ready,
-        wake: None,
+        read_wake: None,
+        write_wake: None,
     })
 }
 
@@ -80,11 +81,17 @@ struct Limited {
     io: BoxStream,
     budget: Arc<Budget>,
     ready: Option<Arc<AtomicBool>>,
-    wake: Option<Pin<Box<tokio::time::Sleep>>>,
+    read_wake: Option<Pin<Box<tokio::time::Sleep>>>,
+    write_wake: Option<Pin<Box<tokio::time::Sleep>>>,
 }
 
 impl Limited {
-    fn credit(&mut self, cx: &mut Context<'_>, size: usize) -> Poll<io::Result<usize>> {
+    fn credit(
+        &mut self,
+        cx: &mut Context<'_>,
+        size: usize,
+        write: bool,
+    ) -> Poll<io::Result<usize>> {
         if self
             .ready
             .as_ref()
@@ -96,18 +103,25 @@ impl Limited {
             )));
         }
         let admitted = self.budget.claim(size);
+        // Read and write can have independent pending work. Admitting one
+        // direction must not cancel the other's registered budget wakeup.
+        let wake = if write {
+            &mut self.write_wake
+        } else {
+            &mut self.read_wake
+        };
         if admitted > 0 || size == 0 {
-            self.wake = None;
+            *wake = None;
             return Poll::Ready(Ok(admitted));
         }
-        if self.wake.is_none() {
-            self.wake = Some(Box::pin(tokio::time::sleep(Duration::from_millis(10))));
+        if wake.is_none() {
+            *wake = Some(Box::pin(tokio::time::sleep(Duration::from_millis(10))));
         }
-        if let Some(wake) = &mut self.wake {
-            if std::future::Future::poll(wake.as_mut(), cx).is_ready() {
-                self.wake = Some(Box::pin(tokio::time::sleep(Duration::from_millis(10))));
-                if let Some(wake) = &mut self.wake {
-                    let _ = std::future::Future::poll(wake.as_mut(), cx);
+        if let Some(timer) = wake {
+            if std::future::Future::poll(timer.as_mut(), cx).is_ready() {
+                *wake = Some(Box::pin(tokio::time::sleep(Duration::from_millis(10))));
+                if let Some(timer) = wake {
+                    let _ = std::future::Future::poll(timer.as_mut(), cx);
                 }
             }
         }
@@ -121,7 +135,7 @@ impl AsyncRead for Limited {
         cx: &mut Context<'_>,
         output: &mut ReadBuf<'_>,
     ) -> Poll<io::Result<()>> {
-        let admitted = match self.credit(cx, output.remaining()) {
+        let admitted = match self.credit(cx, output.remaining(), false) {
             Poll::Ready(Ok(n)) => n,
             Poll::Ready(Err(e)) => return Poll::Ready(Err(e)),
             Poll::Pending => return Poll::Pending,
@@ -141,7 +155,7 @@ impl AsyncWrite for Limited {
         cx: &mut Context<'_>,
         bytes: &[u8],
     ) -> Poll<io::Result<usize>> {
-        let admitted = match self.credit(cx, bytes.len()) {
+        let admitted = match self.credit(cx, bytes.len(), true) {
             Poll::Ready(Ok(n)) => n,
             Poll::Ready(Err(e)) => return Poll::Ready(Err(e)),
             Poll::Pending => return Poll::Pending,
@@ -167,6 +181,62 @@ impl AsyncWrite for Limited {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[tokio::test(start_paused = true)]
+    async fn opposite_direction_admission_preserves_a_pending_budget_wakeup() {
+        use std::sync::atomic::AtomicUsize;
+        use std::task::{Wake, Waker};
+        #[derive(Default)]
+        struct Wakes(AtomicUsize);
+        impl Wake for Wakes {
+            fn wake(self: Arc<Self>) {
+                self.0.fetch_add(1, Ordering::Relaxed);
+            }
+        }
+        for blocked_write in [false, true] {
+            let budget = Arc::new(Budget::default());
+            budget.configure(10);
+            // A different stream holds the entire one-byte burst reservation.
+            let reservation = budget.claim(1);
+            assert_eq!(reservation, 1);
+            let (io, _peer) = tokio::io::duplex(64);
+            let mut stream = wrap(Box::new(io), budget.clone(), None);
+            let blocked = Arc::new(Wakes::default());
+            let blocked_waker = Waker::from(blocked.clone());
+            let mut blocked_context = Context::from_waker(&blocked_waker);
+            let admitted_waker = Waker::from(Arc::new(Wakes::default()));
+            let mut admitted_context = Context::from_waker(&admitted_waker);
+            let mut bytes = [0; 1];
+            if blocked_write {
+                assert!(Pin::new(&mut stream)
+                    .poll_write(&mut blocked_context, b"x")
+                    .is_pending());
+            } else {
+                assert!(Pin::new(&mut stream)
+                    .poll_read(&mut blocked_context, &mut ReadBuf::new(&mut bytes))
+                    .is_pending());
+            }
+            // Returning unused credit admits only the opposite direction. Its
+            // idle read or successful write must not cancel the blocked timer.
+            budget.finish(reservation, 0);
+            if blocked_write {
+                assert!(Pin::new(&mut stream)
+                    .poll_read(&mut admitted_context, &mut ReadBuf::new(&mut bytes))
+                    .is_pending());
+            } else {
+                assert!(matches!(
+                    Pin::new(&mut stream).poll_write(&mut admitted_context, b"x"),
+                    Poll::Ready(Ok(1))
+                ));
+            }
+            tokio::time::advance(Duration::from_millis(11)).await;
+            tokio::task::yield_now().await;
+            assert!(
+                blocked.0.load(Ordering::Relaxed) > 0,
+                "blocked write: {blocked_write}"
+            );
+        }
+    }
+
     #[tokio::test]
     async fn paused_contribution_closes_existing_streams_and_counting_does_not_change_bytes() {
         use tokio::io::{AsyncReadExt, AsyncWriteExt};
