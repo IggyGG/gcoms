@@ -52,9 +52,11 @@ def main():
         env.setdefault('CARGO_BUILD_JOBS', '4')
         commands = [
             ('gcoms', ['cargo', 'build', '--release', '--offline', '--locked', '-p', 'gcoms-node', '--bin', 'gcnode', '--features', 'client-persist,experimental-gc2']),
-            ('gchat', ['cargo', 'build', '--release', '--offline', '--config', str(patch), '-p', 'gchat-tui', '--bin', 'gchat', '--features', 'gc2-carrier']),
-            ('gchat', ['cargo', 'build', '--release', '--offline', '--config', str(patch), '-p', 'gchat-core', '--example', 'fleet_probe', '--features', 'gc2-carrier']),
-            ('gchat', ['cargo', 'build', '--release', '--offline', '--config', str(patch), '-p', 'gchat-core', '--example', 'turnover_daemon', '--features', 'gc2-carrier']),
+            # Select the client and both qualification hosts together, so Cargo
+            # resolves their common feature graph and compiles shared crates once.
+            ('gchat', ['cargo', 'build', '--release', '--offline', '--config', str(patch),
+                       '-p', 'gchat-tui', '-p', 'gchat-core', '--bin', 'gchat',
+                       '--example', 'fleet_probe', '--example', 'turnover_daemon', '--features', 'gc2-carrier']),
         ]
         for name, command in commands:
             report['commands'].append({'repository': name, 'argv': command})

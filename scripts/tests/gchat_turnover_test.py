@@ -1,5 +1,6 @@
 """Controller regressions from the real-daemon startup/reopen attempts."""
 import importlib.util
+import json
 import base64
 import copy
 import os
