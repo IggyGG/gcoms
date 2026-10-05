@@ -40,7 +40,10 @@ async fn authorize(a: &impl GcClient, b: &impl GcClient) {
     .await
     .unwrap();
 }
-#[tokio::test]
+// Run both independently persisted peers on the native host's executor model.
+// Synchronous debug-build crypto/store work must not stop the other peer's
+// network and receipt tasks while the unchanged recovery deadline is running.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn modern_contact_file_verifies_resumes_and_revokes_without_a_channel() {
     let diagnostics = tempfile::tempdir().unwrap();
     let metrics = diagnostics.path().join("metrics.jsonl");
@@ -201,12 +204,16 @@ async fn modern_contact_file_verifies_resumes_and_revokes_without_a_channel() {
         }
     })
     .await;
-    if resumed.is_err() {
+    if resumed.is_err() || std::env::var_os("GCOMS_FILE_RECOVERY_DIAGNOSTICS").is_some() {
         eprintln!("source node: {:?}", owner.embedded().node().diagnostics());
         eprintln!(
             "target node: {:?}",
             receiver.embedded().node().diagnostics()
         );
+        eprintln!("source persistence: {:?}", ar.persistence_diagnostics());
+        eprintln!("target persistence: {:?}", br.persistence_diagnostics());
+    }
+    if resumed.is_err() {
         let log = std::fs::read_to_string(&metrics).unwrap();
         let mut events = BTreeMap::<String, usize>::new();
         let mut frame_errors = Vec::new();
