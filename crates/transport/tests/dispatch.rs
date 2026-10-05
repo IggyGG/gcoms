@@ -3,7 +3,7 @@ use gcoms_core::{Cell, CellType};
 use gcoms_transport::{
     server::{AcceptedDuplex, Dispatch, ServerLimits, Tp1Server},
     tls::TlsIdentity,
-    HopOutcome, TokenRegistry, Tp1Client,
+    TokenRegistry, Tp1Client,
 };
 use std::{
     sync::{
@@ -13,6 +13,28 @@ use std::{
     time::Duration,
 };
 use tokio::{sync::oneshot, time::timeout};
+
+async fn retained_post(
+    sender: &h2::client::SendRequest<Bytes>,
+    address: std::net::SocketAddr,
+    path: &str,
+    cell: Bytes,
+) -> (http::StatusCode, Bytes) {
+    let mut sender = sender.clone().ready().await.unwrap();
+    let request = http::Request::builder()
+        .method(http::Method::POST)
+        .uri(format!("https://{address}/{path}"))
+        .body(())
+        .unwrap();
+    let (response, mut send) = sender.send_request(request, false).unwrap();
+    send.send_data(cell, true).unwrap();
+    let response = response.await.unwrap();
+    let status = response.status();
+    let body = gcoms_transport::server::read_body(&mut response.into_body(), 16 * 1024)
+        .await
+        .unwrap();
+    (status, body)
+}
 
 fn echo() -> AcceptedDuplex {
     Box::new(|mut body, mut respond| {
@@ -77,7 +99,19 @@ async fn rejection_precedes_all_handlers_and_does_not_promote_source_admission()
     let server = tokio::spawn(server.run_until(async {
         let _ = stopped.await;
     }));
-    let first = Tp1Client::new().unwrap();
+    // Retain a raw connection across decoy responses: the client pool now
+    // retires 404 connections, but server authentication must remain independent.
+    let tcp = tokio::net::TcpStream::connect(address).await.unwrap();
+    let tls = tokio_rustls::TlsConnector::from(Arc::new(
+        gcoms_transport::tls::client_config_pinned(identity.service_id()).unwrap(),
+    ))
+    .connect(gcoms_transport::tls::server_name_ip(address.ip()), tcp)
+    .await
+    .unwrap();
+    let (first, connection) = h2::client::handshake(tls).await.unwrap();
+    let driver = tokio::spawn(async move {
+        let _ = connection.await;
+    });
     let cell = Bytes::from(
         Cell::new(CellType::Msg, 0, 0, vec![7; 128])
             .encode_wire()
@@ -85,11 +119,8 @@ async fn rejection_precedes_all_handlers_and_does_not_promote_source_admission()
     );
     for path in ["registered-denied", "legacy-denied", "unknown"] {
         assert_eq!(
-            first
-                .post_cell_pinned(address, identity.service_id(), path, cell.clone())
-                .await
-                .unwrap(),
-            HopOutcome::Decoy(404)
+            retained_post(&first, address, path, cell.clone()).await.0,
+            http::StatusCode::NOT_FOUND
         );
     }
     assert_eq!(registered_calls.load(Ordering::SeqCst), 0);
@@ -104,31 +135,20 @@ async fn rejection_precedes_all_handlers_and_does_not_promote_source_admission()
     .await
     .unwrap()
     .is_err());
-    assert!(matches!(
-        first
-            .post_cell_pinned(
-                address,
-                identity.service_id(),
-                "dispatch-authenticated",
-                cell.clone()
-            )
-            .await
-            .unwrap(),
-        HopOutcome::Accepted(Some(_))
-    ));
+    assert_eq!(
+        retained_post(&first, address, "dispatch-authenticated", cell.clone()).await,
+        (http::StatusCode::OK, cell.clone())
+    );
     let admitted = Tp1Client::new().unwrap();
     assert!(admitted
         .get_pinned(address, identity.service_id(), "/")
         .await
         .is_ok());
     for path in ["registered-pass", "legacy-pass"] {
-        assert!(matches!(
-            first
-                .post_cell_pinned(address, identity.service_id(), path, cell.clone())
-                .await
-                .unwrap(),
-            HopOutcome::Accepted(Some(_))
-        ));
+        assert_eq!(
+            retained_post(&first, address, path, cell.clone()).await,
+            (http::StatusCode::OK, cell.clone())
+        );
     }
     assert_eq!(registered_calls.load(Ordering::SeqCst), 1);
     assert_eq!(duplex_calls.load(Ordering::SeqCst), 1);
@@ -138,4 +158,5 @@ async fn rejection_precedes_all_handlers_and_does_not_promote_source_admission()
         .unwrap()
         .unwrap()
         .unwrap();
+    driver.await.unwrap();
 }
