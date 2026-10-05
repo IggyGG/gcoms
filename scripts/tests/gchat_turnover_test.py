@@ -8,6 +8,7 @@ from pathlib import Path
 import socket
 import sys
 import tempfile
+import threading
 import unittest
 from unittest import mock
 
@@ -18,6 +19,53 @@ SPEC.loader.exec_module(turnover)
 
 @unittest.skipUnless(os.name == "posix", "Linux namespace controller")
 class ControllerTests(unittest.TestCase):
+    def test_independent_channel_admissions_continue_while_one_channel_waits(self):
+        held=threading.Event(); release=threading.Event(); other_done=threading.Event()
+        joins=[]
+        def join(client,code,nickname):
+            joins.append(client)
+            if client==1:
+                held.set()
+                if not release.wait(5): raise TimeoutError('held admission')
+            return {'conversation':code}
+        def joined(client,index):
+            if client==4: other_done.set()
+        groups=[dict(index=0,channel='first',members=[0,1,2]),
+                dict(index=1,channel='second',members=[0,3,4])]
+        with turnover.concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+            future=pool.submit(turnover.admit_load_channels,groups,lambda channel:channel,join,joined)
+            try:
+                self.assertTrue(held.wait(5))
+                self.assertTrue(other_done.wait(5))
+                self.assertNotIn(2,joins)
+            finally:
+                release.set()
+            future.result(timeout=5)
+        self.assertEqual(sorted(joins),[1,2,3,4])
+
+    def test_receiver_observation_precedes_collection_of_unrelated_slow_work(self):
+        release=threading.Event(); held=threading.Event()
+        item=dict(channel='channel',token='command',started=10)
+        def history(client,channel,token):
+            if client==1:
+                held.set()
+                if not release.wait(5): raise TimeoutError('held receiver')
+            return [dict(id='exact',mine=False)]
+        with mock.patch.object(turnover.time,'monotonic',return_value=12) as clock, \
+                turnover.concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+            slow=pool.submit(turnover.observe_load_recipient,item,1,history)
+            try:
+                self.assertTrue(held.wait(5))
+                fast=pool.submit(turnover.observe_load_recipient,item,2,history)
+                self.assertEqual(fast.result(timeout=5)[1]['seconds'],2)
+                clock.return_value=100
+                self.assertEqual(fast.result()[1]['seconds'],2)
+            finally:
+                release.set()
+            self.assertEqual(slow.result(timeout=5)[1]['seconds'],90)
+        with self.assertRaisesRegex(RuntimeError,'duplicated'):
+            turnover.observe_load_recipient(item,2,lambda *args:[dict(id='a'),dict(id='b')])
+
     def test_fleet_load_keeps_every_client_and_the_original_recipient_rate(self):
         groups=turnover.load_channel_members()
         self.assertEqual([len(g) for g in groups],[17,17,17,16])

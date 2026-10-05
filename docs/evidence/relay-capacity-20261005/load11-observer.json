@@ -1,0 +1,61 @@
+{
+  "schema": 1,
+  "passed": false,
+  "disposition": "Operator stopped after independent authenticated history observations proved harness timing bias. The 30-minute release gate remains unsatisfied.",
+  "sources": {
+    "gcoms": {
+      "revision": "2f65855a8f6e6442932ef79dbe629d6ec871af84",
+      "snapshot_sha256": "1ebf27fd7da3ec2ac8bc349b811b7e01220e6077cc8aea032fd2d924f3fe0cd4"
+    },
+    "gchat": {
+      "revision": "753b7cc6c7348bc03327c7fe5e992e8b15a00625",
+      "snapshot_sha256": "6eb78703ca6b33db3e7e07bca1a8ace4631cef1d64842761543803b9559d8aa2"
+    }
+  },
+  "clients_started": 64,
+  "channel_members_confirmed": 64,
+  "topology": "fleet-four-channels",
+  "campaign_started": true,
+  "campaign_observed_seconds": 1074.39,
+  "authenticated_commands": 353,
+  "relay_restart": true,
+  "children_stopped": true,
+  "worker_shutdown_failure": "RuntimeError: probe closed early",
+  "worker_sha256": "1d3f3105f3ef07ca2f78c17be6b600927966e3b4ddf6e8c2f3279579cbc6ae5c",
+  "same_receiver_comparisons": [
+    {
+      "independent_receiver_seconds": 1.209,
+      "original_harness_same_receiver_seconds": 5.057
+    },
+    {
+      "independent_receiver_seconds": 0.903,
+      "original_harness_same_receiver_seconds": 2.114
+    },
+    {
+      "independent_receiver_seconds": 1.165,
+      "original_harness_same_receiver_seconds": 2.444
+    },
+    {
+      "independent_receiver_seconds": 0.869,
+      "original_harness_same_receiver_seconds": 6.009
+    },
+    {
+      "independent_receiver_seconds": 0.933,
+      "original_harness_same_receiver_seconds": 2.665
+    },
+    {
+      "independent_receiver_seconds": 1.268,
+      "original_harness_same_receiver_seconds": 2.804
+    },
+    {
+      "independent_receiver_seconds": 3.02,
+      "original_harness_same_receiver_seconds": 4.387
+    },
+    {
+      "independent_receiver_seconds": 1.513,
+      "original_harness_same_receiver_seconds": 2.836
+    }
+  ],
+  "file_final_export_qualified": false,
+  "provider_policy_qualified": false
+}

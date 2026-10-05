@@ -46,6 +46,26 @@ def validated_load_delivery(seen, members, sender, sent):
         raise RuntimeError('command identity or authorship changed')
     return message if message.get('delivery') == 'delivered' else None
 
+def admit_load_channels(groups, invitation, join, joined):
+    def populate(group):
+        for client in group['members'][1:]:
+            code=invitation(group['channel'])
+            if join(client,code,f'participant{client}')['conversation'] != group['channel']:
+                raise RuntimeError('participant joined another channel')
+            joined(client,group['index'])
+    # Each MLS channel retains serial admission and its original barriers.
+    # Independent channels can prepare their members concurrently.
+    with concurrent.futures.ThreadPoolExecutor(max_workers=len(groups)) as pool:
+        list(pool.map(populate,groups))
+
+def observe_load_recipient(item, client, history):
+    rows=history(client,item['channel'],item['token'])
+    observed=time.monotonic()
+    if len(rows)>1:
+        raise RuntimeError('duplicated application command')
+    return client, ({'id':rows[0]['id'],'mine':rows[0]['mine'],
+        'seconds':observed-item['started']} if rows else None)
+
 def fixture_links(rows, routes):
     """Allow only the kernel's inert IPIP fallback in addition to fixture links.
 
@@ -743,11 +763,10 @@ class Journey(base.Worker):
         for index,members in enumerate(load_channel_members(self.spec['config']['load_topology'])):
             channel=self.submit(0,f'/create #relay-load{index} operator')['conversation']
             groups.append({'index':index,'channel':channel,'members':members})
-            for i in members[1:]:
-                code=until(lambda:self.remote_invitation(channel),setup,'64-client invitation')
-                if self.join_invitation(i,code,f'participant{i}')['conversation']!=channel:
-                    raise RuntimeError('participant joined another channel')
-                self.event('load_member_joined',client=i,channel_index=index)
+        admit_load_channels(groups,
+            lambda channel:until(lambda:self.remote_invitation(channel),setup,'64-client invitation'),
+            self.join_invitation,
+            lambda client,index:self.event('load_member_joined',client=client,channel_index=index))
         self.expected_subscriptions=4
         for i in clients:
             expected=2+2*len(groups) if i==0 else 4
@@ -760,54 +779,62 @@ class Journey(base.Worker):
         self.event('relay_load_started',clients=64,contributions=32,seconds=duration,file=transfer,
             channels=len(groups),channel_members=[len(g['members']) for g in groups])
         next_send=began; sender=0
-        while time.monotonic()<end or pending:
-            now=time.monotonic()
-            if now>end+120: raise TimeoutError('load delivery did not drain within its bound')
-            if now<end and now>=next_send:
-                def send(group):
-                    source=group['members'][sender%len(group['members'])]
-                    item={**group,'sender':source,'token':f'@all relay-load:{sender}:{uuid.uuid4().hex}',
-                        'started':time.monotonic(),'seen':{}}
-                    try:
-                        self.submit(source,item['token'],group['channel'])
-                        return item
-                    except RuntimeError as error:
-                        if not any(word in str(error).lower() for word in ('overloaded','full','refused','backing off')): raise
-                        return None
-                # Four simultaneous channel commands keep the original 63
-                # recipient deliveries every ten seconds, with the same ACKs.
-                with concurrent.futures.ThreadPoolExecutor(max_workers=len(groups)) as pool:
-                    batch=list(pool.map(send,groups))
-                attempts+=len(groups)
-                refused+=sum(item is None for item in batch)
-                pending.extend(item for item in batch if item is not None)
-                sender+=1; next_send=began+sender*10
-            for item in list(pending):
-                for i in item['members']:
-                    if i in item['seen']: continue
-                    rows=self.history(i,item['channel'],item['token'])
-                    if rows:
-                        if len(rows)!=1: raise RuntimeError('duplicated application command')
-                        item['seen'][i]={'id':rows[0]['id'],'mine':rows[0]['mine'],
-                            'seconds':time.monotonic()-item['started']}
-                sent=self.history(item['sender'],item['channel'],item['token'])
-                message=validated_load_delivery(item['seen'],item['members'],item['sender'],sent)
-                if message:
-                    record={'sender':item['sender'],'channel_index':item['index'],
-                        'recipients':len(item['members'])-1,'id':message['id'],
-                        'recipient_seconds':[row['seconds'] for i,row in item['seen'].items() if i!=item['sender']],
-                        'authenticated_ack_seconds':time.monotonic()-item['started']}
-                    records.append(record); pending.remove(item)
-                    self.event('load_command_delivered',**record)
-            if not restart and now-began>=duration/2:
-                process=next(p for role,p in reversed(self.children) if role.startswith('relay0') and p.poll() is None)
-                self.stop(process); self.relay(0,self.root/'bootstrap'); restart=True
-                self.event('load_relay_restarted',relay=0)
-            self.sample()
-            for i in clients:
-                process=next(p for role,p in reversed(self.children) if role.startswith(f'client{i}-') or role==f'client{i}')
-                if process.poll() is not None: raise RuntimeError('load client exited')
-            time.sleep(.2)
+        with concurrent.futures.ThreadPoolExecutor(max_workers=8) as sends, \
+                concurrent.futures.ThreadPoolExecutor(max_workers=16) as observations:
+            while time.monotonic()<end or pending:
+                now=time.monotonic()
+                if now>end+120: raise TimeoutError('load delivery did not drain within its bound')
+                if now<end and now>=next_send:
+                    if len(pending)+len(groups)>64:
+                        raise RuntimeError('load command backlog exceeded its bound')
+                    def send(item):
+                        try:
+                            self.submit(item['sender'],item['token'],item['channel'])
+                            return True
+                        except RuntimeError as error:
+                            if not any(word in str(error).lower() for word in ('overloaded','full','refused','backing off')): raise
+                            return False
+                    for group in groups:
+                        item={**group,'sender':group['members'][sender%len(group['members'])],
+                            'token':f'@all relay-load:{sender}:{uuid.uuid4().hex}',
+                            'started':time.monotonic(),'seen':{}}
+                        item['submission']=sends.submit(send,item)
+                        pending.append(item)
+                    attempts+=len(groups)
+                    sender+=1; next_send=began+sender*10
+                checks=[]
+                for item in list(pending):
+                    submission=item['submission']
+                    if submission.done() and not submission.result():
+                        refused+=1;pending.remove(item);continue
+                    for i in item['members']:
+                        if i in item['seen']: continue
+                        checks.append((item,observations.submit(observe_load_recipient,item,i,self.history)))
+                for item,check in checks:
+                    client,row=check.result()
+                    if row is not None: item['seen'][client]=row
+                for item in list(pending):
+                    if not item['submission'].done():continue
+                    if not item['submission'].result():
+                        refused+=1;pending.remove(item);continue
+                    sent=self.history(item['sender'],item['channel'],item['token'])
+                    message=validated_load_delivery(item['seen'],item['members'],item['sender'],sent)
+                    if message:
+                        record={'sender':item['sender'],'channel_index':item['index'],
+                            'recipients':len(item['members'])-1,'id':message['id'],
+                            'recipient_seconds':[row['seconds'] for i,row in item['seen'].items() if i!=item['sender']],
+                            'authenticated_ack_seconds':time.monotonic()-item['started']}
+                        records.append(record); pending.remove(item)
+                        self.event('load_command_delivered',**record)
+                if not restart and now-began>=duration/2:
+                    process=next(p for role,p in reversed(self.children) if role.startswith('relay0') and p.poll() is None)
+                    self.stop(process); self.relay(0,self.root/'bootstrap'); restart=True
+                    self.event('load_relay_restarted',relay=0)
+                self.sample()
+                for i in clients:
+                    process=next(p for role,p in reversed(self.children) if role.startswith(f'client{i}-') or role==f'client{i}')
+                    if process.poll() is not None: raise RuntimeError('load client exited')
+                time.sleep(.2)
         self.finish_file(transfer,120)
         latencies=sorted(value for record in records for value in record['recipient_seconds'])
         if not latencies: raise RuntimeError('no commands delivered')
