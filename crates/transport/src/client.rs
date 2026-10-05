@@ -668,7 +668,17 @@ impl Tp1Client {
             }
             progress.set(4);
             match response.await {
-                Ok(response) => return Ok((response, lease)),
+                Ok(response) => {
+                    // A restarted relay may no longer recognize this private
+                    // path. Do not keep its unauthenticated connection pooled
+                    // while queue recovery retries. Retire only this entry;
+                    // existing stream leases retain their driver. Return the
+                    // original refusal without replaying the request.
+                    if response.status() == StatusCode::NOT_FOUND {
+                        self.remove_connection(pool_key, &connection).await;
+                    }
+                    return Ok((response, lease));
+                }
                 Err(error) => {
                     self.remove_connection(pool_key, &connection).await;
                     if attempt == 0 {
