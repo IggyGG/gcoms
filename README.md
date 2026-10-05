@@ -1,3 +1,5 @@
+Automated relay qualification, 2026-10-05: the isolated fixture renews authenticated bootstrap introductions throughout setup and traffic while preserving relay identities and production lifetimes. `relay-preflight` checks two clients, a DS-sized file and relay restart before `relay-load` runs the unchanged 64-client gate. The source-bound builder accepts `--fetch` to populate dependencies only inside its retained source copy before its offline build. GChat release CI invokes the same builder and fixture automatically. Full load and live fleet acceptance remain required.
+
 Retained channel setup coalesces an already-admitted exact ciphertext with maintenance. Invitation completion does not acknowledge delivery; the original outbox and authenticated receipt requirements still apply.
 
 Relay load tooling: the 64-client `relay-load` campaign models the live operator fleet at 2048 circuits and 4096 connections per relay and verifies the forwarding pools before traffic. Capacity overrides are bounded by the node's existing limits. Desktop contribution budgets and the mandatory delivery, refusal, file, restart and duration thresholds stay unchanged.

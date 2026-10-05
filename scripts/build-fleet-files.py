@@ -34,6 +34,8 @@ def main():
     p.add_argument('--gchat', type=Path, required=True)
     p.add_argument('--output', type=Path, required=True)
     p.add_argument('--target-dir', type=Path, default=ROOT / 'target/fleet-build-cache')
+    p.add_argument('--fetch', action='store_true',
+                   help='fetch dependencies in the isolated source copy before the offline build')
     args = p.parse_args()
     output = args.output.resolve()
     output.mkdir(parents=True, exist_ok=False)
@@ -60,6 +62,8 @@ def main():
                        '--example', 'turnover_daemon', '--features',
                        'gc2-carrier,gcoms-node/client-persist,gcoms-node/experimental-gc2']),
         ]
+        if args.fetch:
+            commands.insert(0, ('gchat', ['cargo', 'fetch', '--config', str(patch)]))
         for name, command in commands:
             report['commands'].append({'repository': name, 'argv': command})
             subprocess.run(command, cwd=output / name, env=env, check=True)
