@@ -1,0 +1,91 @@
+{
+  "schema": 1,
+  "date": "2026-10-05",
+  "status": "source_regressions_passed_native_windows_pending",
+  "product_commit": "9d9b51398756a88a44424daba15f1ab68408c97f",
+  "source_sha256": "6dd2c73b53009566a2d8a2144202044491a7788d9d6178ddb9a7aba37fe3d7a1",
+  "original_windows": {
+    "gchat_prepared": "2941b41f08d043893513be863985eef1dd32613e",
+    "gcoms": "39e2bf83e4cc972e8791fecaf657aac29bb80667",
+    "run_id": 37350936610,
+    "artifact_id": 11364006087,
+    "log_sha256": "49d9470d81697c0b3dfb70935bc7baea62456e226f4eb48f144bf14e6eb941e3",
+    "failure": "chat_host_uses_shared_gcoms_and_reopens_the_same_archive: chat_service.rs:2320 host.flush().await.unwrap(): connection closed",
+    "interpretation": "Archive reopen assertions passed. This log does not independently prove which IPC operation was interrupted; native Windows requalification remains required."
+  },
+  "baseline": {
+    "schema": 1,
+    "revision": "3c11d3ee51a52b572c2ec7ce198a5bf68471d977",
+    "file_sha256": "1e992de808f7b0cc857ee81bd239240ed27d1f77fc5e4d98f6aeb6fdc5f40259",
+    "command": [
+      "cargo",
+      "test",
+      "--offline",
+      "--locked",
+      "-p",
+      "gcoms-sdk",
+      "--features",
+      "ipc",
+      "interrupted_write_tests",
+      "--",
+      "--test-threads=1",
+      "--nocapture"
+    ],
+    "cargo_target_dir": "/run/media/user/SSD-2/.workstation-builds/pool/slots/f8440ca067664e0e8d612971eb67284a/target",
+    "returncode": 101,
+    "seconds": 58.15288413898088,
+    "log": "/run/media/user/SSD-2/retained/gchat-ipc-write-gate-20261005/baseline.log",
+    "log_sha256": "f9f1c92f6d577aae1ce587f6d0131c92c553de83033f42d7cf57e8f460379c01"
+  },
+  "fixed_tests": [
+    {
+      "filter": "interrupted_write_tests",
+      "passed": 3,
+      "log": "/run/media/user/SSD-2/retained/gchat-ipc-write-gate-20261005/interrupted_write_tests-patched.log",
+      "sha256": "0b7a6a850a5934888548b75364fd439d7d424cf9cbf8650bda02f03086919650"
+    },
+    {
+      "filter": "interrupted_read_tests",
+      "passed": 1,
+      "log": "/run/media/user/SSD-2/retained/gchat-ipc-write-gate-20261005/interrupted_read_tests-patched.log",
+      "sha256": "dcadd35abfb36760a50bbcc243f6e86a77dbd02166a9170fc974aada290c5a13"
+    },
+    {
+      "filter": "disconnect_tests",
+      "passed": 1,
+      "log": "/run/media/user/SSD-2/retained/gchat-ipc-write-gate-20261005/disconnect_tests-patched.log",
+      "sha256": "330abac173a8e5eb9ef0a59d3272359d0c5d0221a92a51d3c828591e0f2250d2"
+    },
+    {
+      "filter": "payload_cleanup",
+      "passed": 4,
+      "log": "/run/media/user/SSD-2/retained/gchat-ipc-write-gate-20261005/payload_cleanup-patched.log",
+      "sha256": "b8325a6df6abe741a22903fd22ffe8c681608baaea26638c50bcc518c762c35a"
+    }
+  ],
+  "total_passed": 9,
+  "invariants": [
+    "one retained MAX_FRAME_BYTES-bounded zeroizing frame under the existing writer mutex",
+    "finish existing bytes exactly once before admitting the next frame",
+    "partial write errors poison the writer and close pending correlations",
+    "no detached workers, extra admission queues, wire changes or timeout changes",
+    "original GChat flush assertion preserved"
+  ],
+  "tokio_write_contract": {
+    "version": "1.53.1",
+    "path": "src/io/util/async_write_ext.rs",
+    "lines": "104-110",
+    "claim": "single write is cancellation safe"
+  },
+  "remaining": [
+    "native Windows source-paired qualification",
+    "full release gates remain mandatory"
+  ],
+  "strict_sdk_clippy": {
+    "passed": true,
+    "command": "cargo clippy --offline --locked -p gcoms-sdk --features ipc --all-targets --no-deps -- -D warnings",
+    "log": "/run/media/user/SSD-2/retained/gchat-ipc-write-gate-20261005/clippy-patched.log",
+    "sha256": "f95670ec18805a36dda35a07473d0d70ac11a473e5f7e802253a6ad401feec3e",
+    "note": "Ten pre-existing dependency warnings from gcoms-node are outside --no-deps; the SDK target passed with warnings denied."
+  }
+}
