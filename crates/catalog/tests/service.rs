@@ -1078,6 +1078,293 @@ async fn current_network_grants_authorize_before_relay_cache_and_persist_revocat
     network_grants_authorize_for(3).await;
 }
 
+#[cfg(feature = "experimental-gc2")]
+#[tokio::test]
+async fn desktop_relay_registration_requires_membership_and_pinned_listener_and_withdraws() {
+    use gcoms_catalog::network::{
+        atomic_json, token_digest, GrantFile, GrantRecord, NetworkConfig,
+    };
+    use gcoms_network::{Founder, NetworkDefaults, SignedNetworkDefaults};
+    use gcoms_routing::{Directory, RelayService, ServicePolicy};
+    use gcoms_transport::{server::Tp1Server, tls::TlsIdentity, TokenRegistry};
+    let identity = TlsIdentity::generate().unwrap();
+    let server = Tp1Server::bind_with_identity(
+        "127.0.0.7:0".parse().unwrap(),
+        TokenRegistry::new(),
+        Arc::new(|_, _| Ok(None)),
+        Arc::new(|_| None),
+        &identity,
+    )
+    .await
+    .unwrap();
+    let relay = RelayService::new(
+        server.local_addr().unwrap(),
+        identity.service_id(),
+        [61; 32],
+        Arc::new(Directory::new()),
+        ServicePolicy::default(),
+    )
+    .unwrap();
+    let listener = tokio::spawn(
+        server
+            .with_dispatch_factory(relay.gc2_handler_factory())
+            .run(),
+    );
+    let intro = relay.gc2_introduction(now());
+    let pki = TestPki::new();
+    let (control, _) = fake_relay(&pki, RelayCard::Valid).await;
+    let signer = IdentityKeypair::from_seed([81; 32]);
+    let defaults = NetworkDefaults {
+        version: 1,
+        network_id: "gchat.boo".into(),
+        sequence: 1,
+        issued_at: now() - 1,
+        expires_at: now() + 3600,
+        provider_urls: vec!["https://bootstrap-hel.gchat.boo/".into()],
+        dns_domain: "gchat.boo".into(),
+        founders: vec![Founder {
+            name: "r1.relays.gchat.boo".into(),
+            service_id: [1; 32],
+            address_hints: vec!["8.8.8.8:4433".parse().unwrap()],
+        }],
+    };
+    atomic_json(
+        &pki.directory.join("defaults.json"),
+        &SignedNetworkDefaults::sign(defaults, &signer, vec![]).unwrap(),
+    )
+    .unwrap();
+    std::fs::write(pki.directory.join("root.pub"), signer.public_bytes()).unwrap();
+    let token = URL_SAFE_NO_PAD.encode([85; 32]);
+    let other = URL_SAFE_NO_PAD.encode([86; 32]);
+    let mut grants = GrantFile {
+        version: 1,
+        grants: vec![&token, &other]
+            .into_iter()
+            .map(|token| GrantRecord {
+                id: token_digest(token).unwrap(),
+                expires_at: now() + 3600,
+                scopes: vec!["bootstrap".into()],
+                max_names: 0,
+                revoked: false,
+            })
+            .collect(),
+    };
+    let grants_path = pki.directory.join("grants.json");
+    atomic_json(&grants_path, &grants).unwrap();
+    let mut config = relay_config("http://127.0.0.1/", &pki, vec![control]);
+    config.network = Some(NetworkConfig {
+        network_id: "gchat.boo".into(),
+        defaults_file: pki.directory.join("defaults.json"),
+        verification_key_file: pki.directory.join("root.pub"),
+        grants_file: grants_path.clone(),
+        state_dir: pki.directory.join("network-state"),
+        names_enabled: false,
+        name_lease_secs: 3600,
+        spaceship_credentials_file: None,
+    });
+    let catalog = serve_catalog(config).await;
+    let http = reqwest::Client::new();
+    let body = |intro| {
+        let mut request = gcoms_network::RelayRegistrationRequest {
+            network_id: "gchat.boo".into(),
+            grant_id: token_digest(&token).unwrap(),
+            expires_at: now() + 30,
+            routing_bundle_b64: URL_SAFE_NO_PAD.encode(
+                gcoms_routing::gc2::directory::BootstrapBundle {
+                    relays: vec![intro],
+                }
+                .encode()
+                .unwrap(),
+            ),
+            certificate_b64: URL_SAFE_NO_PAD.encode(identity.certificate_der()),
+            signature_scheme: 0,
+            signature_b64: String::new(),
+        };
+        let (scheme, signature) = identity
+            .sign_service_claim(&request.signing_bytes().unwrap())
+            .unwrap();
+        request.signature_scheme = scheme;
+        request.signature_b64 = URL_SAFE_NO_PAD.encode(signature);
+        request
+    };
+    let url = format!("{catalog}/v1/relays");
+    assert_eq!(
+        http.post(&url)
+            .json(&body(intro.clone()))
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        401
+    );
+    let mut wrong = intro.clone();
+    wrong.service_id = [9; 32];
+    assert_eq!(
+        http.post(&url)
+            .bearer_auth(&token)
+            .json(&body(wrong))
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        401
+    );
+    // A copied introduction and signature confer no authority to another grant.
+    assert_eq!(
+        http.post(&url)
+            .bearer_auth(&other)
+            .json(&body(intro.clone()))
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        401
+    );
+    let mut tampered = body(intro.clone());
+    tampered.expires_at += 1;
+    assert_eq!(
+        http.post(&url)
+            .bearer_auth(&token)
+            .json(&tampered)
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        401
+    );
+    let mut expired = body(intro.clone());
+    expired.expires_at = now() - 1;
+    assert_eq!(
+        http.post(&url)
+            .bearer_auth(&token)
+            .json(&expired)
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        401
+    );
+    let registered = http
+        .post(&url)
+        .bearer_auth(&token)
+        .json(&body(intro.clone()))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(registered.status(), 200);
+    let receipt: gcoms_network::RelayRegistrationResponse = registered.json().await.unwrap();
+    assert_eq!(receipt.service_id, intro.service_id);
+    assert!(receipt.lease_expires_at > now() && receipt.lease_expires_at <= now() + 300);
+    let bootstrap =
+        |id| json!({"request_id":URL_SAFE_NO_PAD.encode([id;16]),"supported_versions":[3]});
+    let response: Value = http
+        .post(format!("{catalog}/v1/relay-provisions"))
+        .bearer_auth(&token)
+        .json(&bootstrap(91))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let raw = URL_SAFE_NO_PAD
+        .decode(response["routing_bundle_b64"].as_str().unwrap())
+        .unwrap();
+    let bundle = gcoms_routing::gc2::directory::BootstrapBundle::decode(&raw).unwrap();
+    let contributed = bundle
+        .relays
+        .iter()
+        .find(|relay| relay.service_id == intro.service_id)
+        .expect("registered contribution included even with fewer than five static seeds");
+    assert!(contributed.expires_at <= receipt.lease_expires_at);
+    let withdrawal = format!("{url}/{}", URL_SAFE_NO_PAD.encode(intro.service_id));
+    assert_eq!(
+        http.delete(&withdrawal)
+            .bearer_auth(&other)
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        401
+    );
+    assert_eq!(
+        http.delete(&withdrawal)
+            .bearer_auth(&token)
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        200
+    );
+    let response: Value = http
+        .post(format!("{catalog}/v1/relay-provisions"))
+        .bearer_auth(&token)
+        .json(&bootstrap(92))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let raw = URL_SAFE_NO_PAD
+        .decode(response["routing_bundle_b64"].as_str().unwrap())
+        .unwrap();
+    assert!(
+        !gcoms_routing::gc2::directory::BootstrapBundle::decode(&raw)
+            .unwrap()
+            .relays
+            .iter()
+            .any(|relay| relay.service_id == intro.service_id)
+    );
+    assert_eq!(
+        http.post(&url)
+            .bearer_auth(&token)
+            .json(&body(intro.clone()))
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        200
+    );
+    grants.grants[0].revoked = true;
+    atomic_json(&grants_path, &grants).unwrap();
+    assert_eq!(
+        http.post(&url)
+            .bearer_auth(&token)
+            .json(&body(intro.clone()))
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        401
+    );
+    let response: Value = http
+        .post(format!("{catalog}/v1/relay-provisions"))
+        .bearer_auth(&other)
+        .json(&bootstrap(93))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let raw = URL_SAFE_NO_PAD
+        .decode(response["routing_bundle_b64"].as_str().unwrap())
+        .unwrap();
+    assert!(
+        !gcoms_routing::gc2::directory::BootstrapBundle::decode(&raw)
+            .unwrap()
+            .relays
+            .iter()
+            .any(|relay| relay.service_id == intro.service_id)
+    );
+    assert!(
+        !pki.directory.join("network-state/dns-state.json").exists(),
+        "relay participation does not use DNS publication"
+    );
+    listener.abort();
+}
+
 async fn network_grants_authorize_for(version: u8) {
     use gcoms_catalog::network::{
         atomic_json, token_digest, GrantFile, GrantRecord, NetworkConfig,

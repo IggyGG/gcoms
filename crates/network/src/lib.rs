@@ -64,6 +64,59 @@ pub struct NetworkInvitation {
     pub grant: String,
     pub expires_at: u64,
 }
+
+/// Optional relay contribution. Public service authority is separate from DNS
+/// naming and contains no personal contact, message identity or private guard.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RelayRegistrationRequest {
+    pub network_id: String,
+    pub grant_id: String,
+    pub expires_at: u64,
+    pub routing_bundle_b64: String,
+    pub certificate_b64: String,
+    pub signature_scheme: u16,
+    pub signature_b64: String,
+}
+
+impl RelayRegistrationRequest {
+    /// Canonical claim binds one service introduction to one network and grant.
+    pub fn signing_bytes(&self) -> Result<Vec<u8>> {
+        use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
+        if self.network_id.is_empty()
+            || self.network_id.len() > 128
+            || self.routing_bundle_b64.len() > 1024
+        {
+            return Err("invalid relay registration claim".into());
+        }
+        let grant = URL_SAFE_NO_PAD
+            .decode(&self.grant_id)
+            .map_err(|_| "invalid relay grant binding")?;
+        let intro = URL_SAFE_NO_PAD
+            .decode(&self.routing_bundle_b64)
+            .map_err(|_| "invalid relay introduction")?;
+        if grant.len() != 32
+            || URL_SAFE_NO_PAD.encode(&grant) != self.grant_id
+            || URL_SAFE_NO_PAD.encode(&intro) != self.routing_bundle_b64
+        {
+            return Err("noncanonical relay registration claim".into());
+        }
+        let mut claim = b"gcoms.relay-contribution.v1\0".to_vec();
+        claim.extend_from_slice(&(self.network_id.len() as u16).to_be_bytes());
+        claim.extend_from_slice(self.network_id.as_bytes());
+        claim.extend_from_slice(&grant);
+        claim.extend_from_slice(&self.expires_at.to_be_bytes());
+        claim.extend_from_slice(&intro);
+        Ok(claim)
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RelayRegistrationResponse {
+    pub service_id: [u8; 32],
+    pub lease_expires_at: u64,
+}
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct RegisterNameRequest {

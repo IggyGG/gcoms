@@ -133,6 +133,7 @@ pub(crate) struct RoutingRuntime {
     pub(super) owner_announcement_pending: AtomicBool,
     pub recovery_status: Mutex<RecoveryStatus>,
     pub published: Arc<AtomicBool>,
+    pub sharing_enabled: AtomicBool,
     #[cfg(feature = "relay-host")]
     pub automatic_connectivity: bool,
     stopping: AtomicBool,
@@ -303,6 +304,7 @@ impl RoutingRuntime {
             owner_announcement_pending: AtomicBool::new(false),
             recovery_status: Mutex::new(RecoveryStatus::default()),
             published: Arc::new(AtomicBool::new(false)),
+            sharing_enabled: AtomicBool::new(true),
             #[cfg(feature = "relay-host")]
             automatic_connectivity: config.connectivity.is_some(),
             stopping: AtomicBool::new(false),
@@ -714,7 +716,9 @@ pub(crate) fn spawn(
                     .unwrap_or_else(|p| p.into_inner())
                     .as_ref()
                     .map(|s| s.introduction(now_unix()));
-                if let Some(own) = introduction.filter(|_| !current_protocol) {
+                if let Some(own) = introduction.filter(|_| {
+                    !current_protocol && runtime.sharing_enabled.load(Ordering::Acquire)
+                }) {
                     if last_candidate != Some(own.addr) {
                         next_publish = std::time::Instant::now();
                         publication_failures = 0;
@@ -728,6 +732,7 @@ pub(crate) fn spawn(
                         // into authority for the new endpoint.
                         let service = runtime.service.lock().unwrap_or_else(|p| p.into_inner());
                         if !runtime.stopping.load(Ordering::Acquire)
+                            && runtime.sharing_enabled.load(Ordering::Acquire)
                             && service
                                 .as_ref()
                                 .is_some_and(|service| service.address() == own.addr)

@@ -140,6 +140,18 @@ pub async fn serve(
     events_tx: broadcast::Sender<Ev>,
     listener: ControlListener,
 ) -> std::io::Result<()> {
+    serve_with_status(state, cmd_tx, events_tx, listener, None).await
+}
+
+pub(crate) type StatusSnapshot = Arc<dyn Fn() -> Value + Send + Sync>;
+
+pub(crate) async fn serve_with_status(
+    state: Arc<Mutex<NodeState>>,
+    cmd_tx: mpsc::Sender<Cmd>,
+    events_tx: broadcast::Sender<Ev>,
+    listener: ControlListener,
+    status: Option<StatusSnapshot>,
+) -> std::io::Result<()> {
     let listen = listener.local_addr()?;
     let remote = listener.remote;
     metrics::log_event("control_listening", &[("port", listen.port().to_string())]);
@@ -162,6 +174,7 @@ pub async fn serve(
         let cmd_tx = cmd_tx.clone();
         let events_tx = events_tx.clone();
         let remote = remote.clone();
+        let status = status.clone();
         connections.spawn(async move {
             if let Some(remote) = remote {
                 let handshake =
@@ -175,6 +188,7 @@ pub async fn serve(
                             events_tx,
                             Some(remote.bearer_token),
                             peer,
+                            status,
                         )
                         .await;
                     }
@@ -188,7 +202,7 @@ pub async fn serve(
                     ),
                 }
             } else {
-                handle_conn(stream, state, cmd_tx, events_tx, None, peer).await;
+                handle_conn(stream, state, cmd_tx, events_tx, None, peer, status).await;
             }
         });
     }
@@ -201,6 +215,7 @@ async fn handle_conn<S>(
     events_tx: broadcast::Sender<Ev>,
     expected_token: Option<Arc<str>>,
     _peer: SocketAddr,
+    status: Option<StatusSnapshot>,
 ) where
     S: AsyncRead + AsyncWrite + Unpin,
 {
@@ -266,7 +281,12 @@ async fn handle_conn<S>(
                 break;
             }
         }
-        let resp = dispatch(&state, &cmd_tx, &req).await;
+        let mut resp = dispatch(&state, &cmd_tx, &req).await;
+        if req.get("cmd").and_then(Value::as_str) == Some("status") {
+            if let (Ok(data), Some(snapshot)) = (&mut resp, &status) {
+                data["relay_diagnostics"] = snapshot();
+            }
+        }
         let mut out = json!({"id": id});
         match resp {
             Ok(data) => {

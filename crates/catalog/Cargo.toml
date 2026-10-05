@@ -23,6 +23,7 @@ rand = "0.8"
 httpdate = "1"
 gcoms-node = { version = "0.1.0", path = "../node" }
 gcoms-routing = { version = "0.1.0", path = "../routing" }
+gcoms-transport = { version = "0.1.0", path = "../transport" }
 gcoms-sdk = { version = "0.1.0", path = "../sdk", default-features = false, features = ["ipc", "descriptor-verification"] }
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 rustls = { version = "0.23.45", default-features = false, features = ["aws-lc-rs", "std"] }

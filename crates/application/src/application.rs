@@ -52,6 +52,8 @@ pub struct ApplicationBuilder {
         Arc<dyn gcoms_runtime::store::ProfileStorage>,
         gcoms_runtime::store::ProtocolData,
     )>,
+    #[cfg(any(feature = "embedded", feature = "network-client"))]
+    sharing: Option<gcoms_runtime::RelaySharingConfig>,
     network: Option<Vec<u8>>,
     network_recovery: bool,
     providers: Vec<String>,
@@ -132,6 +134,13 @@ impl ApplicationBuilder {
     }
     pub fn network_recovery(mut self, enabled: bool) -> Self {
         self.network_recovery = enabled;
+        self
+    }
+
+    /// Explicit desktop contribution. Outbound/mobile backends never host.
+    #[cfg(any(feature = "embedded", feature = "network-client"))]
+    pub fn relay_sharing(mut self, config: gcoms_runtime::RelaySharingConfig) -> Self {
+        self.sharing = Some(config);
         self
     }
     pub fn invitation(mut self, invitation: impl Into<String>) -> Self {
@@ -253,6 +262,9 @@ impl ApplicationBuilder {
             #[cfg(any(feature = "embedded", feature = "network-client"))]
             Backend::Embedded | Backend::NetworkClient => {
                 let client_only = matches!(self.backend, Backend::NetworkClient);
+                if client_only && self.sharing.is_some() {
+                    return Err("Outbound clients cannot contribute relay capacity".into());
+                }
                 let network = self
                     .network
                     .as_ref()
@@ -275,8 +287,13 @@ impl ApplicationBuilder {
                             )
                             .await?
                         } else {
-                            gcoms_runtime::ProtocolRuntime::from_storage(store, data, options)
-                                .await?
+                            gcoms_runtime::ProtocolRuntime::from_storage_with_sharing(
+                                store,
+                                data,
+                                options,
+                                self.sharing,
+                            )
+                            .await?
                         }
                     }
                     None if client_only => {
@@ -289,11 +306,12 @@ impl ApplicationBuilder {
                         .await?
                     }
                     None => {
-                        gcoms_runtime::ProtocolRuntime::open_options(
+                        gcoms_runtime::ProtocolRuntime::open_options_with_sharing(
                             &profile,
                             &self.secret,
                             create,
                             options,
+                            self.sharing,
                         )
                         .await?
                     }
@@ -611,6 +629,8 @@ impl Application {
             relay: None,
             #[cfg(any(feature = "embedded", feature = "network-client"))]
             storage: None,
+            #[cfg(any(feature = "embedded", feature = "network-client"))]
+            sharing: None,
             #[cfg(any(feature = "embedded", feature = "network-client"))]
             central: None,
             network: None,

@@ -65,7 +65,7 @@ class Journey(base.Worker):
         self.result['initial_namespace'] = {'links': initial_links, 'routes': initial_routes}
         run(['mount', '--make-rprivate', '/'])
         run(['mount', '--bind', self.original_root, '/mnt'])
-        count = 10 if self.spec['config'].get('mode') == 'multi-party' else 2
+        count = 64 if self.spec['config'].get('mode') == 'relay-load' else 10 if self.spec['config'].get('mode') == 'multi-party' else 2
         for name in ('home', 'tmp', 'run', *[f'c{i}' for i in range(count)], *[f'r{i}' for i in range(len(self.relay_addresses))]):
             path = self.root / name
             path.mkdir(mode=0o700)
@@ -91,6 +91,9 @@ class Journey(base.Worker):
         run(['ip', 'link', 'add', 'fixture0', 'type', 'veth', 'peer', 'name', 'client0', 'netns', str(self.holder.pid)])
         for address in [FIXTURE, *RELAYS]:
             run(['ip', 'addr', 'add', address + '/24', 'dev', 'fixture0'])
+        if self.spec['config'].get('mode') == 'relay-load':
+            for i in range(32):
+                run(['ip', 'addr', 'add', f'11.231.97.{100+i}/24', 'dev', 'fixture0'])
         run(['ip', '-6', 'addr', 'add', FIXTURE6 + '/64', 'dev', 'fixture0', 'nodad'])
         run(['ip', 'link', 'set', 'fixture0', 'up'])
         run([*self.ns, 'ip', 'link', 'set', 'lo', 'up'])
@@ -125,10 +128,11 @@ class Journey(base.Worker):
                 self.event('fresh_authority_window_wait', until_unix=next_window)
                 while time.time()<next_window: time.sleep(min(2,next_window-time.time()))
         super().prepare()
-        if self.spec['config'].get('mode') == 'multi-party':
+        if self.spec['config'].get('mode') in ('multi-party', 'relay-load'):
             raw = (self.root / 'bootstrap').read_bytes()
             records = [raw[6+i*155:6+(i+1)*155] for i in range(raw[5])]
-            for client in range(2, 10):
+            count = 64 if self.spec['config'].get('mode') == 'relay-load' else 10
+            for client in range(2, count):
                 folder = self.root / f'c{client}'
                 (folder / 'fixtures').mkdir(mode=0o700)
                 os.chown(folder / 'fixtures', self.uid, self.gid)
@@ -147,6 +151,39 @@ class Journey(base.Worker):
             if process.wait(timeout=30) != 0:
                 raise RuntimeError('fixture signed network generation failed')
             self.result['fixture_network_sha256'] = sha256(self.root / 'network.json')
+        if self.spec['config'].get('mode') == 'relay-load':
+            self.prepare_contributions()
+
+    def prepare_contributions(self):
+        host = self.spec['fixture_host']['path']
+        records = []
+        for i in range(32):
+            folder = self.root / f'c{i+2}'
+            env = {'GCHAT_FIXTURE_NETNS': self.result['boundary']['fixture_netns'],
+                   'GCHAT_FIXTURE_HOST_NETNS': self.spec['host_netns']}
+            self.spawn(f'contribution{i}', [host, 'contribute', '--listen', f'11.231.97.{100+i}:{24700+i}',
+                '--bootstrap', self.root / 'bootstrap', '--introduction', folder / 'contribution',
+                '--verified', folder / 'verified', '--diagnostics', folder / 'contribution.json'], env=env)
+            until(lambda: (folder / 'contribution').is_file(), time.monotonic()+30, 'contribution listener')
+            verifier = self.spawn(f'contribution-proof{i}', [host, 'verify', folder / 'contribution', folder / 'verified'],
+                observer=True, env=env | {'GCHAT_FIXTURE_NETNS':self.result['boundary']['observer_netns']})
+            if verifier.wait(timeout=30) != 0:
+                raise RuntimeError('independent contribution listener verification failed')
+            until(lambda: json.loads((folder/'contribution.json').read_text())['published'] if (folder/'contribution.json').is_file() else False,
+                  time.monotonic()+10, 'contribution publication')
+            raw = (folder / 'contribution').read_bytes()
+            if len(raw)!=161 or raw[:6]!=b'GCRB\x02\x01':
+                raise RuntimeError('invalid contribution introduction')
+            records.append(raw[6:])
+        for i in range(64):
+            path=self.root/f'c{i}/bootstrap'
+            seeds=path.read_bytes()[6:]
+            # Five distinct operator seeds plus three independently verified
+            # contributions, within the existing eight-introduction wire cap.
+            selected=[records[(i*3+j)%len(records)] for j in range(3)]
+            self.private(path,b'GCRB\x02\x08'+seeds+b''.join(selected))
+        self.result['contributions']={'count':32,'listener_proofs':32,
+            'scope':'source-bound core contribution services colocated with application clients; native device guards and provider admission qualified separately'}
 
     def lifecycle(self, i):
         path=self.root/(self.latest[f'client{i}']+'.log')
@@ -618,6 +655,100 @@ class Journey(base.Worker):
         self.assert_topology(self.result['boundary']['after'])
         self.result['completed'] = True
 
+    def relay_load(self):
+        clients=list(range(64))
+        setup=time.monotonic()+2400
+        self.rpc_deadline=setup
+        for i in clients:
+            self.start_client(i)
+            # Stagger unauthenticated TLS admission without relaxing its
+            # original eight-connections-per-source protection.
+            time.sleep(.2)
+        for i in clients:
+            until(lambda i=i:self.request(i,'snapshot'),setup,'64-client IPC startup')
+            until(lambda i=i:self.readiness(i),setup,'64-client protected readiness')
+        for i in (0,1): self.files(i,'configure',quota_bytes=str(32*1024*1024),retention_days=7)
+        channel=self.submit(0,'/create #relay-load operator')['conversation']
+        for i in clients[1:]:
+            def invitation():
+                value=self.submit(0,'/invite',channel)['output']
+                return value['link'] if not value.get('localOnly',True) else None
+            code=until(invitation,setup,'64-member invitation')
+            if self.join_invitation(i,code,f'participant{i}')['conversation']!=channel:
+                raise RuntimeError('participant joined another channel')
+            self.event('load_member_joined',client=i)
+        self.expected_subscriptions=4
+        for i in clients: until(lambda i=i:self.readiness(i),setup,'64-member subscription readiness')
+        duration=self.spec['config']['load_seconds']
+        began=time.monotonic(); end=began+duration; began_unix=time.time()
+        self.rpc_deadline=end+120
+        records=[]; attempts=0; refused=0; pending=[]; restart=False
+        transfer=self.start_file(channel,self.spec['config']['file_bytes'],'release-payload')
+        self.event('relay_load_started',clients=64,contributions=32,seconds=duration,file=transfer)
+        next_send=began; sender=0
+        while time.monotonic()<end or pending:
+            now=time.monotonic()
+            if now>end+120: raise TimeoutError('load delivery did not drain within its bound')
+            if now<end and now>=next_send:
+                token=f'@all relay-load:{sender}:{uuid.uuid4().hex}'
+                started=time.monotonic(); attempts+=1
+                try:
+                    self.submit(sender%64,token,channel)
+                    pending.append({'sender':sender%64,'token':token,'started':started,'seen':{}})
+                except RuntimeError as error:
+                    if not any(word in str(error).lower() for word in ('overloaded','full','refused','backing off')): raise
+                    refused+=1
+                sender+=1; next_send=began+sender*10
+            for item in list(pending):
+                for i in clients:
+                    if i in item['seen']: continue
+                    rows=self.history(i,channel,item['token'])
+                    if rows:
+                        if len(rows)!=1: raise RuntimeError('duplicated application command')
+                        item['seen'][i]={'id':rows[0]['id'],'seconds':time.monotonic()-item['started']}
+                sent=self.history(item['sender'],channel,item['token'])
+                if len(item['seen'])==64 and sent and sent[0].get('delivery')=='delivered':
+                    if len({row['id'] for row in item['seen'].values()})!=1: raise RuntimeError('command identity changed')
+                    record={'sender':item['sender'],'recipients':63,'id':sent[0]['id'],
+                        'recipient_seconds':[row['seconds'] for i,row in item['seen'].items() if i!=item['sender']],
+                        'authenticated_ack_seconds':time.monotonic()-item['started']}
+                    records.append(record); pending.remove(item)
+                    self.event('load_command_delivered',**record)
+            if not restart and now-began>=duration/2:
+                process=next(p for role,p in reversed(self.children) if role.startswith('relay0') and p.poll() is None)
+                self.stop(process); self.relay(0,self.root/'bootstrap'); restart=True
+                self.event('load_relay_restarted',relay=0)
+            self.sample()
+            for i in clients:
+                process=next(p for role,p in reversed(self.children) if role.startswith(f'client{i}-') or role==f'client{i}')
+                if process.poll() is not None: raise RuntimeError('load client exited')
+            time.sleep(.2)
+        self.finish_file(transfer,120)
+        latencies=sorted(value for record in records for value in record['recipient_seconds'])
+        if not latencies: raise RuntimeError('no commands delivered')
+        p95=latencies[min(len(latencies)-1,(len(latencies)*95+99)//100-1)]
+        carried=sum(json.loads((self.root/f'c{i+2}/contribution.json').read_text())['transferred_bytes'] for i in range(32))
+        data_accepted=0; relay_refusals=0; forwarding_accepted=0
+        for i in range(len(self.relay_addresses)):
+            for path in (self.root/f'r{i}').glob('metrics.jsonl*'):
+                for line in path.read_text().splitlines():
+                    row=json.loads(line)
+                    if row.get('ts',0)/1000<began_unix: continue
+                    if row.get('event')=='gchat_push_accepted' and row.get('kind') in ('data','duplicate'): data_accepted+=1
+                    if row.get('event')=='gc2_forward_accepted': forwarding_accepted+=1
+                    if row.get('event')=='gc2_forward_refused' or (row.get('event')=='gchat_queue_refused'
+                        and row.get('reason') in ('queue_full','store_capacity','replay_capacity')): relay_refusals+=1
+        relay_fraction=relay_refusals/max(1,data_accepted+forwarding_accepted+relay_refusals)
+        self.result['relay_load']={'clients':64,'seconds':duration,'commands':len(records),'attempts':attempts,
+            'application_refusals':refused,'application_refusal_fraction':refused/max(1,attempts),'recipient_p95_seconds':p95,
+            'authenticated_commands':records,'file':transfer,'relay_restart':restart,'contribution_transferred_bytes':carried,
+            'relay_data_accepted':data_accepted,'relay_forwarding_accepted':forwarding_accepted,'relay_refusals':relay_refusals,'relay_refusal_fraction':relay_fraction,
+            'qualified_duration':duration>=1800,'provider_policy_qualified':False}
+        if refused/max(1,attempts)>=.01 or relay_fraction>=.01 or p95>=5 or carried==0:
+            raise RuntimeError('relay load gate failed: refusal, latency or contribution forwarding')
+        self.result['boundary']['after']=self.inventory(); self.assert_topology(self.result['boundary']['after'])
+        self.result['completed']=True
+
     def exercise(self):
         # Header-only connection lifecycle evidence. This does not replace the
         # all-packet privacy observer or label encrypted flows as entry drivers.
@@ -629,6 +760,8 @@ class Journey(base.Worker):
         self.result['application_started_epoch']=time.time()
         if self.spec['config'].get('mode') == 'multi-party':
             return self.multi_party()
+        if self.spec['config'].get('mode') == 'relay-load':
+            return self.relay_load()
         setup_deadline=time.monotonic()+300
         self.rpc_deadline=setup_deadline
         self.event('setup_deadline', seconds=300)
@@ -769,7 +902,8 @@ def main():
     parser.add_argument('--build',type=Path,required=True)
     parser.add_argument('--out',type=Path,required=True)
     parser.add_argument('--expiries',type=int,default=3,choices=(1,2,3))
-    parser.add_argument('--mode',choices=('smoke','file-recovery','archive-failure','credential-expiry','carrier-cap','entry-loss','multi-party'),default='credential-expiry')
+    parser.add_argument('--mode',choices=('smoke','file-recovery','archive-failure','credential-expiry','carrier-cap','entry-loss','multi-party','relay-load'),default='credential-expiry')
+    parser.add_argument('--load-seconds',type=int,default=1800,help='relay-load only; shorter runs cannot qualify the release')
     parser.add_argument('--file-bytes',type=int)
     parser.add_argument('--release-check',action='store_true',
                         help='file-recovery only: 16 MiB, 180s completion, 600s total; large-file runs stay separate')
@@ -782,10 +916,11 @@ def main():
     if args.release_check and (args.mode!='file-recovery' or
             args.file_bytes not in (None,16*1024*1024) or args.file_completion_seconds not in (None,180)):
         parser.error('release check requires file-recovery with 16 MiB and 180 seconds')
-    if args.file_bytes is None: args.file_bytes=16*1024*1024 if args.release_check else 256*1024*1024
+    if args.mode=='relay-load' and (not args.fixture_host or not 60<=args.load_seconds<=1800): parser.error('relay-load requires the fixture host and 60..1800 seconds')
+    if args.file_bytes is None: args.file_bytes=5235248 if args.mode=='relay-load' else 16*1024*1024 if args.release_check else 256*1024*1024
     if args.file_completion_seconds is None: args.file_completion_seconds=180 if args.release_check else 1200
     maximum=1024*1024*1024 if args.mode=='file-recovery' else 256*1024*1024
-    minimum=16*1024*1024 if args.release_check else 64*1024*1024
+    minimum=5235248 if args.mode=='relay-load' else 16*1024*1024 if args.release_check else 64*1024*1024
     if not minimum<=args.file_bytes<=maximum: parser.error('file size exceeds the selected fixture bounds')
     if not 60<=args.file_completion_seconds<=3600: parser.error('file completion budget must be between 60 and 3600 seconds')
     if args.mode!='file-recovery' and args.file_completion_seconds!=1200: parser.error('custom file completion budget is only for file-recovery')
@@ -793,6 +928,7 @@ def main():
     build=base.build_binding(args.build.resolve())
     before=links();tool_hash=sha256(Path(__file__));helper_hash=sha256(HELPER)
     config={'release_check':args.release_check,'mode':args.mode,'lifecycle_diagnostics':args.mode in ('carrier-cap','entry-loss'),'expiries':args.expiries,'file_bytes':args.file_bytes,'file_completion_seconds':args.file_completion_seconds,'production_credential_seconds':3600,'production_carrier_cap_seconds':1800,'recovery_seconds':300}
+    if args.mode=='relay-load': config.update(load_seconds=args.load_seconds,relay_schedule='gc2')
     spec={'out':str(root),'build':build,'config':config,'workload':'turnover','seed':20260920,
           'uid':os.getuid(),'gid':os.getgid(),'run_nonce':uuid.uuid4().hex,
           'host_netns':os.readlink('/proc/self/ns/net'),'host_mountns':os.readlink('/proc/self/ns/mnt')}
@@ -804,6 +940,7 @@ def main():
     (root/'boundary-helper.py').write_bytes(HELPER.read_bytes())
     timeout=1800 if args.mode in ('entry-loss','multi-party') else 900 if args.mode in ('smoke','archive-failure') else 1200+args.file_completion_seconds if args.mode=='file-recovery' else 3600*(args.expiries+1)+900
     if args.release_check: timeout=600
+    if args.mode=='relay-load': timeout=2400+args.load_seconds+300
     command=['sudo','-n','timeout','--signal=TERM','--kill-after=20',str(timeout),
              'unshare','--net','--mount','--pid','--fork','--mount-proc','--kill-child','--propagation','private','--',
              sys.executable,str(Path(__file__).resolve()),'--worker',str(root/'spec.json')]

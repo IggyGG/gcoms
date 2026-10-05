@@ -14,6 +14,7 @@ struct Cached {
     contact: AliasContact,
     proof: Option<VerifiedAuthority>,
     retry_after: tokio::time::Instant,
+    failures: u32,
 }
 
 /// One entry per bounded scheduler lane, including negative results. Holding
@@ -60,20 +61,74 @@ pub(super) fn apply(
 }
 
 impl Memo {
+    pub(super) fn backing_off(&self, contact: &AliasContact) -> bool {
+        self.0.try_lock().is_ok_and(|cached| {
+            cached.as_ref().is_some_and(|entry| {
+                same_binding(&entry.contact, contact)
+                    && entry.failures > 0
+                    && entry.retry_after > tokio::time::Instant::now()
+            })
+        })
+    }
+
+    #[cfg(feature = "experimental-gc2")]
+    pub(super) async fn observe(&self, contact: Option<&AliasContact>, result: &JobResult) {
+        let Some(contact) = contact else { return };
+        let mut cached = self.0.lock().await;
+        if let JobResult::Failed(error) = result {
+            let error = error.to_ascii_lowercase();
+            if !(error.contains("overloaded")
+                || error.contains("refused")
+                || error.contains("no permits"))
+            {
+                return;
+            }
+            let old = cached
+                .as_ref()
+                .filter(|entry| same_binding(&entry.contact, contact));
+            let failures = old.map_or(1, |entry| entry.failures.saturating_add(1));
+            let proof = old.and_then(|entry| entry.proof.clone());
+            *cached = Some(Cached {
+                contact: contact.clone(),
+                proof,
+                failures,
+                retry_after: tokio::time::Instant::now()
+                    + retry_delay(failures, &mut rand::thread_rng()),
+            });
+        } else if matches!(result, JobResult::HopAccepted(_)) {
+            if let Some(entry) = cached
+                .as_mut()
+                .filter(|entry| same_binding(&entry.contact, contact))
+            {
+                entry.failures = 0;
+                entry.retry_after = tokio::time::Instant::now();
+            }
+        }
+    }
+
     pub(super) async fn resolve(
         &self,
         client: &Tp1Client,
         contact: Option<&AliasContact>,
         natural: bool,
     ) -> Result<Option<VerifiedAuthority>, String> {
-        let Some(contact) = contact.filter(|c| c.expiry <= now_unix()) else {
+        let Some(contact) = contact else {
             return Ok(None);
         };
+        if natural && self.backing_off(contact) {
+            return Err("relay contact is backing off".into());
+        }
+        if contact.expiry > now_unix() {
+            return Ok(None);
+        }
         let mut cached = self.0.lock().await;
         if let Some(entry) = cached
             .as_ref()
             .filter(|entry| same_binding(&entry.contact, contact))
         {
+            if entry.failures > 0 && entry.retry_after > tokio::time::Instant::now() {
+                return Err("relay authority refresh is backing off".into());
+            }
             if let Some(proof) = entry.proof.as_ref().filter(|p| p.expiry > now_unix()) {
                 return Ok(Some(proof.clone()));
             }
@@ -81,17 +136,35 @@ impl Memo {
                 return Err("relay authority refresh is backing off".into());
             }
         }
+        let failures = cached
+            .as_ref()
+            .filter(|entry| same_binding(&entry.contact, contact))
+            .map_or(0, |entry| entry.failures);
         let result = tokio::time::timeout(Duration::from_secs(60), query(client, contact, natural))
             .await
             .map_err(|_| "relay authority refresh timed out".to_string())
             .and_then(|result| result);
+        let failures = if result.is_ok() {
+            0
+        } else {
+            failures.saturating_add(1)
+        };
         *cached = Some(Cached {
             contact: contact.clone(),
             proof: result.as_ref().ok().cloned(),
-            retry_after: tokio::time::Instant::now() + Duration::from_secs(5),
+            retry_after: tokio::time::Instant::now()
+                + retry_delay(failures, &mut rand::thread_rng()),
+            failures,
         });
         result.map(Some)
     }
+}
+
+fn retry_delay(failures: u32, rng: &mut impl Rng) -> Duration {
+    let base = 5_000u64
+        .saturating_mul(1 << failures.saturating_sub(1).min(4))
+        .min(60_000);
+    Duration::from_millis(rng.gen_range(base..=base.saturating_add(base / 5).min(60_000)))
 }
 
 // A cover deposit carries no application message. The existing relay accepts
@@ -178,4 +251,64 @@ fn verified(contact: &AliasContact, expiry: Option<u64>) -> Result<VerifiedAutho
         contact: contact.clone(),
         expiry,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn retry_backoff_is_jittered_bounded_and_resets_after_success() {
+        let mut rng = StdRng::seed_from_u64(1);
+        for failure in 1..=100 {
+            let delay = retry_delay(failure, &mut rng);
+            assert!((Duration::from_secs(5)..=Duration::from_secs(60)).contains(&delay));
+            if failure >= 5 {
+                assert_eq!(delay, Duration::from_secs(60));
+            }
+        }
+        assert!(retry_delay(0, &mut rng) <= Duration::from_secs(6));
+        assert!(retry_delay(2, &mut rng) >= Duration::from_secs(10));
+    }
+    #[cfg(feature = "experimental-gc2")]
+    #[tokio::test]
+    async fn overload_blocks_live_authority_but_not_an_alternate_and_success_clears_it() {
+        let memo = Memo::default();
+        let contact = AliasContact {
+            target: RelayTarget {
+                address: "192.0.2.1:4433".parse().unwrap(),
+                relay_service_id: [1; 32],
+            },
+            queue_id: [2; 32],
+            epoch: 1,
+            push_cap: [3; 32],
+            expiry: now_unix() + 3600,
+        };
+        memo.observe(
+            Some(&contact),
+            &JobResult::Failed("GC/2 relay overloaded".into()),
+        )
+        .await;
+        assert!(memo.backing_off(&contact));
+        assert!(memo
+            .resolve(&Tp1Client::new().unwrap(), Some(&contact), true)
+            .await
+            .err()
+            .unwrap()
+            .contains("backing off"));
+        let mut alternate = contact.clone();
+        alternate.target.address = "192.0.2.2:4433".parse().unwrap();
+        assert!(!memo.backing_off(&alternate));
+        memo.observe(Some(&contact), &JobResult::HopAccepted(bytes::Bytes::new()))
+            .await;
+        assert!(!memo.backing_off(&contact));
+        memo.observe(
+            Some(&contact),
+            &JobResult::Failed("connection timed out".into()),
+        )
+        .await;
+        assert!(
+            !memo.backing_off(&contact),
+            "uncertain outcomes must not trigger alternate-alias replay"
+        );
+    }
 }

@@ -111,12 +111,95 @@ impl TlsIdentity {
         self.service_id
     }
 
+    /// Possession proof for a bounded domain-separated service claim. Uses the
+    /// service TLS principal, never a person's application signing identity.
+    pub fn sign_service_claim(&self, claim: &[u8]) -> Result<(u16, Vec<u8>), TlsError> {
+        if claim.len() > 4096 {
+            return Err(TlsError::General("service claim exceeds bound".into()));
+        }
+        let key = PrivateKeyDer::Pkcs8(self.private_key_pkcs8_der.clone().into());
+        let key = rustls::crypto::aws_lc_rs::sign::any_supported_type(&key)?;
+        let signer = key
+            .choose_scheme(&[
+                SignatureScheme::ECDSA_NISTP256_SHA256,
+                SignatureScheme::ECDSA_NISTP384_SHA384,
+                SignatureScheme::ED25519,
+                SignatureScheme::RSA_PSS_SHA256,
+            ])
+            .ok_or_else(|| TlsError::General("unsupported service claim key".into()))?;
+        Ok((u16::from(signer.scheme()), signer.sign(claim)?))
+    }
+
     pub fn server_config(&self) -> Result<ServerConfig, TlsError> {
         server_config(
             CertificateDer::from(self.certificate_der.clone()),
             PrivateKeyDer::Pkcs8(self.private_key_pkcs8_der.clone().into()),
         )
     }
+}
+
+/// Validate possession against the same SPKI pin used by the independently
+/// probed listener. Certificate names and a caller-supplied trust root confer
+/// no authority here.
+pub fn verify_service_claim(
+    certificate: &[u8],
+    pin: [u8; 32],
+    scheme: u16,
+    claim: &[u8],
+    signature: &[u8],
+) -> Result<(), TlsError> {
+    let failed = || TlsError::General("invalid service possession proof".into());
+    if certificate.len() > 8192
+        || signature.is_empty()
+        || signature.len() > 1024
+        || claim.len() > 4096
+        || certificate_service_id(certificate).map_err(|_| failed())? != pin
+    {
+        return Err(failed());
+    }
+    let (rest, cert) = x509_parser::parse_x509_certificate(certificate).map_err(|_| failed())?;
+    if !rest.is_empty() {
+        return Err(failed());
+    }
+    let key = cert.public_key();
+    let scheme = SignatureScheme::from(scheme);
+    let oid = key.algorithm.algorithm.to_id_string();
+    let compatible = match scheme {
+        SignatureScheme::ECDSA_NISTP256_SHA256 | SignatureScheme::ECDSA_NISTP384_SHA384 => {
+            oid == "1.2.840.10045.2.1"
+                && key
+                    .algorithm
+                    .parameters
+                    .as_ref()
+                    .and_then(|value| value.as_oid().ok())
+                    .is_some_and(|oid| {
+                        oid.to_id_string()
+                            == if scheme == SignatureScheme::ECDSA_NISTP256_SHA256 {
+                                "1.2.840.10045.3.1.7"
+                            } else {
+                                "1.3.132.0.34"
+                            }
+                    })
+        }
+        SignatureScheme::ED25519 => oid == "1.3.101.112" && key.algorithm.parameters.is_none(),
+        SignatureScheme::RSA_PSS_SHA256 => oid == "1.2.840.113549.1.1.1",
+        _ => false,
+    };
+    if !compatible {
+        return Err(failed());
+    }
+    for (supported, algorithms) in provider().signature_verification_algorithms.mapping {
+        if *supported == scheme
+            && algorithms.iter().any(|algorithm| {
+                algorithm
+                    .verify_signature(key.subject_public_key.data.as_ref(), claim, signature)
+                    .is_ok()
+            })
+        {
+            return Ok(());
+        }
+    }
+    Err(failed())
 }
 
 impl Drop for TlsIdentity {
@@ -293,6 +376,34 @@ impl rustls::client::danger::ServerCertVerifier for PinnedVerifier {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn service_possession_proof_binds_claim_and_spki() {
+        let identity = TlsIdentity::generate().unwrap();
+        let claim = b"gcoms.relay-contribution.v1\0network-and-grant";
+        let (scheme, signature) = identity.sign_service_claim(claim).unwrap();
+        let verify = |pin, scheme, claim: &[u8], signature: &[u8]| {
+            verify_service_claim(identity.certificate_der(), pin, scheme, claim, signature)
+        };
+        assert!(verify(identity.service_id(), scheme, claim, &signature).is_ok());
+        assert!(verify([0; 32], scheme, claim, &signature).is_err());
+        assert!(verify(
+            identity.service_id(),
+            scheme,
+            b"different grant",
+            &signature
+        )
+        .is_err());
+        assert!(verify(
+            identity.service_id(),
+            u16::from(SignatureScheme::ED25519),
+            claim,
+            &signature
+        )
+        .is_err());
+        let mut altered = signature;
+        altered[0] ^= 1;
+        assert!(verify(identity.service_id(), scheme, claim, &altered).is_err());
+    }
     use tokio_rustls::{TlsAcceptor, TlsConnector};
 
     fn identity_for_key(key: &rcgen::KeyPair, serial: u64) -> TlsIdentity {

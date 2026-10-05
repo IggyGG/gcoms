@@ -9,6 +9,8 @@ pub(super) struct RelayHost {
     pub target: RelayTarget,
     identity_pk: Vec<u8>,
     bundle: Vec<u8>,
+    #[cfg(feature = "experimental-gc2")]
+    pub forwarding: Arc<super::gc2_admission::Pool>,
 }
 
 impl RelayHost {
@@ -59,6 +61,11 @@ pub(super) async fn start(
     let service_id = tls_identity.service_id();
     let stream_emission = cfg.profile.stream_emission();
     let registry = TokenRegistry::new();
+    #[cfg(feature = "experimental-gc2")]
+    let forwarding = super::gc2_admission::Pool::new(routing.map_or_else(
+        || RelayCapacity::default().circuits(),
+        |r| r.relay_capacity.circuits(),
+    ));
     let leases = Arc::new(Mutex::new(
         LeaseStore::new(service_id, StoreConfig::default()).map_err(|e| e.to_string())?,
     ));
@@ -113,6 +120,7 @@ pub(super) async fn start(
             transit_scheduler.clone(),
             service_id,
             frwd_target_policy.clone(),
+            forwarding.clone(),
         );
         let terminal: Option<gcoms_transport::server::DuplexHandler> =
             Some(Arc::new(move |path| {
@@ -153,6 +161,8 @@ pub(super) async fn start(
             target: relay_target,
             identity_pk: identity.0.to_vec(),
             bundle: identity.1.to_vec(),
+            #[cfg(feature = "experimental-gc2")]
+            forwarding,
         }),
         transport,
         local_addr,

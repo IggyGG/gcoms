@@ -1,5 +1,7 @@
 //! Scoped invitation admission and durable, single-writer DNS publication.
 //! The publisher owns only records it has journaled, never a whole DNS zone.
+#[cfg(feature = "experimental-gc2")]
+pub(crate) mod relays;
 use super::{no_store, now_unix, ApiError, AppState};
 use axum::{
     extract::{Path, State},
@@ -93,6 +95,8 @@ struct DnsState {
     retry_at: u64,
 }
 pub struct NetworkService {
+    #[cfg(feature = "experimental-gc2")]
+    relays: Mutex<relays::Registry>,
     pub(crate) invitation_records: Mutex<super::invitations::Store>,
     config: NetworkConfig,
     defaults: SignedNetworkDefaults,
@@ -241,6 +245,10 @@ impl NetworkService {
             &config.state_dir.join("invitations.json"),
         )?);
         Ok(Self {
+            #[cfg(feature = "experimental-gc2")]
+            relays: Mutex::new(relays::Registry::load(
+                &config.state_dir.join("relay-state.json"),
+            )?),
             invitation_records,
             config,
             defaults,

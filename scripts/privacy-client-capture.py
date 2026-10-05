@@ -263,7 +263,7 @@ class Worker:
         return self.spawn(f'relay{i}' + ('-configured' if bootstrap else ''), [binary, 'serve',
             '--keystore', folder / 'key', '--pass-file', self.root / 'pass', '--port', 24500 + i,
             '--advertise-addr', f'{self.relay_addresses[i]}:{24500+i}', '--control-port', 19500 + i,
-            '--schedule', 'gchat-files', '--no-router-mapping', '--metrics', folder / 'metrics.jsonl'],
+            '--schedule', self.spec['config'].get('relay_schedule', 'gchat-files'), '--no-router-mapping', '--metrics', folder / 'metrics.jsonl'],
             env={'GC_ROUTING_BOOTSTRAP': str(bootstrap)} if bootstrap else {})
 
     def prepare(self):

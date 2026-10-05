@@ -475,6 +475,11 @@ async fn run() -> Result<(), String> {
             if let Some(m) = arg("--metrics") {
                 gcoms_node::metrics::init(std::path::Path::new(&m))
                     .map_err(|e| format!("metrics init {m}: {e}"))?;
+            } else if std::env::var("GC_RELAY_DEBUG").as_deref() == Ok("1") {
+                // Existing fleet debug configuration enables bounded diagnostics
+                // without changing protected service arguments or identities.
+                gcoms_node::metrics::init(&keystore.with_extension("metrics.jsonl"))
+                    .map_err(|e| format!("relay metrics init: {e}"))?;
             }
             let profile = match arg("--schedule")
                 .unwrap_or_else(|| "production".to_string())

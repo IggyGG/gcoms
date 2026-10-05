@@ -1,5 +1,7 @@
 //! Resource-bounded private circuit service on the existing TP1 listener.
 #[cfg(feature = "experimental-gc2")]
+mod bandwidth;
+#[cfg(feature = "experimental-gc2")]
 mod gc2_referrals;
 use crate::{
     carrier::{self, CarrierConfig, Records},
@@ -94,6 +96,8 @@ impl Default for ServicePolicy {
 }
 
 pub struct RelayService {
+    #[cfg(feature = "experimental-gc2")]
+    bandwidth: Arc<bandwidth::Budget>,
     addr: Mutex<SocketAddr>,
     service_id: [u8; 32],
     secret: Zeroizing<[u8; 32]>,
@@ -156,6 +160,8 @@ impl RelayService {
             return Err("invalid relay service policy".into());
         }
         Ok(Arc::new(Self {
+            #[cfg(feature = "experimental-gc2")]
+            bandwidth: Arc::new(bandwidth::Budget::default()),
             addr: Mutex::new(addr),
             service_id,
             secret: Zeroizing::new(secret),
@@ -164,19 +170,19 @@ impl RelayService {
             #[cfg(feature = "experimental-gc2")]
             gc2_bulk_slots: Arc::new(Semaphore::new(policy.max_circuits.saturating_sub(1))),
             #[cfg(feature = "experimental-gc2")]
-            gc2_control_slots: Arc::new(Semaphore::new(4)),
+            gc2_control_slots: Arc::new(Semaphore::new(policy.max_circuits.min(64))),
             #[cfg(feature = "experimental-gc2")]
             gc2_directory: Arc::new(crate::gc2::directory::Directory::with_address_policy(
                 policy.target_allowed.clone(),
             )),
             catalog_origins: Mutex::new(policy.catalog_origins.clone()),
-            policy,
             private: Mutex::new(PrivateState {
                 window: Instant::now(),
                 operations: 0,
                 provisions: HashMap::new(),
             }),
-            probes: Semaphore::new(4),
+            probes: Semaphore::new(policy.max_circuits.min(64)),
+            policy,
         }))
     }
 
@@ -247,6 +253,16 @@ impl RelayService {
     }
 
     #[cfg(feature = "experimental-gc2")]
+    pub fn configure_contribution_bandwidth(&self, bytes_per_second: usize) {
+        self.bandwidth.configure(bytes_per_second);
+    }
+
+    #[cfg(feature = "experimental-gc2")]
+    pub fn contribution_bytes(&self) -> u64 {
+        self.bandwidth.transferred()
+    }
+
+    #[cfg(feature = "experimental-gc2")]
     async fn gc2_introductions(
         &self,
         mut body: h2::RecvStream,
@@ -312,6 +328,11 @@ impl RelayService {
                 }
                 permits.push(service.slots.clone().try_acquire_owned()?);
                 let io = service.connect_target(target).await?;
+                let io = bandwidth::wrap(
+                    io,
+                    service.bandwidth.clone(),
+                    service.policy.transit_ready.clone(),
+                );
                 Ok(crate::gc2::entry::hold_capacity(io, permits))
             })
         })

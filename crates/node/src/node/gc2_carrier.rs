@@ -63,16 +63,53 @@ pub(crate) async fn deliver(
 /// terminal. Exact bytes are preserved for retries by the caller's outbox.
 pub(crate) async fn deliver_all(
     client: &Tp1Client,
+    scheduler: &RelayScheduler,
     delivery: &DirectDelivery,
     class: gcoms_core::TrafficClass,
 ) -> Result<(), String> {
-    let contact = delivery
-        .peer
-        .primary()
-        .ok_or("peer has no public alias")?
-        .clone();
+    let contact = delivery.peer.primary().ok_or("peer has no public alias")?;
     for cell in &delivery.cells {
-        deliver(client, &contact, class, &cell.payload).await?;
+        if !scheduler.is_gc2() {
+            deliver(client, contact, class, &cell.payload).await?;
+            continue;
+        }
+        let mut error = "Every authenticated peer alias is backing off".to_string();
+        let mut delivered = false;
+        for contact in delivery
+            .peer
+            .aliases
+            .iter()
+            .filter(|contact| !scheduler.contact_backing_off(contact))
+        {
+            let msg = Cell::new(gcoms_core::CellType::Msg, 0, 0, cell.payload.clone());
+            let result =
+                match scheduler.push_with_class(ProducerClass::Direct, contact.clone(), msg, class)
+                {
+                    Ok(receipt) => receipt.completion().await.accepted().map(|_| ()),
+                    Err(error) => Err(error.to_string()),
+                };
+            match result {
+                Ok(()) => {
+                    delivered = true;
+                    break;
+                }
+                Err(failure) => {
+                    let refused = failure.contains("overloaded")
+                        || failure.contains("refused")
+                        || failure.contains("backing off")
+                        || failure.contains("no permits");
+                    error = failure;
+                    // Uncertain delivery keeps the original outbox ownership;
+                    // only a refusal allows immediate alternate-alias admission.
+                    if !refused {
+                        break;
+                    }
+                }
+            }
+        }
+        if !delivered {
+            return Err(error);
+        }
     }
     Ok(())
 }

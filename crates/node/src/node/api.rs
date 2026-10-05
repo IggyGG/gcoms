@@ -495,7 +495,12 @@ pub struct NodeDiagnostics {
     pub relay: crate::scheduler::diagnostics::SchedulerSnapshot,
     pub client_resources: crate::scheduler::ResourceSnapshot,
     pub relay_resources: crate::scheduler::ResourceSnapshot,
+    #[cfg(all(feature = "experimental-gc2", feature = "relay-host"))]
+    pub forwarding: Option<ForwardingSnapshot>,
 }
+
+#[cfg(all(feature = "experimental-gc2", feature = "relay-host"))]
+pub use super::gc2_admission::Snapshot as ForwardingSnapshot;
 
 /// Local readiness, class counts and bounded backend failure context.
 /// Never includes authority objects or application payloads.
@@ -520,6 +525,10 @@ pub struct TransportStatus {
 
 #[derive(Clone)]
 pub struct NodeHandle {
+    #[cfg(all(feature = "experimental-gc2", feature = "relay-host"))]
+    pub(super) relay_tls_identity: Option<Arc<gcoms_transport::tls::TlsIdentity>>,
+    #[cfg(all(feature = "experimental-gc2", feature = "relay-host"))]
+    pub(super) forwarding: Option<Arc<super::gc2_admission::Pool>>,
     #[cfg(feature = "push-gateway")]
     pub(super) notification_host: Option<std::sync::Weak<super::host::RelayHost>>,
     pub(crate) state: std::sync::Weak<Mutex<NodeState>>,
@@ -552,6 +561,8 @@ impl NodeHandle {
     /// Approximate during concurrent updates; quiesce before reconciling counts.
     pub fn diagnostics(&self) -> NodeDiagnostics {
         NodeDiagnostics {
+            #[cfg(all(feature = "experimental-gc2", feature = "relay-host"))]
+            forwarding: self.forwarding.as_ref().map(|pool| pool.snapshot()),
             transport: self.transport_status(),
             resources: self.scheduler.combined_resource_snapshot(),
             client: self.scheduler.diagnostics_snapshot(),
@@ -687,6 +698,45 @@ impl NodeHandle {
     }
 
     #[cfg(feature = "experimental-gc2")]
+    pub fn sign_relay_registration(
+        &self,
+        request: &mut gcoms_network::RelayRegistrationRequest,
+    ) -> Result<(), String> {
+        #[cfg(feature = "relay-host")]
+        {
+            use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
+            let identity = self
+                .relay_tls_identity
+                .as_ref()
+                .ok_or("relay host identity unavailable")?;
+            let current = self.gc2_relay_introduction()?;
+            let current = gcoms_routing::gc2::directory::BootstrapBundle {
+                relays: vec![current],
+            }
+            .encode()
+            .map_err(|e| e.to_string())?;
+            if URL_SAFE_NO_PAD.encode(&current) != request.routing_bundle_b64
+                || request.expires_at <= now_unix()
+                || request.expires_at > now_unix() + 60
+            {
+                return Err("relay registration changed current listener authority".into());
+            }
+            let (scheme, signature) = identity
+                .sign_service_claim(&request.signing_bytes()?)
+                .map_err(|e| e.to_string())?;
+            request.certificate_b64 = URL_SAFE_NO_PAD.encode(identity.certificate_der());
+            request.signature_scheme = scheme;
+            request.signature_b64 = URL_SAFE_NO_PAD.encode(signature);
+            Ok(())
+        }
+        #[cfg(not(feature = "relay-host"))]
+        {
+            let _ = request;
+            Err("relay hosting is unavailable".into())
+        }
+    }
+
+    #[cfg(feature = "experimental-gc2")]
     pub fn install_gc2_routing_bootstrap(
         &self,
         bundle: &gcoms_routing::gc2::directory::BootstrapBundle,
@@ -736,6 +786,76 @@ impl NodeHandle {
         self.routing
             .as_ref()
             .is_some_and(|r| r.published.load(std::sync::atomic::Ordering::Acquire))
+    }
+
+    /// Host-owned policy; personal messaging and the existing outbound routes
+    /// are independent of contribution eligibility.
+    pub fn set_relay_sharing(&self, enabled: bool) -> Result<(), String> {
+        let runtime = self.routing.as_ref().ok_or("routing not enabled")?;
+        #[cfg(feature = "relay-host")]
+        let _service = runtime.service.lock().unwrap_or_else(|p| p.into_inner());
+        runtime
+            .sharing_enabled
+            .store(enabled, std::sync::atomic::Ordering::Release);
+        if !enabled {
+            runtime
+                .published
+                .store(false, std::sync::atomic::Ordering::Release);
+        }
+        Ok(())
+    }
+
+    /// Accept a provider's independent listener proof only for the endpoint
+    /// still owned by this host. Router changes invalidate stale responses.
+    #[cfg(feature = "experimental-gc2")]
+    pub fn confirm_relay_publication(
+        &self,
+        verified: &gcoms_routing::gc2::directory::Introduction,
+    ) -> Result<(), String> {
+        let runtime = self.routing.as_ref().ok_or("routing not enabled")?;
+        #[cfg(feature = "relay-host")]
+        let service = runtime.service.lock().unwrap_or_else(|p| p.into_inner());
+        #[cfg(feature = "relay-host")]
+        let current = service.as_ref().map(|s| s.gc2_introduction(now_unix()));
+        #[cfg(not(feature = "relay-host"))]
+        let current: Option<gcoms_routing::gc2::directory::Introduction> = None;
+        if !runtime
+            .sharing_enabled
+            .load(std::sync::atomic::Ordering::Acquire)
+            || current.as_ref() != Some(verified)
+        {
+            return Err("relay endpoint or sharing eligibility changed".into());
+        }
+        runtime
+            .published
+            .store(true, std::sync::atomic::Ordering::Release);
+        Ok(())
+    }
+
+    #[cfg(all(feature = "experimental-gc2", feature = "relay-host"))]
+    pub fn configure_relay_contribution(&self, bytes_per_second: usize) -> Result<(), String> {
+        let runtime = self.routing.as_ref().ok_or("routing not enabled")?;
+        let service = runtime.service.lock().unwrap_or_else(|p| p.into_inner());
+        service
+            .as_ref()
+            .ok_or("relay listener unavailable")?
+            .configure_contribution_bandwidth(bytes_per_second);
+        Ok(())
+    }
+
+    #[cfg(all(feature = "experimental-gc2", feature = "relay-host"))]
+    pub fn relay_contribution_bytes(&self) -> u64 {
+        self.routing
+            .as_ref()
+            .and_then(|runtime| {
+                runtime
+                    .service
+                    .lock()
+                    .unwrap_or_else(|p| p.into_inner())
+                    .as_ref()
+                    .map(|service| service.contribution_bytes())
+            })
+            .unwrap_or(0)
     }
 
     pub async fn install_routing_bootstrap(

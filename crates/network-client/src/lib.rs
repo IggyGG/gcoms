@@ -4,6 +4,8 @@
 //! until it agrees with independently verified network defaults.
 pub mod invitations;
 pub mod names;
+#[cfg(feature = "experimental-gc2")]
+pub mod relays;
 pub mod routing;
 
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};

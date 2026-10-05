@@ -8,6 +8,10 @@ pub mod private_fs {
     pub use gcoms_private_fs::*;
 }
 pub use runtime::{ErrorSink, ProtocolClient, ProtocolRuntime};
+pub mod sharing;
+pub use sharing::{RelaySharingConfig, RelaySharingStatus};
+#[cfg(all(feature = "gc2-carrier", target_os = "macos"))]
+mod sharing_macos;
 
 pub mod contacts;
 pub struct RuntimeOptions {

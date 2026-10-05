@@ -401,7 +401,15 @@ impl AppState {
 }
 
 pub fn router(state: AppState) -> Router {
-    Router::new()
+    let router = Router::new();
+    #[cfg(feature = "experimental-gc2")]
+    let router = router
+        .route("/v1/relays", post(network::relays::register))
+        .route(
+            "/v1/relays/{service}",
+            axum::routing::delete(network::relays::remove),
+        );
+    router
         .route("/healthz", get(health))
         .route("/readyz", get(ready))
         .route("/v1/catalog", get(query_catalog))
@@ -768,7 +776,7 @@ async fn relay_provision(
     let (response, authority_expiry) = if version == 3 {
         #[cfg(feature = "experimental-gc2")]
         {
-            gc2_bootstrap_response(&bootstrap, allow_local).await?
+            gc2_bootstrap_response(&bootstrap, allow_local, state.network.as_deref()).await?
         }
         #[cfg(not(feature = "experimental-gc2"))]
         {
@@ -862,6 +870,7 @@ fn unavailable() -> ApiError {
 async fn gc2_bootstrap_response(
     bootstrap: &RelayBootstrap,
     allow_local: bool,
+    network: Option<&network::NetworkService>,
 ) -> Result<(RelayBootstrapResponse, u64), ApiError> {
     let mut relays: Vec<gcoms_routing::gc2::directory::Introduction> = Vec::new();
     for relay in &bootstrap.relays {
@@ -886,6 +895,30 @@ async fn gc2_bootstrap_response(
         }
         if relays.len() == 8 {
             break;
+        }
+    }
+    if let Some(network) = network {
+        let mut contributions = network.contributed_relays().await;
+        contributions.retain(|intro| {
+            !relays
+                .iter()
+                .any(|old| old.conflicts(intro.addr, intro.service_id))
+        });
+        // Keep at least five independently operated seeds when available; the
+        // remaining bounded partial view rotates fresh desktop contributions.
+        if !contributions.is_empty() {
+            relays.truncate(5);
+            for intro in contributions {
+                if !relays
+                    .iter()
+                    .any(|old| old.conflicts(intro.addr, intro.service_id))
+                {
+                    relays.push(intro);
+                }
+                if relays.len() == 8 {
+                    break;
+                }
+            }
         }
     }
     // Control requests can straddle a credential rollover. Never cache an

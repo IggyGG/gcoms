@@ -54,6 +54,8 @@ pub(crate) mod invitation_directory;
 pub use invitation_directory::validate_resolved as validate_resolved_invitation;
 #[cfg(feature = "experimental-gc2")]
 mod gc2_acks;
+#[cfg(all(feature = "experimental-gc2", feature = "relay-host"))]
+mod gc2_admission;
 #[cfg(feature = "experimental-gc2")]
 mod gc2_bootstrap;
 #[cfg(feature = "experimental-gc2")]
@@ -1633,9 +1635,22 @@ async fn start_role(
             let state = state.clone();
             let cmd_tx = cmd_tx.clone();
             let events_tx = events_tx.clone();
+            let diagnostics = transit_scheduler.clone();
+            #[cfg(feature = "experimental-gc2")]
+            let forwarding = relay_host.as_ref().map(|host| host.forwarding.clone());
+            let status: crate::control::StatusSnapshot = Arc::new(move || {
+                let result = serde_json::json!({"scheduler": diagnostics.as_ref().map(|s| s.diagnostics_snapshot())});
+                #[cfg(feature = "experimental-gc2")]
+                let result = {
+                    let mut result = result;
+                    result["forwarding"] = serde_json::json!(forwarding.as_ref().map(|pool| pool.snapshot()));
+                    result
+                };
+                result
+            });
             tasks.push(tokio::spawn(async move {
                 if let Err(e) =
-                    crate::control::serve(state, cmd_tx, events_tx, control_listener).await
+                    crate::control::serve_with_status(state, cmd_tx, events_tx, control_listener, Some(status)).await
                 {
                     metrics::log_event("control_error", &[("e", e.to_string())]);
                 }
@@ -1663,6 +1678,10 @@ async fn start_role(
             _ => None,
         };
         let handle = NodeHandle {
+            #[cfg(all(feature = "experimental-gc2", feature = "relay-host"))]
+            relay_tls_identity: host_relay.then(|| Arc::new(tls_identity)),
+            #[cfg(all(feature = "experimental-gc2", feature = "relay-host"))]
+            forwarding: relay_host.as_ref().map(|host| host.forwarding.clone()),
             #[cfg(feature = "push-gateway")]
             notification_host: relay_host.as_ref().map(Arc::downgrade),
             state: Arc::downgrade(&state),
@@ -1846,7 +1865,11 @@ fn schedulers(
         let transit = Arc::new(Tp1Client::new().map_err(|e| e.to_string())?);
         #[cfg(feature = "experimental-gc2")]
         if routing.as_ref().is_some_and(|r| r.gc2.get().is_some()) {
-            let (client, relay) = RelayScheduler::with_gc2_transit(client, transit);
+            let capacity = routing
+                .as_ref()
+                .map_or_else(RelayCapacity::default, |r| r.relay_capacity);
+            let (client, relay) =
+                RelayScheduler::with_gc2_transit(client, transit, capacity.circuits());
             return Ok((client, Some(relay)));
         }
         let (client, relay) = RelayScheduler::with_transit(client, transit, profile);

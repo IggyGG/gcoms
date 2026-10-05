@@ -21,6 +21,10 @@ use persistence::{PersistenceCounters, SaveCause};
 pub type ErrorSink = Arc<dyn Fn(String) + Send + Sync>;
 
 struct Inner {
+    #[cfg(feature = "gc2-carrier")]
+    sharing: Option<Arc<crate::sharing::State>>,
+    #[cfg(feature = "gc2-carrier")]
+    sharing_now: tokio::sync::Notify,
     #[cfg(feature = "hosted-channels")]
     hosted: crate::hosted::owner::Owner,
     #[cfg(feature = "hosted-channels")]
@@ -53,6 +57,10 @@ struct Inner {
 
 #[derive(Default)]
 struct BackgroundTasks {
+    #[cfg(feature = "gc2-carrier")]
+    sharing_started: bool,
+    #[cfg(feature = "gc2-carrier")]
+    sharing_task: Option<tokio::task::AbortHandle>,
     tasks: tokio::task::JoinSet<()>,
     recovery_started: bool,
     naming_started: bool,
@@ -223,7 +231,7 @@ impl ProtocolRuntime {
         data: ProtocolData,
         options: crate::RuntimeOptions,
     ) -> Result<Self, String> {
-        Self::from_storage_role(store, data, options, true).await
+        Self::from_storage_role(store, data, options, true, None).await
     }
 
     /// Restore the same encrypted profile with no local relay or control listener.
@@ -232,7 +240,21 @@ impl ProtocolRuntime {
         data: ProtocolData,
         options: crate::RuntimeOptions,
     ) -> Result<Self, String> {
-        Self::from_storage_role(store, data, options, false).await
+        Self::from_storage_role(store, data, options, false, None).await
+    }
+
+    /// Additive desktop hosting configuration; existing constructors and
+    /// RuntimeOptions struct literals retain their original behavior.
+    pub async fn from_storage_with_sharing(
+        store: Arc<dyn ProfileStorage>,
+        data: ProtocolData,
+        options: crate::RuntimeOptions,
+        sharing: Option<crate::RelaySharingConfig>,
+    ) -> Result<Self, String> {
+        if sharing.is_some() && options.carrier != gcoms_sdk::CarrierProfile::Gc2 {
+            return Err("relay sharing requires the GC/2 desktop backend".into());
+        }
+        Self::from_storage_role(store, data, options, true, sharing).await
     }
 
     async fn from_storage_role(
@@ -240,6 +262,7 @@ impl ProtocolRuntime {
         data: ProtocolData,
         options: crate::RuntimeOptions,
         host_relay: bool,
+        sharing: Option<crate::RelaySharingConfig>,
     ) -> Result<Self, String> {
         let relay = options
             .relay
@@ -277,6 +300,7 @@ impl ProtocolRuntime {
             options.network,
             host_relay,
             options.durable_channel_inbox,
+            sharing,
         )
         .await
     }
@@ -306,6 +330,21 @@ impl ProtocolRuntime {
             ProtocolStore::open(path, secret)?
         };
         Self::from_client_storage(Arc::new(store), data, options).await
+    }
+
+    pub async fn open_options_with_sharing(
+        path: &std::path::Path,
+        secret: &str,
+        create: bool,
+        options: crate::RuntimeOptions,
+        sharing: Option<crate::RelaySharingConfig>,
+    ) -> Result<Self, String> {
+        let (store, data) = if create {
+            ProtocolStore::create(path, secret)?
+        } else {
+            ProtocolStore::open(path, secret)?
+        };
+        Self::from_storage_with_sharing(Arc::new(store), data, options, sharing).await
     }
 
     pub fn verify_secret(&self, secret: &str) -> Result<(), String> {
@@ -617,6 +656,7 @@ impl ProtocolRuntime {
             installed,
             true,
             false,
+            None,
         )
         .await
     }
@@ -632,8 +672,31 @@ impl ProtocolRuntime {
         installed: Option<gcoms_network_client::InstalledNetwork>,
         host_relay: bool,
         durable_channel_inbox: bool,
+        sharing_config: Option<crate::RelaySharingConfig>,
     ) -> Result<Self, String> {
         let identity_seed = data.identity_seed;
+        if sharing_config.is_some() && installed.is_none() {
+            return Err("desktop relay sharing requires an installed invitation network".into());
+        }
+        #[cfg(not(feature = "gc2-carrier"))]
+        if sharing_config.is_some() {
+            return Err("relay sharing is not compiled in".into());
+        }
+        #[cfg(feature = "gc2-carrier")]
+        let sharing = sharing_config
+            .map(|config| {
+                crate::sharing::State::open(
+                    store.network_directory().with_extension("relay-sharing"),
+                    identity_seed,
+                    config,
+                )
+                .map(Arc::new)
+            })
+            .transpose()?;
+        #[cfg(feature = "gc2-carrier")]
+        let sharing_config = sharing
+            .as_ref()
+            .map(|state| state.config.lock().expect("sharing config lock").clone());
         let node_state = data.node_state;
         let network = if profile.is_production() {
             installed
@@ -644,12 +707,18 @@ impl ProtocolRuntime {
         } else {
             None
         };
-        let connectivity = if host_relay && network.is_some() && listen.port() == 0 {
+        let connectivity = if host_relay
+            && network.is_some()
+            && (listen.port() == 0 || sharing_config.is_some())
+        {
             Some(gcoms_node::connectivity::ConnectivityConfig {
                 state: Some(Arc::new(gcoms_node::connectivity::PortState::open(
                     &store.network_directory(),
                     &identity_seed,
                 )?)),
+                mapping: sharing_config
+                    .as_ref()
+                    .is_none_or(|config| config.router_mapping),
                 ..Default::default()
             })
         } else {
@@ -682,6 +751,11 @@ impl ProtocolRuntime {
             let routing = if node_config.profile.is_production() {
                 let mut routing = gcoms_node::node::RoutingConfig::from_environment()?;
                 routing.connectivity = connectivity;
+                #[cfg(feature = "relay-host")]
+                if let Some(config) = &sharing_config {
+                    routing.relay_capacity =
+                        gcoms_node::node::RelayCapacity::new(config.circuits, config.connections)?;
+                }
                 Some(routing)
             } else {
                 None
@@ -712,6 +786,11 @@ impl ProtocolRuntime {
         } else if let Some(connectivity) = connectivity {
             let mut routing = gcoms_node::node::RoutingConfig::from_environment()?;
             routing.connectivity = Some(connectivity);
+            #[cfg(feature = "relay-host")]
+            if let Some(config) = &sharing_config {
+                routing.relay_capacity =
+                    gcoms_node::node::RelayCapacity::new(config.circuits, config.connections)?;
+            }
             gcoms_node::node::start_persistent_restored_with_policy_and_routing(
                 node_config,
                 policy,
@@ -754,7 +833,16 @@ impl ProtocolRuntime {
         if let Some(network) = &network {
             node.configure_invitation_directory(network.clone())?;
         }
+        #[cfg(all(feature = "gc2-carrier", feature = "relay-host"))]
+        if let Some(config) = &sharing_config {
+            node.set_relay_sharing(false)?;
+            node.configure_relay_contribution(config.bandwidth_bytes_per_second)?;
+        }
         let runtime = Self(Arc::new(Inner {
+            #[cfg(feature = "gc2-carrier")]
+            sharing,
+            #[cfg(feature = "gc2-carrier")]
+            sharing_now: tokio::sync::Notify::new(),
             #[cfg(feature = "hosted-channels")]
             hosted: crate::hosted::owner::Owner::default(),
             #[cfg(feature = "hosted-channels")]
@@ -885,6 +973,30 @@ impl ProtocolRuntime {
         self.0
             .closing
             .store(true, std::sync::atomic::Ordering::Release);
+        #[cfg(feature = "gc2-carrier")]
+        if let Some(sharing) = &self.0.sharing {
+            if let Some(background) = self
+                .0
+                .background
+                .lock()
+                .expect("runtime task lock")
+                .as_mut()
+            {
+                if let Some(task) = background.sharing_task.take() {
+                    task.abort();
+                }
+            }
+            {
+                let _config = sharing.config.lock().expect("sharing config lock");
+                let _ = self.0.node.set_relay_sharing(false);
+            }
+            if let (Some(network), Ok(intro)) =
+                (&self.0.network, self.0.node.gc2_relay_introduction())
+            {
+                let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(5);
+                let _ = network.remove_relay(intro.service_id, deadline).await;
+            }
+        }
         #[cfg(feature = "files")]
         if let Some(files) = self.0.modern_files.lock().await.take() {
             files.shutdown().await;
@@ -922,6 +1034,54 @@ impl ProtocolRuntime {
 
     pub fn network_client(&self) -> Option<gcoms_network_client::NetworkClient> {
         self.0.network.clone()
+    }
+
+    pub fn relay_sharing_status(&self) -> crate::RelaySharingStatus {
+        #[cfg(feature = "gc2-carrier")]
+        if let Some(sharing) = &self.0.sharing {
+            return sharing.status.lock().expect("sharing status lock").clone();
+        }
+        crate::RelaySharingStatus {
+            state: "Relay sharing is unavailable for this backend".into(),
+            ..Default::default()
+        }
+    }
+
+    pub fn configure_relay_sharing(
+        &self,
+        enabled: bool,
+    ) -> Result<crate::RelaySharingStatus, String> {
+        #[cfg(feature = "gc2-carrier")]
+        {
+            let sharing = self
+                .0
+                .sharing
+                .as_ref()
+                .ok_or("Relay sharing is unavailable for this backend")?;
+            sharing.set_enabled(enabled)?;
+            // Withdraw eligibility immediately; a background proof is required
+            // before enabling it again, including after an explicit opt-in.
+            self.0.node.set_relay_sharing(false)?;
+            let mut status = sharing
+                .status
+                .lock()
+                .map_err(|_| "relay sharing status busy")?;
+            status.enabled = enabled;
+            status.published = false;
+            status.state = if enabled {
+                "Checking relay sharing eligibility"
+            } else {
+                "Relay sharing is off"
+            }
+            .into();
+            self.0.sharing_now.notify_one();
+            Ok(status.clone())
+        }
+        #[cfg(not(feature = "gc2-carrier"))]
+        {
+            let _ = enabled;
+            Err("Relay sharing is unavailable for this backend".into())
+        }
     }
 
     pub fn network_status(&self) -> NetworkStatus {
@@ -1010,6 +1170,15 @@ impl ProtocolRuntime {
             background
                 .tasks
                 .spawn(network_names_loop(Arc::downgrade(&self.0)));
+        }
+        #[cfg(feature = "gc2-carrier")]
+        if self.0.sharing.is_some() && self.0.network.is_some() && !background.sharing_started {
+            background.sharing_started = true;
+            background.sharing_task = Some(
+                background
+                    .tasks
+                    .spawn(relay_sharing_loop(Arc::downgrade(&self.0))),
+            );
         }
         Ok(())
     }
@@ -1119,6 +1288,9 @@ async fn network_bootstrap_loop(weak: std::sync::Weak<Inner>, urls: Vec<String>)
     let mut failures = 0u32;
     loop {
         let Some(inner) = weak.upgrade() else { break };
+        if inner.closing.load(std::sync::atomic::Ordering::Acquire) {
+            break;
+        }
         let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(120);
         let result = tokio::time::timeout_at(
             deadline,
@@ -1179,6 +1351,140 @@ async fn network_names_loop(weak: std::sync::Weak<Inner>) {
         tokio::select! {
             _ = tokio::time::sleep(delay) => {},
             _ = inner.names_now.notified() => {},
+        }
+    }
+}
+
+#[cfg(feature = "gc2-carrier")]
+async fn relay_sharing_loop(weak: std::sync::Weak<Inner>) {
+    let mut registered: Option<gcoms_routing::gc2::directory::Introduction> = None;
+    let mut lease = 0u64;
+    let mut next = tokio::time::Instant::now();
+    let mut failures = 0u32;
+    loop {
+        let Some(inner) = weak.upgrade() else { break };
+        let (Some(sharing), Some(network)) = (&inner.sharing, &inner.network) else {
+            break;
+        };
+        let config = sharing.config.lock().expect("sharing config lock").clone();
+        let eligibility = if config.enabled {
+            crate::sharing::eligibility().await
+        } else {
+            Err("Relay sharing is off")
+        };
+        let mut status = crate::RelaySharingStatus {
+            enabled: config.enabled,
+            circuits: config.circuits,
+            connections: config.connections,
+            bandwidth_bytes_per_second: config.bandwidth_bytes_per_second,
+            ..Default::default()
+        };
+        if let Err(reason) = eligibility {
+            let _ = inner.node.set_relay_sharing(false);
+            if let Some(intro) = registered.take() {
+                let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(5);
+                let _ = network.remove_relay(intro.service_id, deadline).await;
+            }
+            status.state = reason.into();
+            lease = 0;
+            next = tokio::time::Instant::now();
+        } else if let Ok(intro) = inner.node.gc2_relay_introduction() {
+            {
+                let current = sharing.config.lock().expect("sharing config lock");
+                if !current.enabled || inner.closing.load(std::sync::atomic::Ordering::Acquire) {
+                    continue;
+                }
+                let _ = inner.node.set_relay_sharing(true);
+            }
+            if !gcoms_routing::service::public_ip(intro.addr.ip()) {
+                let _ = inner.node.set_relay_sharing(false);
+                if let Some(old) = registered.take() {
+                    let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(5);
+                    let _ = network.remove_relay(old.service_id, deadline).await;
+                }
+                lease = 0;
+                status.state = "Waiting for a publicly reachable listener".into();
+            } else {
+                let changed = registered.as_ref().is_some_and(|old| {
+                    old.addr != intro.addr || old.service_id != intro.service_id
+                });
+                if changed {
+                    next = tokio::time::Instant::now();
+                    lease = 0;
+                }
+                if tokio::time::Instant::now() >= next {
+                    let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(15);
+                    let registration =
+                        network.relay_registration(&intro).and_then(|mut request| {
+                            inner.node.sign_relay_registration(&mut request)?;
+                            Ok(request)
+                        });
+                    let result = match registration {
+                        Ok(request) => network.register_relay(&intro, &request, deadline).await,
+                        Err(error) => Err(error),
+                    };
+                    match result {
+                        Ok(expiry) => {
+                            let published = {
+                                let current = sharing.config.lock().expect("sharing config lock");
+                                current.enabled
+                                    && !inner.closing.load(std::sync::atomic::Ordering::Acquire)
+                                    && inner.node.confirm_relay_publication(&intro).is_ok()
+                            };
+                            if published {
+                                registered = Some(intro);
+                                lease = expiry;
+                                failures = 0;
+                                next = tokio::time::Instant::now()
+                                    + std::time::Duration::from_secs(60);
+                            } else {
+                                let deadline =
+                                    tokio::time::Instant::now() + std::time::Duration::from_secs(5);
+                                let _ = network.remove_relay(intro.service_id, deadline).await;
+                                continue;
+                            }
+                        }
+                        _ => {
+                            failures = failures.saturating_add(1);
+                            let delay = (5u64 << failures.saturating_sub(1).min(4)).min(60);
+                            next = tokio::time::Instant::now()
+                                + std::time::Duration::from_millis(
+                                    (delay * 1000 + u64::from(rand::random::<u16>()) % 1001)
+                                        .min(60_000),
+                                );
+                        }
+                    }
+                }
+                if lease <= gcoms_network_client::now_unix() {
+                    let _ = inner.node.set_relay_sharing(false);
+                }
+                status.published = inner.node.relay_published();
+                status.lease_expires_at = (lease > 0).then_some(lease);
+                status.state = if status.published {
+                    "Contributing relay capacity"
+                } else {
+                    "Waiting for independent listener verification"
+                }
+                .into();
+            }
+        } else {
+            status.state = "Waiting for the relay listener".into();
+        }
+        #[cfg(feature = "relay-host")]
+        {
+            status.transferred_bytes = inner.node.relay_contribution_bytes();
+        }
+        {
+            let current = sharing.config.lock().expect("sharing config lock");
+            if current.enabled == config.enabled
+                && !inner.closing.load(std::sync::atomic::Ordering::Acquire)
+            {
+                *sharing.status.lock().expect("sharing status lock") = status;
+            }
+        }
+        tokio::select! {
+            _ = tokio::time::sleep(std::time::Duration::from_secs(5)) => {},
+            _ = inner.sharing_now.notified() => {},
         }
     }
 }

@@ -59,6 +59,10 @@ impl Latency {
 #[derive(Debug, Default, Serialize)]
 pub struct SchedulerSnapshot {
     pub enabled: bool,
+    pub lane_limit: usize,
+    pub lanes: usize,
+    pub rejected_lane_limit: u64,
+    pub rejected_lane_queue: u64,
     pub accepted: u64,
     pub rejected_full: u64,
     pub rejected_pending: u64,
@@ -80,6 +84,8 @@ pub struct SchedulerSnapshot {
 #[derive(Default)]
 pub(super) struct Diagnostics {
     enabled: AtomicBool,
+    pub rejected_lane_limit: AtomicU64,
+    pub rejected_lane_queue: AtomicU64,
     pub accepted: AtomicU64,
     pub rejected_full: AtomicU64,
     pub rejected_pending: AtomicU64,
@@ -114,6 +120,10 @@ impl Diagnostics {
     pub fn snapshot(&self) -> SchedulerSnapshot {
         SchedulerSnapshot {
             enabled: self.enabled(),
+            lane_limit: 0,
+            lanes: 0,
+            rejected_lane_limit: self.rejected_lane_limit.load(Relaxed),
+            rejected_lane_queue: self.rejected_lane_queue.load(Relaxed),
             accepted: self.accepted.load(Relaxed),
             rejected_full: self.rejected_full.load(Relaxed),
             rejected_pending: self.rejected_pending.load(Relaxed),

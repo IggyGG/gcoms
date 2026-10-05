@@ -16,7 +16,7 @@ push-gateway = ["push-notifications", "relay-host", "gcoms-node/push-gateway"]
 component-services = []
 hosted-channels = ["dep:gcoms-mls", "dep:gcoms-channel-service", "dep:sha2"]
 files = ["dep:gcoms-file-transfer", "dep:sha2"]
-gc2-carrier = ["gcoms-node/experimental-gc2", "gcoms-network-client/experimental-gc2"]
+gc2-carrier = ["gcoms-node/experimental-gc2", "gcoms-network-client/experimental-gc2", "dep:sha2"]
 
 [dependencies]
 gcoms-mls = { version = "0.1.0", path = "../mls", optional = true, features = ["hosted-channels", "client-persist"] }
@@ -34,7 +34,7 @@ gcoms-transport = { version = "0.1.0", path = "../transport" }
 gcoms-crypto = { version = "0.1.0", path = "../crypto" }
 gcoms-private-fs = { version = "0.1.0", path = "../private-fs" }
 async-trait = "0.1"
-tokio = { version = "1", features = ["rt", "macros", "sync", "time", "net", "io-util"] }
+tokio = { version = "1", features = ["rt", "macros", "sync", "time", "net", "io-util", "process"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 postcard = { version = "1", default-features = false, features = ["alloc"] }

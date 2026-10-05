@@ -14,6 +14,9 @@ use std::sync::{Mutex, OnceLock};
 
 /// Events buffered toward the writer thread before new ones are dropped.
 pub const QUEUE_CAPACITY: usize = 4096;
+/// Bound retained operator diagnostics even when a relay is continuously busy.
+pub const MAX_FILE_BYTES: u64 = 16 * 1024 * 1024;
+const RETAINED_FILES: usize = 3;
 /// Field names that must never appear in a metrics line.
 pub const FORBIDDEN_FIELDS: &[&str] = &["target", "queue", "token", "peer", "addr", "path", "to"];
 
@@ -39,15 +42,50 @@ pub fn init(path: &std::path::Path) -> std::io::Result<()> {
         let _ = file.set_permissions(std::fs::Permissions::from_mode(0o600));
     }
     let (tx, rx) = sync_channel::<String>(QUEUE_CAPACITY);
+    let path = path.to_owned();
+    let mut written = file.metadata()?.len();
     std::thread::Builder::new()
         .name("gc-metrics".into())
         .spawn(move || {
             while let Ok(line) = rx.recv() {
-                let _ = writeln!(file, "{line}");
+                if written.saturating_add(line.len() as u64 + 1) > MAX_FILE_BYTES {
+                    if rotate(&path).is_ok() {
+                        if let Ok(next) = options.open(&path) {
+                            file = next;
+                            written = 0;
+                        } else {
+                            DROPPED.fetch_add(1, Ordering::Relaxed);
+                            continue;
+                        }
+                    } else {
+                        DROPPED.fetch_add(1, Ordering::Relaxed);
+                        continue;
+                    }
+                }
+                if writeln!(file, "{line}").is_ok() {
+                    written = written.saturating_add(line.len() as u64 + 1);
+                } else {
+                    DROPPED.fetch_add(1, Ordering::Relaxed);
+                }
             }
         })?;
     *sender().lock().unwrap_or_else(|p| p.into_inner()) = Some(tx);
     Ok(())
+}
+
+fn rotate(path: &std::path::Path) -> std::io::Result<()> {
+    let backup = |index| {
+        let mut name = path.as_os_str().to_owned();
+        name.push(format!(".{index}"));
+        std::path::PathBuf::from(name)
+    };
+    for index in (1..RETAINED_FILES).rev() {
+        match std::fs::rename(backup(index), backup(index + 1)) {
+            Err(error) if error.kind() != std::io::ErrorKind::NotFound => return Err(error),
+            _ => {}
+        }
+    }
+    std::fs::rename(path, backup(1))
 }
 
 /// Lines the writer could not keep up with since startup.

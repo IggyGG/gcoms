@@ -44,6 +44,9 @@ pub const LANE_IDLE_TTL: Duration = Duration::from_secs(15 * 60);
 /// with `EnqueueError::Full` so a remote party cannot grow lane count
 /// without bound.
 pub const MAX_LANES: usize = 64;
+/// GC/2 has separate interactive and bulk lanes. This is a count ceiling only;
+/// all queued and running work still shares the original node memory budget.
+pub const MAX_GC2_ENDPOINT_LANES: usize = 512;
 const ADMIN_INTERVAL: Duration = Duration::from_millis(250);
 const MAINTENANCE_MIN_MS: u64 = 2250;
 const MAINTENANCE_MAX_MS: u64 = 3750;
@@ -575,7 +578,7 @@ impl FairQueue {
 
 struct Lane {
     queue: Mutex<FairQueue>,
-    authority: authority::Memo,
+    authority: Arc<authority::Memo>,
     /// Authority for cover on this lane. `None` for administrative lanes and
     /// for lanes opened by a forwarded job (an intermediary never emits
     /// cover on behalf of a remote submitter).
@@ -603,6 +606,7 @@ struct Inner {
     budget: budget::Budget,
     max_in_flight: usize,
     natural: bool,
+    lane_limit: usize,
 }
 
 #[derive(Clone)]
@@ -683,17 +687,41 @@ impl RelayScheduler {
     pub(crate) fn with_gc2_transit(
         client: Arc<Tp1Client>,
         transit: Arc<Tp1Client>,
+        circuits: usize,
     ) -> (Self, Self) {
         let mut profile = SchedulerProfile::production().with_pipelining();
         profile.natural = true;
         profile.emit_cover = false;
-        Self::with_transit(client, transit, profile)
+        let (client_budget, transit_budget) = budget::Budget::pair(0);
+        (
+            Self::with_budget_limit(
+                client,
+                profile.clone(),
+                client_budget,
+                MAX_GC2_ENDPOINT_LANES,
+            ),
+            Self::with_budget_limit(transit, profile, transit_budget, circuits),
+        )
     }
 
     fn with_budget(
         client: Arc<Tp1Client>,
         profile: SchedulerProfile,
         budget: budget::Budget,
+    ) -> Self {
+        let limit = if profile.natural {
+            MAX_GC2_ENDPOINT_LANES
+        } else {
+            MAX_LANES
+        };
+        Self::with_budget_limit(client, profile, budget, limit)
+    }
+
+    fn with_budget_limit(
+        client: Arc<Tp1Client>,
+        profile: SchedulerProfile,
+        budget: budget::Budget,
+        lane_limit: usize,
     ) -> Self {
         let (shutdown, _) = watch::channel(false);
         let scheduler = Self {
@@ -711,6 +739,7 @@ impl RelayScheduler {
                 budget,
                 max_in_flight: profile.max_in_flight,
                 natural: profile.natural,
+                lane_limit,
             }),
         };
         // The idle-lane sweeper needs a runtime; a scheduler built outside
@@ -749,7 +778,10 @@ impl RelayScheduler {
     }
 
     pub fn diagnostics_snapshot(&self) -> diagnostics::SchedulerSnapshot {
-        self.inner.diagnostics.snapshot()
+        let mut snapshot = self.inner.diagnostics.snapshot();
+        snapshot.lane_limit = self.inner.lane_limit;
+        snapshot.lanes = self.lane_count();
+        snapshot
     }
 
     pub(crate) fn pipelined(&self) -> bool {
@@ -771,6 +803,24 @@ impl RelayScheduler {
         inner: Cell,
     ) -> Result<Receipt, EnqueueError> {
         self.push_with_class(class, contact, inner, TrafficClass::Interactive)
+    }
+
+    #[cfg(all(feature = "experimental-gc2", feature = "relay-host"))]
+    pub(crate) fn contact_backing_off(&self, contact: &AliasContact) -> bool {
+        if !self.is_gc2() {
+            return false;
+        }
+        self.inner
+            .lanes
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .iter()
+            .any(|(key, lane)| {
+                key.address == contact.target.address
+                    && key.service_id == contact.target.relay_service_id
+                    && key.token == gcoms_transport::encode_b64url(&contact.queue_id)
+                    && lane.authority.backing_off(contact)
+            })
     }
 
     pub fn push_with_class(
@@ -899,6 +949,27 @@ impl RelayScheduler {
         )
     }
 
+    /// Bounded burst admission. A duplicate is never enqueued a second time;
+    /// the forwarding boundary shares the first operation's completion.
+    #[cfg(feature = "experimental-gc2")]
+    pub(crate) async fn forward_gc2_wait(
+        &self,
+        forward: gcoms_protocol::relay::gc2::Forward,
+    ) -> Result<Receipt, EnqueueError> {
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(1);
+        loop {
+            match self.forward_gc2(forward.clone()) {
+                Err(EnqueueError::Full) if tokio::time::Instant::now() < deadline => {
+                    tokio::time::sleep_until(
+                        (tokio::time::Instant::now() + Duration::from_millis(20)).min(deadline),
+                    )
+                    .await;
+                }
+                result => return result,
+            }
+        }
+    }
+
     pub fn admin_post(
         &self,
         target: RelayTarget,
@@ -1000,15 +1071,30 @@ impl RelayScheduler {
         if let Some(lane) = lanes.get(key) {
             if let Some(auth) = auth {
                 let mut slot = lane.auth.lock().unwrap_or_else(|p| p.into_inner());
-                if slot.is_none() {
-                    *slot = Some(auth);
-                }
+                // Queue identity stays stable across owner renewal. Refresh its
+                // current cover authority instead of retaining obsolete caps.
+                *slot = Some(auth);
             }
             return Ok(lane.clone());
         }
-        if lanes.len() >= MAX_LANES {
+        if lanes.len() >= self.inner.lane_limit {
+            self.inner
+                .diagnostics
+                .increment(&self.inner.diagnostics.rejected_lane_limit);
             return Err(EnqueueError::Full);
         }
+        // The two traffic classes have one authority memo for the same relay
+        // binding, so simultaneous stale sends perform one authenticated probe.
+        let authority = lanes
+            .iter()
+            .find(|(other, _)| {
+                other.address == key.address
+                    && other.service_id == key.service_id
+                    && other.token == key.token
+                    && other.administrative == key.administrative
+            })
+            .map(|(_, lane)| lane.authority.clone())
+            .unwrap_or_default();
         let capacity = if key.administrative {
             32
         } else {
@@ -1016,7 +1102,7 @@ impl RelayScheduler {
         };
         let lane = Arc::new(Lane {
             queue: Mutex::new(FairQueue::new(capacity)),
-            authority: authority::Memo::default(),
+            authority,
             auth: Mutex::new(auth),
             notify: Notify::new(),
             pinned: std::sync::atomic::AtomicBool::new(false),
@@ -1116,6 +1202,9 @@ impl RelayScheduler {
             },
         );
         if !queued {
+            self.inner
+                .diagnostics
+                .increment(&self.inner.diagnostics.rejected_lane_queue);
             self.inner
                 .diagnostics
                 .increment(&self.inner.diagnostics.rejected_full);
@@ -1577,7 +1666,10 @@ async fn send_request(
     };
     #[cfg(feature = "experimental-gc2")]
     if request.natural {
-        return gc2::send(client, request, proof, retry_base, traffic).await;
+        let contact = request.authority.clone();
+        let result = gc2::send(client, request, proof, retry_base, traffic).await;
+        authority.observe(contact.as_ref(), &result).await;
+        return result;
     }
     let PendingRequest {
         target,
@@ -2411,6 +2503,56 @@ mod tests {
             .unwrap();
         assert_eq!(scheduler.lane_count(), MAX_LANES - 1);
         scheduler.shutdown();
+    }
+
+    #[cfg(feature = "experimental-gc2")]
+    #[tokio::test]
+    async fn gc2_lane_capacity_and_cross_class_probe_memo_follow_configured_limits() {
+        let (endpoint, transit) = RelayScheduler::with_gc2_transit(
+            Arc::new(Tp1Client::new().unwrap()),
+            Arc::new(Tp1Client::new().unwrap()),
+            128,
+        );
+        endpoint.enable_diagnostics();
+        transit.enable_diagnostics();
+        assert_eq!(endpoint.diagnostics_snapshot().lane_limit, 512);
+        assert_eq!(transit.diagnostics_snapshot().lane_limit, 128);
+        for id in 0..128u16 {
+            let key = LaneKey {
+                address: "192.0.2.1:443".parse().unwrap(),
+                service_id: [1; 32],
+                token: id.to_string(),
+                administrative: false,
+                natural_class: Some(TrafficClass::Interactive),
+            };
+            transit.lane_for(&key, None).unwrap();
+        }
+        let key = LaneKey {
+            address: "192.0.2.1:443".parse().unwrap(),
+            service_id: [1; 32],
+            token: "extra".into(),
+            administrative: false,
+            natural_class: Some(TrafficClass::Interactive),
+        };
+        assert!(matches!(
+            transit.lane_for(&key, None),
+            Err(EnqueueError::Full)
+        ));
+        let interactive = endpoint.lane_for(&key, None).unwrap();
+        let bulk = endpoint
+            .lane_for(
+                &LaneKey {
+                    natural_class: Some(TrafficClass::Bulk),
+                    ..key
+                },
+                None,
+            )
+            .unwrap();
+        assert!(Arc::ptr_eq(&interactive.authority, &bulk.authority));
+        assert_eq!(endpoint.combined_resource_snapshot().bytes, 0);
+        assert_eq!(transit.diagnostics_snapshot().rejected_lane_limit, 1);
+        endpoint.shutdown();
+        transit.shutdown();
     }
 
     #[test]

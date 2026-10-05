@@ -54,12 +54,13 @@ def main():
             ('gcoms', ['cargo', 'build', '--release', '--offline', '--locked', '-p', 'gcoms-node', '--bin', 'gcnode', '--features', 'client-persist,experimental-gc2']),
             ('gchat', ['cargo', 'build', '--release', '--offline', '--config', str(patch), '-p', 'gchat-tui', '--bin', 'gchat', '--features', 'gc2-carrier']),
             ('gchat', ['cargo', 'build', '--release', '--offline', '--config', str(patch), '-p', 'gchat-core', '--example', 'fleet_probe', '--features', 'gc2-carrier']),
+            ('gchat', ['cargo', 'build', '--release', '--offline', '--config', str(patch), '-p', 'gchat-core', '--example', 'turnover_daemon', '--features', 'gc2-carrier']),
         ]
         for name, command in commands:
             report['commands'].append({'repository': name, 'argv': command})
             subprocess.run(command, cwd=output / name, env=env, check=True)
         (output / 'bin').mkdir()
-        for name, relative in [('gcnode', 'gcnode'), ('gchat', 'gchat'), ('fleet_probe', 'examples/fleet_probe')]:
+        for name, relative in [('gcnode', 'gcnode'), ('gchat', 'gchat'), ('fleet_probe', 'examples/fleet_probe'), ('turnover_daemon', 'examples/turnover_daemon')]:
             dest = output / 'bin' / name
             shutil.copy2(args.target_dir / 'release' / relative, dest)
             report['artifacts'][name] = {'sha256': digest(dest), 'size': dest.stat().st_size}

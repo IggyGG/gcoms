@@ -474,3 +474,11 @@ with `gcnode serve --relay-circuits N --relay-connections N`; ordinary defaults
 and per-client/source security bounds remain unchanged. See the
 [node operator capacity contract](crates/node/README.md#operator-relay-capacity).
 This option requires workload qualification and is not itself a 500-user claim.
+
+GC/2 forwarding now honors that circuit budget, reserves the last slot for
+interactive traffic, and waits at most one second for admission. Desktop hosts
+can contribute reachable relay capacity using the optional
+`ApplicationBuilder::relay_sharing(RelaySharingConfig)` configuration. The
+provider verifies membership, a service-key signature and the public listener
+before advertising a short lease; DNS naming is independent. See
+[relay contribution and qualification](docs/RELAY_SHARING.md).

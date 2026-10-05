@@ -60,3 +60,15 @@ Unauthenticated source admission stays at eight connections per IP. The entry's
 16-circuit/15-bulk bounds, class separation, covered schedule, authenticated path
 selection and service expiry remain enforced. Bulk cannot consume the relay's
 last circuit. Failed connections and dropped streams return their slots.
+
+GC/2 forwarding and transit scheduling use this same circuit budget. Control
+and reachability probes use at most 64 slots. Admission has a one-second bound
+and a bounded waiter pool. Endpoint schedulers allow 512 GC/2 destination/class
+lanes; legacy endpoints retain 64. Aggregate queued work remains 4096 jobs /
+8 MiB, and each durable relay queue retains 256 cells / 4 MiB. Files stream in
+blocks instead of requiring an entire release to fit a queue.
+
+Authenticated control status exposes `relay_diagnostics` with scheduler and
+forwarding admission counters. `GC_RELAY_DEBUG=1` enables a default metrics file
+beside the keystore unless `--metrics` supplies a path. Metrics rotate at 16 MiB
+with three backups; refusal journal entries are rate limited.

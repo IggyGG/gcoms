@@ -111,10 +111,21 @@ impl QueueService {
                             .map(|outcome| (outcome, class))
                     });
                 let reply = match result {
-                    Ok((_, class)) => {
+                    Ok((outcome, class)) => {
                         crate::metrics::log_event(
                             "gchat_push_accepted",
-                            &[("class", format!("{class:?}"))],
+                            &[
+                                ("class", format!("{class:?}")),
+                                (
+                                    "kind",
+                                    match outcome {
+                                        crate::queues::PushOutcome::Cover => "probe",
+                                        crate::queues::PushOutcome::Enqueued => "data",
+                                        crate::queues::PushOutcome::Duplicate => "duplicate",
+                                    }
+                                    .into(),
+                                ),
+                            ],
                         );
                         Some(HopReply::Accepted)
                     }

@@ -112,7 +112,7 @@ async fn deliver_direct_reserved(
 ) -> Result<(), String> {
     #[cfg(feature = "experimental-gc2")]
     if let Some(client) = natural {
-        return super::gc2_carrier::deliver_all(client, delivery, traffic).await;
+        return super::gc2_carrier::deliver_all(client, scheduler, delivery, traffic).await;
     }
     #[cfg(not(feature = "experimental-gc2"))]
     let _ = natural;
@@ -2349,7 +2349,9 @@ pub(crate) async fn complete_direct_record(
     }
     #[cfg(feature = "experimental-gc2")]
     if let Some(client) = &natural {
-        if let Err(error) = super::gc2_carrier::deliver_all(client, &delivery, traffic).await {
+        if let Err(error) =
+            super::gc2_carrier::deliver_all(client, scheduler, &delivery, traffic).await
+        {
             metrics::log_event("natural_delivery_deferred", &[("e", error)]);
         }
         return Ok(message_id);
