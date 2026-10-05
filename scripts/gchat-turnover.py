@@ -77,6 +77,8 @@ class FixtureRoutingRenewal:
             [bootstrap_records((self.root/f'c{i+2}/contribution').read_bytes())[0]
              for i in range(self.contributions)],now)
         by_identity={r[:83]:r for r in operators+contributions}
+        if any(r[:83] not in by_identity for rows in self.clients.values() for r in rows):
+            raise ValueError('fixture client references an unverified relay identity')
         bundles={self.root/'bootstrap':operators}
         bundles.update({path:[by_identity[r[:83]] for r in old] for path,old in self.clients.items()})
         for path,records in bundles.items():
@@ -163,6 +165,19 @@ def observe_load_recipient(item, client, history):
     return client, ({'id':rows[0]['id'],'mine':rows[0]['mine'],
         'seconds':observed-item['started']} if rows else None)
 
+def relay_load_counts(paths, started_unix, completed_unix):
+    data_accepted=forwarding_accepted=refusals=0
+    for path in paths:
+        for line in path.read_text().splitlines():
+            row=json.loads(line)
+            if not started_unix<=row.get('ts',0)/1000<=completed_unix:continue
+            if row.get('event')=='gchat_push_accepted' and row.get('kind') in ('data','duplicate'):
+                data_accepted+=1
+            if row.get('event')=='gc2_forward_accepted':forwarding_accepted+=1
+            if row.get('event')=='gc2_forward_refused' or (row.get('event')=='gchat_queue_refused'
+                and row.get('reason') in ('queue_full','store_capacity','replay_capacity')):refusals+=1
+    return data_accepted,forwarding_accepted,refusals
+
 def fixture_links(rows, routes):
     """Allow only the kernel's inert IPIP fallback in addition to fixture links.
 
@@ -193,6 +208,19 @@ class Journey(base.Worker):
         self.origin = time.monotonic(); self.roles = {}; self.latest = {}; self.chat_count = 0
         if self.spec['config'].get('mode') in ('carrier-cap', 'entry-loss'):
             self.env['GCOMS_GC2_LIFECYCLE'] = '1'
+
+    def execute(self):
+        status=super().execute()
+        if self.spec['config']['mode']=='relay-load':
+            # Final immutable metrics include rotated journals and counters
+            # after every producer has stopped; no profile/card is exported.
+            evidence=self.result.setdefault('evidence',{})
+            paths=list(self.original_root.glob('r*/metrics.jsonl*'))
+            paths.extend(self.original_root/f'c{i+2}/contribution.json' for i in range(32))
+            for path in paths:
+                if path.is_file():evidence[str(path.relative_to(self.original_root))]=sha256(path)
+            (self.original_root/'worker.json').write_text(json.dumps(self.result,indent=2)+'\n')
+        return status
 
     def event(self, kind, **facts):
         super().event(kind, elapsed=time.monotonic() - self.origin, **facts)
@@ -947,23 +975,17 @@ class Journey(base.Worker):
                     process=next(p for role,p in reversed(self.children) if role.startswith(f'client{i}-') or role==f'client{i}')
                     if process.poll() is not None: raise RuntimeError('load client exited')
                 time.sleep(.2)
+        completed_unix=time.time();observed_seconds=time.monotonic()-began
         self.finish_file(transfer,120)
         latencies=sorted(value for record in records for value in record['recipient_seconds'])
         if not latencies: raise RuntimeError('no commands delivered')
         p95=latencies[min(len(latencies)-1,(len(latencies)*95+99)//100-1)]
         carried=sum(json.loads((self.root/f'c{i+2}/contribution.json').read_text())['transferred_bytes'] for i in range(32))
-        data_accepted=0; relay_refusals=0; forwarding_accepted=0
-        for i in range(len(self.relay_addresses)):
-            for path in (self.root/f'r{i}').glob('metrics.jsonl*'):
-                for line in path.read_text().splitlines():
-                    row=json.loads(line)
-                    if row.get('ts',0)/1000<began_unix: continue
-                    if row.get('event')=='gchat_push_accepted' and row.get('kind') in ('data','duplicate'): data_accepted+=1
-                    if row.get('event')=='gc2_forward_accepted': forwarding_accepted+=1
-                    if row.get('event')=='gc2_forward_refused' or (row.get('event')=='gchat_queue_refused'
-                        and row.get('reason') in ('queue_full','store_capacity','replay_capacity')): relay_refusals+=1
+        data_accepted,forwarding_accepted,relay_refusals=relay_load_counts(
+            self.root.glob('r*/metrics.jsonl*'),began_unix,completed_unix)
         relay_fraction=relay_refusals/max(1,data_accepted+forwarding_accepted+relay_refusals)
         self.result['relay_load']={'clients':64,'seconds':duration,'commands':len(records),'attempts':attempts,
+            'started_unix':began_unix,'completed_unix':completed_unix,'observed_seconds':observed_seconds,
             'topology':self.spec['config']['load_topology'],'channels':len(groups),
             'channel_members':[len(g['members']) for g in groups],'recipient_deliveries_per_round':63,
             'application_refusals':refused,'application_refusal_fraction':refused/max(1,attempts),'recipient_p95_seconds':p95,
@@ -1215,6 +1237,10 @@ def main():
         except (FileNotFoundError,PermissionError): pass
     evidence={name:sha256(root/name) for name in ('worker.json','events.jsonl','connections.pcap','connections.capture.log','controller.log') if (root/name).exists()}
     evidence.update({p.name:sha256(p) for p in root.glob('client*.log')})
+    if args.mode=='relay-load':
+        evidence.update({name:digest for name,digest in worker.get('evidence',{}).items()
+                         if name.startswith('r') and '/metrics.jsonl' in name
+                         or name.startswith('c') and name.endswith('/contribution.json')})
     report={'evidence':evidence,'retired_namespace_pids':residual,'scope':SCOPE,'worker_exit':result.returncode,'host_links_unchanged':base.link_identity(before)==base.link_identity(after),
             'host_before':before,'host_after':after,'build_unchanged':base.build_binding(args.build.resolve())==build,
             'tooling_unchanged':sha256(Path(__file__))==tool_hash and sha256(HELPER)==helper_hash,

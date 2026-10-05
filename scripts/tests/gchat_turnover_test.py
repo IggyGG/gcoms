@@ -93,6 +93,33 @@ class ControllerTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError,'changed identity'):renewal.close()
         self.assertTrue(renewal.receipt['stopped'])
 
+    def test_load_receipt_counts_only_campaign_events_across_rotations(self):
+        with tempfile.TemporaryDirectory() as directory:
+            paths=[Path(directory)/name for name in ('metrics.jsonl','metrics.jsonl.1')]
+            rows=[dict(ts=999,event='gc2_forward_refused'),dict(ts=1000,event='gc2_forward_accepted'),
+                  dict(ts=1500,event='gchat_push_accepted',kind='data'),
+                  dict(ts=1700,event='gchat_push_accepted',kind='duplicate'),
+                  dict(ts=1900,event='gchat_queue_refused',reason='queue_full'),
+                  dict(ts=2000,event='gc2_forward_refused'),dict(ts=2001,event='gc2_forward_refused')]
+            for path,subset in zip(paths,(rows[:3],rows[3:])):
+                path.write_text(''.join(json.dumps(row)+'\n' for row in subset))
+            self.assertEqual(turnover.relay_load_counts(paths,1,2),(2,1,2))
+
+    def test_load_retains_rotated_metrics_and_final_contribution_after_cleanup(self):
+        journey=turnover.Journey.__new__(turnover.Journey)
+        journey.spec={'config':{'mode':'relay-load'}};journey.result={'evidence':{}}
+        with tempfile.TemporaryDirectory() as directory:
+            journey.original_root=Path(directory)
+            expected=['r0/metrics.jsonl','r0/metrics.jsonl.1','c2/contribution.json']
+            for name in expected+['c2/card']:
+                path=journey.original_root/name;path.parent.mkdir(exist_ok=True);path.write_bytes(b'evidence')
+            with mock.patch.object(turnover.base.Worker,'execute',return_value=0) as execute:
+                self.assertEqual(journey.execute(),0)
+            execute.assert_called_once()
+            receipt=json.loads((journey.original_root/'worker.json').read_text())
+            self.assertEqual(set(receipt['evidence']),set(expected))
+            self.assertTrue(all(len(digest)==64 for digest in receipt['evidence'].values()))
+
     def test_receiver_observation_precedes_collection_of_unrelated_slow_work(self):
         release=threading.Event(); held=threading.Event()
         item=dict(channel='channel',token='command',started=10)
