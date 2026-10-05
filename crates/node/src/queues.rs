@@ -23,7 +23,7 @@ pub const DEFAULT_MAX_REPLAY_NONCES: usize = 4096;
 /// Distinct live subscription nonces one lease may hold. Subscriptions are
 /// long-lived, so they get their own small budget: a `sub_cap` holder cannot
 /// exhaust the push replay set and brick deposits (SPEC §10.2).
-pub const DEFAULT_MAX_SUBSCRIPTION_NONCES: usize = 64;
+pub const DEFAULT_MAX_SUBSCRIPTION_NONCES: usize = 4096;
 /// Aggregate RAM the relay will hold across every queue (SPEC §10.3
 /// `RELAY_CAP` as a store bound). Independent of the per-lease limits.
 pub const DEFAULT_MAX_TOTAL_QUEUE_BYTES: u64 = 256 * 1024 * 1024;

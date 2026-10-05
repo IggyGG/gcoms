@@ -1036,7 +1036,9 @@ mod provision_authority_tests {
         );
         let mut receipts = Vec::new();
         let mut filled = false;
-        for _ in 0..1024 {
+        // Generous bound: the lane fills at LANE_CAPACITY, which grew with the
+        // capacity work; the assertion below is the real check.
+        for _ in 0..4096 {
             match scheduler.forward(frwd.clone()) {
                 Ok(receipt) => receipts.push(receipt),
                 Err(EnqueueError::Full) => {

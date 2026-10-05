@@ -5,7 +5,9 @@ use std::collections::HashSet;
 use std::sync::{Arc, Mutex};
 
 pub const MAX_JOBS: usize = 4096;
-pub const MAX_BYTES: usize = 8 * 1024 * 1024;
+/// In-flight byte budget per endpoint and per transit. Sized so the MAX_LANES
+/// cover reservations (two per lane) still leave data room.
+pub const MAX_BYTES: usize = 64 * 1024 * 1024;
 const COVER_BYTES: usize = 16 * 1024;
 
 #[derive(Clone, Copy, Debug, Default, Serialize)]
