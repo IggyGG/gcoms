@@ -1,0 +1,34 @@
+{
+  "baseline": "a2d4fc1b25bbdd9c67fc0a10c9e2858d0303d0d8",
+  "command": [
+    "cargo",
+    "test",
+    "--offline",
+    "--locked",
+    "-p",
+    "gcoms-runtime",
+    "--all-features",
+    "--lib",
+    "modern_contact_file_verifies_resumes_and_revokes_without_a_channel",
+    "--",
+    "--test-threads=1",
+    "--nocapture"
+  ],
+  "exit_code": 101,
+  "seconds": 598.7011820918415,
+  "scope": "legacy contact-file fixture comparison; not a GC/2 latency pass",
+  "current_full_suite": {
+    "passed": 66,
+    "failed": 1,
+    "ignored": 3,
+    "seconds": 378.12
+  },
+  "current_serial_retry": {
+    "passed": false,
+    "seconds": 357.63
+  },
+  "baseline_failed_same_deadline": true,
+  "deadline_seconds": 240,
+  "deadlines_unchanged": true,
+  "baseline_log_sha256": "2480d82a54887ba5a0fb8c0888e5b16843f12d73092b321b7dd6dc88fdb3631f"
+}
