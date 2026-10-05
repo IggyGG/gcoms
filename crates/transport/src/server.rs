@@ -478,6 +478,11 @@ async fn handle_connection(
         result = handshake => result,
     }
     .map_err(|_| io::Error::new(io::ErrorKind::TimedOut, "connection handshake timed out"))??;
+    // Unknown paths may be stale capabilities after a relay restart. Repeated
+    // decoy requests must not renew their source admission forever. Reuse the
+    // idle budget as an absolute pre-authentication lifetime; authentication
+    // retains the usual request/idle bounds and never releases the global slot.
+    let unauthenticated_deadline = tokio::time::Instant::now() + IDLE_TIMEOUT;
     // Initializing service state cannot block the accept loop, and malformed
     // TLS/HTTP2 probes never allocate it.
     handlers.on_duplex = factory.map(|factory| factory());
@@ -489,6 +494,15 @@ async fn handle_connection(
         let idle = requests.is_empty();
         let request = tokio::select! {
             _ = server_stopped(&mut stopped) => break,
+            _ = tokio::time::sleep_until(unauthenticated_deadline),
+                if !slot.authenticated.load(Ordering::Acquire) => {
+                    // A request task may have authenticated while this select
+                    // was pending. Only end a connection still unauthenticated.
+                    if !slot.authenticated.load(Ordering::Acquire) {
+                        break;
+                    }
+                    continue;
+                },
             result = async {
                 if idle {
                     tokio::time::timeout(IDLE_TIMEOUT, conn.accept()).await
