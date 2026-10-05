@@ -177,10 +177,10 @@ mod tests {
             Err(EnqueueError::Full)
         });
         assert!(attempts > 0, "the queued removal notice remains eligible");
-        admitted
+        assert!(admitted
             .unwrap()
             .send(JobResult::HopAccepted(bytes::Bytes::new()))
-            .unwrap();
+            .is_ok());
         maintenance.complete_next(&state).await;
         assert!(!maintenance
             .plans
