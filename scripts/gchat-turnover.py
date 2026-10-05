@@ -165,6 +165,23 @@ def observe_load_recipient(item, client, history):
     return client, ({'id':rows[0]['id'],'mine':rows[0]['mine'],
         'seconds':observed-item['started']} if rows else None)
 
+def incomplete_load_commands(pending, now):
+    """Bounded failure evidence, without message content or capabilities."""
+    rows=[]
+    for item in pending[:64]:
+        future=item['submission']
+        submission='pending'
+        if future.done():
+            if future.cancelled():submission='cancelled'
+            elif future.exception() is not None:submission='failed'
+            else:submission='accepted' if future.result() else 'refused'
+        rows.append({'channel_index':item['index'],'sender':item['sender'],
+            'age_seconds':max(0,now-item['started']),'submission':submission,
+            'observed_clients':sorted(item['seen']),
+            'missing_clients':sorted(set(item['members'])-set(item['seen'])),
+            'sender_delivery':item.get('sender_delivery','unobserved')})
+    return {'pending_commands':len(pending),'commands':rows}
+
 def relay_load_counts(paths, started_unix, completed_unix):
     data_accepted=forwarding_accepted=refusals=0
     for path in paths:
@@ -923,9 +940,12 @@ class Journey(base.Worker):
                 concurrent.futures.ThreadPoolExecutor(max_workers=16) as observations:
             while time.monotonic()<end or pending:
                 now=time.monotonic()
-                if now>end+120: raise TimeoutError('load delivery did not drain within its bound')
+                if now>end+120:
+                    self.result['relay_load_incomplete']=incomplete_load_commands(pending,now)
+                    raise TimeoutError('load delivery did not drain within its bound')
                 if now<end and now>=next_send:
                     if len(pending)+len(groups)>64:
+                        self.result['relay_load_incomplete']=incomplete_load_commands(pending,now)
                         raise RuntimeError('load command backlog exceeded its bound')
                     def send(item):
                         try:
@@ -958,6 +978,7 @@ class Journey(base.Worker):
                     if not item['submission'].result():
                         refused+=1;pending.remove(item);continue
                     sent=self.history(item['sender'],item['channel'],item['token'])
+                    item['sender_delivery']=sent[0].get('delivery') if len(sent)==1 else 'absent'
                     message=validated_load_delivery(item['seen'],item['members'],item['sender'],sent)
                     if message:
                         record={'sender':item['sender'],'channel_index':item['index'],
@@ -1033,12 +1054,15 @@ class Journey(base.Worker):
         self.chat(channel,'turnover:warmup')
         if self.spec['config'].get('mode')=='relay-preflight':
             transfer=self.start_file(channel,5235248,'release-preflight')
-            process=next(p for role,p in reversed(self.children) if role.startswith('relay0') and p.poll() is None)
-            self.stop(process);self.relay(0,self.root/'bootstrap')
+            # Client1 owns its inbox on relay3. Exercise terminal lease loss,
+            # including route repair, before the full traffic campaign.
+            process=next(p for role,p in reversed(self.children) if role.startswith('relay3') and p.poll() is None)
+            self.stop(process);self.relay(3,self.root/'bootstrap')
             self.chat(channel,'turnover:preflight-restarted',120)
             self.finish_file(transfer,180)
             self.routing_renewal.check()
             self.result['relay_preflight']={'clients':2,'file':transfer,'relay_restart':True,
+                'restarted_relay':3,'terminal_inbox_restart':True,
                 'chat_acknowledged':self.chat_count,'credential_rollover_qualified':False}
             self.result['boundary']['after']=self.inventory();self.assert_topology(self.result['boundary']['after'])
             self.result['completed']=True

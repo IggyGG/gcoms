@@ -3,6 +3,7 @@ import importlib.util
 import json
 import base64
 import copy
+import concurrent.futures
 import os
 from pathlib import Path
 import socket
@@ -19,6 +20,28 @@ SPEC.loader.exec_module(turnover)
 
 @unittest.skipUnless(os.name == "posix", "Linux namespace controller")
 class ControllerTests(unittest.TestCase):
+    def test_pending_evidence_distinguishes_missing_recipient_from_missing_ack(self):
+        accepted=concurrent.futures.Future();accepted.set_result(True)
+        waiting=concurrent.futures.Future()
+        failed=concurrent.futures.Future();failed.set_exception(RuntimeError('private error'))
+        base={'index':1,'sender':0,'members':[0,4,8],'token':'private message',
+            'channel':'private channel','started':20,'submission':accepted}
+        records=[dict(base,seen={0:{},4:{}},sender_delivery='pending'),
+            dict(base,seen={0:{},4:{},8:{}},sender_delivery='pending'),
+            dict(base,seen={},submission=waiting),dict(base,seen={},submission=failed)]
+        summary=turnover.incomplete_load_commands(records,30)
+        self.assertEqual(summary['pending_commands'],4)
+        self.assertEqual(summary['commands'][0]['missing_clients'],[8])
+        self.assertEqual(summary['commands'][1]['missing_clients'],[])
+        self.assertEqual(summary['commands'][1]['sender_delivery'],'pending')
+        self.assertEqual([row['submission'] for row in summary['commands']],
+                         ['accepted','accepted','pending','failed'])
+        self.assertTrue(all(row['age_seconds']==10 for row in summary['commands']))
+        self.assertNotIn('private',json.dumps(summary))
+        bounded=turnover.incomplete_load_commands(records*17,30)
+        self.assertEqual(bounded['pending_commands'],68)
+        self.assertEqual(len(bounded['commands']),64)
+
     @staticmethod
     def introduction(identity, expiry=3600, epoch=1):
         return bytes([identity])*83+bytes([epoch])*64+expiry.to_bytes(8,'big')

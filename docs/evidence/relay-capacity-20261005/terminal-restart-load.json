@@ -1,0 +1,63 @@
+{
+  "schema": 1,
+  "date": "2026-10-05",
+  "scope": "original failed 64-client campaign and separate two-client diagnostic; not release qualification",
+  "original": {
+    "candidate": 152,
+    "run_id": 37350931202,
+    "artifact": {
+      "run_id": 37350931202,
+      "artifact_id": 11364817830,
+      "original_bytes": 3977325,
+      "sha256": "e4266a155edf01fb4b2e12b30596556cb6ad93be303de1c9365e7aa001b1c2e1",
+      "prepared_gchat": "2941b41f08d043893513be863985eef1dd32613e",
+      "gcoms": "39e2bf83e4cc972e8791fecaf657aac29bb80667"
+    },
+    "failure": "RuntimeError: load command backlog exceeded its bound",
+    "all_64_joined": true,
+    "traffic_seconds_observed": 1209.5978572368622,
+    "completed_commands": 422,
+    "restarted_relay_accepted_pushes": 0,
+    "restarted_relay_subscriptions": 0,
+    "limitations": [
+      "pending per-recipient history and sender delivery maps are not retained on this failure; cannot label every incomplete command ACK-only",
+      "completed-only latency distribution excludes pending failures and is not a passing release result",
+      "file accepted but final export/hash gate not reached",
+      "30-minute workload gate not reached; all thresholds remain unchanged"
+    ],
+    "diagnosis": {
+      "path": "/run/media/user/SSD-2/retained/gchat-release148-monitor-20261005/candidate152-relay-load/diagnosis.json",
+      "sha256": "e8455bc3cc252ab80e77603be88c0be09fb705aca56d5b1a89be36fc833ef6af"
+    }
+  },
+  "two_client_diagnostic": {
+    "gcoms": "0eabd6f",
+    "gchat": "c870b32",
+    "passed": true,
+    "terminal_relay": 3,
+    "recipient_seconds_after_restart": 58.81600546836853,
+    "authenticated_sender_ack_seconds_after_restart": 59.12518525123596,
+    "file_bytes": 5235248,
+    "file_hash_verified": true,
+    "file_seconds_after_restart": 64.9528431892395,
+    "diagnosis": {
+      "path": "/run/media/user/SSD-2/retained/gchat-terminal-restart-20261005/diagnosis.json",
+      "sha256": "27ee022ef58ac5b2d16d27eed199164977a37755e04bf939a52b06a3d45a381c"
+    }
+  },
+  "harness": {
+    "preflight_restarts_receiver_terminal_relay": 3,
+    "failure_rows_max": 64,
+    "records_recipient_and_sender_delivery_separately": true,
+    "records_message_content": false,
+    "controls_passed": 37,
+    "release_thresholds_unchanged": true,
+    "source_sha256": {
+      "scripts/gchat-turnover.py": "0017eef639a660dee1cf4b11541fffc8d57b822703412d95d0b857bb7b2da22a",
+      "scripts/tests/gchat_turnover_test.py": "29b095f57cfa92315bf74fda1cdeb00d435bac8c7fb298527bb3c2ebd4f4e1b4"
+    }
+  },
+  "causal_transport_regressions": "transport-unauthenticated-lifetime.json",
+  "full_campaign_on_new_source_required": true,
+  "live_deployment_claimed": false
+}
