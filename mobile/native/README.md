@@ -28,6 +28,13 @@ a new `open` request and a secret from the application's platform unlock provide
 Use an OS-private absolute profile path. Production selects GC/2 explicitly; fixture
 mode is rejected unless the separate non-release `fixtures` feature is compiled.
 
+Apple simulator qualification requests its one-use relay card only once the native
+test has started. The disposable host exposes an authenticated loopback issuer;
+the capability stays in test-runner environment variables and is never logged.
+This avoids spending the existing five-minute grant lifetime on Xcode startup.
+Android retains its existing static fixture asset. Production packages include
+neither the fixture issuer nor the simulator's localhost HTTP exception.
+
 Cancellation skips queued work and releases results. Already-running mutations
 finish before the next command, preserving runtime durability. It does not roll
 back a send: reconcile state before retrying. Destroy joins graceful shutdown and

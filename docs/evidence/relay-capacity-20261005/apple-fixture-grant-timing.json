@@ -1,0 +1,62 @@
+{
+  "schema": 1,
+  "recorded_at": "2026-10-05T18:37:21.403445+00:00",
+  "source_commit": "e740172",
+  "followup": "POSIX-only pipe tests annotated; no runtime change",
+  "original_failure": {
+    "run": 37350728228,
+    "job": 111900616269,
+    "source": "39e2bf83e4cc972e8791fecaf657aac29bb80667",
+    "log_sha256": "51655a247add6131bd0a7c56b53932a899284b8714ccfc69d12ebc3836e87f54",
+    "error": "TP-1 hop unauthenticated: 404",
+    "fixture_compile_finished_utc": "2026-10-05T18:14:47Z",
+    "test_command_started_utc": "2026-10-05T18:14:56Z",
+    "test_started_utc": "2026-10-05T18:19:52Z",
+    "test_failed_utc": "2026-10-05T18:19:59Z",
+    "grant_lifetime_secs": 300,
+    "interpretation": "Timing and grant-expiry checks support stale provisioning credentials during simulator startup; original run did not record the specific refusal gate."
+  },
+  "change": "One fresh existing provisioning card requested by the running simulator through an authenticated, one-use, loopback-only fixture issuer. No production lifetime/authentication/API changes.",
+  "tests": {
+    "python_passed": 6,
+    "python_log": "/run/media/user/SSD-2/retained/gchat-apple-fixture-20261005/python-controls.log",
+    "python_log_sha256": "00677df14ad1dc09a6ee89d3a34b0eba3623e4ec7f9b12464a803d1ad231e77f",
+    "native_helper": {
+      "passed": true,
+      "receipt": "/run/media/user/SSD-2/retained/gchat-mobile-fresh-grant-gate-20261005/report.json",
+      "sha256": "6b12a7606df7ad58ef0cffb602cf1ac0178c72eb0e98b7253bbfb498fbe85d2e",
+      "checks": [
+        "initial card and fresh card differ",
+        "listener unchanged",
+        "stop exits zero",
+        "listener closes",
+        "stderr empty"
+      ],
+      "build_seconds": 148.87,
+      "smoke_seconds": 3.09
+    },
+    "native_apple": "required in successor",
+    "posix_only_controls_on_windows": [
+      "complete record pipe",
+      "partial line deadline",
+      "multiple records pipe"
+    ]
+  },
+  "review": {
+    "codematch": "unreachable",
+    "independent_agent": "r1_scope_readiness; bounded I/O, cleanup, fixture-only ATS checked",
+    "lightweight_receipt": "/run/media/user/SSD-2/retained/gchat-final-source-20261005/lightweight-final.json",
+    "lightweight_receipt_sha256": "21d8b644fa674114a83495e59f3d5978c687cd80d9743364352a81c7574a9b67"
+  },
+  "files": {
+    "mobile/native/examples/fixture_host.rs": "56b136544c03fd83f255e5d6547a3ab8bb19d029889b116d4af006411c9eb39d",
+    "mobile/apple/Tests/GComsTests/RelayTests.swift": "dc27d760feac6bcf64f040f44ee9fab7df3741499d50f831928d83dd90bbe722",
+    "scripts/mobile_fixture.py": "4f533c9f17e66c9d522b032c0d787d75f17983a28e749d5fde15aab2bd198d7b",
+    "scripts/qualify-apple.py": "1f157e11b5567cfda6663cd9733dd2039cbb61beee772bc6b882ec0dd4761d5f",
+    "scripts/tests/mobile_fixture_test.py": "d219fdc2dd47445059b0a0d615fa4265d2e2ce72a329d520b3d5245f3156ea05"
+  },
+  "limitations": [
+    "No local Xcode/Swift tools; simulator compilation and native acceptance remain required.",
+    "No fleet delivery or managed deployment claimed by fixture controls."
+  ]
+}

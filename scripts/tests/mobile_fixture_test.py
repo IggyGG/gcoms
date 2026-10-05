@@ -69,15 +69,18 @@ class MobileFixtureTests(unittest.TestCase):
             finally:
                 os.close(write)
 
+    @unittest.skipIf(os.name == "nt", "Apple/Linux fixture uses POSIX-selectable pipes")
     def test_complete_record_decodes_without_waiting_for_eof(self):
         with self.pipe(b'{"relay":[1,2],"port":1234}\n') as process:
             self.assertEqual(read_record(process, 1), {"relay": [1, 2], "port": 1234})
 
+    @unittest.skipIf(os.name == "nt", "Apple/Linux fixture uses POSIX-selectable pipes")
     def test_partial_line_honors_deadline(self):
         with self.pipe(b'{"relay":') as process:
             with self.assertRaisesRegex(RuntimeError, "timed out"):
                 read_record(process, 0.02)
 
+    @unittest.skipIf(os.name == "nt", "Apple/Linux fixture uses POSIX-selectable pipes")
     def test_unexpected_multiple_records_fail_closed(self):
         with self.pipe(b'{}\n{}\n') as process:
             with self.assertRaisesRegex(RuntimeError, "framing differs"):
