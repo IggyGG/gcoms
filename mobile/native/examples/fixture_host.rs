@@ -18,22 +18,30 @@ async fn main() -> Result<(), String> {
         .ok_or("embedded runtime")?
         .sdk_client()
         .embedded();
-    let card = client.node().provision_client_relay().await?;
-    let card = sdk::RelayCard(
-        base64::engine::general_purpose::URL_SAFE_NO_PAD
-            .encode(card.encode_private().ok_or("fixture card")?)
-            .into_bytes(),
-    );
-    println!(
-        "{}",
-        serde_json::json!({"relay": card, "port": client.node().listener_addr().port()})
-    );
-    std::io::stdout().flush().map_err(|e| e.to_string())?;
-    let (send, receive) = tokio::sync::oneshot::channel();
+    let (send, mut receive) = tokio::sync::mpsc::channel(1);
     std::thread::spawn(move || {
-        let _ = std::io::stdin().lock().lines().next();
-        let _ = send.send(());
+        for line in std::io::stdin().lock().lines() {
+            let Ok(line) = line else { break };
+            if send.blocking_send(line).is_err() {
+                break;
+            }
+        }
     });
-    let _ = receive.await;
+    loop {
+        let card = client.node().provision_client_relay().await?;
+        let card = sdk::RelayCard(
+            base64::engine::general_purpose::URL_SAFE_NO_PAD
+                .encode(card.encode_private().ok_or("fixture card")?)
+                .into_bytes(),
+        );
+        println!(
+            "{}",
+            serde_json::json!({"relay": card, "port": client.node().listener_addr().port()})
+        );
+        std::io::stdout().flush().map_err(|e| e.to_string())?;
+        if receive.recv().await.as_deref() != Some("provision") {
+            break;
+        }
+    }
     app.close().await
 }

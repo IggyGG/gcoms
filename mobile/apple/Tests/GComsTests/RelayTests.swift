@@ -12,15 +12,25 @@ final class RelayTests: XCTestCase {
             "application": "mobile-smoke", "profile": root.appendingPathComponent("profile").path,
             "secret": "disposable-simulator-secret", "fixture": true
         ]
-        if session.role == 1 {
-            guard let relay = ProcessInfo.processInfo.environment["GCOMS_RELAY"] else {
-                try await session.close()
-                throw GComsError.native("Run scripts/qualify-apple.py with the separate relay fixture")
-            }
-            configuration["relay"] = try JSONSerialization.jsonObject(with: Data(relay.utf8))
-        }
-        let config = try JSONSerialization.data(withJSONObject: configuration)
         do {
+            if session.role == 1 {
+                let environment = ProcessInfo.processInfo.environment
+                guard let address = environment["GCOMS_RELAY_ISSUER"],
+                      let url = URL(string: address), url.scheme == "http", url.host == "127.0.0.1",
+                      url.path == "/relay", let token = environment["GCOMS_RELAY_TOKEN"] else {
+                    try await session.close()
+                    throw GComsError.native("Run scripts/qualify-apple.py with the separate relay fixture")
+                }
+                var request = URLRequest(url: url, timeoutInterval: 15)
+                request.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+                let (data, response) = try await URLSession.shared.data(for: request)
+                guard (response as? HTTPURLResponse)?.statusCode == 200, data.count <= 256 * 1024 else {
+                    try await session.close()
+                    throw GComsError.native("Local fixture could not issue a fresh relay card")
+                }
+                configuration["relay"] = try JSONSerialization.jsonObject(with: data)
+            }
+            let config = try JSONSerialization.data(withJSONObject: configuration)
             let first = try await session.open(configuration: config)
             let channelReply = try await session.request(JSONSerialization.data(withJSONObject: [
                 "op": "create_channel", "channel": "smoke", "display": "owner",

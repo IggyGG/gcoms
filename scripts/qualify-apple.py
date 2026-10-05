@@ -65,6 +65,11 @@ def qualify(args):
         }))
         spec = spec.replace("CODE_SIGNING_ALLOWED: NO",
             "CODE_SIGNING_ALLOWED: YES\n    CODE_SIGN_IDENTITY: '-'\n    CODE_SIGN_ENTITLEMENTS: " + str(entitlements))
+        spec = spec.replace("  Preview:\n    type: application\n",
+            "  Preview:\n    type: application\n    info:\n      path: Fixture-Info.plist\n"
+            "      properties:\n        NSAppTransportSecurity:\n          NSAllowsLocalNetworking: true\n"
+            "          NSExceptionDomains:\n            '127.0.0.1':\n"
+            "              NSExceptionAllowsInsecureHTTPLoads: true\n")
     if push:
         spec = spec.replace("product: GComs", "product: GComsPush")
         spec = spec.replace("GCOMS_ENABLED", "GCOMS_ENABLED GCOMS_PUSH")
@@ -96,14 +101,15 @@ def qualify(args):
                 "-destination", "platform=iOS Simulator,id=" + device,
                 "-derivedDataPath", evidence / "derived"]
             run(command + ["build-for-testing"], env=env)
-            # Provisioning grants expire after five minutes. Mint only after
-            # compilation and simulator startup, immediately before execution.
-            with relay() if args.role == "client" else contextlib.nullcontext(None) as host:
+            # Simulator test launch can itself exceed a grant's five minutes.
+            # The running test requests its one fresh grant from the local fixture.
+            with relay(fresh_at_test_start=True) if args.role == "client" else contextlib.nullcontext(None) as host:
                 test_env = dict(env)
                 if host:
                     # xcodebuild forwards TEST_RUNNER_ variables to the runner
                     # with that prefix removed; credentials stay out of argv.
-                    test_env["TEST_RUNNER_GCOMS_RELAY"] = json.dumps(host["relay"], separators=(",", ":"))
+                    test_env["TEST_RUNNER_GCOMS_RELAY_ISSUER"] = host["issuer"]["url"]
+                    test_env["TEST_RUNNER_GCOMS_RELAY_TOKEN"] = host["issuer"]["token"]
                 run(command + ["-resultBundlePath", evidence / "tests.xcresult",
                     "test-without-building"], env=test_env)
         else:
