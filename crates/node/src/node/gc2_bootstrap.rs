@@ -17,6 +17,19 @@ pub(crate) struct Prepared {
     pub ready: Arc<gcoms_routing::gc2::owner::ReadyConnector>,
 }
 
+pub(crate) fn invitation_bundle(
+    mut relays: Vec<Introduction>,
+    founders: Option<&[[u8; 32]]>,
+) -> Result<BootstrapBundle, String> {
+    if let Some(founders) = founders {
+        relays.retain(|relay| founders.contains(&relay.service_id));
+    }
+    relays.truncate(gcoms_routing::gc2::directory::MAX_INTRODUCTIONS);
+    let bundle = BootstrapBundle { relays };
+    bundle.validate().map_err(|e| e.to_string())?;
+    Ok(bundle)
+}
+
 pub(crate) fn prepare(
     cfg: &super::NodeConfig,
     runtime: Option<&Arc<super::routing::RoutingRuntime>>,
@@ -112,6 +125,49 @@ mod tests {
     use gcoms_routing::service::gc2_introduction_from;
 
     const RELAY: &str = "93.184.216.34:443";
+
+    #[test]
+    fn invitation_excludes_contributions_without_removing_local_routes() {
+        let founder = gc2_introduction_from(RELAY.parse().unwrap(), [1; 32], &[2; 32], now_unix());
+        let contribution = gc2_introduction_from(
+            "93.184.216.35:443".parse().unwrap(),
+            [3; 32],
+            &[4; 32],
+            now_unix(),
+        );
+        let routes = vec![founder.clone(), contribution.clone()];
+        let invite = invitation_bundle(routes.clone(), Some(&[[1; 32]])).unwrap();
+        assert_eq!(invite.relays, vec![founder]);
+        assert_eq!(routes.len(), 2);
+        assert_eq!(
+            invitation_bundle(routes.clone(), None).unwrap().relays,
+            routes
+        );
+        assert!(invitation_bundle(vec![contribution], Some(&[[1; 32]])).is_err());
+    }
+
+    #[test]
+    fn invitation_finds_founders_beyond_the_first_eight_candidates() {
+        let routes = (1u8..=16)
+            .map(|id| {
+                gc2_introduction_from(
+                    format!("93.184.216.{id}:443").parse().unwrap(),
+                    [id; 32],
+                    &[id; 32],
+                    now_unix(),
+                )
+            })
+            .collect();
+        let invite = invitation_bundle(routes, Some(&[[15; 32], [16; 32]])).unwrap();
+        assert_eq!(
+            invite
+                .relays
+                .iter()
+                .map(|relay| relay.service_id)
+                .collect::<Vec<_>>(),
+            vec![[15; 32], [16; 32]]
+        );
+    }
 
     #[test]
     fn advertised_introduction_installs_and_expired_or_tampered_fails_closed() {

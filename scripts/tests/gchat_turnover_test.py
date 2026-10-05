@@ -293,6 +293,18 @@ class ControllerTests(unittest.TestCase):
                                turnover.time.monotonic()+1, 'invitation')
         submit.assert_called_once_with(0, '/invite person', 'channel')
 
+    def test_fixture_invitation_runs_as_the_profile_owner(self):
+        self.worker.spec['fixture_host']={'path':'fixture'}
+        answer=turnover.subprocess.CompletedProcess([],0,b'{"link":"private-link","localOnly":false}',b'')
+        with mock.patch.object(self.worker,'request',return_value={'snapshot':{'conversations':[
+                {'id':'channel','name':'#fixture'}]}}), mock.patch.object(turnover.subprocess,'run',return_value=answer) as run:
+            self.assertEqual(self.worker.remote_invitation('channel'),'private-link')
+        argv=run.call_args.args[0]
+        self.assertIn('setpriv',argv)
+        self.assertEqual(argv[argv.index('--reuid')+1],str(self.worker.uid))
+        self.assertEqual(json.loads(run.call_args.kwargs['input']),{'channel':'fixture'})
+        self.assertNotIn('private-link',str(self.worker.events))
+
     def test_fixture_never_silently_accepts_another_network(self):
         preview={'response':{'kind':'preview','preview':{'newNetwork':True,'network':{'id':'other'}}}}
         with mock.patch.object(self.worker,'request',return_value=preview) as request:

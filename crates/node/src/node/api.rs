@@ -884,10 +884,36 @@ impl NodeHandle {
     ) -> Result<String, String> {
         #[cfg(feature = "experimental-gc2")]
         if let Some(current) = self.routing.as_ref().and_then(|runtime| runtime.gc2.get()) {
-            let bundle = gcoms_routing::gc2::directory::BootstrapBundle {
-                relays: current.directory.reentry_candidates(),
+            let network = self.state.upgrade().and_then(|state| {
+                state
+                    .lock()
+                    .unwrap_or_else(|p| p.into_inner())
+                    .invitation_network
+                    .clone()
+            });
+            let founders = network
+                .map(|network| {
+                    network.current_defaults().map(|defaults| {
+                        defaults
+                            .founders
+                            .into_iter()
+                            .map(|founder| founder.service_id)
+                            .collect::<Vec<_>>()
+                    })
+                })
+                .transpose()?;
+            // Invitations carry only pinned network founders. Contributions
+            // remain usable locally and are learned through the recipient's
+            // authenticated provider directory, never through a bearer link.
+            let relays = if founders.is_some() {
+                current
+                    .directory
+                    .eligible(&[], now_unix())
+                    .map_err(|e| e.to_string())?
+            } else {
+                current.directory.reentry_candidates()
             };
-            bundle.validate().map_err(|e| e.to_string())?;
+            let bundle = super::gc2_bootstrap::invitation_bundle(relays, founders.as_deref())?;
             return invite
                 .to_link_with_gc2_bootstrap(bundle)
                 .ok_or_else(|| "invite is too large to encode".into());

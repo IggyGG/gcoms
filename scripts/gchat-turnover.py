@@ -408,15 +408,19 @@ class Journey(base.Worker):
             # this does not qualify provider-backed reusable invitations.
             snapshot = self.request(0, 'snapshot')['snapshot']
             name = next(row['name'].lstrip('#') for row in snapshot['conversations'] if row['id'] == channel)
-            with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as stream:
-                remaining = self.rpc_deadline-time.monotonic() if self.rpc_deadline else 30
-                stream.settimeout(max(.001, remaining))
-                stream.connect(str(self.root/'c0/fixture-invitations.sock'))
-                stream.sendall(json.dumps({'channel':name}).encode())
-                stream.shutdown(socket.SHUT_WR)
-                chunks=[]
-                while chunk := stream.recv(65536): chunks.append(chunk)
-            value=json.loads(b''.join(chunks))
+            remaining = self.rpc_deadline-time.monotonic() if self.rpc_deadline else 30
+            # The namespace controller is root; the private SDK endpoint is
+            # deliberately restricted to the profile's ordinary owner.
+            code = ('import socket,sys; s=socket.socket(socket.AF_UNIX); '
+                    's.settimeout(30); s.connect(sys.argv[1]); '
+                    's.sendall(sys.stdin.buffer.read()); s.shutdown(socket.SHUT_WR); '
+                    'f=s.makefile("rb"); sys.stdout.buffer.write(f.read(1048576))')
+            response=subprocess.run(['setpriv','--reuid',str(self.uid),'--regid',str(self.gid),
+                '--clear-groups','--no-new-privs','--',sys.executable,'-c',code,
+                str(self.root/'c0/fixture-invitations.sock')],
+                input=json.dumps({'channel':name}).encode(),capture_output=True,
+                timeout=max(.001,min(30,remaining)),check=True,env=self.env)
+            value=json.loads(response.stdout)
             if 'error' in value: raise RuntimeError(value['error'])
         else:
             value=self.submit(0, '/invite person', channel)['output']

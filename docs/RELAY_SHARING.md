@@ -17,6 +17,8 @@ on shutdown or network change, and retry with jittered exponential backoff.
 Unavailable publication never enables forwarding. Saved opt-out settings are
 authenticated, encrypted and owner-private.
 
+Channel invitations embed only fresh signed-network founder introductions, even when the local directory also contains contributions. Recipients discover contributions through their authenticated provider directory; invitation bearers cannot add untrusted network relays.
+
 Provider state is bounded to 1024 services, 64 per grant and 16 per public
 IPv4 /24 or IPv6 /48. Bootstrap bundles keep up to five operator seeds and add
 contributions up to the existing eight-introduction limit. Service pins and
