@@ -1,0 +1,81 @@
+{
+  "schema": 1,
+  "date": "2026-10-05",
+  "scope": "focused Linux transport regression; not full release or live fleet qualification",
+  "source_revision": "0895b803bad7ec1df100e4e0a1026063595febbb",
+  "change": {
+    "client_unknown_path_retirement_revision": "d221cb1",
+    "server_unauthenticated_lifetime_seconds": 120,
+    "deadline_origin": "completed TLS/HTTP2 handshake",
+    "decoy_requests_extend_lifetime": false,
+    "authenticated_connection_preserved": true,
+    "global_connection_and_unauthenticated_source_caps_unchanged": true,
+    "dispatch_authentication_unchanged": true,
+    "automatic_404_replay": false,
+    "existing_subscribers_preserved": true
+  },
+  "causal_baseline": {
+    "revision": "c17f04272f1d31f1ebdb8cd0bd92b0612eb2fbb0",
+    "passed": 0,
+    "failed": 1,
+    "failure": "active unknown paths must release source slots at their original deadline: terminal TLS handshake reset",
+    "report": {
+      "path": "/run/media/user/SSD-2/retained/gchat-transport-retirement-gate-20261005/server-baseline-report.json",
+      "sha256": "b50b0ebac67509140310f7167eae9696d399a27cf737576d212efe42007fb29a"
+    },
+    "log": {
+      "path": "/run/media/user/SSD-2/retained/gchat-transport-retirement-gate-20261005/server-baseline.log",
+      "sha256": "989ea1378f77337a00f484a785f39a229c60d53d3452fcb948c3e2cb71c66789"
+    }
+  },
+  "validation": {
+    "distinct_tests_passed": 64,
+    "checks": [
+      {
+        "group": "server-lifetime",
+        "passed": 1,
+        "failed": 0,
+        "seconds": 2.921,
+        "log_sha256": "66de83864041992c1dfab1a662d7249269799e59e3dda5107b5e2adabf8c482d"
+      },
+      {
+        "group": "raw-dispatch",
+        "passed": 1,
+        "failed": 0,
+        "seconds": 2.219,
+        "log_sha256": "ba1e38c53e11a3b50499d0b87db539c0bee3633290b918da8b4ded35793f0a5e"
+      },
+      {
+        "group": "transport-controls",
+        "passed": 63,
+        "failed": 0,
+        "seconds": 35.741,
+        "log_sha256": "c1079936f80df093bbebca5118555d5a0e3ccad605063be3df7657cba2a421a7"
+      }
+    ],
+    "strict_clippy_all_targets_all_features": {
+      "passed": true,
+      "seconds": 14.322,
+      "log_sha256": "e8d5e03db1e613ce3d873cbea3d0232df81ee10bde43b34af31ee41ac37c5ad4"
+    },
+    "format": true,
+    "source_audit_paths": 1006,
+    "research_import_hashes": 7,
+    "source_bindings": {
+      "path": "/run/media/user/SSD-2/retained/gchat-transport-retirement-gate-20261005/server-patched-full-source-bindings.json",
+      "sha256": "c09c329c4118bd1e43529d832bb7ff06692e8ec30ecfa40d9a0c1da59c463404"
+    },
+    "report": {
+      "path": "/run/media/user/SSD-2/retained/gchat-transport-retirement-gate-20261005/server-patched-report.json",
+      "sha256": "437d92a60fc36638a55e3b28469d8cd3b3c7d120a91fddde61cffa9a98f1b7c0"
+    }
+  },
+  "test_design": "Raw retained HTTP/2 clients hold all eight unauthenticated source slots and continue decoy requests while virtual time advances past 120 seconds. Fresh admission must recover; the authenticated session must survive unchanged. The separate raw dispatch fixture proves rejected paths do not promote source admission or invoke registered/legacy handlers.",
+  "retained_client_comparison": {
+    "path": "/run/media/user/SSD-2/retained/gchat-transport-retirement-gate-20261005/client-patched-report.json",
+    "sha256": "ade3af345f7ae7f1ba81517db56d6d70f1ba9338a0e47353447e01da362100d2"
+  },
+  "release_qualified": false,
+  "fleet_deployed": false,
+  "codematch": "unreachable"
+}

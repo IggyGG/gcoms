@@ -20,3 +20,11 @@ the client retires its exact cached connection so later work can reconnect.
 The timed-out request is not replayed, and its outcome remains uncertain.
 Existing subscribers keep their connection driver. Waiting for admission or a
 partially received response body does not evict an otherwise healthy connection.
+
+An unknown-path HTTP 404 also retires only its exact cached connection, allowing
+later queue recovery to reconnect. It returns the original refusal without
+replaying the request or stopping existing subscribers. On the server, a
+connection that has not authenticated a private path expires 120 seconds after
+its handshake, even if repeated decoy requests keep it active. Authenticated
+connections retain their ordinary idle/request limits and global admission slot;
+the unauthenticated per-source cap and dispatch authentication checks still apply.
