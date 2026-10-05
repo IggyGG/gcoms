@@ -1,4 +1,5 @@
 #![cfg(feature = "experimental-gc2")]
+use bytes::Bytes;
 use gcoms_core::{gc2::NaturalCell, CellType, TrafficClass};
 use gcoms_routing::{
     gc2::{
@@ -11,7 +12,7 @@ use gcoms_routing::{
 use gcoms_transport::{
     gc2::{NaturalOutcome, NaturalRoute},
     server::Tp1Server,
-    tls::TlsIdentity,
+    tls::{self, TlsIdentity},
     TokenRegistry, Tp1Client,
 };
 use std::{
@@ -22,6 +23,77 @@ use std::{
     time::Duration,
 };
 use tokio::{sync::oneshot, time::timeout};
+
+// Role isolation belongs to a physical connection. Tp1Client deliberately
+// retires its pool entry after 404, so retain TLS/H2 for cross-role probes.
+async fn retained_connection(
+    seed: &Introduction,
+) -> (h2::client::SendRequest<Bytes>, tokio::task::JoinHandle<()>) {
+    let (sender, connection) = timeout(Duration::from_secs(60), async {
+        let socket = tokio::net::TcpStream::connect(seed.addr).await.unwrap();
+        let tls = tokio_rustls::TlsConnector::from(Arc::new(
+            tls::client_config_pinned(seed.service_id).unwrap(),
+        ))
+        .connect(tls::server_name_ip(seed.addr.ip()), socket)
+        .await
+        .unwrap();
+        h2::client::handshake(tls).await.unwrap()
+    })
+    .await
+    .expect("retained connection must finish within the client request bound");
+    let driver = tokio::spawn(async move {
+        let _ = connection.await;
+    });
+    (sender, driver)
+}
+
+async fn retained_post(
+    sender: &h2::client::SendRequest<Bytes>,
+    seed: &Introduction,
+    token: &str,
+    wire: Bytes,
+) -> (http::StatusCode, Bytes) {
+    timeout(Duration::from_secs(60), async {
+        let mut sender = sender.clone().ready().await.unwrap();
+        let request = http::Request::builder()
+            .method("POST")
+            .uri(format!("https://{}/{token}", seed.addr))
+            .body(())
+            .unwrap();
+        let (response, mut send) = sender.send_request(request, false).unwrap();
+        send.send_data(wire, true).unwrap();
+        let response = response.await.unwrap();
+        let status = response.status();
+        let body = gcoms_transport::server::read_body(&mut response.into_body(), 64 * 1024)
+            .await
+            .unwrap();
+        (status, body)
+    })
+    .await
+    .expect("retained request must finish within the client request bound")
+}
+
+async fn retained_refresh(sender: &h2::client::SendRequest<Bytes>, seed: &Introduction) {
+    let (status, body) = retained_post(
+        sender,
+        seed,
+        &gcoms_transport::encode_b64url(&seed.reentry_cap),
+        Bytes::from(pex().encode()),
+    )
+    .await;
+    assert_eq!(status, http::StatusCode::OK);
+    let cell = NaturalCell::decode(&body).unwrap();
+    assert_eq!(cell.kind(), CellType::Pex);
+    assert_eq!(cell.flags(), 0);
+    let bundle = BootstrapBundle::decode(cell.payload()).unwrap();
+    let own = bundle
+        .relays
+        .iter()
+        .find(|relay| relay.service_id == seed.service_id)
+        .unwrap();
+    assert_eq!(own.reentry_cap, seed.reentry_cap);
+    own.entry(now_unix()).unwrap();
+}
 
 struct Fixture {
     service: Arc<RelayService>,
@@ -360,8 +432,8 @@ async fn roles_cannot_mix_and_gc1_authority_cannot_authenticate_v2_discovery() {
             gcoms_transport::server::Dispatch::Rejected
         ));
     }
-    let client = Tp1Client::new().unwrap();
-    discovery::refresh(&client, &seed, &[]).await.unwrap();
+    let (client, driver) = retained_connection(&seed).await;
+    retained_refresh(&client, &seed).await;
     for cap in [
         seed.entry_cap,
         seed.transit_cap,
@@ -369,19 +441,30 @@ async fn roles_cannot_mix_and_gc1_authority_cannot_authenticate_v2_discovery() {
         old.circuit_cap,
     ] {
         assert_eq!(
-            request(&client, &seed, &cap, pex()).await.unwrap(),
-            NaturalOutcome::Decoy(404)
+            retained_post(
+                &client,
+                &seed,
+                &gcoms_transport::encode_b64url(&cap),
+                Bytes::from(pex().encode()),
+            )
+            .await
+            .0,
+            http::StatusCode::NOT_FOUND
         );
     }
-    discovery::refresh(&client, &seed, &[]).await.unwrap();
+    retained_refresh(&client, &seed).await;
     assert_eq!(fixture.connections.load(Ordering::SeqCst), 1);
+    drop(client);
     fixture.stop().await;
+    timeout(Duration::from_secs(3), driver)
+        .await
+        .unwrap()
+        .unwrap();
 }
 
 #[tokio::test]
 async fn registered_endpoint_cannot_bypass_control_role_or_then_switch_to_control() {
     use gcoms_core::Cell;
-    use gcoms_transport::HopOutcome;
     let fixture = Fixture::new().await;
     let seed = fixture.service.gc2_introduction(now_unix());
     let bytes = bytes::Bytes::from(
@@ -389,32 +472,40 @@ async fn registered_endpoint_cannot_bypass_control_role_or_then_switch_to_contro
             .encode_wire()
             .unwrap(),
     );
-    let control = Tp1Client::new().unwrap();
-    discovery::refresh(&control, &seed, &[]).await.unwrap();
+    let (control, control_driver) = retained_connection(&seed).await;
+    retained_refresh(&control, &seed).await;
     assert_eq!(
-        control
-            .post_cell_pinned(
-                seed.addr,
-                seed.service_id,
-                "fixture-registered",
-                bytes.clone()
-            )
+        retained_post(&control, &seed, "fixture-registered", bytes.clone())
             .await
-            .unwrap(),
-        HopOutcome::Decoy(404)
+            .0,
+        http::StatusCode::NOT_FOUND
     );
-    discovery::refresh(&control, &seed, &[]).await.unwrap();
-    let terminal = Tp1Client::new().unwrap();
-    assert!(matches!(
-        terminal
-            .post_cell_pinned(seed.addr, seed.service_id, "fixture-registered", bytes)
-            .await
-            .unwrap(),
-        HopOutcome::Accepted(Some(_))
-    ));
-    assert!(discovery::refresh(&terminal, &seed, &[]).await.is_err());
+    retained_refresh(&control, &seed).await;
+    let (terminal, terminal_driver) = retained_connection(&seed).await;
+    let (status, body) = retained_post(&terminal, &seed, "fixture-registered", bytes.clone()).await;
+    assert_eq!(status, http::StatusCode::OK);
+    assert_eq!(body, bytes);
+    assert_eq!(
+        retained_post(
+            &terminal,
+            &seed,
+            &gcoms_transport::encode_b64url(&seed.reentry_cap),
+            Bytes::from(pex().encode()),
+        )
+        .await
+        .0,
+        http::StatusCode::NOT_FOUND
+    );
     assert_eq!(fixture.connections.load(Ordering::SeqCst), 2);
+    drop(control);
+    drop(terminal);
     fixture.stop().await;
+    for driver in [control_driver, terminal_driver] {
+        timeout(Duration::from_secs(3), driver)
+            .await
+            .unwrap()
+            .unwrap();
+    }
 }
 
 #[tokio::test]

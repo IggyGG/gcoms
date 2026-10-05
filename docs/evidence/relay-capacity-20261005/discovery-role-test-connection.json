@@ -1,0 +1,201 @@
+{
+  "schema": 1,
+  "date": "2026-10-06",
+  "scope": "Test-only repair of two discovery physical-session fixtures; no production, dependency, API, wire or release-gate changes.",
+  "baseline_revision": "44d2a87fb0f879f06ec0f8dd2476fcb09e0b7c4c",
+  "changed_sources": [
+    "crates/routing/tests/gc2_discovery.rs"
+  ],
+  "production_sources_unchanged": true,
+  "runtime_equivalence": {
+    "path": "/run/media/user/SSD-2/retained/gchat-discovery-role-fixture-gate-20261006/runtime-equivalence.json",
+    "sha256": "19f35edec9a0c93b823b66dc30f7806ca19cfefafd4304d785e609a24abcf21f"
+  },
+  "original_ci": {
+    "run_id": 37367644527,
+    "job_id": 111956574392,
+    "artifact_id": 11373231351,
+    "archive": {
+      "path": "/run/media/user/SSD-2/retained/gchat-release148-monitor-20261005/candidate154-critical/windows154-original.zip",
+      "sha256": "b20c94656ebcfd9ad2c123184bf783673f15db6fee0787f1337f68c0ddc8998f"
+    },
+    "failure": {
+      "path": "/run/media/user/SSD-2/retained/gchat-release148-monitor-20261005/candidate154-critical/windows154-original-failure.json",
+      "sha256": "72994d93fe7833859fc32d4c903add49e300ed08c25ee8a7deafdfc684695cd0"
+    },
+    "original_fixture": {
+      "path": "/run/media/user/SSD-2/retained/gchat-release148-monitor-20261005/candidate154-critical/windows154-original-gc2_discovery.rs",
+      "sha256": "cf7a383f5275755e9fa97ea7c548529e12294a228e7c9842998b7d541e452015"
+    },
+    "gchat_native_passed": true,
+    "gcoms_native_passed": false,
+    "suite_passed": 6,
+    "suite_failed": 2
+  },
+  "cause": "Tp1Client correctly retires its exact pool entry on 404. Two discovery tests assumed later probes retained the same physical connection, causing a new-role request to reach a fresh session and connection counts to increase. Pinned raw TLS/H2 preserves the physical-session security invariant.",
+  "preserved_assertions": [
+    "Invalid GC/1 and zero authorities cannot commit a role; entry/transit/control roles cannot mix.",
+    "One physical control connection rejects entry, transit and GC/1 capabilities with 404 and still renews valid discovery.",
+    "A registered endpoint cannot bypass an existing control role; valid control renewal still works on the same connection.",
+    "The second physical terminal connection echoes the exact valid cell bytes and rejects switching to control.",
+    "Connection counts remain exactly one and two; all relay circuits are released.",
+    "Owned servers and H2 drivers are joined; retained connections and requests keep a 60-second bound."
+  ],
+  "local_causal_baseline": {
+    "schema": 1,
+    "phase": "baseline",
+    "source_sha256": "1b18225e8d72d267a32db13110312d92c311005123ec4b62d2ad68431935d442",
+    "command": [
+      "cargo",
+      "test",
+      "--offline",
+      "--locked",
+      "-p",
+      "gcoms-routing",
+      "--all-features",
+      "--test",
+      "gc2_discovery",
+      "role",
+      "--",
+      "--test-threads=1",
+      "--nocapture"
+    ],
+    "returncode": 101,
+    "seconds": 22.078879488864914,
+    "log_sha256": "f5a1dabea6affcaabbb726bf7543230d2639450c91c5ae444e74a4b07a5206af",
+    "report": {
+      "path": "/run/media/user/SSD-2/retained/gchat-discovery-role-fixture-gate-20261006/baseline-report.json",
+      "sha256": "89eba56722608219020f231d985b05cb53f043d8bd98c1ee3ed4ca0fa004c671"
+    },
+    "source": {
+      "path": "/run/media/user/SSD-2/retained/gchat-discovery-role-fixture-gate-20261006/baseline-source.json",
+      "sha256": "1b18225e8d72d267a32db13110312d92c311005123ec4b62d2ad68431935d442"
+    },
+    "log": {
+      "path": "/run/media/user/SSD-2/retained/gchat-discovery-role-fixture-gate-20261006/baseline.log",
+      "sha256": "f5a1dabea6affcaabbb726bf7543230d2639450c91c5ae444e74a4b07a5206af"
+    }
+  },
+  "first_patch_compile_failure_retained": {
+    "schema": 1,
+    "managed_target": "/run/media/user/SSD-2/.workstation-builds/pool/slots/42e98e756f6f42269466255c5fd47405/target",
+    "phase": "patched",
+    "source_sha256": "728382bdf20543f26f11c416e04ea33c4516a5c4cd3c125c4f5a0529392fdd4b",
+    "command": [
+      "cargo",
+      "test",
+      "--offline",
+      "--locked",
+      "-p",
+      "gcoms-routing",
+      "--all-features",
+      "--test",
+      "gc2_discovery",
+      "--",
+      "--test-threads=1",
+      "--nocapture"
+    ],
+    "returncode": 101,
+    "seconds": 62.17764737107791,
+    "log_sha256": "5d814e159ebc73aad5b70f49032a7817be3d5f99be5dd80d2eb068da8caafa22",
+    "report": {
+      "path": "/run/media/user/SSD-2/retained/gchat-discovery-role-fixture-gate-20261006/patched-report.json",
+      "sha256": "d1fe1a96cb392d2c453b7c731e37d5e63d0fd69faa69aa671c5db80f6466da1f"
+    },
+    "source": {
+      "path": "/run/media/user/SSD-2/retained/gchat-discovery-role-fixture-gate-20261006/patched-source.json",
+      "sha256": "728382bdf20543f26f11c416e04ea33c4516a5c4cd3c125c4f5a0529392fdd4b"
+    },
+    "log": {
+      "path": "/run/media/user/SSD-2/retained/gchat-discovery-role-fixture-gate-20261006/patched.log",
+      "sha256": "5d814e159ebc73aad5b70f49032a7817be3d5f99be5dd80d2eb068da8caafa22"
+    }
+  },
+  "validation": {
+    "full_discovery_suite": {
+      "passed": 8,
+      "failed": 0,
+      "report": {
+        "schema": 1,
+        "managed_target": "/run/media/user/SSD-2/.workstation-builds/pool/slots/42e98e756f6f42269466255c5fd47405/target",
+        "phase": "corrected",
+        "source_sha256": "2b4685cd037e524013ec5235e0894d3bb5190c680351596b9abc3ad7c8d37ad7",
+        "command": [
+          "cargo",
+          "test",
+          "--offline",
+          "--locked",
+          "-p",
+          "gcoms-routing",
+          "--all-features",
+          "--test",
+          "gc2_discovery",
+          "--",
+          "--test-threads=1",
+          "--nocapture"
+        ],
+        "returncode": 0,
+        "seconds": 3.9217877429910004,
+        "log_sha256": "1cb571eda960dadaa8d8749d684c26b7097996c6bbbf7560ef8c5ed96c82cb62",
+        "report": {
+          "path": "/run/media/user/SSD-2/retained/gchat-discovery-role-fixture-gate-20261006/corrected-report.json",
+          "sha256": "422710fb73e642e7ce1a9aa8fffeeee72ca3ad2a8fc8c1f0fe2db286bfdf7ca7"
+        },
+        "source": {
+          "path": "/run/media/user/SSD-2/retained/gchat-discovery-role-fixture-gate-20261006/corrected-source.json",
+          "sha256": "2b4685cd037e524013ec5235e0894d3bb5190c680351596b9abc3ad7c8d37ad7"
+        },
+        "log": {
+          "path": "/run/media/user/SSD-2/retained/gchat-discovery-role-fixture-gate-20261006/corrected.log",
+          "sha256": "1cb571eda960dadaa8d8749d684c26b7097996c6bbbf7560ef8c5ed96c82cb62"
+        }
+      }
+    },
+    "strict_changed_target_clippy": {
+      "schema": 1,
+      "managed_target": "/run/media/user/SSD-2/.workstation-builds/pool/slots/42e98e756f6f42269466255c5fd47405/target",
+      "phase": "clippy",
+      "source_sha256": "2b4685cd037e524013ec5235e0894d3bb5190c680351596b9abc3ad7c8d37ad7",
+      "command": [
+        "cargo",
+        "clippy",
+        "--offline",
+        "--locked",
+        "-p",
+        "gcoms-routing",
+        "--all-features",
+        "--test",
+        "gc2_discovery",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "returncode": 0,
+      "seconds": 47.95283110602759,
+      "log_sha256": "3dd5e7f8cf9ac030d0b9d4aebcec954a58337d1befe4d5d5ed80dfd7e654f987",
+      "report": {
+        "path": "/run/media/user/SSD-2/retained/gchat-discovery-role-fixture-gate-20261006/clippy-report.json",
+        "sha256": "addabe5a710668ae023426653355e49ce936d4e8718d1c1bc693793646d055b0"
+      },
+      "source": {
+        "path": "/run/media/user/SSD-2/retained/gchat-discovery-role-fixture-gate-20261006/clippy-source.json",
+        "sha256": "2b4685cd037e524013ec5235e0894d3bb5190c680351596b9abc3ad7c8d37ad7"
+      },
+      "log": {
+        "path": "/run/media/user/SSD-2/retained/gchat-discovery-role-fixture-gate-20261006/clippy.log",
+        "sha256": "3dd5e7f8cf9ac030d0b9d4aebcec954a58337d1befe4d5d5ed80dfd7e654f987"
+      }
+    },
+    "format": true,
+    "source_checks": {
+      "path": "/run/media/user/SSD-2/retained/gchat-discovery-role-fixture-gate-20261006/source-checks.json",
+      "sha256": "882cb79fb5d3252e69d3f1d185a404ba5f73c2f9b59c999d726181e46d787a22"
+    }
+  },
+  "broader_gc2_fixture_audit": {
+    "files_reviewed": 8,
+    "additional_stale_session_assertions": 0,
+    "reviewer": "transport_validation"
+  },
+  "qualification": "Original154 failure remains failed. A new exact-source candidate requires normal native qualification; runtime equivalence does not relabel or waive a gate."
+}
