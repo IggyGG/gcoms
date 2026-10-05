@@ -794,17 +794,61 @@ async fn read_payload<R: AsyncRead + Unpin>(
 
 #[cfg(all(any(unix, windows), feature = "ipc"))]
 struct ClientWriter<W> {
-    stream: W,
+    stream: Option<W>,
+    pending: Option<(Zeroizing<Vec<u8>>, [u8; 4], usize)>,
 }
 
 #[cfg(all(any(unix, windows), feature = "ipc"))]
 impl<W: AsyncWrite + Unpin> ClientWriter<W> {
     fn new(stream: W) -> Self {
-        Self { stream }
+        Self {
+            stream: Some(stream),
+            pending: None,
+        }
+    }
+
+    async fn finish_pending(&mut self) -> Result<(), SdkError> {
+        let stream = self.stream.as_mut().ok_or(SdkError::ConnectionClosed)?;
+        if let Some((payload, prefix, written)) = &mut self.pending {
+            while *written < prefix.len() + payload.len() {
+                let remaining = if *written < prefix.len() {
+                    &prefix[*written..]
+                } else {
+                    &payload[*written - prefix.len()..]
+                };
+                // Tokio's single write is cancellation safe. Update the retained
+                // cursor before the next await; never repeat accepted bytes.
+                match stream.write(remaining).await {
+                    Ok(0) => {
+                        self.stream = None;
+                        self.pending = None;
+                        return Err(SdkError::Runtime("IPC write returned zero".into()));
+                    }
+                    Ok(count) => *written += count,
+                    Err(error) => {
+                        self.stream = None;
+                        self.pending = None;
+                        return Err(SdkError::Runtime(error.to_string()));
+                    }
+                }
+            }
+        }
+        self.pending = None;
+        Ok(())
     }
 
     async fn write_frame(&mut self, frame: &Frame) -> Result<(), SdkError> {
-        write_client_frame(&mut self.stream, frame).await
+        validate_outgoing(frame)?;
+        // Finish an admitted request even if its caller stopped waiting. Only
+        // this one bounded, zeroizing frame survives cancellation under the
+        // existing writer mutex; no extra workers or request replay are needed.
+        self.finish_pending().await?;
+        let payload = encode_storage(&ClientFrame(frame))?;
+        let prefix = u32::try_from(payload.len())
+            .map_err(|_| SdkError::Protocol("IPC frame exceeds u32 length".into()))?
+            .to_be_bytes();
+        self.pending = Some((payload, prefix, 0));
+        self.finish_pending().await
     }
 }
 
@@ -1131,18 +1175,26 @@ impl IpcClient {
             request: std::mem::replace(&mut *request, Request::Identity),
         }));
         let mut closed = self.0.closed.subscribe();
-        let sent = {
+        let (sent, broken) = {
             let mut writer = self.0.writer.lock().await;
-            match writer.as_mut() {
+            let sent = match writer.as_mut() {
                 Some(writer) if !*closed.borrow() => tokio::select! {
                     _ = closed.changed() => Err(SdkError::ConnectionClosed),
                     result = writer.write_frame(&frame) => result,
                 },
                 _ => Err(SdkError::ConnectionClosed),
-            }
+            };
+            let broken = writer.as_ref().is_some_and(|writer| writer.stream.is_none());
+            (sent, broken)
         };
         if let Err(error) = sent {
-            self.0.pending.lock().await.remove(&request_id);
+            if broken {
+                // A failed partial frame cannot be repaired by a later request.
+                // Release both pipe halves and fail every pending correlation.
+                self.close().await;
+            } else {
+                self.0.pending.lock().await.remove(&request_id);
+            }
             return Err(error);
         }
         // The response correlation owns only a oneshot, never the payload.
@@ -3455,7 +3507,40 @@ mod interrupted_write_tests {
     }
 
     #[tokio::test]
+    async fn failed_partial_request_poisoning_rejects_later_frames() {
+        tokio::time::timeout(std::time::Duration::from_secs(5), async {
+            let (mut peer, stream) = tokio::io::duplex(1);
+            let writer = tokio::spawn(async move {
+                let mut writer = ClientWriter::new(stream);
+                let result = writer.write_frame(&request(41)).await;
+                (writer, result)
+            });
+            peer.read_exact(&mut [0; 2]).await.unwrap();
+            drop(peer);
+            let (mut writer, result) = writer.await.unwrap();
+            assert!(result.is_err());
+            assert!(writer.stream.is_none());
+            assert!(writer.pending.is_none());
+            assert_eq!(
+                writer.write_frame(&request(42)).await.unwrap_err(),
+                SdkError::ConnectionClosed
+            );
+        })
+        .await
+        .expect("failed writes close without admitting another frame");
+    }
+
+    #[tokio::test]
     async fn cancelled_partial_request_finishes_before_the_next_frame() {
+        cancel_partial_request(false).await;
+    }
+
+    #[tokio::test]
+    async fn cancelled_partial_body_finishes_before_the_next_frame() {
+        cancel_partial_request(true).await;
+    }
+
+    async fn cancel_partial_request(in_body: bool) {
         tokio::time::timeout(std::time::Duration::from_secs(5), async {
             let (mut peer, stream) = tokio::io::duplex(1);
             let writer = Arc::new(Mutex::new(ClientWriter::new(stream)));
@@ -3467,15 +3552,26 @@ mod interrupted_write_tests {
             // finish its length prefix. Cancel without sleeps or scheduler luck.
             let mut length = [0; 4];
             peer.read_exact(&mut length[..2]).await.unwrap();
+            let mut body_prefix = [0];
+            if in_body {
+                peer.read_exact(&mut length[2..]).await.unwrap();
+                peer.read_exact(&mut body_prefix).await.unwrap();
+            }
             first.abort();
             assert!(first.await.unwrap_err().is_cancelled());
             let next_writer = writer.clone();
             let next = tokio::spawn(async move {
                 next_writer.lock().await.write_frame(&request(42)).await
             });
-            peer.read_exact(&mut length[2..]).await.unwrap();
+            if !in_body {
+                peer.read_exact(&mut length[2..]).await.unwrap();
+            }
             let mut payload = vec![0; u32::from_be_bytes(length) as usize];
-            peer.read_exact(&mut payload).await.unwrap();
+            let consumed = usize::from(in_body);
+            if in_body {
+                payload[0] = body_prefix[0];
+            }
+            peer.read_exact(&mut payload[consumed..]).await.unwrap();
             assert_eq!(decode(&payload).unwrap(), request(41));
             assert_eq!(read_frame(&mut peer).await.unwrap(), request(42));
             next.await.unwrap().unwrap();
