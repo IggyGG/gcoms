@@ -816,7 +816,7 @@ impl RelayScheduler {
         self.push_with_class(class, contact, inner, TrafficClass::Interactive)
     }
 
-    #[cfg(all(feature = "experimental-gc2", feature = "relay-host"))]
+    #[cfg(feature = "experimental-gc2")]
     pub(crate) fn contact_backing_off(&self, contact: &AliasContact) -> bool {
         if !self.is_gc2() {
             return false;
