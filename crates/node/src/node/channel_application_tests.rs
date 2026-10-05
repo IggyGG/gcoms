@@ -95,8 +95,8 @@ async fn reusable_invitation_does_not_wait_for_prior_channel_delivery() {
     let admitted = owner.admit(&invite, &package).unwrap();
     let member = gcoms_mls::ChannelMember::join(prepared, &admitted.welcome).unwrap();
     let mut route = persist::tests::owned_channel_route(81, member.own_pseudonym(), [91; 32]);
-    let (contact, mut received, server) = terminal(route.public.control.clone()).await;
-    route.public.control = contact;
+    let (contact, mut received, server) = terminal(route.public.data.clone()).await;
+    route.public.data = contact;
     channel
         .directory
         .insert("offline-peer".into(), route.public);
