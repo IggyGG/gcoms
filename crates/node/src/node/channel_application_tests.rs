@@ -83,6 +83,139 @@ fn application() -> Vec<u8> {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn reusable_invitation_does_not_wait_for_prior_channel_delivery() {
+    let mut channel = persist::tests::established_owner_fixture("invites");
+    let prepared = gcoms_mls::ChannelMember::prepare("offline-peer").unwrap();
+    let package = gcoms_mls::ChannelMember::key_package_bytes(&prepared).unwrap();
+    let crate::channel::ChannelRole::Owner(owner) = &mut channel.role else {
+        unreachable!()
+    };
+    let invite =
+        owner.sign_invite_key_package(&package, "offline-peer", gcoms_mls::Caps::member(), 3600);
+    let admitted = owner.admit(&invite, &package).unwrap();
+    let member = gcoms_mls::ChannelMember::join(prepared, &admitted.welcome).unwrap();
+    let mut route = persist::tests::owned_channel_route(81, member.own_pseudonym(), [91; 32]);
+    let (contact, mut received, server) = terminal(route.public.control.clone()).await;
+    route.public.control = contact;
+    channel
+        .directory
+        .insert("offline-peer".into(), route.public);
+
+    let scheduler = RelayScheduler::with_profile(
+        Arc::new(Tp1Client::new().unwrap()),
+        SchedulerProfile::compressed_production(38),
+    );
+    let saved = Arc::new(Mutex::new(Vec::new()));
+    let mut node = persist::tests::state();
+    node.scheduler.shutdown();
+    node.scheduler = scheduler.clone();
+    let saved_sink = saved.clone();
+    node.durable_state_sink = Some(Arc::new(move |bytes| {
+        *saved_sink.lock().unwrap() = bytes;
+        Ok(())
+    }));
+    node.channels.insert("invites".into(), channel);
+    let state = Arc::new(Mutex::new(node));
+    let (events_tx, _) = broadcast::channel(8);
+    let (commands, cmd_rx) = mpsc::channel(8);
+    let command_loop = spawn_command_loop(CommandLoopContext {
+        state: state.clone(),
+        frwd_admitted: Default::default(),
+        scheduler: scheduler.clone(),
+        events_tx,
+        #[cfg(feature = "relay-host")]
+        relay_host: None,
+        cmd_rx,
+    });
+    let (done, mut text_result) = tokio::sync::oneshot::channel();
+    commands
+        .send(Cmd::SendChannelText {
+            channel: "invites".into(),
+            text: b"prior channel message".to_vec(),
+            done,
+        })
+        .await
+        .unwrap();
+    // Keep the prior command's real first-hop completion unresolved. Local
+    // invitation management must still return without accepting that delivery.
+    let (_, held_reply) = tokio::time::timeout(Duration::from_secs(5), received.recv())
+        .await
+        .unwrap()
+        .unwrap();
+    let before = saved.lock().unwrap().clone();
+    let policy = crate::channel_invite::policy::InvitationPolicy {
+        expires_at: None,
+        max_admissions: Some(1),
+    };
+    let (done, result) = tokio::sync::oneshot::channel();
+    commands
+        .send(Cmd::CreateReusableInvitation {
+            channel: "invites".into(),
+            policy,
+            done,
+        })
+        .await
+        .unwrap();
+    let issued = tokio::time::timeout(Duration::from_secs(2), result)
+        .await
+        .expect("a reusable invitation must not wait for prior message delivery")
+        .unwrap()
+        .unwrap();
+    let persisted = saved.lock().unwrap().clone();
+    assert!(!persisted.is_empty());
+    assert_ne!(persisted, before);
+    assert!(!persisted.windows(32).any(|bytes| bytes == issued.secret));
+    assert_eq!(
+        invitations::list(&state, "invites").unwrap()[0],
+        issued.summary
+    );
+
+    // The release's 64-record quota remains enforced, and its local rejection
+    // must also be independent of the held network completion.
+    {
+        let mut st = state.lock().unwrap();
+        let ledger = &mut st.channels.get_mut("invites").unwrap().invitations;
+        let first = ledger.records[0].clone();
+        for index in 1..crate::channel_invite::policy::INVITATION_LIMIT {
+            let mut record = first.clone();
+            record.id[0] ^= index as u8;
+            ledger.insert(record).unwrap();
+        }
+    }
+    let (done, result) = tokio::sync::oneshot::channel();
+    commands
+        .send(Cmd::CreateReusableInvitation {
+            channel: "invites".into(),
+            policy,
+            done,
+        })
+        .await
+        .unwrap();
+    let result = tokio::time::timeout(Duration::from_secs(2), result)
+        .await
+        .expect("the local invitation quota must not wait for prior delivery")
+        .unwrap();
+    assert!(matches!(result, Err(error) if error.contains("invitation limit reached")));
+    assert!(matches!(
+        text_result.try_recv(),
+        Err(tokio::sync::oneshot::error::TryRecvError::Empty)
+    ));
+    assert_eq!(*saved.lock().unwrap(), persisted);
+
+    let (done, stopped) = tokio::sync::oneshot::channel();
+    commands.send(Cmd::Shutdown { done }).await.unwrap();
+    tokio::time::timeout(Duration::from_secs(3), stopped)
+        .await
+        .unwrap()
+        .unwrap();
+    command_loop.await.unwrap();
+    assert!(text_result.await.unwrap().is_err());
+    drop(held_reply);
+    server.abort();
+    let _ = server.await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn file_receipt_does_not_hold_channel_preparation_for_an_independent_peer() {
     let mut channel = persist::tests::established_owner_fixture("files");
     let mut peers = Vec::new();

@@ -699,9 +699,19 @@ pub(crate) fn spawn_command_loop(ctx: CommandLoopContext) -> tokio::task::JoinHa
                     done,
                 } => {
                     let key = CmdKey::Channel(channel.clone());
-                    dispatch!(key, done, |state, _scheduler, _events_tx| {
-                        invitations::create(&state, &channel, policy)
-                    });
+                    // Issuing a capability only changes the durable local ledger.
+                    // Keep channel preparation ordered, but do not wait for prior
+                    // text/presence delivery to offline recipients. Admission and
+                    // its MLS/wire ordering still use the full completion chain.
+                    dispatch!(
+                        key,
+                        done,
+                        split | state,
+                        _scheduler,
+                        _events_tx,
+                        _prepare,
+                        _complete | { invitations::create(&state, &channel, policy) }
+                    );
                 }
                 Cmd::ListInvitations { channel, done } => {
                     let _ = done.send(invitations::list(&state, &channel));
