@@ -1,0 +1,18 @@
+{
+  "schema": 1,
+  "date": "2026-10-05",
+  "attempt": "load-06",
+  "source": "0e73c61",
+  "passed": false,
+  "joined_clients": 12,
+  "fixture_operator_circuits": 128,
+  "live_operator_circuits": 2048,
+  "failure": "RuntimeError: invitation join did not confirm channel membership: error runtime: timed out waiting for the owner (they may be offline)",
+  "children_stopped": true,
+  "host_links_unchanged": true,
+  "report_sha256": "2606c99483dd10c628860dda5c0850d397cf97406c9188473df34c326a538cc3",
+  "measured_max_operator_outgoing_connections": 139,
+  "circuit_exhaustion_proven": false,
+  "release_qualified": false,
+  "next_test": "same source-bound binaries with explicitly verified 2048-circuit/4096-connection operator pools; all acceptance thresholds unchanged"
+}

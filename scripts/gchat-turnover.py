@@ -14,6 +14,16 @@ RELAYS = tuple(f'11.231.97.{n}' for n in range(10, 16))
 CLIENT, CLIENT6 = base.CLIENT, base.CLIENT6
 SCOPE = 'actual_gchat_disconnected_fivehop_turnover_v2'
 
+def load_relay_capacity(config):
+    if config.get('mode') != 'relay-load':
+        return []
+    circuits = config['relay_circuits']
+    connections = config['relay_connections']
+    if (type(circuits) is not int or type(connections) is not int
+            or not 1 <= circuits <= 4096 or not 2 * circuits <= connections <= 8192):
+        raise ValueError('relay capacity requires 1..4096 circuits and twice that many connections, at most 8192')
+    return ['--relay-circuits', str(circuits), '--relay-connections', str(connections)]
+
 def fixture_links(rows, routes):
     """Allow only the kernel's inert IPIP fallback in addition to fixture links.
 
@@ -49,6 +59,8 @@ class Journey(base.Worker):
         super().event(kind, elapsed=time.monotonic() - self.origin, **facts)
 
     def spawn(self, role, command, **kwargs):
+        if role.startswith('relay') and len(command) > 1 and command[1] == 'serve':
+            command = [*command, *load_relay_capacity(self.spec['config'])]
         generation = self.roles.get(role, 0); self.roles[role] = generation + 1
         actual = role if generation == 0 else f'{role}-reopen-{generation}'
         self.latest[role] = actual
@@ -153,6 +165,15 @@ class Journey(base.Worker):
             self.result['fixture_network_sha256'] = sha256(self.root / 'network.json')
         if self.spec['config'].get('mode') == 'relay-load':
             self.prepare_contributions()
+            pools = [self.control(i, 'status')['relay_diagnostics']['forwarding']
+                     for i in range(len(self.relay_addresses))]
+            if any(pool['limit'] != self.spec['config']['relay_circuits']
+                   or pool['bulk_limit'] != pool['limit'] - 1 for pool in pools):
+                raise RuntimeError('relay forwarding pools do not match configured load capacity')
+            self.result['relay_capacity'] = {'circuits': self.spec['config']['relay_circuits'],
+                'connections': self.spec['config']['relay_connections'], 'forwarding_pools': pools}
+            self.event('load_relay_capacity_verified', circuits=self.spec['config']['relay_circuits'],
+                       connections=self.spec['config']['relay_connections'], relays=len(pools))
 
     def prepare_contributions(self):
         host = self.spec['fixture_host']['path']
@@ -925,6 +946,10 @@ def main():
     parser.add_argument('--expiries',type=int,default=3,choices=(1,2,3))
     parser.add_argument('--mode',choices=('smoke','file-recovery','archive-failure','credential-expiry','carrier-cap','entry-loss','multi-party','relay-load'),default='credential-expiry')
     parser.add_argument('--load-seconds',type=int,default=1800,help='relay-load only; shorter runs cannot qualify the release')
+    parser.add_argument('--load-relay-circuits',type=int,
+                        help='relay-load only; default 2048 matches the live operator fleet')
+    parser.add_argument('--load-relay-connections',type=int,
+                        help='relay-load only; default 4096 matches the live operator fleet')
     parser.add_argument('--file-bytes',type=int)
     parser.add_argument('--release-check',action='store_true',
                         help='file-recovery only: 16 MiB, 180s completion, 600s total; large-file runs stay separate')
@@ -938,6 +963,16 @@ def main():
             args.file_bytes not in (None,16*1024*1024) or args.file_completion_seconds not in (None,180)):
         parser.error('release check requires file-recovery with 16 MiB and 180 seconds')
     if args.mode=='relay-load' and (not args.fixture_host or not 60<=args.load_seconds<=1800): parser.error('relay-load requires the fixture host and 60..1800 seconds')
+    if args.mode != 'relay-load' and (args.load_relay_circuits is not None or args.load_relay_connections is not None):
+        parser.error('relay capacity overrides require relay-load')
+    if args.mode == 'relay-load':
+        args.load_relay_circuits = 2048 if args.load_relay_circuits is None else args.load_relay_circuits
+        args.load_relay_connections = 4096 if args.load_relay_connections is None else args.load_relay_connections
+        try:
+            load_relay_capacity({'mode':args.mode, 'relay_circuits':args.load_relay_circuits,
+                                 'relay_connections':args.load_relay_connections})
+        except ValueError as error:
+            parser.error(str(error))
     if args.file_bytes is None: args.file_bytes=5235248 if args.mode=='relay-load' else 16*1024*1024 if args.release_check else 256*1024*1024
     if args.file_completion_seconds is None: args.file_completion_seconds=180 if args.release_check else 1200
     maximum=1024*1024*1024 if args.mode=='file-recovery' else 256*1024*1024
@@ -949,7 +984,8 @@ def main():
     build=base.build_binding(args.build.resolve())
     before=links();tool_hash=sha256(Path(__file__));helper_hash=sha256(HELPER)
     config={'release_check':args.release_check,'mode':args.mode,'lifecycle_diagnostics':args.mode in ('carrier-cap','entry-loss'),'expiries':args.expiries,'file_bytes':args.file_bytes,'file_completion_seconds':args.file_completion_seconds,'production_credential_seconds':3600,'production_carrier_cap_seconds':1800,'recovery_seconds':300}
-    if args.mode=='relay-load': config.update(load_seconds=args.load_seconds,relay_schedule='gc2')
+    if args.mode=='relay-load': config.update(load_seconds=args.load_seconds,relay_schedule='gc2',
+        relay_circuits=args.load_relay_circuits,relay_connections=args.load_relay_connections)
     spec={'out':str(root),'build':build,'config':config,'workload':'turnover','seed':20260920,
           'uid':os.getuid(),'gid':os.getgid(),'run_nonce':uuid.uuid4().hex,
           'host_netns':os.readlink('/proc/self/ns/net'),'host_mountns':os.readlink('/proc/self/ns/mnt')}

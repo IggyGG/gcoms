@@ -18,6 +18,26 @@ SPEC.loader.exec_module(turnover)
 
 @unittest.skipUnless(os.name == "posix", "Linux namespace controller")
 class ControllerTests(unittest.TestCase):
+    def test_load_capacity_matches_node_bounds_and_keeps_other_modes_unchanged(self):
+        self.assertEqual(turnover.load_relay_capacity({'mode':'smoke'}), [])
+        self.assertEqual(turnover.load_relay_capacity({'mode':'relay-load',
+            'relay_circuits':2048, 'relay_connections':4096}),
+            ['--relay-circuits','2048','--relay-connections','4096'])
+        for circuits, connections in [(0,4096),(4097,8192),(2048,4095),(1,8193),(True,4096)]:
+            with self.subTest(circuits=circuits, connections=connections), self.assertRaises(ValueError):
+                turnover.load_relay_capacity({'mode':'relay-load',
+                    'relay_circuits':circuits, 'relay_connections':connections})
+
+    def test_load_capacity_rejects_invalid_cli_overrides_before_fixture_creation(self):
+        for extra in (['--mode','smoke','--load-relay-circuits','2048'],
+                      ['--mode','relay-load','--fixture-host','/unused','--load-relay-circuits','4097'],
+                      ['--mode','relay-load','--fixture-host','/unused','--load-relay-connections','4095']):
+            with self.subTest(extra=extra), mock.patch.object(os,'geteuid',return_value=1000), \
+                    mock.patch.object(sys,'argv',['gchat-turnover','--build','/unused','--out','/unused',*extra]), \
+                    mock.patch.object(sys,'stderr'):
+                with self.assertRaises(SystemExit) as caught: turnover.main()
+                self.assertEqual(caught.exception.code,2)
+
     def test_group_delivery_requires_every_recipient_exact_identity_and_sender_ack(self):
         rows = [[dict(id='original', mine=i == 3, delivery='delivered')] for i in range(10)]
         self.assertEqual(turnover.validated_group_delivery(rows, 3)['id'], 'original')
