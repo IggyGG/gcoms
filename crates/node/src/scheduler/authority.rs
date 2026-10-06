@@ -167,6 +167,36 @@ fn retry_delay(failures: u32, rng: &mut impl Rng) -> Duration {
     Duration::from_millis(rng.gen_range(base..=base.saturating_add(base / 5).min(60_000)))
 }
 
+#[cfg(feature = "experimental-gc2")]
+fn observe_probe(contact: &AliasContact, outcome: &str, status: Option<u16>) {
+    let expired_by_seconds = now_unix().saturating_sub(contact.expiry);
+    crate::metrics::log_event(
+        "gc2_authority_probe",
+        &[
+            ("outcome", outcome.into()),
+            ("expired_by_seconds", expired_by_seconds.to_string()),
+            (
+                "status",
+                status.map_or_else(String::new, |code| code.to_string()),
+            ),
+        ],
+    );
+    // Routing identifiers stay out of aggregate metrics. Explicit local debug
+    // opt-in permits only the public relay address, never queue/capability data.
+    if std::env::var("GCOMS_PRIVATE_ROUTE_DIAGNOSTICS").as_deref() == Ok("1") {
+        eprintln!(
+            "{}",
+            serde_json::json!({
+                "event": "gc2_authority_probe_diagnostic",
+                "relay_address": contact.target.address.to_string(),
+                "outcome": outcome,
+                "status": status,
+                "expired_by_seconds": expired_by_seconds,
+            })
+        );
+    }
+}
+
 // A cover deposit carries no application message. The existing relay accepts
 // it only after checking the exact queue, epoch, current capability and that
 // its expiry is no later than the owner's live lease. The pinned TLS response
@@ -207,8 +237,23 @@ async fn query(
                     Ok(probe)
                 },
             )
-            .await
-            .map_err(|e| e.to_string())?;
+            .await;
+        let outcome = match outcome {
+            Ok(outcome) => outcome,
+            Err(error) => {
+                observe_probe(contact, "transport_error", None);
+                return Err(error.to_string());
+            }
+        };
+        let (kind, status) = match &outcome {
+            NaturalOutcome::Accepted(None) => ("accepted", None),
+            NaturalOutcome::Accepted(Some(_)) => ("unexpected_body", None),
+            NaturalOutcome::Conflict => ("conflict", None),
+            NaturalOutcome::Overloaded => ("overloaded", None),
+            NaturalOutcome::Internal => ("internal", None),
+            NaturalOutcome::Decoy(code) => ("decoy", Some(*code)),
+        };
+        observe_probe(contact, kind, status);
         if !matches!(outcome, NaturalOutcome::Accepted(None)) {
             return Err("relay refused the GC/2 authority probe".into());
         }

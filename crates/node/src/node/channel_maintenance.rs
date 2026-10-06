@@ -1027,10 +1027,53 @@ impl ChannelMaintenance {
                     match push(peer, cell) {
                         Ok(receipt) => {
                             let token = plan.token;
+                            let work = match plan.work {
+                                Work::Forward(_) => "forward",
+                                Work::Pull(..) => "pull",
+                                Work::Message(_) => "message",
+                                Work::Pex(_) => "pex",
+                                Work::Control(_) => "control",
+                                Work::Membership(_) => "membership",
+                            };
+                            let diagnostic = (std::env::var("GCOMS_PRIVATE_ROUTE_DIAGNOSTICS")
+                                .as_deref()
+                                == Ok("1"))
+                            .then(|| {
+                                (
+                                    plan.channel.clone(),
+                                    peer.contact.target.address,
+                                    peer.pseudonym,
+                                    peer.contact.expiry,
+                                )
+                            });
                             self.completions.push(Box::pin(async move {
                                 let result = receipt.completion().await.accepted();
                                 if let Err(error) = &result {
                                     metrics::log_event("chan_push_failed", &[("e", error.clone())]);
+                                    if let Some((channel, address, member, expiry)) = diagnostic {
+                                        let kind = match error.as_str() {
+                                            "relay contact is backing off" => "contact_backoff",
+                                            "relay authority refresh is backing off" => "authority_backoff",
+                                            "relay refused the GC/2 authority probe" => "authority_probe_refused",
+                                            "no ready independent GC/2 route" => "route_unavailable",
+                                            _ => "other",
+                                        };
+                                        // Do not put routing identifiers in aggregate metrics or
+                                        // disclose member IDs, queue IDs, tokens or capabilities.
+                                        let digest = Sha256::digest(member);
+                                        eprintln!(
+                                            "{}",
+                                            serde_json::json!({
+                                                "event": "chan_push_diagnostic",
+                                                "channel": channel,
+                                                "work": work,
+                                                "relay_address": address.to_string(),
+                                                "member_hash": encode_b64url(&digest[..8]),
+                                                "failure": kind,
+                                                "expired_by_seconds": now_unix().saturating_sub(expiry),
+                                            })
+                                        );
+                                    }
                                 }
                                 (token, result.is_ok())
                             }));

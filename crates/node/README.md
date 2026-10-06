@@ -73,6 +73,14 @@ forwarding admission counters. `GC_RELAY_DEBUG=1` enables a default metrics file
 beside the keystore unless `--metrics` supplies a path. Metrics rotate at 16 MiB
 with three backups; refusal journal entries are rate limited.
 
+For a temporary local routing investigation, explicitly set
+`GCOMS_PRIVATE_ROUTE_DIAGNOSTICS=1`. This separate opt-in writes public relay
+addresses, channel names, shortened member hashes, contact expiry ages and
+fixed failure classifications to stderr/the local journal. It is off by
+default and never adds identifiers to metrics or prints queue IDs, capabilities,
+tokens or payloads. Remove the opt-in after diagnosis. The ordinary metrics
+include only coarse GC/2 authority-probe outcomes, status codes and expiry ages.
+
 A direct outbox attempt that cannot select a ready GC/2 route retries its exact
 ciphertext after about five seconds, with jitter. This also covers a ready-set
 change arriving before the failed attempt completes. Recipient acknowledgement

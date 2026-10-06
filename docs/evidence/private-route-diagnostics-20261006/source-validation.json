@@ -1,0 +1,34 @@
+{
+  "schema": 1,
+  "passed": true,
+  "base_commit": "ce0d20833a1c4ac2d65bd64b95dcd6a284d98858",
+  "files": {
+    "crates/node/src/scheduler/authority.rs": "d26e8af1c030124d65194981881c5c12c950652c70712093e9dd6449d93422ed",
+    "crates/node/src/node/channel_maintenance.rs": "8d0f1932fe533861ffd6e7821d6f10e99c449e28f1d66188172b01de003ad15b",
+    "crates/node/README.md": "718560f4d7a6d5164a1c0c1b62ef2ca690ef88383a29b39554907c849d370135"
+  },
+  "check": {
+    "command": "cargo check --locked --offline -p gcoms-node --lib --features client-persist,experimental-gc2",
+    "manifest": "/run/media/user/SSD-2/git/ghost/gcoms/.worktrees/irc-parity/gcoms/Cargo.toml",
+    "exit_code": 0,
+    "seconds_reported_by_cargo": 14.16,
+    "log_sha256": "c29958a2d533f6f8aae8bb22ef92965bf01be322761f1bf1c4e6279a35ebba87"
+  },
+  "format_and_whitespace": "PASS",
+  "behavior_changes": false,
+  "api_or_wire_changes": false,
+  "private_details_gate": "GCOMS_PRIVATE_ROUTE_DIAGNOSTICS=1",
+  "private_details_sink": "local stderr/journal only; disabled by default",
+  "metrics_identifiers_added": false,
+  "diagnostic_fields": [
+    "public relay address",
+    "channel",
+    "work classification",
+    "base64url(SHA256(member pseudonym)[0:8])",
+    "fixed coarse failure/outcome",
+    "numeric status",
+    "expired_by_seconds"
+  ],
+  "credentials_or_queue_identifiers_logged": false,
+  "live_mutations": false
+}
