@@ -512,3 +512,10 @@ can contribute reachable relay capacity using the optional
 provider verifies membership, a service-key signature and the public listener
 before advertising a short lease; DNS naming is independent. See
 [relay contribution and qualification](docs/RELAY_SHARING.md).
+
+The isolated production-bootstrap fixture uses five independent relays, matching
+the GC/2 route length. Recovery keeps its 120-second stage deadlines and reports
+transport state when a stage fails. The bootstrap API also exposes the 24-hour
+contact-lifetime bound required by the newer Drone companion; relay-admission
+proofs retain their five-minute bound. See [bootstrap validation and paired-worker
+checks](docs/GC2_NETWORK_BOOTSTRAP.md#bootstrap-fixture-and-companion-validation-2026-10-06).

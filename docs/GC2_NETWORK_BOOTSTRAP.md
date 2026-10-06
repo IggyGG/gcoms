@@ -76,3 +76,58 @@ operated HTTPS providers have been upgraded, that a packaged installer can
 onboard against them, or that client-observer privacy thresholds pass. Deployment,
 installed-artifact acceptance and privacy capture remain separate gates. No
 provider/relay upgrade or test campaign is implied by this change.
+
+## Bootstrap fixture and companion validation, 2026-10-06
+
+The production namespace journey passes with five independent relays, including
+fresh bootstrap, retained reopening and recovery after rejecting a downgrade.
+The 120-second caller deadlines, cover scheduling and production address policy
+are unchanged. The fixture checks its relay count against `RELAY_HOPS` before
+waiting and reports transport recovery state on failure. The
+[namespace receipt](evidence/bootstrap-20261006/namespace.json) records all stages
+passing in 177 seconds. Targeted [core/runtime/path checks and strict
+Clippy](evidence/bootstrap-20261006/regression.json) pass too. A separate
+[reusable-enrollment test](evidence/bootstrap-20261006/enrollment.json) enrolls
+two members and completes authenticated round trips in 24.61 seconds.
+
+Drone's newer `ghost-bootstrap-protocol` consumer also needs
+`gcoms_core::bootstrap::MAX_CONTACT_LIFETIME_SECONDS`. The committed companion
+definition from `ace57eb` is integrated at `6112a94`: contact records have a
+maximum lifetime of 86,400 seconds; proof lifetime remains 300 seconds. This
+does not extend the aliases or signed key bundle inside a contact. Their own
+expiry and authentication checks still apply.
+
+[Companion evidence](evidence/bootstrap-20261006/companion.json) binds the original
+14 protocol tests and four additional boundary tests to Drone `e8b1f218` and
+GComs `281adf3`, with the original Drone lockfile unchanged. Both `gdrone` and
+`machine-agent` production-default binary graphs also pass an offline locked
+check; see [worker compilation](evidence/bootstrap-20261006/worker-compilation.json).
+
+To reproduce the consumer boundary checks, use a disposable checkout of that
+Drone revision beside the selected GComs checkout. Copy the retained
+[contact lifetime tests](evidence/bootstrap-20261006/contact_lifetime.rs) into
+Drone's `crates/bootstrap-protocol/tests/contact_lifetime.rs`. From that Drone
+checkout, outside any ancestor COMS Cargo configuration, run:
+
+```sh
+cargo test --offline --locked -p ghost-bootstrap-protocol -- --test-threads=1
+cargo clippy --offline --locked -p ghost-bootstrap-protocol --all-targets -- -D warnings
+cargo check --offline --locked -p gdrone -p machine-agent --bins
+```
+
+Keep active companion checkouts unchanged. These checks validate the pinned
+consumer pair; they do not publish or install a Drone release.
+
+The complete local [message/file/reopen smoke](evidence/bootstrap-20261006/smoke.json)
+passes with six relays and five-hop routes. GChat `51623b9` corrects the fixture
+host so reopened profiles reject startup seeds/inbox cards and start no fixture
+renewal watcher. Both directions receive authenticated acknowledgments; a
+65,536-byte export matches its hash; the receiver reopens; and the original
+pending message delivers after both profiles reopen without resubmission.
+The journey takes about 52 seconds. The original failed fixture report is retained
+separately, and the repaired example has its own source/binary binding. No recovery
+budget, production policy, credential lifetime or route length was relaxed.
+
+See the [combined source validation record](evidence/bootstrap-20261006/summary.json).
+This is the bounded local smoke scope, not fleet, native installer, hourly-turnover,
+privacy, large-file or 64-client load qualification.

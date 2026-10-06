@@ -1,0 +1,26 @@
+{
+  "scope": "local production GC/2 durable reusable enrollment with two members; no live fleet commands",
+  "source": "281adf377ed620abf7a33ab5283b654ff126f5cd",
+  "command": [
+    "cargo",
+    "test",
+    "--manifest-path",
+    "/run/media/user/SSD-2/git/ghost/gcoms/.worktrees/irc-parity/gcoms/Cargo.toml",
+    "-p",
+    "gcoms-node",
+    "--features",
+    "client-persist,experimental-gc2",
+    "--locked",
+    "--test",
+    "node_enrollment",
+    "reusable_enrollment_uses_current_gc2_carriers_for_both_members",
+    "--",
+    "--exact",
+    "--nocapture",
+    "--test-threads=1"
+  ],
+  "passed": true,
+  "seconds": 24.61,
+  "log": "/run/media/user/SSD-2/retained/gchat-bootstrap-fixture-20261006/reusable-enrollment.log",
+  "sha256": "4e282174d6651e0fda7f4ea8b108ff56a11a83b42c5a03650c7a9ff5bcbf70fd"
+}

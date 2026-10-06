@@ -1,0 +1,82 @@
+{
+  "observedAt": "2026-10-06T06:30:03.807088+00:00",
+  "sourceCommit": "281adf377ed620abf7a33ab5283b654ff126f5cd",
+  "steps": [
+    {
+      "name": "core-tests",
+      "command": [
+        "cargo",
+        "test",
+        "--manifest-path",
+        "/run/media/user/SSD-2/git/ghost/gcoms/.worktrees/irc-parity/gcoms/Cargo.toml",
+        "-p",
+        "gcoms-core",
+        "--locked",
+        "--lib"
+      ],
+      "exitCode": 0,
+      "seconds": 3.4310920010320842,
+      "log": "/run/media/user/SSD-2/retained/gchat-bootstrap-fixture-20261006/core-tests.log",
+      "sha256": "a292e5eef79032ef7dec50b24d27e91f79edafccb3ef38589b0ee6f57bfc56bf"
+    },
+    {
+      "name": "path-tests",
+      "command": [
+        "cargo",
+        "test",
+        "--manifest-path",
+        "/run/media/user/SSD-2/git/ghost/gcoms/.worktrees/irc-parity/gcoms/Cargo.toml",
+        "-p",
+        "gcoms-routing",
+        "--features",
+        "experimental-gc2",
+        "--locked",
+        "--lib",
+        "gc2::path::tests",
+        "--",
+        "--test-threads=1"
+      ],
+      "exitCode": 0,
+      "seconds": 32.19235904002562,
+      "log": "/run/media/user/SSD-2/retained/gchat-bootstrap-fixture-20261006/path-tests.log",
+      "sha256": "a9f9a223ee312674554a591b10d20018432f68df18533144753da14f63b3cc94"
+    },
+    {
+      "name": "runtime-tests",
+      "command": [
+        "/run/media/user/SSD-2/.workstation-builds/pool/slots/f8440ca067664e0e8d612971eb67284a/target/debug/deps/gcoms_runtime-4db13e48609653cc",
+        "--test-threads=1"
+      ],
+      "exitCode": 0,
+      "seconds": 98.5986359170638,
+      "log": "/run/media/user/SSD-2/retained/gchat-bootstrap-fixture-20261006/runtime-tests.log",
+      "sha256": "606520f25a32e04fde7364d47d88d84ef44efc2e845eddb92b9de611a21d1f03"
+    },
+    {
+      "name": "clippy",
+      "command": [
+        "cargo",
+        "clippy",
+        "--manifest-path",
+        "/run/media/user/SSD-2/git/ghost/gcoms/.worktrees/irc-parity/gcoms/Cargo.toml",
+        "-p",
+        "gcoms-core",
+        "-p",
+        "gcoms-runtime",
+        "--all-targets",
+        "--features",
+        "gcoms-runtime/gc2-carrier",
+        "--locked",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "exitCode": 0,
+      "seconds": 57.24298724997789,
+      "log": "/run/media/user/SSD-2/retained/gchat-bootstrap-fixture-20261006/clippy.log",
+      "sha256": "3e7bde5309cd9b98d8ea7666c39147e8f2ffd96fb93ceb4da191eece98956d21"
+    }
+  ],
+  "complete": true,
+  "passed": true
+}

@@ -1,0 +1,40 @@
+{
+  "schema": 1,
+  "at": "2026-10-06T06:27:59.760897+00:00",
+  "command": [
+    "cargo",
+    "check",
+    "--offline",
+    "--locked",
+    "-p",
+    "gdrone",
+    "-p",
+    "machine-agent",
+    "--bins"
+  ],
+  "cwd": "/run/media/user/SSD-2/retained/gchat-contact-companion-20261006/paired/drone",
+  "returncode": 0,
+  "passed": true,
+  "seconds": 105.54243673197925,
+  "drone_commit": "e8b1f218b4bd262a2d167bc601d624e0149b5b0e",
+  "gcoms_commit_at_start": "281adf377ed620abf7a33ab5283b654ff126f5cd",
+  "gcoms_commit_at_end": "281adf377ed620abf7a33ab5283b654ff126f5cd",
+  "gcoms_resolved_path": "/run/media/user/SSD-2/git/ghost/gcoms/.worktrees/irc-parity/gcoms",
+  "target": "/run/media/user/SSD-2/.workstation-builds/pool/slots/d791b6601810456fbb51a3c0908c67ab/target",
+  "log": "/run/media/user/SSD-2/retained/gchat-contact-companion-20261006/actual-worker-check.log",
+  "log_sha256": "74d44e7db01d18bcce9d7582c484e50763243b7d11fe32a4f93aa0c7b44bf60e",
+  "original_lock_sha256": "4940d0e97f481d59eb6b14237d0e64bd68efdc63a306f41a39e37089dfc258d1",
+  "lock_sha256_after": "4940d0e97f481d59eb6b14237d0e64bd68efdc63a306f41a39e37089dfc258d1",
+  "core_sha256_after": "3f7d8778bd25b79b954e62227937dfcf9bbe190fd0d2ab58177cfd1246ff4f81",
+  "feature_selection": "gdrone production defaults (runtime gc2-carrier/component-services/files; SDK in-process/ipc), machine-agent command-center default; no qualification or hub-repair features",
+  "no_native_package_rebuild": true,
+  "observed_nonblocking_warnings": [
+    {
+      "path": "gcoms/crates/node/src/scheduler.rs",
+      "line": 966,
+      "symbol": "forward_gc2_wait",
+      "kind": "dead_code",
+      "note": "Expected feature-limited worker graph does not use this relay scheduling helper; compilation succeeds. Not changed in this task."
+    }
+  ]
+}

@@ -1,0 +1,111 @@
+{
+  "schema": 1,
+  "observedAt": "2026-10-06T06:53:25.055379+00:00",
+  "passed": true,
+  "scope": "Bootstrap fixture correction, additive companion constant and retained-only local delivery qualification",
+  "sourceCommits": {
+    "gcoms": "281adf377ed620abf7a33ab5283b654ff126f5cd",
+    "gcomsContactIntegration": "6112a94d4e55fe0798d110b4a894d509b2e3a174",
+    "gchatFixture": "51623b9c51c4300ff6f1c3b523a2ea6d405265d7",
+    "droneConsumer": "e8b1f218b4bd262a2d167bc601d624e0149b5b0e"
+  },
+  "fixes": [
+    "Five independent namespace relays match the production five-hop path; fail fast on insufficient fixture topology and print recovery state on failure.",
+    "Integrate the committed 86400-second contact lifetime constant; signed admission proof maximum remains 300 seconds.",
+    "Fresh fixture profiles require bootstrap; reopened profiles reject startup seeds/cards and run no fixture renewal watcher."
+  ],
+  "validation": {
+    "namespace": {
+      "passed": true,
+      "seconds": 177.058366318,
+      "stageDeadlineSeconds": 120,
+      "stages": [
+        "fresh",
+        "retained reopen",
+        "recovery after downgrade rejection"
+      ]
+    },
+    "gcomsTests": {
+      "core": 41,
+      "path": 3,
+      "ordinaryRuntime": 29,
+      "namespaceSeparate": 1,
+      "strictClippy": true
+    },
+    "consumerTests": {
+      "protocol": 14,
+      "lifetimeBoundaries": 4,
+      "strictClippy": true,
+      "originalLockUnchanged": true
+    },
+    "actualWorkerCompilation": [
+      "gdrone",
+      "machine-agent"
+    ],
+    "reusableEnrollment": {
+      "passed": true,
+      "seconds": 24.61,
+      "members": 2,
+      "authenticatedRoundTrips": 2
+    },
+    "turnoverPythonTests": 37,
+    "fixtureRustTests": 2,
+    "fixtureStrictClippy": true,
+    "deliverySmoke": {
+      "passed": true,
+      "seconds": 51.915531581034884,
+      "fileBytes": 65536,
+      "bothDirectionsAcknowledged": true,
+      "fileHashVerifiedAfterReopen": true,
+      "pendingMessageDeliveredWithoutResubmission": true,
+      "retainedOnlyRecovery": true
+    },
+    "formattingAndSourceAudits": true,
+    "independentFixtureReview": "No blockers"
+  },
+  "preserved": [
+    "Production address, route, TLS and cover rules",
+    "All recovery deadlines",
+    "Original failed smoke and failed test invocation",
+    "Original build manifest, binaries and lockfiles",
+    "Other task checkouts and canonical uncommitted work"
+  ],
+  "limits": [
+    "Local source/fixture qualification only; no live fleet, provider, hub, Pi or installed application changes by this task.",
+    "No native installer, mobile, full release, large file, expiry/turnover, privacy or 64-client load qualification claimed."
+  ],
+  "evidence": {
+    "companion.json": {
+      "sha256": "123f3ce0b89fbc3d28993ca8de4a391f1eca4be44ee6f3be5de6c3a29459cd5f",
+      "bytes": 6116
+    },
+    "contact_lifetime.rs": {
+      "sha256": "e7a583d8ba239e474d77e8f8b661caa2c9a8cf5889b46d788cb05f6bd2ca8948",
+      "bytes": 4796
+    },
+    "enrollment.json": {
+      "sha256": "c4a6c874153751a32d84495a3135319c1a8e4571af57420a9a3aa6d6e6a08288",
+      "bytes": 809
+    },
+    "fixture-repair.json": {
+      "sha256": "fd06d09b00a0da19622b2939bd1b89964bfe93dacfc62f84d64ac6d5c2a77b2c",
+      "bytes": 2750
+    },
+    "namespace.json": {
+      "sha256": "949124e95b863965200b778c39241990f6c533e1282d18bcfc641412cf68f43d",
+      "bytes": 542
+    },
+    "regression.json": {
+      "sha256": "77e352ad56ca0de224fd612590f4cda97487ca170888957af9cd89d9c00ba76e",
+      "bytes": 2498
+    },
+    "smoke.json": {
+      "sha256": "7766046271cd8793e62e7a561f24a494adcd31b47bc37c2a5b5cdb29eeb0b32f",
+      "bytes": 6141
+    },
+    "worker-compilation.json": {
+      "sha256": "3c74cee100cbeac70f1bcafbbfbc0d3ff1f7613ca3e187e17476c58cf3dc8347",
+      "bytes": 1801
+    }
+  }
+}

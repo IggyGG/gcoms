@@ -546,6 +546,8 @@ class Journey(base.Worker):
         if fresh:
             command += ['--create', '--inbox-card', folder / 'card']
             environment['GC_ROUTING_BOOTSTRAP'] = str(folder / 'bootstrap')
+        # Reopen has neither startup seeds nor a fixture renewal watcher;
+        # authenticated re-entry must use the encrypted retained directory.
         process = self.spawn(f'client{i}', command, observer=i == 0, env=environment)
         self.clients.append(process)
         self.spawn(f'probe{i}', [Path(self.spec['build']['path']) / 'bin/fleet_probe', '--serve',

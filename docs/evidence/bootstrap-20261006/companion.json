@@ -1,0 +1,116 @@
+{
+  "schema": 1,
+  "at": "2026-10-06T06:22:31.265338+00:00",
+  "passed": true,
+  "integration": {
+    "gcoms_original_base": "65897c849012b6e32805cd091334354d45aaa475",
+    "gcoms_integration_commit": "6112a94d4e55fe0798d110b4a894d509b2e3a174",
+    "gcoms_current_commit": "281adf377ed620abf7a33ab5283b654ff126f5cd",
+    "existing_companion_commit": "ace57eb8cd07552eefe39024e7308f10314d8150",
+    "consumer_commit": "e8b1f218b4bd262a2d167bc601d624e0149b5b0e",
+    "consumer_introduction_commit": "78230c58405cec75275b1ac1eaa349c95446ed7d",
+    "patch_is_exact_original_four_line_addition": true,
+    "shared_gcoms_only_owned_file": "crates/core/src/bootstrap.rs",
+    "gcoms_file_sha256": "3f7d8778bd25b79b954e62227937dfcf9bbe190fd0d2ab58177cfd1246ff4f81",
+    "compiled_core_identical_to_both_committed_revisions": true,
+    "max_contact_seconds": 86400,
+    "max_proof_seconds": 300,
+    "shared_git_index_touched_by_this_agent": false
+  },
+  "consumer": {
+    "snapshot": "/run/media/user/SSD-2/retained/gchat-contact-companion-20261006/paired/drone",
+    "production_source_unmodified": true,
+    "added_validation_file": {
+      "path": "/run/media/user/SSD-2/retained/gchat-contact-companion-20261006/paired/drone/crates/bootstrap-protocol/tests/contact_lifetime.rs",
+      "sha256": "e7a583d8ba239e474d77e8f8b661caa2c9a8cf5889b46d788cb05f6bd2ca8948",
+      "bytes": 4796
+    },
+    "test_patch": {
+      "path": "/run/media/user/SSD-2/retained/gchat-contact-companion-20261006/contact-lifetime-consumer-test.patch",
+      "sha256": "5da82716a647696e85cd4cad2845f4bdefa5f1b438f82c8439e525caca99f063",
+      "bytes": 5167
+    },
+    "original_lock_unchanged": true,
+    "lock_sha256": "4940d0e97f481d59eb6b14237d0e64bd68efdc63a306f41a39e37089dfc258d1",
+    "resolved_local_packages": [
+      {
+        "name": "ghost-bootstrap-protocol",
+        "manifest_path": "/run/media/user/SSD-2/retained/gchat-contact-companion-20261006/paired/drone/crates/bootstrap-protocol/Cargo.toml",
+        "resolved_manifest_path": "/run/media/user/SSD-2/retained/gchat-contact-companion-20261006/paired/drone/crates/bootstrap-protocol/Cargo.toml",
+        "manifest_sha256": "a26e3334d8f004f6d52b865b90eb790a0b827e89ae63a6e0cb873020303b2e00"
+      },
+      {
+        "name": "ghost-command-envelope",
+        "manifest_path": "/run/media/user/SSD-2/retained/gchat-contact-companion-20261006/paired/drone/crates/command-envelope/Cargo.toml",
+        "resolved_manifest_path": "/run/media/user/SSD-2/retained/gchat-contact-companion-20261006/paired/drone/crates/command-envelope/Cargo.toml",
+        "manifest_sha256": "663cb5c0a04bd504cbc202b5a08ad404d78374a93d72138b274acfa1d0d14f37"
+      },
+      {
+        "name": "gcoms-core",
+        "manifest_path": "/run/media/user/SSD-2/retained/gchat-contact-companion-20261006/paired/gcoms/crates/core/Cargo.toml",
+        "resolved_manifest_path": "/run/media/user/SSD-2/git/ghost/gcoms/.worktrees/irc-parity/gcoms/crates/core/Cargo.toml",
+        "manifest_sha256": "cbdf8c11dd9a8acad7190f38b2ebcea391c12ba2b7fd4a2f1f88d6e602671550"
+      },
+      {
+        "name": "gcoms-crypto",
+        "manifest_path": "/run/media/user/SSD-2/retained/gchat-contact-companion-20261006/paired/gcoms/crates/crypto/Cargo.toml",
+        "resolved_manifest_path": "/run/media/user/SSD-2/git/ghost/gcoms/.worktrees/irc-parity/gcoms/crates/crypto/Cargo.toml",
+        "manifest_sha256": "420fa0e3a1c107c032fd62eff085dc2ae6edf9d8c34033ef1a0312c8f8610052"
+      },
+      {
+        "name": "gcoms-protocol",
+        "manifest_path": "/run/media/user/SSD-2/retained/gchat-contact-companion-20261006/paired/gcoms/crates/protocol/Cargo.toml",
+        "resolved_manifest_path": "/run/media/user/SSD-2/git/ghost/gcoms/.worktrees/irc-parity/gcoms/crates/protocol/Cargo.toml",
+        "manifest_sha256": "abf31a6827264cf7f89ed399bbde1c364e6f12d209ad49d404297eefa3f34431"
+      }
+    ]
+  },
+  "validation": {
+    "offline_locked_metadata": true,
+    "original_protocol_tests_passed": 14,
+    "contact_boundary_tests_passed": 4,
+    "strict_clippy_passed": true,
+    "tests_seconds": 22.93456968991086,
+    "clippy_seconds": 13.74382900702767,
+    "checks": [
+      "300,301,86400-second signed contacts accepted",
+      "86401-second and expired contacts rejected",
+      "every alias must last through contact expiry; expired/short second alias rejected",
+      "malformed contact, wrong identity and invalid bundle signature rejected",
+      "relay admission keeps300-second maximum;301 rejected"
+    ],
+    "managed_target": "/run/media/user/SSD-2/.workstation-builds/pool/slots/d791b6601810456fbb51a3c0908c67ab/target"
+  },
+  "evidence": [
+    {
+      "path": "/run/media/user/SSD-2/retained/gchat-contact-companion-20261006/source-binding.json",
+      "sha256": "03b5a79b887d50998ad2d47c618382c030914161d2a028d2d8d9b0d14ea87a1d",
+      "bytes": 724
+    },
+    {
+      "path": "/run/media/user/SSD-2/retained/gchat-contact-companion-20261006/metadata-original.json",
+      "sha256": "b5ee302a18bfe320ed021e5f0ada5be4e405da08d010892e6fc65aa133d368ec",
+      "bytes": 2368
+    },
+    {
+      "path": "/run/media/user/SSD-2/retained/gchat-contact-companion-20261006/validation.json",
+      "sha256": "b40ed4d076b92d9cdab014e773290d14e8eda0969197c9a29fed799d06dbda05",
+      "bytes": 1872
+    },
+    {
+      "path": "/run/media/user/SSD-2/retained/gchat-contact-companion-20261006/consumer-protocol-tests.log",
+      "sha256": "8bf3ddaef785ed218b4c15701202543b5a7d4a617c0d0e7e254c25e85b4adc6c",
+      "bytes": 6100
+    },
+    {
+      "path": "/run/media/user/SSD-2/retained/gchat-contact-companion-20261006/consumer-clippy.log",
+      "sha256": "f3642b44cd21ae847d4c26f94b5d3a9d455506778de98bd2aac4f869c9dc8ddb",
+      "bytes": 3511
+    }
+  ],
+  "limits": [
+    "Only ghost-bootstrap-protocol and its dependencies were built/tested; no fullDrone application or native release qualification claimed.",
+    "Consumer test file is retained isolated validation; root owns persistent source/evidence publication.",
+    "No canonical/workstream dirty files, deployed services, identities or live state changed."
+  ]
+}

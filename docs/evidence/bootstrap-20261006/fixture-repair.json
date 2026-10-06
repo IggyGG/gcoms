@@ -1,0 +1,93 @@
+{
+  "schema": 1,
+  "passed": true,
+  "scope": "fixture-only host repair; original application/relay binaries unchanged",
+  "commands": [
+    {
+      "name": "tests",
+      "argv": [
+        "cargo",
+        "test",
+        "--release",
+        "--offline",
+        "--locked",
+        "--config",
+        "/run/media/user/SSD-2/retained/gchat-bootstrap-rig-20261006/build/source.toml",
+        "-p",
+        "gchat-core",
+        "--example",
+        "turnover_daemon",
+        "--features",
+        "gc2-carrier,gcoms-node/client-persist,gcoms-node/experimental-gc2",
+        "fixture::tests",
+        "--",
+        "--test-threads=1"
+      ],
+      "returncode": 0,
+      "seconds": 187.34043011302128,
+      "log_sha256": "6d4363a5a652b25580856facf094bb3562f1e3c15934e5ef954867c8fdc17999"
+    },
+    {
+      "name": "clippy",
+      "argv": [
+        "cargo",
+        "clippy",
+        "--release",
+        "--offline",
+        "--locked",
+        "--config",
+        "/run/media/user/SSD-2/retained/gchat-bootstrap-rig-20261006/build/source.toml",
+        "-p",
+        "gchat-core",
+        "--example",
+        "turnover_daemon",
+        "--features",
+        "gc2-carrier,gcoms-node/client-persist,gcoms-node/experimental-gc2",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "returncode": 0,
+      "seconds": 95.0753882220015,
+      "log_sha256": "7651810203dc5bbc18a824c7c2f50c66c05c1ce1fef1ba13b65e66c65a0d1fe4"
+    },
+    {
+      "name": "build",
+      "argv": [
+        "cargo",
+        "build",
+        "--release",
+        "--offline",
+        "--locked",
+        "--config",
+        "/run/media/user/SSD-2/retained/gchat-bootstrap-rig-20261006/build/source.toml",
+        "-p",
+        "gcoms-node",
+        "-p",
+        "gchat-tui",
+        "-p",
+        "gchat-core",
+        "--example",
+        "turnover_daemon",
+        "--features",
+        "gc2-carrier,gcoms-node/client-persist,gcoms-node/experimental-gc2"
+      ],
+      "returncode": 0,
+      "seconds": 291.9267342579551,
+      "log_sha256": "dff2ab932dae03563ca4b8f7104a62f4ed3f7905382989f5ddba0c112dcba701"
+    }
+  ],
+  "original_build_sha256": "d9298d131cf3793f8a1df1c888da53311af908cb431998b4d6c602f7a8e1bf1a",
+  "patched_source_sha256": "9de9792570f11a1c9fd663fe270a09c944567eab9a3c7991e150eb10ca9e1f33",
+  "started_at": 1791268853.230884,
+  "artifact": {
+    "path": "/run/media/user/SSD-2/retained/gchat-bootstrap-rig-20261006/fixture-repair/bin/turnover_daemon",
+    "sha256": "218f064421b12a939ef14aa186db8b359838f7a37234f58e70c422a041051dcc",
+    "size": 37690144
+  },
+  "original_snapshot_restored": true,
+  "locks_unchanged": true,
+  "original_artifacts_unchanged": true,
+  "original_build_unchanged": true,
+  "completed_at": 1791269427.8242178
+}

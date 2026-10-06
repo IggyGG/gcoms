@@ -1,0 +1,148 @@
+{
+  "schema": 1,
+  "passed": true,
+  "scope": "Two-client disconnected-namespace enrollment, authenticated delivery, file integrity and retained-only profile reopen smoke; not a fleet/load/expiry qualification",
+  "sources": {
+    "gcoms": "281adf377ed620abf7a33ab5283b654ff126f5cd",
+    "production_gchat": "c870b32d6385ad362314f0cfdd1ae67a5b02b1aa",
+    "fixture_gchat": "51623b9c51c4300ff6f1c3b523a2ea6d405265d7",
+    "fixture_source_sha256": "9de9792570f11a1c9fd663fe270a09c944567eab9a3c7991e150eb10ca9e1f33",
+    "fixture_binary_sha256": "218f064421b12a939ef14aa186db8b359838f7a37234f58e70c422a041051dcc"
+  },
+  "claims": {
+    "completed": true,
+    "application_journey_seconds": 51.915531581034884,
+    "fresh_profiles": 2,
+    "signed_network_join_and_remote_invitation": true,
+    "isolated_relays": 6,
+    "route_relay_hops": 5,
+    "recipient_display_and_authenticated_sender_ack_both_directions": [
+      {
+        "sender": 0,
+        "message_id": "58bbed6fec14b23ae11142c374da8be7",
+        "seconds": 0.1814140200149268
+      },
+      {
+        "sender": 1,
+        "message_id": "cc9754b0c95513c525e49b054d58abb3",
+        "seconds": 0.178680231096223
+      }
+    ],
+    "file": {
+      "bytes": 65536,
+      "sha256": "e04295d7e67b12f35f279d513ce9cc86bd4dea4a37973c23f375075c305a2a60",
+      "accepted_and_completed": true,
+      "initial_export_verified": true,
+      "same_identity_receiver_reopen": true,
+      "reopened_export_verified": true,
+      "reopened_export_sha256": "e04295d7e67b12f35f279d513ce9cc86bd4dea4a37973c23f375075c305a2a60"
+    },
+    "admitted_message_after_both_profiles_reopen": {
+      "message_id": "ed77211ae6f0604d3344b05d9ffaba40",
+      "no_resubmission": true,
+      "same_identities": true
+    },
+    "reopen_inputs": {
+      "fresh_bootstrap": false,
+      "inbox_card": false,
+      "renewal_watcher": false
+    },
+    "deadlines_unchanged": true,
+    "deadlines_seconds": {
+      "whole_smoke": 900,
+      "initial_setup": 300,
+      "file_completion": 300,
+      "same_identity_reopen": 120,
+      "routing_recovery": 300,
+      "admitted_delivery_after_reopen": 300
+    },
+    "cleanup": {
+      "retired_namespace_pids": [],
+      "host_links_unchanged": true,
+      "build_unchanged": true,
+      "tooling_unchanged": true,
+      "fixture_host_unchanged": true
+    },
+    "children_stopped": true,
+    "application_exit_codes": [
+      0,
+      0,
+      0,
+      0,
+      0
+    ]
+  },
+  "fixture_validation": {
+    "focused_tests_passed": 2,
+    "strict_clippy_passed": true,
+    "original_snapshot_restored": true,
+    "locks_unchanged": true,
+    "original_artifacts_unchanged": true,
+    "original_build_unchanged": true,
+    "timings_seconds": {
+      "tests": 187.34043011302128,
+      "clippy": 95.0753882220015,
+      "build": 291.9267342579551
+    }
+  },
+  "prior_failure_preserved": {
+    "passed": false,
+    "cause": "Fixture host unconditionally required fresh bootstrap input on retained-only reopen. Production namespace bootstrap/recovery and the smoke delivery/file stages had passed.",
+    "test_invocation_failure": "First fixture-test invocation rejected external gcoms-node package before compilation; corrected selection tests only gchat-core."
+  },
+  "limitations": [
+    "No credential-expiry or carrier-turnover qualification",
+    "No latency ceiling or release/load qualification",
+    "No live production actions"
+  ],
+  "evidence": {
+    "build/build.json": {
+      "path": "/run/media/user/SSD-2/retained/gchat-bootstrap-rig-20261006/build/build.json",
+      "sha256": "d9298d131cf3793f8a1df1c888da53311af908cb431998b4d6c602f7a8e1bf1a"
+    },
+    "commit-binding.json": {
+      "path": "/run/media/user/SSD-2/retained/gchat-bootstrap-rig-20261006/commit-binding.json",
+      "sha256": "d3438b4793a3891261bdf6723b695f55d256f4f9d1e50840cfd03abd547210a7"
+    },
+    "fixture-repair/commit-binding.json": {
+      "path": "/run/media/user/SSD-2/retained/gchat-bootstrap-rig-20261006/fixture-repair/commit-binding.json",
+      "sha256": "0d018dd5cddb180395c9312bd175edd6d14751264ce69d8591dd2822744d1f31"
+    },
+    "fixture-repair/result.json": {
+      "path": "/run/media/user/SSD-2/retained/gchat-bootstrap-rig-20261006/fixture-repair/result.json",
+      "sha256": "fd06d09b00a0da19622b2939bd1b89964bfe93dacfc62f84d64ac6d5c2a77b2c"
+    },
+    "fixture-repair/attempt01/result.json": {
+      "path": "/run/media/user/SSD-2/retained/gchat-bootstrap-rig-20261006/fixture-repair/attempt01/result.json",
+      "sha256": "59754687a0ccde4a119484e1ecefbca8e84fef0419ecf2aa720f84c0720c5ea4"
+    },
+    "smoke-failure-analysis.json": {
+      "path": "/run/media/user/SSD-2/retained/gchat-bootstrap-rig-20261006/smoke-failure-analysis.json",
+      "sha256": "efb67ce9ff882ffb802ab57f4d007d734fc82450a6c7918bdd6c980e675ac042"
+    },
+    "smoke/report.json": {
+      "path": "/run/media/user/SSD-2/retained/gchat-bootstrap-rig-20261006/smoke/report.json",
+      "sha256": "f917e3b82ea219bd2bf910439ebd7e04a48d4cc5709f1ce98b12d65621ce49f8"
+    },
+    "smoke/worker.json": {
+      "path": "/run/media/user/SSD-2/retained/gchat-bootstrap-rig-20261006/smoke/worker.json",
+      "sha256": "e157992bf4f8d8f4a13f55ac50ba6966a402cc8b7d397cafe980a06c830c3883"
+    },
+    "smoke/events.jsonl": {
+      "path": "/run/media/user/SSD-2/retained/gchat-bootstrap-rig-20261006/smoke/events.jsonl",
+      "sha256": "942b7559a58f437a4baeaefeadd29134904e4195465cac029c5d4bd25aa4b98a"
+    },
+    "smoke-repaired/report.json": {
+      "path": "/run/media/user/SSD-2/retained/gchat-bootstrap-rig-20261006/smoke-repaired/report.json",
+      "sha256": "2b3a44dfa0394e036dcb33c1b5fe767092e580204624c40f9998e54473ade246"
+    },
+    "smoke-repaired/worker.json": {
+      "path": "/run/media/user/SSD-2/retained/gchat-bootstrap-rig-20261006/smoke-repaired/worker.json",
+      "sha256": "a7ef278e913f46d1bcad9946f34a72c9cb7d4a81bbb25ab92461c3f7281e3125"
+    },
+    "smoke-repaired/events.jsonl": {
+      "path": "/run/media/user/SSD-2/retained/gchat-bootstrap-rig-20261006/smoke-repaired/events.jsonl",
+      "sha256": "4b9fa6cc96dec2e61777d4437e18dc04de65a8205d50630ff1a81849965d2830"
+    }
+  }
+}

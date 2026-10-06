@@ -1,0 +1,13 @@
+{
+  "scope": "local production-profile HTTPS bootstrap; no fleet or privacy qualification",
+  "test": "bootstrap::gc2_tests::production_bootstrap_fresh_reopen_and_recovery",
+  "binary_sha256": "ea4be05dd2761dbf3931caf62c246ae68b886471ca39d05a2e9ca2a8e168c951",
+  "script_sha256": "5d0bc21cda1994461b989a8a7a591fb185a49392431842a63ec29d652c5abd9d",
+  "exit_code": 0,
+  "seconds": 177.05836631800048,
+  "test_passed": true,
+  "binary_unchanged": true,
+  "host_namespace_unchanged": true,
+  "host_interfaces_unchanged": true,
+  "passed": true
+}
