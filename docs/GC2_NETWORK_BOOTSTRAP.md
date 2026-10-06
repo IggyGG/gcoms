@@ -59,10 +59,12 @@ replay/revocation and authority-expiry replay refusal. These fixtures use local
 servers; test introductions are never dialed on the public network.
 
 GChat also has a production-profile fresh/reopen/recovery journey. Run its
-compiled all-feature `gchat_core` test binary with
+compiled `gcoms-runtime` test binary with the `gc2-carrier` feature using
 `scripts/test-bootstrap-namespace.py --binary <path> --output <new evidence dir>`.
 The harness creates a disconnected network namespace containing only loopback
-and four fixture addresses. The Rust application runs as the invoking user,
+and five distinct fixture addresses: one entry, three middles and a terminal.
+Four relays cannot form a production route, regardless of the recovery timeout.
+The Rust application runs as the invoking user,
 uses normal GC/2 scheduling and authenticated TLS with an explicit fixture CA,
 and cannot reach the fleet. This checks the actual production constructor,
 typed import, both subscription classes, encrypted directory reopening, retained

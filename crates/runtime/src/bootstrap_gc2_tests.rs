@@ -199,11 +199,18 @@ fn assert_current_ready(node: &gcoms_node::node::NodeHandle) {
 #[cfg(target_os = "linux")]
 async fn production_journey() {
     use std::os::unix::fs::PermissionsExt;
+    // The terminal cannot also be an entry or middle: production GC/2 needs
+    // five independent relays, even for the first inbox provision.
+    let relay_hosts = 71..=75u8;
+    assert!(
+        relay_hosts.len() >= gcoms_routing::gc2::path::RELAY_HOPS,
+        "bootstrap fixture has too few independent relays for a production route"
+    );
     let directory = tempfile::tempdir().unwrap();
     std::fs::set_permissions(directory.path(), std::fs::Permissions::from_mode(0o700)).unwrap();
     retained_bootstrap_without_invitation_obeys_deadline(directory.path()).await;
     let mut relays = Vec::new();
-    for n in 71..75u8 {
+    for n in relay_hosts {
         let config = NodeConfig {
             seed: [n; 32],
             listen: format!("93.184.216.{n}:0").parse().unwrap(),
@@ -265,7 +272,12 @@ async fn production_journey() {
         &http,
     )
     .await
-    .unwrap();
+    .unwrap_or_else(|error| {
+        panic!(
+            "fresh bootstrap failed: {error}; transport={:?}",
+            node.transport_status()
+        )
+    });
     assert!(node.has_routing_bootstrap());
     assert!(node.routing_bootstrap().is_err());
     assert!(node
@@ -310,7 +322,12 @@ async fn production_journey() {
         tokio::time::Instant::now() + Duration::from_secs(120),
     )
     .await
-    .unwrap();
+    .unwrap_or_else(|error| {
+        panic!(
+            "retained bootstrap recovery failed: {error}; transport={:?}",
+            node.transport_status()
+        )
+    });
     assert_eq!(
         state.requests.lock().unwrap().len(),
         calls,
@@ -350,7 +367,12 @@ async fn production_journey() {
         &http,
     )
     .await
-    .unwrap();
+    .unwrap_or_else(|error| {
+        panic!(
+            "bootstrap recovery after downgrade failed: {error}; transport={:?}",
+            node.transport_status()
+        )
+    });
     assert_eq!(node.current_info().await.unwrap().identity_pk, identity);
     assert_current_ready(&node);
     assert!(state

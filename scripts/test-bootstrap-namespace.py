@@ -16,7 +16,8 @@ import sys
 import time
 
 TEST = "bootstrap::gc2_tests::production_bootstrap_fresh_reopen_and_recovery"
-ADDRESSES = [f"93.184.216.{n}/32" for n in range(71, 75)]
+# One entry, three independent middles, and a distinct terminal.
+ADDRESSES = [f"93.184.216.{n}/32" for n in range(71, 76)]
 
 
 def digest(path):
