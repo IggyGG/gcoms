@@ -18,6 +18,10 @@ pub const CONTROL_PAGE_BYTES: usize = 8192;
 /// Matches the existing CMD D13 sender's bounded object source.
 pub const MAX_ARTIFACT_BYTES: u64 = 67_108_864;
 pub const MAX_PROOF_LIFETIME_SECONDS: u64 = 300;
+/// The controller contact pin (`relayReplyB64`) is a durable route record, not a
+/// short admission proof; it is valid for a full day so a wedged transfer can be
+/// retried with the same reply.
+pub const MAX_CONTACT_LIFETIME_SECONDS: u64 = 86_400;
 /// The payload bootstrap admission runs over production relays whose delivery
 /// latency is minutes to tens of minutes. The client request, the CMD reply and
 /// the follow-on payload request must all outlive that delivery, so the client
