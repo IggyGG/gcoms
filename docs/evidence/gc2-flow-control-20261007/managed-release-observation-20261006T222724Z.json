@@ -1,0 +1,560 @@
+{
+  "active": {
+    "argv": [
+      "kubectl",
+      "--request-timeout=10s",
+      "-n",
+      "ghost-com",
+      "exec",
+      "deployment/gchat-release",
+      "-c",
+      "coordinator",
+      "--",
+      "python3",
+      "/opt/gchat/scripts/release.py",
+      "status",
+      "--state",
+      "/state",
+      "--json",
+      "--release",
+      "338a2af43e2afef3dace24c0f868475a727824ea22059c61aa542348bad08981"
+    ],
+    "result": {
+      "controller_status_age_seconds": 22,
+      "deployment": {
+        "reason": "",
+        "state": "waiting_artifacts",
+        "targets": []
+      },
+      "deployment_progress": {},
+      "flight": {
+        "active": "338a2af43e2afef3dace24c0f868475a727824ea22059c61aa542348bad08981",
+        "pending": null,
+        "schema": 1
+      },
+      "observed_at": 1791325644,
+      "platforms": [
+        {
+          "external_wait": false,
+          "platform": "android",
+          "reason": "routine release exceeded 60 minutes at building; retained requests require reconciliation",
+          "routine_deadline_at": 1791306011,
+          "state": "blocked",
+          "state_age_seconds": 1437
+        },
+        {
+          "external_wait": false,
+          "platform": "ios",
+          "reason": "routine release exceeded 60 minutes at building; retained requests require reconciliation",
+          "routine_deadline_at": 1791306011,
+          "state": "blocked",
+          "state_age_seconds": 1437
+        },
+        {
+          "external_wait": false,
+          "platform": "linux-x86_64",
+          "reason": "routine release exceeded 60 minutes at building; retained requests require reconciliation",
+          "routine_deadline_at": 1791306011,
+          "state": "blocked",
+          "state_age_seconds": 1437
+        },
+        {
+          "external_wait": false,
+          "platform": "macos-aarch64",
+          "reason": "routine release exceeded 60 minutes at building; retained requests require reconciliation",
+          "routine_deadline_at": 1791306011,
+          "state": "blocked",
+          "state_age_seconds": 1437
+        },
+        {
+          "external_wait": false,
+          "platform": "macos-x86_64",
+          "reason": "routine release exceeded 60 minutes at building; retained requests require reconciliation",
+          "routine_deadline_at": 1791306011,
+          "state": "blocked",
+          "state_age_seconds": 1437
+        },
+        {
+          "platform": "sdk",
+          "reason": "build worker failed; inspect retained worker log",
+          "state": "blocked",
+          "state_age_seconds": 1373
+        },
+        {
+          "external_wait": false,
+          "platform": "windows-x86_64",
+          "reason": "routine release exceeded 60 minutes at building; retained requests require reconciliation",
+          "routine_deadline_at": 1791306011,
+          "state": "blocked",
+          "state_age_seconds": 1437
+        }
+      ],
+      "publication_policy": "production-minutes-v1",
+      "relay_load": {
+        "observed_at": 1791325622,
+        "release_id": "338a2af43e2afef3dace24c0f868475a727824ea22059c61aa542348bad08981",
+        "schema": 1,
+        "sources": {
+          "gchat": {
+            "commit": "fea0b215b928fa2fe168a3009e692bc7cb5603cb",
+            "tree": "e0e6bf6f8a3de6fb7f5fad5f8d45d852f1d0c133"
+          },
+          "gcoms": {
+            "commit": "1d9c8a3206c175a20109731de5d9e7b6d55d8a75",
+            "tree": "1b931d6e36570b6b1501b291e79f8d5753deecb5"
+          }
+        },
+        "state": "waiting"
+      },
+      "release_id": "338a2af43e2afef3dace24c0f868475a727824ea22059c61aa542348bad08981",
+      "running_workers": [],
+      "schema": 1,
+      "sequence": 161,
+      "sources": {
+        "gchat": {
+          "commit": "fea0b215b928fa2fe168a3009e692bc7cb5603cb",
+          "tree": "e0e6bf6f8a3de6fb7f5fad5f8d45d852f1d0c133"
+        },
+        "gcoms": {
+          "commit": "1d9c8a3206c175a20109731de5d9e7b6d55d8a75",
+          "tree": "1b931d6e36570b6b1501b291e79f8d5753deecb5"
+        }
+      },
+      "versions": {
+        "android": "1181",
+        "ios": "1.1.81",
+        "linux-x86_64": "0.1.166",
+        "macos-aarch64": "0.1.166",
+        "macos-x86_64": "0.1.166",
+        "sdk": "0.1.166",
+        "windows-x86_64": "0.1.166"
+      }
+    }
+  },
+  "limitations": [
+    "Deployment target observations are the controller retained records, not fresh direct SSH probes of eight relays.",
+    "Available versions are reported by the deployed release CLI; this observation does not independently reverify artifact signatures.",
+    "The documented immutable SDK index is historical and is not evidence of the latest pointer.",
+    "SDK worker failure details are not exposed by this CLI status; no external retained worker files were read."
+  ],
+  "mutation_performed": false,
+  "normal_resume_proposal": {
+    "command": [
+      "kubectl",
+      "--request-timeout=10s",
+      "-n",
+      "ghost-com",
+      "exec",
+      "deployment/gchat-release",
+      "-c",
+      "coordinator",
+      "--",
+      "python3",
+      "/opt/gchat/scripts/release.py",
+      "resume",
+      "--state",
+      "/state",
+      "--release",
+      "338a2af43e2afef3dace24c0f868475a727824ea22059c61aa542348bad08981",
+      "--platform",
+      "linux-x86_64",
+      "--json"
+    ],
+    "execute": false,
+    "purpose": "Ask the installed normal release controller to reconcile the blocked Linux platform after storage recovery; no source replacement or direct ledger write.",
+    "review_before_execution": "Root must decide whether this frozen candidate is the intended source pair. SDK failure and retained failed gates are not waived. Other platforms can use the same command with their explicit platform; do not blindly retry SDK."
+  },
+  "observed_utc": "2026-10-06T22:27:24.830671+00:00",
+  "public_index": {
+    "current_pointer": false,
+    "fields": [
+      "archives",
+      "qualification",
+      "qualification_reuse",
+      "release_id",
+      "schema",
+      "sources",
+      "version"
+    ],
+    "http_status": 200,
+    "release_id": "f8ae216bf9016d59f17a4dad836806b5a31fbe3c4b57d35dba12d4f3f2f64852",
+    "sha256": "68d2ed261486b43100663abb4188712198256f7b1322d11b08841af7621de2a6",
+    "source": "README.md immutable SDK index",
+    "sources": {
+      "gchat": {
+        "commit": "52d28d733cfef44df5e5e6db984d51178955f5ab",
+        "tree": "d58be23a243d449ff3e03031f497dbed8c3763b5"
+      },
+      "gcoms": {
+        "commit": "8f8fdb36bc898e6af3fe00dbf044da6f837fb640",
+        "tree": "f0cab6c74e9f1075b8344ded39d2303c00f0dd24"
+      }
+    },
+    "url": "https://gchat.boo/updates/sdk/f8ae216bf9016d59f17a4dad836806b5a31fbe3c4b57d35dba12d4f3f2f64852/index.json",
+    "version": "0.1.98"
+  },
+  "schema": 1,
+  "scope": "GComs repository plus deployed operational CLI and documented public immutable index; no external repository files read",
+  "selected": {
+    "argv": [
+      "kubectl",
+      "--request-timeout=10s",
+      "-n",
+      "ghost-com",
+      "exec",
+      "deployment/gchat-release",
+      "-c",
+      "coordinator",
+      "--",
+      "python3",
+      "/opt/gchat/scripts/release.py",
+      "status",
+      "--state",
+      "/state",
+      "--json"
+    ],
+    "result": {
+      "controller_status_age_seconds": 21,
+      "deployment": {
+        "reason": "Deployment failed; retained worker evidence requires correction",
+        "state": "blocked",
+        "targets": [
+          {
+            "healthy": true,
+            "id": "anchor-0",
+            "matches": true,
+            "running": {
+              "images": [
+                {
+                  "container": "gcnode",
+                  "image_id": "127.0.0.1:30444/ghost/gchat-services@sha256:185585c4ff9344c59a0ad45ed1bbb7587d1e8a117d86ef2b3e38f76b584d6dcb"
+                },
+                {
+                  "container": "gcnode-keygen",
+                  "image_id": "127.0.0.1:30444/ghost/gchat-services@sha256:185585c4ff9344c59a0ad45ed1bbb7587d1e8a117d86ef2b3e38f76b584d6dcb"
+                }
+              ]
+            },
+            "state": "deployed"
+          },
+          {
+            "healthy": true,
+            "id": "anchor-1",
+            "matches": true,
+            "running": {
+              "images": [
+                {
+                  "container": "gcnode",
+                  "image_id": "127.0.0.1:30444/ghost/gchat-services@sha256:185585c4ff9344c59a0ad45ed1bbb7587d1e8a117d86ef2b3e38f76b584d6dcb"
+                },
+                {
+                  "container": "gcnode-keygen",
+                  "image_id": "127.0.0.1:30444/ghost/gchat-services@sha256:185585c4ff9344c59a0ad45ed1bbb7587d1e8a117d86ef2b3e38f76b584d6dcb"
+                }
+              ]
+            },
+            "state": "deployed"
+          },
+          {
+            "healthy": true,
+            "id": "anchor-2",
+            "matches": false,
+            "running": {
+              "images": [
+                {
+                  "container": "gcnode",
+                  "image_id": "127.0.0.1:30444/ghost/gchat-services@sha256:740bd99e4fb5180bc680cfb91179d8295119339de677fa11ee45cc4327a1a26e"
+                },
+                {
+                  "container": "gcnode-keygen",
+                  "image_id": "127.0.0.1:30444/ghost/gchat-services@sha256:740bd99e4fb5180bc680cfb91179d8295119339de677fa11ee45cc4327a1a26e"
+                }
+              ]
+            },
+            "state": "rolled_back"
+          },
+          {
+            "healthy": true,
+            "id": "catalog",
+            "matches": true,
+            "running": {
+              "images": [
+                {
+                  "container": "gc-catalog",
+                  "image_id": "127.0.0.1:30444/ghost/gchat-services@sha256:185585c4ff9344c59a0ad45ed1bbb7587d1e8a117d86ef2b3e38f76b584d6dcb"
+                },
+                {
+                  "container": "own-state",
+                  "image_id": "127.0.0.1:30444/ghost/gchat-services@sha256:185585c4ff9344c59a0ad45ed1bbb7587d1e8a117d86ef2b3e38f76b584d6dcb"
+                }
+              ]
+            },
+            "state": "deployed"
+          },
+          {
+            "healthy": true,
+            "id": "controller",
+            "matches": true,
+            "running": {
+              "images": [
+                {
+                  "container": "coordinator",
+                  "image_id": "127.0.0.1:30444/ghost/gchat-release@sha256:82c6bb61eb510e1f44a4937124fd449fbae0ce4020739fcf9b99c460d4344112"
+                }
+              ]
+            },
+            "state": "deployed"
+          },
+          {
+            "healthy": true,
+            "id": "push",
+            "matches": true,
+            "running": {
+              "images": [
+                {
+                  "container": "gateway",
+                  "image_id": "127.0.0.1:30444/ghost/gchat-push@sha256:4aa6584387b823f58c77fe2cac98e5a1d6015bfc599c4d3ac7f72c72310cf617"
+                },
+                {
+                  "container": "private-config",
+                  "image_id": "127.0.0.1:30444/ghost/gchat-push@sha256:4aa6584387b823f58c77fe2cac98e5a1d6015bfc599c4d3ac7f72c72310cf617"
+                }
+              ]
+            },
+            "state": "deployed"
+          },
+          {
+            "healthy": true,
+            "id": "relay-1",
+            "matches": true,
+            "running": {
+              "sha256": "0a56a37416c80b6b7becb1239c167b939a4674a7ddb67d421498a9f67ad0894c"
+            },
+            "state": "deployed"
+          },
+          {
+            "healthy": true,
+            "id": "relay-2",
+            "matches": true,
+            "running": {
+              "sha256": "0a56a37416c80b6b7becb1239c167b939a4674a7ddb67d421498a9f67ad0894c"
+            },
+            "state": "deployed"
+          },
+          {
+            "healthy": true,
+            "id": "relay-2-gcoms-catalog",
+            "matches": true,
+            "running": {
+              "sha256": "db860b0e41e0cd62d52206303076b85de95e93c68f5df4b9320beeb1d1b284ba"
+            },
+            "state": "deployed"
+          },
+          {
+            "healthy": true,
+            "id": "relay-2-gcoms-channel-service",
+            "matches": true,
+            "running": {
+              "sha256": "b0ebfa465f7e8e0604c9df72d1c59df54b07da1a817960f3c5bf21f2ffceffd9"
+            },
+            "state": "deployed"
+          },
+          {
+            "healthy": true,
+            "id": "relay-3",
+            "matches": true,
+            "running": {
+              "sha256": "0a56a37416c80b6b7becb1239c167b939a4674a7ddb67d421498a9f67ad0894c"
+            },
+            "state": "deployed"
+          },
+          {
+            "healthy": true,
+            "id": "relay-4",
+            "matches": true,
+            "running": {
+              "sha256": "0a56a37416c80b6b7becb1239c167b939a4674a7ddb67d421498a9f67ad0894c"
+            },
+            "state": "deployed"
+          },
+          {
+            "healthy": true,
+            "id": "relay-4-gcoms-catalog",
+            "matches": true,
+            "running": {
+              "sha256": "db860b0e41e0cd62d52206303076b85de95e93c68f5df4b9320beeb1d1b284ba"
+            },
+            "state": "deployed"
+          },
+          {
+            "healthy": true,
+            "id": "relay-5",
+            "matches": true,
+            "running": {
+              "sha256": "0a56a37416c80b6b7becb1239c167b939a4674a7ddb67d421498a9f67ad0894c"
+            },
+            "state": "deployed"
+          },
+          {
+            "healthy": true,
+            "id": "relay-6",
+            "matches": true,
+            "running": {
+              "sha256": "0a56a37416c80b6b7becb1239c167b939a4674a7ddb67d421498a9f67ad0894c"
+            },
+            "state": "deployed"
+          },
+          {
+            "healthy": true,
+            "id": "relay-7",
+            "matches": true,
+            "running": {
+              "sha256": "0a56a37416c80b6b7becb1239c167b939a4674a7ddb67d421498a9f67ad0894c"
+            },
+            "state": "deployed"
+          },
+          {
+            "healthy": true,
+            "id": "relay-8",
+            "matches": true,
+            "running": {
+              "sha256": "0a56a37416c80b6b7becb1239c167b939a4674a7ddb67d421498a9f67ad0894c"
+            },
+            "state": "deployed"
+          }
+        ]
+      },
+      "deployment_progress": {
+        "deadline_at": 1791273587,
+        "stage": "observe",
+        "started_at": 1791272687,
+        "target": "anchor-2"
+      },
+      "flight": {
+        "active": "338a2af43e2afef3dace24c0f868475a727824ea22059c61aa542348bad08981",
+        "pending": null,
+        "schema": 1
+      },
+      "observed_at": 1791325643,
+      "platforms": [
+        {
+          "external_wait": false,
+          "platform": "android",
+          "publication_deadline_at": 1791257919,
+          "publication_wait": false,
+          "reason": "",
+          "routine_deadline_at": 1791242031,
+          "state": "available",
+          "state_age_seconds": 69651
+        },
+        {
+          "external_wait": false,
+          "platform": "ios",
+          "publication_deadline_at": 1791258842,
+          "publication_wait": true,
+          "reason": "",
+          "routine_deadline_at": 1791242031,
+          "state": "submitting",
+          "state_age_seconds": 71402
+        },
+        {
+          "external_wait": false,
+          "platform": "linux-x86_64",
+          "publication_deadline_at": 1791258472,
+          "publication_wait": false,
+          "reason": "",
+          "routine_deadline_at": 1791242031,
+          "state": "available",
+          "state_age_seconds": 69586
+        },
+        {
+          "external_wait": false,
+          "platform": "macos-aarch64",
+          "publication_deadline_at": 1791258287,
+          "publication_wait": false,
+          "reason": "",
+          "routine_deadline_at": 1791242031,
+          "state": "available",
+          "state_age_seconds": 68482
+        },
+        {
+          "external_wait": false,
+          "platform": "macos-x86_64",
+          "publication_deadline_at": 1791263148,
+          "publication_wait": false,
+          "reason": "",
+          "routine_deadline_at": 1791242031,
+          "state": "available",
+          "state_age_seconds": 64932
+        },
+        {
+          "platform": "sdk",
+          "reason": "",
+          "state": "available",
+          "state_age_seconds": 76296
+        },
+        {
+          "external_wait": false,
+          "platform": "windows-x86_64",
+          "publication_deadline_at": 1791258287,
+          "publication_wait": false,
+          "reason": "",
+          "routine_deadline_at": 1791242031,
+          "state": "available",
+          "state_age_seconds": 68353
+        }
+      ],
+      "publication_policy": "production-minutes-v1",
+      "relay_load": {
+        "observed_at": 1791325622,
+        "receipt_sha256": "1bbe5c634e271f3fea5b228b60b780a4bb5122bb3e736e22980dd4623b374535",
+        "release_id": "51e2d3c52ad6612e92c87bc55734e30fd046134deb846a9781053d16802152fc",
+        "schema": 1,
+        "sources": {
+          "gchat": {
+            "commit": "effaccb5b1e955f3c107254828b1c0f9b53cf226",
+            "tree": "f2affc25dc4755e8b89920cb173f5fbdf736e632"
+          },
+          "gcoms": {
+            "commit": "65897c849012b6e32805cd091334354d45aaa475",
+            "tree": "8a5e67daf2b8adf950883fc0ce2d944aa30a2d2c"
+          }
+        },
+        "state": "passed"
+      },
+      "release_id": "51e2d3c52ad6612e92c87bc55734e30fd046134deb846a9781053d16802152fc",
+      "running_workers": [],
+      "schema": 1,
+      "sequence": 155,
+      "sources": {
+        "gchat": {
+          "commit": "effaccb5b1e955f3c107254828b1c0f9b53cf226",
+          "tree": "f2affc25dc4755e8b89920cb173f5fbdf736e632"
+        },
+        "gcoms": {
+          "commit": "65897c849012b6e32805cd091334354d45aaa475",
+          "tree": "8a5e67daf2b8adf950883fc0ce2d944aa30a2d2c"
+        }
+      },
+      "versions": {
+        "android": "1175",
+        "ios": "1.1.75",
+        "linux-x86_64": "0.1.160",
+        "macos-aarch64": "0.1.160",
+        "macos-x86_64": "0.1.160",
+        "sdk": "0.1.160",
+        "windows-x86_64": "0.1.160"
+      }
+    }
+  },
+  "storage_observation": {
+    "capacity": "192Gi",
+    "longhorn_robustness": "healthy",
+    "longhorn_state": "attached",
+    "margin_above_16GiB_bytes": 33390960640,
+    "mounted_available_bytes": 50570829824,
+    "note": "Earlier bounded live API/statvfs observation in this session; no cleanup needed",
+    "phase": "Bound",
+    "requested": "192Gi"
+  }
+}

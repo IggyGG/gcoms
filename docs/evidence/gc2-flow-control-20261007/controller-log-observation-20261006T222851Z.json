@@ -1,0 +1,22 @@
+{
+  "argv": [
+    "kubectl",
+    "--request-timeout=10s",
+    "-n",
+    "ghost-com",
+    "logs",
+    "deployment/gchat-release",
+    "-c",
+    "coordinator",
+    "--since=2h",
+    "--tail=400",
+    "--timestamps=true"
+  ],
+  "exit_code": 0,
+  "observed_utc": "2026-10-06T22:28:51.388159+00:00",
+  "schema": 1,
+  "scope": "bounded deployed controller log excerpt; no source/helper files inspected",
+  "selected_lines": [],
+  "stderr": "",
+  "total_lines": 0
+}

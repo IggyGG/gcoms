@@ -1,0 +1,144 @@
+{
+  "argv": [
+    "kubectl",
+    "--request-timeout=10s",
+    "-n",
+    "ghost-com",
+    "exec",
+    "deployment/gchat-release",
+    "-c",
+    "coordinator",
+    "--",
+    "python3",
+    "/opt/gchat/scripts/release.py",
+    "status",
+    "--state",
+    "/state",
+    "--release",
+    "338a2af43e2afef3dace24c0f868475a727824ea22059c61aa542348bad08981",
+    "--json"
+  ],
+  "mutation_performed": false,
+  "observed_utc": "2026-10-06T22:29:41.394780+00:00",
+  "response": {
+    "controller_status_age_seconds": 31,
+    "deployment": {
+      "reason": "",
+      "state": "waiting_artifacts",
+      "targets": []
+    },
+    "deployment_progress": {},
+    "flight": {
+      "active": "338a2af43e2afef3dace24c0f868475a727824ea22059c61aa542348bad08981",
+      "pending": null,
+      "schema": 1
+    },
+    "observed_at": 1791325781,
+    "platforms": [
+      {
+        "external_wait": false,
+        "platform": "android",
+        "reason": "routine release exceeded 60 minutes at building; retained requests require reconciliation",
+        "routine_deadline_at": 1791306011,
+        "state": "blocked",
+        "state_age_seconds": 1574
+      },
+      {
+        "external_wait": false,
+        "platform": "ios",
+        "reason": "routine release exceeded 60 minutes at building; retained requests require reconciliation",
+        "routine_deadline_at": 1791306011,
+        "state": "blocked",
+        "state_age_seconds": 1574
+      },
+      {
+        "external_wait": false,
+        "platform": "linux-x86_64",
+        "reason": "routine release exceeded 60 minutes at building; retained requests require reconciliation",
+        "routine_deadline_at": 1791306011,
+        "state": "blocked",
+        "state_age_seconds": 32
+      },
+      {
+        "external_wait": false,
+        "platform": "macos-aarch64",
+        "reason": "routine release exceeded 60 minutes at building; retained requests require reconciliation",
+        "routine_deadline_at": 1791306011,
+        "state": "blocked",
+        "state_age_seconds": 1574
+      },
+      {
+        "external_wait": false,
+        "platform": "macos-x86_64",
+        "reason": "routine release exceeded 60 minutes at building; retained requests require reconciliation",
+        "routine_deadline_at": 1791306011,
+        "state": "blocked",
+        "state_age_seconds": 1574
+      },
+      {
+        "platform": "sdk",
+        "reason": "build worker failed; inspect retained worker log",
+        "state": "blocked",
+        "state_age_seconds": 1510
+      },
+      {
+        "external_wait": false,
+        "platform": "windows-x86_64",
+        "reason": "routine release exceeded 60 minutes at building; retained requests require reconciliation",
+        "routine_deadline_at": 1791306011,
+        "state": "blocked",
+        "state_age_seconds": 1574
+      }
+    ],
+    "publication_policy": "production-minutes-v1",
+    "relay_load": {
+      "observed_at": 1791325749,
+      "release_id": "338a2af43e2afef3dace24c0f868475a727824ea22059c61aa542348bad08981",
+      "schema": 1,
+      "sources": {
+        "gchat": {
+          "commit": "fea0b215b928fa2fe168a3009e692bc7cb5603cb",
+          "tree": "e0e6bf6f8a3de6fb7f5fad5f8d45d852f1d0c133"
+        },
+        "gcoms": {
+          "commit": "1d9c8a3206c175a20109731de5d9e7b6d55d8a75",
+          "tree": "1b931d6e36570b6b1501b291e79f8d5753deecb5"
+        }
+      },
+      "state": "waiting"
+    },
+    "release_id": "338a2af43e2afef3dace24c0f868475a727824ea22059c61aa542348bad08981",
+    "running_workers": [
+      {
+        "deadline_at": 1791326649,
+        "platform": "linux-x86_64",
+        "release_id": "338a2af43e2afef3dace24c0f868475a727824ea22059c61aa542348bad08981",
+        "stage": "relay_load",
+        "started_at": 1791325749
+      }
+    ],
+    "schema": 1,
+    "sequence": 161,
+    "sources": {
+      "gchat": {
+        "commit": "fea0b215b928fa2fe168a3009e692bc7cb5603cb",
+        "tree": "e0e6bf6f8a3de6fb7f5fad5f8d45d852f1d0c133"
+      },
+      "gcoms": {
+        "commit": "1d9c8a3206c175a20109731de5d9e7b6d55d8a75",
+        "tree": "1b931d6e36570b6b1501b291e79f8d5753deecb5"
+      }
+    },
+    "versions": {
+      "android": "1181",
+      "ios": "1.1.81",
+      "linux-x86_64": "0.1.166",
+      "macos-aarch64": "0.1.166",
+      "macos-x86_64": "0.1.166",
+      "sdk": "0.1.166",
+      "windows-x86_64": "0.1.166"
+    }
+  },
+  "resume_request_id": "f31e9ed64a134dd397666c9d4df74e74",
+  "schema": 1
+}

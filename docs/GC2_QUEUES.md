@@ -55,6 +55,22 @@ absolute subscription deadline bounds idle periods and writes, and transport
 shutdown owns cancellation of the whole handler. Bytes already accepted by the
 transport cannot be withdrawn by revocation.
 
+HTTP/2 receive credit belongs to the consuming client. A client must keep driving
+the shared connection and return credit for consumed subscription bytes while
+finite requests are pending. Withholding that credit blocks the subscription;
+it does not prevent another authenticated deposit on the same connection. The
+service retains its exact pending queue-head write across deposit notifications
+and resumes it when credit returns, without holding the queue-store lock while
+waiting. Hop acceptance still proves only relay admission.
+
+`stalled_subscription_credit_resumes_without_blocking_finite_push` exercises this
+contract with one pinned TLS/HTTP2 connection and a 16-byte subscription window.
+It exhausts that window with eight acceptance bytes and eight message bytes,
+requires a second deposit to finish while credit remains withheld, then returns
+credit and checks exact ordered bytes and an empty queue. This is a server
+regression with synthetic payloads; it does not qualify native-client file
+delivery or an application launch.
+
 The client prepares authorization after connection/request admission, requires
 the envelope's authenticated class to match its route and preserves exact retry
 bytes. Natural framing handles split/coalesced cells with at most one

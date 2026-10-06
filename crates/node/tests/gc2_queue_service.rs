@@ -614,6 +614,142 @@ async fn revoked_subscription_cancels_a_writer_blocked_on_receive_credit() {
     assert!(result.is_ok() || result.unwrap_err().is_cancelled());
     fixture.finish().await;
 }
+/// Client receive-credit starvation must block only that subscription, not
+/// finite requests on the same physical connection or eventual exact delivery.
+#[tokio::test]
+async fn stalled_subscription_credit_resumes_without_blocking_finite_push() {
+    let fixture = Fixture::new().await;
+    let socket = tokio::net::TcpStream::connect(fixture.address)
+        .await
+        .unwrap();
+    socket.set_nodelay(true).unwrap();
+    let tls =
+        tokio_rustls::TlsConnector::from(Arc::new(tls::client_config_pinned(fixture.pin).unwrap()))
+            .connect(tls::server_name_ip(fixture.address.ip()), socket)
+            .await
+            .unwrap();
+    let mut builder = h2::client::Builder::new();
+    builder.initial_window_size(16);
+    let (sender, connection) = builder.handshake(tls).await.unwrap();
+    let driver = tokio::spawn(async move {
+        let _ = connection.await;
+    });
+    let token = queue_token(&QUEUE);
+    let first = fixture.push(B, 70, 1024);
+    let second = fixture.push(B, 71, 256);
+    let accepted = status_cell(HopReply::Accepted).encode();
+    assert_eq!(accepted.len(), 8);
+    let (response, _) = retained_natural_post(
+        &sender,
+        fixture.address,
+        &token,
+        first.encode(&CAPS.push, &fixture.pin).unwrap(),
+    )
+    .await;
+    assert_eq!(response.status(), http::StatusCode::OK);
+    assert_eq!(
+        gcoms_transport::server::read_body(&mut response.into_body(), 16)
+            .await
+            .unwrap(),
+        accepted
+    );
+    let sub = Subscription {
+        class: B,
+        queue_id: QUEUE,
+        epoch: 1,
+        expiry: now_unix() + 100,
+        nonce: [72; 16],
+    };
+    let (response, request_body) = retained_natural_post(
+        &sender,
+        fixture.address,
+        &token,
+        sub.encode(&CAPS.sub, &fixture.pin).unwrap(),
+    )
+    .await;
+    assert_eq!(response.status(), http::StatusCode::OK);
+    let mut subscription = response.into_body();
+    let mut expected = accepted.clone();
+    expected.extend(first.msg.as_ref().unwrap().encode());
+    expected.extend(second.msg.as_ref().unwrap().encode());
+    let mut received = Vec::with_capacity(expected.len());
+    timeout(Duration::from_secs(3), async {
+        while received.len() < 16 {
+            received.extend(subscription.data().await.unwrap().unwrap());
+        }
+    })
+    .await
+    .unwrap();
+    // No credit is released: eight status bytes and eight real MSG bytes use
+    // the entire stream window. The uncompleted queue head remains retained.
+    assert_eq!(received, expected[..16]);
+    assert_eq!(fixture.service.active_subscriptions(), 1);
+    assert_eq!(
+        fixture.store.lock().unwrap().queue_len(&QUEUE, now_unix()),
+        1
+    );
+    assert!(timeout(Duration::from_millis(100), subscription.data())
+        .await
+        .is_err());
+
+    // Cloning SendRequest retains this same TLS/H2 connection. This PUSH also
+    // wakes the subscription's queue notification while its write is pending.
+    timeout(Duration::from_secs(3), async {
+        let (response, _) = retained_natural_post(
+            &sender,
+            fixture.address,
+            &token,
+            second.encode(&CAPS.push, &fixture.pin).unwrap(),
+        )
+        .await;
+        assert_eq!(response.status(), http::StatusCode::OK);
+        assert_eq!(
+            gcoms_transport::server::read_body(&mut response.into_body(), 16)
+                .await
+                .unwrap(),
+            accepted
+        );
+    })
+    .await
+    .expect("a blocked subscription must not block another finite request");
+    assert_eq!(
+        fixture.store.lock().unwrap().queue_len(&QUEUE, now_unix()),
+        2
+    );
+    assert!(timeout(Duration::from_millis(100), subscription.data())
+        .await
+        .is_err());
+
+    subscription.flow_control().release_capacity(16).unwrap();
+    timeout(Duration::from_secs(3), async {
+        while received.len() < expected.len() {
+            let bytes = subscription.data().await.unwrap().unwrap();
+            assert!(received.len() + bytes.len() <= expected.len());
+            subscription
+                .flow_control()
+                .release_capacity(bytes.len())
+                .unwrap();
+            received.extend(bytes);
+        }
+        while fixture.store.lock().unwrap().queue_len(&QUEUE, now_unix()) != 0 {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("restored receive credit must resume the exact retained queue head");
+    assert_eq!(received, expected);
+    assert_eq!(fixture.store.lock().unwrap().total_queue_bytes(), 0);
+    drop(subscription);
+    drop(request_body);
+    fixture.inactive().await;
+    drop(sender);
+    fixture.finish().await;
+    timeout(Duration::from_secs(3), driver)
+        .await
+        .expect("owned H2 driver must stop with the fixture")
+        .unwrap();
+}
+
 /// Real GCT2 entry + three middles + TLS/H2 terminal: public scheduler API, separate
 /// authenticated subscriptions, many bulk records and interleaved chat.
 #[tokio::test]

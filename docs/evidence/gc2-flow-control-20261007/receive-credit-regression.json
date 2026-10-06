@@ -1,0 +1,92 @@
+{
+  "schema": 1,
+  "date": "2026-10-07",
+  "kind": "server-flow-control-regression",
+  "base_commit": "1d9c8a3206c175a20109731de5d9e7b6d55d8a75",
+  "source_file": "crates/node/tests/gc2_queue_service.rs",
+  "source_sha256": "441bacefa81fadaef2b5d92ee6f7c658cef650cca6bf64fd490ef04d8fad3980",
+  "command": [
+    "cargo",
+    "test",
+    "--offline",
+    "--locked",
+    "-p",
+    "gcoms-node",
+    "--all-features",
+    "--test",
+    "gc2_queue_service",
+    "stalled_subscription_credit_resumes_without_blocking_finite_push",
+    "--",
+    "--exact",
+    "--nocapture"
+  ],
+  "result": {
+    "exit_code": 0,
+    "passed": 1,
+    "failed": 0,
+    "filtered_out": 7,
+    "test_seconds": 0.32,
+    "total_seconds": 117.015
+  },
+  "retained_log": {
+    "path": "test-evidence/gc2-receive-credit-20261007/focused-test.log",
+    "sha256": "a62c84aa9ed7b66ab27e38b7fba1dee2eae9b4afafc0aa895b1f2cd29c0ecbd8",
+    "tracked": false
+  },
+  "assertions": [
+    "One pinned TCP/TLS/HTTP2 connection; no reconnecting client pool.",
+    "16-byte stream window exhausted by 8-byte Accepted and 8 payload bytes; no credit returned.",
+    "Queue head remains retained while the subscription writer waits for receive credit.",
+    "A second authenticated finite PUSH is accepted on the same connection within 3 seconds while subscription credit remains withheld.",
+    "Deposit notification preserves the exact pending write.",
+    "Returning receive credit delivers both exact ordered encoded MSG payloads; queue length and bytes return to zero.",
+    "Subscription becomes inactive and the owned H2 connection driver stops."
+  ],
+  "review": {
+    "independent_source_review": "passed",
+    "source_sha256": "441bacefa81fadaef2b5d92ee6f7c658cef650cca6bf64fd490ef04d8fad3980"
+  },
+  "production_changes": false,
+  "limitations": [
+    "Synthetic queue payloads; not authenticated application-level file delivery or persistence.",
+    "Does not prove or fix the reported 396000/5235248-byte native-client stall.",
+    "Does not qualify a mobile in-process launch, current release, fleet rollout or the 64-client campaign.",
+    "No mobile, Dropship, Drone or GChat repository files were inspected."
+  ],
+  "additional_validation": [
+    {
+      "command": [
+        "rustfmt",
+        "--edition",
+        "2021",
+        "--check",
+        "crates/node/tests/gc2_queue_service.rs"
+      ],
+      "exit_code": 0
+    },
+    {
+      "command": [
+        "python3",
+        "scripts/check-source.py"
+      ],
+      "exit_code": 0,
+      "checked_paths": 1026
+    },
+    {
+      "command": [
+        "python3",
+        "scripts/check-research-import.py"
+      ],
+      "exit_code": 0,
+      "matched_files": 7
+    },
+    {
+      "command": [
+        "git",
+        "diff",
+        "--check"
+      ],
+      "exit_code": 0
+    }
+  ]
+}
