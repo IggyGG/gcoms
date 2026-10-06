@@ -35,6 +35,16 @@ secret or grants membership. Deploy this endpoint before enabling compact sharin
 in clients. See [reusable invitations](../../docs/REUSABLE_INVITATIONS.md) for
 bounds, recovery and rollout requirements.
 
+The invitation directory permits up to 1024 retained descriptors per scoped
+publisher grant, shared across that publisher's channels. The independent global
+bounds remain 10,000 records and 128 MiB. These provider bounds do not change the
+64-record invitation ledger or member limit of a channel. At capacity, publication
+returns HTTP 507; renewing an existing descriptor remains allowed. Expired route
+records release their slots only after the signed-descriptor replay horizon (up to
+360 seconds after the last accepted publication). A running owner renews eligible
+invitations, so waiting does not free those slots. Preserve the grant and retained
+directory when upgrading the catalog; no state migration or broader scope is needed.
+
 The retained `gc-network-operator` binary creates signing keys, signs defaults,
 prepares key transitions, issues/revokes invitation grants and verifies documents.
 Run it without arguments for its exact file-oriented syntax. Secret outputs must

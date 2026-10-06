@@ -1,0 +1,70 @@
+{
+  "schema": 1,
+  "passed": true,
+  "base_commit": "ec750cf213a963c717465cf0bdc624d66682e938",
+  "production_change": "Per scoped publisher descriptor capacity64 ->1024. Global10000records/128MiB, authorization, signature, sequence/replay, existing renewal, and64-member/channel invitation bounds unchanged.",
+  "source": {
+    "crates/catalog/src/invitations.rs": "87d8579b7a140134b2b58aa7b6ba2013a903791a074d88c127220fd83da426ad",
+    "crates/catalog/README.md": "9c11d4302d5d90e376046e5928e9ebf68a2a91bbac2237d9e8f96b5fca1e08c5"
+  },
+  "validation": {
+    "catalog_lib_tests": {
+      "name": "catalog-tests",
+      "command": [
+        "cargo",
+        "test",
+        "--offline",
+        "--locked",
+        "-p",
+        "gcoms-catalog",
+        "--all-features",
+        "--lib",
+        "--",
+        "--test-threads=1"
+      ],
+      "exit_code": 0,
+      "seconds": 138.3302826450672,
+      "log": "/run/media/user/SSD-2/retained/gchat-catalog-quota-20261006/catalog-tests.log",
+      "log_sha256": "1eb7255de9466d984e08367be50ebd0d21e40663386c2f73784ef461e77fb19b",
+      "passed_tests": 6
+    },
+    "strict_catalog_clippy": {
+      "passed": true,
+      "command": [
+        "cargo",
+        "clippy",
+        "--offline",
+        "--locked",
+        "-p",
+        "gcoms-catalog",
+        "--all-features",
+        "--all-targets",
+        "--no-deps",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "exit_code": 0,
+      "seconds": 9.832910980796441,
+      "log_sha256": "bf3c4ab521a23d1f077893fb085b25bd98874ed344b789b350c27d6a84ef12c2"
+    },
+    "format_and_whitespace": "PASS",
+    "initial_clippy_dependency_failure": {
+      "log_sha256": "4e16bac629eec26523c775e355ce74a73aa1bbf5fd4d33911d5a0599eaf74799",
+      "scope": "Catalog-only graph exposes10 existing gcoms-node unused/dead-code warnings without client-persist. Strict --no-deps Clippy passes on unchanged catalog source; no dependency edits or warning suppression were added."
+    }
+  },
+  "observed_cause": {
+    "hub_records": 118,
+    "eligible_records": 116,
+    "provider_current_descriptors_per_grant": [
+      64,
+      64
+    ],
+    "grant_scopes_valid": true,
+    "grant_expiry_valid": true,
+    "all_provider_records_map_to_current_hub": true,
+    "http507": "Source-derived admission result; provider access logs disabled, no actual response log claim."
+  },
+  "deployment": "Not deployed by this source validation; future standalone artifact is an unsigned operator repair, not signed package or full release qualification."
+}

@@ -4,6 +4,9 @@ use super::*;
 use gcoms_network::channel_invitation::{Descriptor, MAX_DESCRIPTOR_BYTES};
 use std::io::Read;
 const MAX_RECORDS: usize = 10_000;
+// One scoped publisher can own several channels, each with its own invitation
+// ledger. Bound the aggregate separately from the per-channel admission limit.
+const MAX_RECORDS_PER_GRANT: usize = 1024;
 const MAX_ACTIVE_BYTES: usize = 128 * 1024 * 1024;
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -81,7 +84,7 @@ impl Store {
                 return Ok(false);
             }
         } else if self.entries.len() >= MAX_RECORDS
-            || self.entries.values().filter(|r| r.grant == grant).count() >= 64
+            || self.entries.values().filter(|r| r.grant == grant).count() >= MAX_RECORDS_PER_GRANT
         {
             return Err(ApiError {
                 status: StatusCode::INSUFFICIENT_STORAGE,
@@ -184,12 +187,14 @@ mod tests {
     use super::*;
     use gcoms_crypto::IdentityKeypair;
     use gcoms_network::channel_invitation::DescriptorBody;
-    fn descriptor(id: u8, sequence: u64, now: u64) -> Descriptor {
+    fn descriptor(id: u16, sequence: u64, now: u64) -> Descriptor {
         let issuer = IdentityKeypair::from_seed([81; 32]);
+        let mut invitation_id = [0; 16];
+        invitation_id[..2].copy_from_slice(&id.to_le_bytes());
         let body = DescriptorBody {
             version: 1,
             network_id: "test".into(),
-            id: URL_SAFE_NO_PAD.encode([id; 16]),
+            id: URL_SAFE_NO_PAD.encode(invitation_id),
             issuer_key: URL_SAFE_NO_PAD.encode(issuer.public_bytes()),
             sequence,
             issued_at: now,
@@ -204,21 +209,72 @@ mod tests {
         }
     }
     #[test]
+    fn publisher_quota_spans_channels_but_preserves_renewal_and_grant_isolation() {
+        let mut store = Store::default();
+        for id in 0..MAX_RECORDS_PER_GRANT as u16 {
+            assert!(store
+                .stage(descriptor(id, 1, 1000), "grant".into(), 1000)
+                .unwrap());
+        }
+        let rejected = store
+            .stage(
+                descriptor(MAX_RECORDS_PER_GRANT as u16, 1, 1000),
+                "grant".into(),
+                1000,
+            )
+            .unwrap_err();
+        assert_eq!(rejected.status, StatusCode::INSUFFICIENT_STORAGE);
+        assert_eq!(rejected.message, "invitation directory capacity reached");
+        assert_eq!(store.entries.len(), MAX_RECORDS_PER_GRANT);
+        // A full publisher can renew or replay its existing descriptors.
+        assert!(store
+            .stage(descriptor(0, 2, 1001), "grant".into(), 1001)
+            .unwrap());
+        assert!(!store
+            .stage(descriptor(0, 2, 1001), "grant".into(), 1001)
+            .unwrap());
+        assert_eq!(store.entries.len(), MAX_RECORDS_PER_GRANT);
+        // Exhausting one scoped publisher does not consume another's quota.
+        assert!(store
+            .stage(
+                descriptor(MAX_RECORDS_PER_GRANT as u16, 1, 1001),
+                "other-grant".into(),
+                1001,
+            )
+            .unwrap());
+        assert_eq!(store.entries.len(), MAX_RECORDS_PER_GRANT + 1);
+        assert!(store
+            .stage(
+                descriptor(MAX_RECORDS_PER_GRANT as u16 + 1, 1, 1001),
+                "grant".into(),
+                1001,
+            )
+            .is_err());
+    }
+    #[test]
     fn expired_records_release_quota_after_all_signed_routes_expire() {
         let mut store = Store::default();
-        for id in 0..64 {
+        for id in 0..MAX_RECORDS_PER_GRANT as u16 {
             assert!(store
                 .stage(descriptor(id, 2, 1000), "grant".into(), 1000)
                 .unwrap());
         }
         assert!(store
-            .stage(descriptor(64, 1, 1000), "grant".into(), 1000)
+            .stage(
+                descriptor(MAX_RECORDS_PER_GRANT as u16, 1, 1000),
+                "grant".into(),
+                1000,
+            )
             .is_err());
         assert!(store
             .stage(descriptor(0, 1, 1000), "grant".into(), 1001)
             .is_err());
         assert!(store
-            .stage(descriptor(64, 1, 1360), "grant".into(), 1360)
+            .stage(
+                descriptor(MAX_RECORDS_PER_GRANT as u16, 1, 1360),
+                "grant".into(),
+                1360,
+            )
             .unwrap());
         assert_eq!(store.entries.len(), 1);
         assert!(store
