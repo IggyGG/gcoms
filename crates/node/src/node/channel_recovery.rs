@@ -13,6 +13,61 @@ pub(crate) fn stage_own_route_announcement(
     stage_route_announcement(st, channel, recipient, None)
 }
 
+/// A recovered route must reach every current authenticated peer. Directory
+/// messages are not forwarded by their recipients, so bounded overlay gossip
+/// cannot announce a replacement to a channel larger than its fanout.
+pub(crate) fn stage_recovered_route_announcements(
+    st: &mut NodeState,
+    channel: &str,
+) -> Result<(), String> {
+    let cs = st.channels.get(channel).ok_or("no channel")?;
+    let own = cs.role.own_pseudonym();
+    let already_staged = cs
+        .route_announcement
+        .as_ref()
+        .filter(|cached| cached.epoch == cs.role.epoch() && cached.route == cs.own_route.public)
+        .map(|cached| cached.recovery_targets.clone())
+        .unwrap_or_default();
+    let recipients: Vec<_> = cs
+        .role
+        .roster_members()
+        .iter()
+        .filter(|member| member.pseudonym != own && !already_staged.contains(&member.pseudonym))
+        .filter_map(|member| {
+            cs.directory
+                .values()
+                .find(|route| route.pseudonym == member.pseudonym)
+                .cloned()
+        })
+        .collect();
+    for recipient in recipients {
+        // Each admitted destination is durable. A full outbox leaves the
+        // existing progress intact, and the next recovery pass reuses the
+        // exact cached wire instead of advancing the MLS sender again.
+        stage_own_route_announcement(st, channel, &recipient)?;
+        st.channels
+            .get_mut(channel)
+            .expect("retained under lock")
+            .route_announcement
+            .as_mut()
+            .expect("durable announcement staged")
+            .recovery_targets
+            .insert(recipient.pseudonym);
+    }
+    // A later recovery, even of this exact route, must announce again. Only
+    // failed partial rounds retain progress while earlier controls drain.
+    if let Some(cached) = st
+        .channels
+        .get_mut(channel)
+        .expect("retained under lock")
+        .route_announcement
+        .as_mut()
+    {
+        cached.recovery_targets.clear();
+    }
+    Ok(())
+}
+
 /// Associate the exact encrypted Dir response with its authenticated request in
 /// the existing durable reply cache. It is still a Dir, never a membership ACK.
 pub(crate) fn stage_own_route_reply(
@@ -52,6 +107,9 @@ fn stage_route_announcement(
         .route_announcement
         .as_ref()
         .filter(|a| a.epoch == epoch && a.route == own);
+    let recovery_targets = cached
+        .map(|cached| cached.recovery_targets.clone())
+        .unwrap_or_default();
     let pending = cached.is_some_and(|cached| {
         cs.pending_control
             .iter()
@@ -94,6 +152,7 @@ fn stage_route_announcement(
         epoch,
         route: own,
         wire: wire.clone(),
+        recovery_targets,
     });
     if !pending {
         cs.pending_control
@@ -339,6 +398,7 @@ pub(crate) fn export_channel_reconnect(
             epoch,
             route: own,
             wire,
+            recovery_targets: Default::default(),
         });
     }
     Ok(code)

@@ -97,6 +97,249 @@ fn input(st: &Arc<Mutex<NodeState>>, wire: &[u8], events: &broadcast::Sender<Ev>
     }
 }
 
+fn recovery_fanout_fixture(peers: u8) -> NodeState {
+    let mut st = state();
+    let name = "recovery";
+    let owner = gcoms_mls::OwnerSession::create(
+        IdentityKeypair::from_seed(channel_seed(&st, name)),
+        "owner",
+        64,
+    )
+    .unwrap();
+    let role = ChannelRole::Owner(owner);
+    let own = current_owned(61, &role, &st.identity_seed, name);
+    let mut cs = ChannelState::new(role, own, 5, name.into(), ChannelVisibility::Private);
+    cs.directory
+        .insert("owner".into(), cs.own_route.public.clone());
+    for i in 0..peers {
+        let display = format!("member{i}");
+        let prepared = gcoms_mls::ChannelMember::prepare(&display).unwrap();
+        let package = gcoms_mls::ChannelMember::key_package_bytes(&prepared).unwrap();
+        let pseudonym = gcoms_mls::ChannelMember::prepared_pseudonym(&prepared);
+        cs.role.stage_admit(&package, &display).unwrap();
+        cs.role.merge_pending().unwrap();
+        let mut route = owned_channel_route(100 + i, pseudonym, [100 + i; 32]).public;
+        route.data.expiry = now_unix() + 3600;
+        route.control.expiry = now_unix() + 3600;
+        cs.directory.insert(display, route);
+    }
+    st.channels.insert(name.into(), cs);
+    st.durable_state_sink = Some(Arc::new(|_| Ok(())));
+    st
+}
+
+#[tokio::test]
+async fn recovered_route_targets_every_current_peer_beyond_gossip_fanout() {
+    let mut st = recovery_fanout_fixture(12);
+    let cs = st.channels.get_mut("recovery").unwrap();
+    let epoch = cs.role.epoch();
+    let roster = cs.role.roster();
+    let owned = cs.own_route.public.clone();
+    let expected: Vec<_> = cs
+        .directory
+        .values()
+        .filter(|route| route.pseudonym != owned.pseudonym)
+        .cloned()
+        .collect();
+    // Directory history must not grant a removed/nonmember a fresh route.
+    cs.directory.insert(
+        "obsolete".into(),
+        owned_channel_route(200, [200; 32], [201; 32]).public,
+    );
+    stage_recovered_route_announcements(&mut st, "recovery").unwrap();
+    let cs = &st.channels["recovery"];
+    assert_eq!(cs.pending_control.len(), 12);
+    let wire = cs.route_announcement.as_ref().unwrap().wire.clone();
+    for recipient in &expected {
+        assert_eq!(
+            cs.pending_control
+                .iter()
+                .filter(|(route, pending)| route == recipient && pending == &wire)
+                .count(),
+            1,
+            "every authenticated member needs its own exact durable destination"
+        );
+    }
+    assert!(
+        cs.pending.is_empty(),
+        "directory delivery cannot rely on gossip"
+    );
+    assert_eq!(cs.role.epoch(), epoch);
+    assert_eq!(cs.role.roster(), roster);
+    assert_eq!(cs.own_route.public, owned);
+    stage_recovered_route_announcements(&mut st, "recovery").unwrap();
+    let cs = &st.channels["recovery"];
+    assert_eq!(cs.pending_control.len(), 12);
+    assert_eq!(cs.route_announcement.as_ref().unwrap().wire, wire);
+}
+
+#[tokio::test]
+async fn recovered_route_full_outbox_keeps_partial_progress_and_exact_retry() {
+    let mut st = recovery_fanout_fixture(12);
+    let cs = st.channels.get_mut("recovery").unwrap();
+    let epoch = cs.role.epoch();
+    let filler_route = cs.directory["member0"].clone();
+    for i in 0..crate::channel::CHANNEL_ACK_LIMIT - 3 {
+        cs.pending_control
+            .push_back((filler_route.clone(), vec![i as u8]));
+    }
+    assert_eq!(
+        stage_recovered_route_announcements(&mut st, "recovery").unwrap_err(),
+        "channel control outbox is full"
+    );
+    let cs = st.channels.get_mut("recovery").unwrap();
+    assert_eq!(cs.pending_control.len(), crate::channel::CHANNEL_ACK_LIMIT);
+    let wire = cs.route_announcement.as_ref().unwrap().wire.clone();
+    let partial: Vec<_> = cs
+        .pending_control
+        .iter()
+        .filter(|(_, w)| w == &wire)
+        .cloned()
+        .collect();
+    assert_eq!(partial.len(), 3);
+    // Existing unrelated controls drain; the partial announcement remains.
+    cs.pending_control.retain(|(_, w)| w == &wire);
+    stage_recovered_route_announcements(&mut st, "recovery").unwrap();
+    let cs = &st.channels["recovery"];
+    assert_eq!(cs.pending_control.len(), 12);
+    assert!(partial
+        .iter()
+        .all(|entry| cs.pending_control.contains(entry)));
+    assert!(cs
+        .pending_control
+        .iter()
+        .all(|(_, pending)| pending == &wire));
+    assert_eq!(cs.role.epoch(), epoch);
+}
+
+#[tokio::test]
+async fn recovered_route_progress_survives_drained_prefix_with_blocked_other_controls() {
+    let mut st = recovery_fanout_fixture(12);
+    let cs = st.channels.get_mut("recovery").unwrap();
+    let filler = cs.directory["member0"].clone();
+    for i in 0..crate::channel::CHANNEL_ACK_LIMIT - 3 {
+        cs.pending_control
+            .push_back((filler.clone(), vec![i as u8]));
+    }
+    let mut staged = std::collections::HashSet::new();
+    let mut original_wire = None;
+    for round in 0..4 {
+        let result = stage_recovered_route_announcements(&mut st, "recovery");
+        if round < 3 {
+            assert_eq!(result.unwrap_err(), "channel control outbox is full");
+        } else {
+            result.unwrap();
+        }
+        let cs = st.channels.get_mut("recovery").unwrap();
+        assert_eq!(cs.pending_control.len(), crate::channel::CHANNEL_ACK_LIMIT);
+        let announcement = cs.route_announcement.as_ref().unwrap();
+        let wire = announcement.wire.clone();
+        assert_eq!(original_wire.get_or_insert_with(|| wire.clone()), &wire);
+        if round < 3 {
+            assert_eq!(announcement.recovery_targets.len(), (round + 1) * 3);
+        } else {
+            assert!(announcement.recovery_targets.is_empty());
+        }
+        // Only these announcements receive relay acceptance. The unrelated
+        // blocked controls remain and must not starve the remaining peers.
+        cs.pending_control.retain(|(target, pending)| {
+            if pending == &wire {
+                assert!(staged.insert(target.pseudonym), "prefix was staged twice");
+                false
+            } else {
+                true
+            }
+        });
+    }
+    assert_eq!(staged.len(), 12);
+    let cs = st.channels.get_mut("recovery").unwrap();
+    assert_eq!(
+        cs.pending_control.len(),
+        crate::channel::CHANNEL_ACK_LIMIT - 3
+    );
+    cs.pending_control.clear();
+    // A fresh recovery of the same route must send again after a completed
+    // round, reusing the exact encrypted announcement rather than the cursor.
+    stage_recovered_route_announcements(&mut st, "recovery").unwrap();
+    let cs = &st.channels["recovery"];
+    assert_eq!(cs.pending_control.len(), 12);
+    assert!(cs
+        .pending_control
+        .iter()
+        .all(|(_, w)| Some(w) == original_wire.as_ref()));
+    assert!(cs
+        .route_announcement
+        .as_ref()
+        .unwrap()
+        .recovery_targets
+        .is_empty());
+}
+
+#[tokio::test]
+async fn recovered_route_partial_progress_cannot_skip_a_changed_owned_route() {
+    let mut st = recovery_fanout_fixture(3);
+    let cs = st.channels.get_mut("recovery").unwrap();
+    let filler = cs.directory["member0"].clone();
+    for i in 0..crate::channel::CHANNEL_ACK_LIMIT - 1 {
+        cs.pending_control
+            .push_back((filler.clone(), vec![i as u8]));
+    }
+    assert!(stage_recovered_route_announcements(&mut st, "recovery").is_err());
+    let seed = st.identity_seed;
+    let cs = st.channels.get_mut("recovery").unwrap();
+    let old_wire = cs.route_announcement.as_ref().unwrap().wire.clone();
+    assert_eq!(
+        cs.route_announcement
+            .as_ref()
+            .unwrap()
+            .recovery_targets
+            .len(),
+        1
+    );
+    cs.pending_control.clear();
+    cs.own_route = current_owned(201, &cs.role, &seed, "recovery");
+    stage_recovered_route_announcements(&mut st, "recovery").unwrap();
+    let cs = &st.channels["recovery"];
+    assert_eq!(cs.pending_control.len(), 3);
+    let current = cs.route_announcement.as_ref().unwrap();
+    assert_ne!(current.wire, old_wire);
+    assert_eq!(current.route, cs.own_route.public);
+    assert!(cs
+        .pending_control
+        .iter()
+        .all(|(_, wire)| wire == &current.wire));
+}
+
+#[tokio::test]
+async fn recovered_route_persistence_failure_retains_only_committed_destinations() {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    let mut st = recovery_fanout_fixture(3);
+    let saves = Arc::new(AtomicUsize::new(0));
+    let sink = saves.clone();
+    st.durable_state_sink = Some(Arc::new(move |_| {
+        if sink.fetch_add(1, Ordering::SeqCst) == 1 {
+            Err("second destination save failed".into())
+        } else {
+            Ok(())
+        }
+    }));
+    assert_eq!(
+        stage_recovered_route_announcements(&mut st, "recovery").unwrap_err(),
+        "second destination save failed"
+    );
+    let cs = &st.channels["recovery"];
+    assert_eq!(cs.pending_control.len(), 1);
+    let committed = cs.pending_control[0].clone();
+    stage_recovered_route_announcements(&mut st, "recovery").unwrap();
+    let cs = &st.channels["recovery"];
+    assert_eq!(cs.pending_control.len(), 3);
+    assert!(cs.pending_control.contains(&committed));
+    assert!(cs
+        .pending_control
+        .iter()
+        .all(|(_, wire)| wire == &committed.1));
+}
+
 #[tokio::test]
 async fn recovery_expired_authenticated_carrier_preserves_generation_until_real_member_ack() {
     let (mut a, mut b, welcome) = fixture();

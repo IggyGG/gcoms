@@ -1,0 +1,92 @@
+{
+  "schema": 1,
+  "recorded_at": "2026-10-07T20:10:43.830502+00:00",
+  "kind": "recovered_channel_directory_durable_destinations",
+  "base_revision": "8020b822cacbcb56e3c82dd64d86bcb08b6523be",
+  "scope": "GComs automatic channel-route recovery; no API, wire format, cryptography, capacity, timeout, or qualification changes",
+  "confirmed_source_defect": {
+    "old_path": "recover_channels signed a self-Dir and queued only overlay forwarding. Work::Forward uses probabilistic bounded forward_targets(None), and Dir recipients do not forward onward. Hop acceptance or the fixed attempt budget removes that forwarding entry.",
+    "new_path": "Checkpoint the recovered owned route, then stage the existing exact cached MLS Dir separately to every current authenticated peer in the durable bounded control outbox. Mark channel_ready only after every target has been staged; failure retains committed partial work for retry. A bounded transient per-round target set prevents drained prefixes from starving later recipients while unrelated controls remain blocked; it is cleared on successful completion and ignored/reset on route or epoch changes.",
+    "capacity": 64
+  },
+  "validation": {
+    "native_command": [
+      "cargo",
+      "test",
+      "--offline",
+      "--locked",
+      "-p",
+      "gcoms-node",
+      "--all-features",
+      "--lib",
+      "--",
+      "node::channel_recovery::tests",
+      "node::persist::channel_cold_route_tests::cold_both_expired_channel_queues_recover",
+      "--test-threads=4"
+    ],
+    "native_passed": 19,
+    "native_failed": 0,
+    "native_seconds": 30.95,
+    "new_regressions": [
+      "12 current peers beyond gossip fanout receive one exact cached wire each; own and obsolete identities excluded; roster/epoch/owned authority unchanged",
+      "Full64-control outbox preserves3 committed announcement destinations; draining unrelated controls lets retry finish all12 using the same wire",
+      "Second destination persistence failure rolls back only uncommitted work; retry retains the first committed destination and reuses its exact wire",
+      "61 unrelated blocked controls remain while accepted announcement prefixes drain;4 partial rounds cover every one of12 peers without restaging earlier prefixes; a later completed recovery reannounces all12 using the same wire",
+      "Changing the owned route invalidates partial staging progress and creates a new exact wire for every current peer"
+    ],
+    "source_audit_paths": 1067,
+    "source_audit_passed": true,
+    "format_check_passed": true,
+    "diff_check_passed": true,
+    "runtime_budget": "workstation-builds manager,8 CPU affinity,300-second test bound after warmed native compilation",
+    "prior_native_run": {
+      "passed": 19,
+      "failed": 0,
+      "seconds": 124.53,
+      "scope": "initial durable fanout change, all route unit and cold-route tests"
+    },
+    "incremental_compile_seconds": 38.12,
+    "generated_client_checks": {
+      "packages/gc-rpc/scripts/generate.mjs --check": "passed",
+      "examples/typed-addon/browser/generate.mjs --check": "passed"
+    }
+  },
+  "diagnostic_context": {
+    "original64_parallel_setup": "reproduced119.8s join failure, fixed independently by globally paced shared-owner admissions",
+    "paced64_setup": "all63 joins passed; subsequent60-second nonqualifying campaign delivered18 commands but failed2 accepted commands missing clients22/34 after relay0 restart",
+    "pre_failure_state": "Both clients recovered inbox/channel subscriptions but no channel cell arrived after restart; exact channel-route replacement is not established by retained metrics",
+    "two_client_restart": "Existing unchanged two-client preflight passed after terminal relay restart; full5235248-byte file verified and bidirectional authenticated chat completed",
+    "causality_limit": "The source fanout defect is independently proven. This does not prove it is the sole cause of the observed64-client loss. Final full64-client30-minute qualification remains mandatory.",
+    "artifacts": {
+      "local-paced-setup-result.json": {
+        "path": "/run/media/user/SSD-2/git/ghost/gcoms/.worktrees/irc-parity/gchat/test-evidence/candidate167-repair-20261007/local-paced-setup-result.json",
+        "sha256": "3b480aa25d57466ea4dc62486dee0e8b22a6f5cb13511dc17c31c5f2f4d10efe"
+      },
+      "local-two-client-restart-result.json": {
+        "path": "/run/media/user/SSD-2/git/ghost/gcoms/.worktrees/irc-parity/gchat/test-evidence/candidate167-repair-20261007/local-two-client-restart-result.json",
+        "sha256": "64012006248a2de4c92846e85be105db406eb508328dcf0c4ace9e0bd1b69f3a"
+      },
+      "relay-original-failure-analysis.json": {
+        "path": "/run/media/user/SSD-2/git/ghost/gcoms/.worktrees/irc-parity/gchat/test-evidence/candidate167-repair-20261007/relay-original-failure-analysis.json",
+        "sha256": "406a641ab2025fef48f622bcd60192e6494a0dee35a2561fed17f136e335921b"
+      },
+      "local-setup-reproduction.json": {
+        "path": "/run/media/user/SSD-2/git/ghost/gcoms/.worktrees/irc-parity/gchat/test-evidence/candidate167-repair-20261007/local-setup-reproduction.json",
+        "sha256": "45856f4c5713ca70be5b9d2d81172a8e8208dbd4d4ba389cd8bf15f4d3fed89e"
+      }
+    }
+  },
+  "source_sha256": {
+    "crates/node/src/channel.rs": "01a4fba797ad949a47cd328e873d1a33e6256ca4e35850b5ff7b436244bf5f46",
+    "crates/node/src/node/routing.rs": "39877ec1c8f6e3645bb81a68e56f416bd397ad9304f711d264ec80a600f15e1b",
+    "crates/node/src/node/channel_recovery.rs": "788c9cf6126bcf00f002ffef08c80c9d66edf53aa775cac03531802b39505100",
+    "crates/node/src/node/channel_recovery_unit_tests.rs": "6f53a7d7b9c0f4dc22427925cce42839de780acf987475190154ec1dd4650e1d"
+  },
+  "release_qualified": false,
+  "compatibility": {
+    "public_api_changed": false,
+    "wire_changed": false,
+    "archive_schema_changed": false,
+    "transient_state": "crate-private RouteAnnouncement.recovery_targets; never serialized; bounded by the64-member roster"
+  }
+}

@@ -923,9 +923,7 @@ async fn recover_channels(
         if cs.own_route.public != public || cs.own_route.aliases != retained {
             continue;
         }
-        // Reannounce after every recovered subscription, including an exact
-        // restore: a crash may have followed the durable route checkpoint but
-        // preceded delivery of its previous directory announcement.
+        // Commit the recovered route before any announcement can be admitted.
         {
             let own_name = cs
                 .roster()
@@ -934,29 +932,21 @@ async fn recover_channels(
                 .ok_or("channel has no own roster entry")?
                 .display_name;
             let public = route.public.clone();
-            let wire = match cs
-                .role
-                .send(&crate::channel::encode_dir(&own_name, &public))
-            {
-                Ok(wire) => wire,
-                Err(error) => {
-                    st.pause_failed_owner_transition();
-                    return Err(error.to_string());
-                }
-            };
             if cs.install_authenticated_route(&own_name, &public).is_none() {
                 st.pause_failed_owner_transition();
                 return Err("owned channel route replacement refused".into());
             }
-            let id = crate::channel::msg_id(&name, &wire);
-            cs.note(id, wire.clone());
-            cs.enqueue_forward(id, wire);
         }
         cs.own_route = route;
         if let Err(error) = persist_current_direct_state(&st) {
             st.pause_failed_owner_transition();
             return Err(error);
         }
+        // Reannounce even an exact restore: a crash may follow the durable
+        // route checkpoint but precede its announcement. Keep this channel
+        // pending until every peer has its own durable control destination;
+        // the bounded overlay does not forward directory messages onward.
+        stage_recovered_route_announcements(&mut st, &name)?;
         runtime
             .channel_ready
             .lock()

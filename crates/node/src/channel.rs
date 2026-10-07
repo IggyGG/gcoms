@@ -664,6 +664,8 @@ pub(crate) struct RouteAnnouncement {
     pub epoch: u64,
     pub route: ChannelRoute,
     pub wire: Vec<u8>,
+    /// Current recovery round only; not serialized. Bounded by the roster.
+    pub recovery_targets: HashSet<[u8; 32]>,
 }
 impl Drop for RouteAnnouncement {
     fn drop(&mut self) {
