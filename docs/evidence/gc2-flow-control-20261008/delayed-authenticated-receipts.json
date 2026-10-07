@@ -1,0 +1,198 @@
+{
+  "schema": "gcoms/delayed-receipt-diagnosis/v1",
+  "source_before": "bc963e917a50afb0d62a22aad35358d557c066e3",
+  "candidate": 170,
+  "run_id": 37685675717,
+  "job_id": 113019140819,
+  "artifact_id": 11513887375,
+  "artifact_sha256": "03f8c143b3c217e943c9b3777ba23189a5aa388b7ff57cf8e6b059390306dccd",
+  "release_qualified": false,
+  "failed_gate": "TimeoutError: load delivery did not drain within its bound",
+  "completed_authenticated_commands": 713,
+  "pending_commands": [
+    {
+      "channel_index": 0,
+      "sender": 57,
+      "age_seconds": 749.9683455479999,
+      "submission": "accepted",
+      "missing_clients": [],
+      "sender_delivery": "local_accepted",
+      "observed_client_count": 17,
+      "late_channel_errors": [
+        {
+          "seconds_after_load_start": 1372.982,
+          "error": "openmls: ValidationError(UnableToDecrypt(SecretTreeError(TooDistantInThePast)))"
+        }
+      ]
+    },
+    {
+      "channel_index": 2,
+      "sender": 63,
+      "age_seconds": 740.053511398,
+      "submission": "accepted",
+      "missing_clients": [],
+      "sender_delivery": "local_accepted",
+      "observed_client_count": 17,
+      "late_channel_errors": [
+        {
+          "seconds_after_load_start": 1366.529,
+          "error": "openmls: ValidationError(UnableToDecrypt(SecretTreeError(TooDistantInThePast)))"
+        }
+      ]
+    },
+    {
+      "channel_index": 2,
+      "sender": 3,
+      "age_seconds": 720.038705575,
+      "submission": "accepted",
+      "missing_clients": [],
+      "sender_delivery": "local_accepted",
+      "observed_client_count": 17,
+      "late_channel_errors": [
+        {
+          "seconds_after_load_start": 1372.983,
+          "error": "openmls: ValidationError(UnableToDecrypt(SecretTreeError(TooDistantInThePast)))"
+        }
+      ]
+    },
+    {
+      "channel_index": 0,
+      "sender": 9,
+      "age_seconds": 699.9505670849999,
+      "submission": "accepted",
+      "missing_clients": [],
+      "sender_delivery": "local_accepted",
+      "observed_client_count": 17,
+      "late_channel_errors": [
+        {
+          "seconds_after_load_start": 1366.524,
+          "error": "openmls: ValidationError(UnableToDecrypt(SecretTreeError(TooDistantInThePast)))"
+        }
+      ]
+    },
+    {
+      "channel_index": 0,
+      "sender": 21,
+      "age_seconds": 669.922238137,
+      "submission": "accepted",
+      "missing_clients": [],
+      "sender_delivery": "local_accepted",
+      "observed_client_count": 17,
+      "late_channel_errors": [
+        {
+          "seconds_after_load_start": 1372.987,
+          "error": "openmls: ValidationError(UnableToDecrypt(SecretTreeError(TooDistantInThePast)))"
+        }
+      ]
+    },
+    {
+      "channel_index": 3,
+      "sender": 20,
+      "age_seconds": 589.8842371559999,
+      "submission": "accepted",
+      "missing_clients": [],
+      "sender_delivery": "local_accepted",
+      "observed_client_count": 16,
+      "late_channel_errors": [
+        {
+          "seconds_after_load_start": 1475.58,
+          "error": "openmls: ValidationError(UnableToDecrypt(SecretTreeError(TooDistantInThePast)))"
+        }
+      ]
+    },
+    {
+      "channel_index": 2,
+      "sender": 0,
+      "age_seconds": 390.060559132,
+      "submission": "accepted",
+      "missing_clients": [],
+      "sender_delivery": "local_accepted",
+      "observed_client_count": 17,
+      "late_channel_errors": [
+        {
+          "seconds_after_load_start": 1747.412,
+          "error": "openmls: ValidationError(UnableToDecrypt(SecretTreeError(TooDistantInThePast)))"
+        }
+      ]
+    }
+  ],
+  "relay_restart_seconds_after_load_start": 901.437,
+  "diagnosis": "All seven remaining payloads were observed by all intended clients; each affected sender later reported TooDistantInThePast. The retained trace does not decode each failing ciphertext subtype. The causal node regression independently proves that a delayed authentic TextAck stranded by this receive window cannot complete the sender outbox.",
+  "baseline_regression": {
+    "test": "node::channel_recovery::tests::delayed_authenticated_receipt_survives_the_channel_control_window",
+    "command": "opencode-test cargo test --offline --locked -p gcoms-node --all-features --lib delayed_authenticated_receipt_survives_the_channel_control_window -- --exact node::channel_recovery::tests::delayed_authenticated_receipt_survives_the_channel_control_window --nocapture",
+    "exit_code": 101,
+    "tests_run": 1,
+    "tests_failed": 1,
+    "test_seconds": 1.66,
+    "failure": "only the exact authenticated delayed ACK may complete delivery"
+  },
+  "correction": {
+    "old_out_of_order_tolerance": 10,
+    "new_out_of_order_tolerance": 64,
+    "max_forward_distance_unchanged": 2000,
+    "maximum_newer_generations_before_acceptance": 63,
+    "upgrade": "Both private and hosted persisted groups adopt the new policy before new traffic, keeping wire policy, padding and existing 128-past-epoch restore policy. Already erased keys cannot be recovered.",
+    "memory": "At most64 receive-key slots per initialized ratchet; consumed keys remain unavailable. For63 remote senders AES128+12-byte nonce raw material is bounded by112896 bytes per application epoch (not total resident memory). Ratchets are lazy; allocator, optional-slot and serialization overhead are additional. Historical epochs and handshake ratchets multiply this finite bound.",
+    "unchanged": [
+      "wire format",
+      "authenticated acknowledgments",
+      "channel membership limit",
+      "receipt journal size",
+      "outbox deadlines",
+      "load gate"
+    ]
+  },
+  "focused_mls_regressions": {
+    "tests_passed": 3,
+    "seconds": 2.23,
+    "covers": [
+      "legacy owner/member restore twice and persisted config",
+      "hosted restore twice preserving plaintext handshake policy",
+      "exact63-newer acceptance and64-newer rejection",
+      "replay rejection"
+    ]
+  },
+  "verification": {
+    "node_recovery": {
+      "command": "opencode-test cargo test --offline --locked -p gcoms-node --all-features --lib node::channel_recovery::tests -- --nocapture",
+      "passed": 18,
+      "failed": 0,
+      "test_seconds": 16.96,
+      "log_sha256": "2b32ee5a2147c3eae8c20efe5e16a0143c2cf5e57afc6c84448e8fe9d7b5fadb"
+    },
+    "mls_suite": {
+      "command": "cargo test --offline --locked -p gcoms-mls --all-features",
+      "passed": 46,
+      "failed": 0,
+      "ignored": 2,
+      "ignored_reason": "Existing explicit release-mode scale gates; no additional skips",
+      "unit_test_seconds": 2.94,
+      "integration_test_seconds": [
+        2.6,
+        1.14
+      ]
+    },
+    "source_check": {
+      "command": "python3 scripts/check-source.py",
+      "exit_code": 0,
+      "paths": 1068
+    },
+    "independent_review": "No correctness blocker: shared policy covers creation/join/restoration; wire/padding/history preserved and stored; replay and finite-bound regressions cover migration.",
+    "strict_clippy": {
+      "command": "cargo clippy --offline --locked -p gcoms-mls -p gcoms-node --all-features --all-targets -- -D warnings",
+      "exit_code": 0,
+      "seconds": 91,
+      "log_sha256": "3f1bfa2b0d31d78027314626cdf6cc400efc7e410bbde15b4506362061c7eb38"
+    },
+    "format_and_diff_check": "PASS",
+    "execution": "Native commands admitted by workstation-batch/opencode-test; final MLS suite and Clippy ran serially with an 8 GiB reservation."
+  },
+  "changed_source_sha256": {
+    "crates/mls/src/session.rs": "543527c7b64713ab2ae681e3da65adaa3f1262d0acc07102397f736fa1a7bd8f",
+    "crates/mls/src/hosted.rs": "7a79f15499dd2e2db8d74dd30f386670036d317457318cfeb63fd6ac3d2d97a7",
+    "crates/node/src/node/channel_recovery_unit_tests.rs": "9fb7869d3cb99dbed69d0eff77f2305a715c3ba3b1a96e45508581059bc466a6"
+  },
+  "verified_at_utc": "2026-10-07T23:01:11.568222+00:00",
+  "remaining_release_gate": "The full 64-client, 30-minute managed campaign has not been rerun for this source; it remains required before production qualification."
+}

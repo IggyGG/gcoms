@@ -5,7 +5,7 @@
 //! separate profile: a legacy channel cannot opt in by receiving an external
 //! commit. Transport and durable sequencing are supplied by the embedding application.
 
-use crate::session::{CIPHERSUITE, MAX_WIRE_BYTES};
+use crate::session::{sender_ratchet_configuration, CIPHERSUITE, MAX_WIRE_BYTES};
 use crate::{MlsError, RosterMember};
 use gcoms_crypto::{verify_signature, IdentityKeypair};
 use openmls::messages::group_info::VerifiableGroupInfo;
@@ -448,7 +448,7 @@ fn create_config() -> MlsGroupCreateConfig {
         .ciphersuite(CIPHERSUITE)
         .wire_format_policy(PURE_PLAINTEXT_WIRE_FORMAT_POLICY)
         .padding_size(128)
-        .sender_ratchet_configuration(SenderRatchetConfiguration::new(10, 2000))
+        .sender_ratchet_configuration(sender_ratchet_configuration())
         .use_ratchet_tree_extension(true)
         .build()
 }
@@ -457,7 +457,7 @@ fn join_config() -> MlsGroupJoinConfig {
     MlsGroupJoinConfig::builder()
         .wire_format_policy(PURE_PLAINTEXT_WIRE_FORMAT_POLICY)
         .padding_size(128)
-        .sender_ratchet_configuration(SenderRatchetConfiguration::new(10, 2000))
+        .sender_ratchet_configuration(sender_ratchet_configuration())
         .use_ratchet_tree_extension(true)
         .build()
 }
@@ -1319,6 +1319,77 @@ impl HostedObserver {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(feature = "client-persist")]
+    #[test]
+    fn restored_hosted_receipts_keep_the_public_handshake_policy() {
+        let root = IdentityKeypair::from_seed([27; 32]);
+        let mut owner = HostedSession::create(&root, "owner", 64, true).unwrap();
+        let observer = HostedObserver::new(
+            owner.policy.clone(),
+            owner.policy.channel_id(),
+            &owner.export_group_info().unwrap(),
+        )
+        .unwrap();
+        let (mut alice, commit) = PreparedHostedJoin::new("alice")
+            .unwrap()
+            .join(&observer, &JoinPermit::public(), 100)
+            .unwrap();
+        alice.accept_join(&commit).unwrap();
+        owner.receive(&commit, 100).unwrap();
+        for session in [&mut owner, &mut alice] {
+            let legacy = MlsGroupJoinConfig::builder()
+                .wire_format_policy(PURE_PLAINTEXT_WIRE_FORMAT_POLICY)
+                .padding_size(256)
+                .sender_ratchet_configuration(SenderRatchetConfiguration::new(10, 2000))
+                .use_ratchet_tree_extension(true)
+                .build();
+            session
+                .ctx
+                .group
+                .set_configuration(session.ctx.backend.storage(), &legacy)
+                .unwrap();
+            for _ in 0..2 {
+                *session = HostedSession::restore(
+                    &[7; 32],
+                    &session.persist(&[7; 32]).unwrap(),
+                    session.policy.channel_id(),
+                )
+                .unwrap();
+                let group = &session.ctx.group;
+                let stored = MlsGroup::load(session.ctx.backend.storage(), group.group_id())
+                    .unwrap()
+                    .unwrap();
+                assert_eq!(stored.configuration(), group.configuration());
+                assert_eq!(
+                    group.configuration().wire_format_policy(),
+                    PURE_PLAINTEXT_WIRE_FORMAT_POLICY
+                );
+                assert_eq!(group.configuration().padding_size(), 256);
+                assert_eq!(
+                    group.configuration().sender_ratchet_configuration(),
+                    &sender_ratchet_configuration()
+                );
+                assert_eq!(
+                    group.past_epoch_deletion_policy(),
+                    &PastEpochDeletionPolicy::MaxEpochs(128)
+                );
+            }
+        }
+        let delayed = owner.send_hosted(b"delayed authenticated receipt").unwrap();
+        for _ in 0..63 {
+            let later = owner.send_hosted(b"later").unwrap();
+            alice.receive_hosted(&later).unwrap();
+        }
+        assert_eq!(
+            alice.receive_hosted(&delayed).unwrap(),
+            b"delayed authenticated receipt"
+        );
+        assert!(
+            alice.receive_hosted(&delayed).is_err(),
+            "MLS replay must still fail"
+        );
+    }
 
     #[test]
     fn public_replay_anchor_does_not_expire_with_the_creators_key_package() {

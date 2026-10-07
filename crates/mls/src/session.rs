@@ -175,6 +175,14 @@ pub fn ciphersuite_of_welcome(wire: &[u8]) -> Option<u16> {
     Some(welcome.ciphersuite() as u16)
 }
 
+pub(crate) fn sender_ratchet_configuration() -> SenderRatchetConfiguration {
+    // Targeted receipts share the sender's application ratchet with other
+    // traffic. Retain one bounded 64-generation window, matching the channel
+    // receipt journal, so up to 63 later generations may overtake a receipt.
+    // Consumed keys still cannot be reused; the forward-derivation cap stays put.
+    SenderRatchetConfiguration::new(64, 2000)
+}
+
 fn create_config() -> MlsGroupCreateConfig {
     MlsGroupCreateConfig::builder()
         .ciphersuite(CIPHERSUITE)
@@ -182,7 +190,7 @@ fn create_config() -> MlsGroupCreateConfig {
         .set_past_epoch_deletion_policy(openmls::prelude::PastEpochDeletionPolicy::MaxEpochs(
             history::EPOCHS,
         ))
-        .sender_ratchet_configuration(SenderRatchetConfiguration::new(10, 2000))
+        .sender_ratchet_configuration(sender_ratchet_configuration())
         .use_ratchet_tree_extension(true)
         .build()
 }
@@ -193,7 +201,7 @@ fn join_config() -> MlsGroupJoinConfig {
         .set_past_epoch_deletion_policy(openmls::prelude::PastEpochDeletionPolicy::MaxEpochs(
             history::EPOCHS,
         ))
-        .sender_ratchet_configuration(SenderRatchetConfiguration::new(10, 2000))
+        .sender_ratchet_configuration(sender_ratchet_configuration())
         .use_ratchet_tree_extension(true)
         .build()
 }
@@ -1083,12 +1091,22 @@ pub mod persist {
             .map_err(|e| MlsError::OpenMls(format!("load: {e:?}")))?
             .ok_or_else(|| MlsError::OpenMls("group not in storage".into()))?;
         ensure_ciphersuite(group.ciphersuite())?;
+        // Archives retain the old receive window. Upgrade it before processing
+        // traffic, preserving the private/hosted handshake policy and padding.
+        // GComs uses no resumption PSKs and always carries the ratchet tree;
+        // the existing restore policy keeps 128 historical epochs.
+        let config = MlsGroupJoinConfig::builder()
+            .wire_format_policy(group.configuration().wire_format_policy())
+            .padding_size(group.configuration().padding_size())
+            .set_past_epoch_deletion_policy(openmls::prelude::PastEpochDeletionPolicy::MaxEpochs(
+                history::EPOCHS,
+            ))
+            .sender_ratchet_configuration(sender_ratchet_configuration())
+            .use_ratchet_tree_extension(true)
+            .build();
         group
-            .set_past_epoch_deletion_policy(
-                &backend,
-                openmls::prelude::PastEpochDeletionPolicy::MaxEpochs(history::EPOCHS),
-            )
-            .map_err(|e| MlsError::OpenMls(format!("history policy: {e:?}")))?;
+            .set_configuration(backend.storage(), &config)
+            .map_err(|e| MlsError::OpenMls(format!("restore policy: {e:?}")))?;
         let signer = SignatureKeyPair::read(
             backend.storage(),
             &head.signer_pub,
@@ -1260,6 +1278,90 @@ mod persist_tests {
         let admission = owner.admit(&invite, &kp).unwrap();
         let member = ChannelMember::join(prepared, &admission.welcome).unwrap();
         (owner, member)
+    }
+
+    #[test]
+    fn legacy_archives_upgrade_the_receipt_window_and_preserve_policy() {
+        let (mut owner, mut member) = owner_and_member();
+        for ctx in [&mut owner.ctx, &mut member.ctx] {
+            let legacy = MlsGroupJoinConfig::builder()
+                .wire_format_policy(ctx.group.configuration().wire_format_policy())
+                .padding_size(256)
+                .set_past_epoch_deletion_policy(
+                    openmls::prelude::PastEpochDeletionPolicy::MaxEpochs(history::EPOCHS),
+                )
+                .sender_ratchet_configuration(SenderRatchetConfiguration::new(10, 2000))
+                .use_ratchet_tree_extension(true)
+                .build();
+            ctx.group
+                .set_configuration(ctx.backend.storage(), &legacy)
+                .unwrap();
+        }
+        // Initialize both receive ratchets under the legacy configuration.
+        member
+            .receive(&owner.send(b"before upgrade").unwrap())
+            .unwrap();
+        owner
+            .receive(&member.send(b"before upgrade").unwrap())
+            .unwrap();
+        for _ in 0..2 {
+            owner = OwnerSession::restore(&KEY, &owner.persist(&KEY).unwrap(), owner_id()).unwrap();
+            member = ChannelMember::restore(&KEY, &member.persist(&KEY).unwrap()).unwrap();
+            for ctx in [&owner.ctx, &member.ctx] {
+                let stored = MlsGroup::load(ctx.backend.storage(), ctx.group.group_id())
+                    .unwrap()
+                    .unwrap();
+                assert_eq!(stored.configuration(), ctx.group.configuration());
+                assert_eq!(
+                    stored.configuration().wire_format_policy(),
+                    join_config().wire_format_policy()
+                );
+                assert_eq!(stored.configuration().padding_size(), 256);
+                assert_eq!(
+                    stored.configuration().sender_ratchet_configuration(),
+                    &sender_ratchet_configuration()
+                );
+                assert_eq!(
+                    stored.past_epoch_deletion_policy(),
+                    &openmls::prelude::PastEpochDeletionPolicy::MaxEpochs(history::EPOCHS)
+                );
+            }
+        }
+        let owner_delayed = owner.send(b"delayed owner receipt").unwrap();
+        let member_delayed = member.send(b"delayed member receipt").unwrap();
+        for _ in 0..63 {
+            member.receive(&owner.send(b"later").unwrap()).unwrap();
+            owner.receive(&member.send(b"later").unwrap()).unwrap();
+        }
+        assert_eq!(
+            member.receive(&owner_delayed).unwrap().unwrap().1,
+            b"delayed owner receipt"
+        );
+        assert_eq!(
+            owner.receive(&member_delayed).unwrap().unwrap().1,
+            b"delayed member receipt"
+        );
+        assert!(
+            member.receive(&owner_delayed).is_err(),
+            "consumed receipt keys cannot be replayed"
+        );
+        assert!(
+            owner.receive(&member_delayed).is_err(),
+            "consumed receipt keys cannot be replayed"
+        );
+    }
+
+    #[test]
+    fn receipt_window_rejects_messages_beyond_its_finite_bound() {
+        let (mut owner, mut member) = owner_and_member();
+        let delayed = owner.send(b"too old").unwrap();
+        for _ in 0..64 {
+            member.receive(&owner.send(b"later").unwrap()).unwrap();
+        }
+        let error = member.receive(&delayed).unwrap_err();
+        assert!(
+            matches!(error, MlsError::OpenMls(ref message) if message.contains("TooDistantInThePast"))
+        );
     }
 
     #[test]

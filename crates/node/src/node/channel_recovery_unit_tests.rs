@@ -97,6 +97,61 @@ fn input(st: &Arc<Mutex<NodeState>>, wire: &[u8], events: &broadcast::Sender<Ev>
     }
 }
 
+#[tokio::test]
+async fn delayed_authenticated_receipt_survives_the_channel_control_window() {
+    let (mut sender, recipient, _) = fixture();
+    let peer = recipient.channels["recovery"].own_route.public.clone();
+    let channel = sender.channels.get_mut("recovery").unwrap();
+    let wire = channel
+        .role
+        .send(&crate::channel::encode_text(b"retained command", false))
+        .unwrap();
+    let id = crate::channel::msg_id("recovery", &wire);
+    channel.message_outbox.insert(
+        id,
+        crate::channel::ChannelMessageOutbox {
+            wire: wire.clone(),
+            expected: HashMap::from([(peer.pseudonym, peer)]),
+            acknowledged: HashSet::new(),
+        },
+    );
+    let sender = Arc::new(Mutex::new(sender));
+    let recipient = Arc::new(Mutex::new(recipient));
+    let (events, _) = broadcast::channel(32);
+    input(&recipient, &wire, &events);
+    let receipt = recipient.lock().unwrap().channels["recovery"].commit_ack_cache[&id]
+        .1
+        .clone();
+    // ACKs are private MLS messages sharing this sender's application ratchet.
+    // A delayed receipt may be overtaken by the rest of the bounded journal.
+    for generation in 1..crate::channel::CHANNEL_ACK_LIMIT {
+        let later = recipient
+            .lock()
+            .unwrap()
+            .channels
+            .get_mut("recovery")
+            .unwrap()
+            .role
+            .send(&crate::channel::encode_text_ack(
+                [generation as u8; 16],
+                false,
+            ))
+            .unwrap();
+        input(&sender, &later, &events);
+    }
+    assert!(sender.lock().unwrap().channels["recovery"]
+        .message_outbox
+        .contains_key(&id));
+    input(&sender, &receipt, &events);
+    let mut sender = sender.lock().unwrap();
+    let channel = sender.channels.get_mut("recovery").unwrap();
+    assert!(
+        !channel.message_outbox.contains_key(&id),
+        "only the exact authenticated delayed ACK may complete delivery"
+    );
+    assert!(channel.role.receive_authenticated(&receipt).is_err());
+}
+
 fn recovery_fanout_fixture(peers: u8) -> NodeState {
     let mut st = state();
     let name = "recovery";
