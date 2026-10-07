@@ -182,20 +182,40 @@ class ControllerTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError,'prepare failed'):
             turnover.parallel_setup(lambda _:(_ for _ in ()).throw(RuntimeError('prepare failed')),range(4))
 
-    def test_parallel_enrollment_preserves_each_channel_chain_and_all_members(self):
+    def test_failed_join_retains_member_and_owner_transport_without_invitation(self):
         self.worker.spec['config']['load_topology']='fleet-four-channels'
         self.worker.rpc_deadline=turnover.time.monotonic()+60
-        barrier=threading.Barrier(4);lock=threading.Lock();joined={i:[] for i in range(4)};created=[]
+        with mock.patch.object(turnover,'load_channel_members',return_value=[[0,1,2]]), \
+                mock.patch.object(self.worker,'submit',return_value={'conversation':'channel'}), \
+                mock.patch.object(self.worker,'remote_invitation',return_value='private-invitation') as invitation, \
+                mock.patch.object(self.worker,'join_invitation',side_effect=RuntimeError('owner timeout')) as join, \
+                mock.patch.object(self.worker,'status',side_effect=lambda i:{'routing_ready':i==0}):
+            with self.assertRaisesRegex(RuntimeError,'owner timeout'):
+                self.worker.prepare_load_channels(self.worker.rpc_deadline)
+        failure=next(row for row in self.worker.events if row['event']=='load_member_join_failed')
+        self.assertEqual((failure['client'],failure['channel_index']),(1,0))
+        self.assertTrue(failure['owner_transport']['routing_ready'])
+        self.assertFalse(failure['member_transport']['routing_ready'])
+        self.assertGreaterEqual(failure['seconds'],0)
+        self.assertNotIn('private-invitation',json.dumps(failure))
+        invitation.assert_called_once()
+        join.assert_called_once_with(1,'private-invitation','participant1')
+
+    def test_shared_owner_enrollment_is_serial_round_robin_for_all_63_members(self):
+        self.worker.spec['config']['load_topology']='fleet-four-channels'
+        self.worker.rpc_deadline=turnover.time.monotonic()+60
+        owner_thread=threading.get_ident();joined={i:[] for i in range(4)};created=[];order=[]
         def create(client,text):
             self.assertEqual(client,0);index=len(created);created.append(text)
             return {'conversation':f'channel{index}'}
         def invitation(channel):
-            index=int(channel[-1])
-            if not joined[index]:barrier.wait(timeout=5)
+            self.assertEqual(threading.get_ident(),owner_thread)
+            self.assertEqual(channel,f'channel{len(order)%4}')
             return channel
         def join(client,code,nickname):
             index=int(code[-1])
-            with lock:joined[index].append(client)
+            self.assertEqual(threading.get_ident(),owner_thread)
+            joined[index].append(client);order.append(client)
             self.assertEqual(nickname,f'participant{client}')
             return {'conversation':code}
         with mock.patch.object(self.worker,'submit',side_effect=create), \
@@ -205,9 +225,10 @@ class ControllerTests(unittest.TestCase):
         self.assertEqual(len(created),4)
         self.assertEqual([g['members'] for g in groups],turnover.load_channel_members())
         self.assertEqual([joined[i] for i in range(4)],[g[1:] for g in turnover.load_channel_members()])
+        self.assertEqual(order,list(range(1,64)))
         events=[row for row in self.worker.events if row['event']=='load_member_joined']
         self.assertEqual(sorted(row['client'] for row in events),list(range(1,64)))
-        # Every threaded event must also survive as one complete JSONL record.
+        # Every admitted member retains one complete event record.
         self.assertEqual(len((self.root/'events.jsonl').read_text().splitlines()),63)
 
     @staticmethod
@@ -301,7 +322,8 @@ class ControllerTests(unittest.TestCase):
         journey.spec={'config':{'mode':'relay-load'}};journey.result={'evidence':{}}
         with tempfile.TemporaryDirectory() as directory:
             journey.original_root=Path(directory)
-            expected=['r0/metrics.jsonl','r0/metrics.jsonl.1','c2/contribution.json']
+            expected=['r0/metrics.jsonl','r0/metrics.jsonl.1','c0/metrics.jsonl',
+                      'c53/metrics.jsonl.1','c2/contribution.json']
             for name in expected+['c2/card']:
                 path=journey.original_root/name;path.parent.mkdir(exist_ok=True);path.write_bytes(b'evidence')
             with mock.patch.object(turnover.base.Worker,'execute',return_value=0) as execute:

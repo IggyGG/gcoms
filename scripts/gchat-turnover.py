@@ -291,6 +291,7 @@ class Journey(base.Worker):
             # after every producer has stopped; no profile/card is exported.
             evidence=self.result.setdefault('evidence',{})
             paths=list(self.original_root.glob('r*/metrics.jsonl*'))
+            paths.extend(self.original_root.glob('c*/metrics.jsonl*'))
             paths.extend(self.original_root/f'c{i+2}/contribution.json' for i in range(32))
             for path in paths:
                 if path.is_file():evidence[str(path.relative_to(self.original_root))]=sha256(path)
@@ -975,16 +976,23 @@ class Journey(base.Worker):
         for index,members in enumerate(load_channel_members(self.spec['config']['load_topology'])):
             channel=self.submit(0,f'/create #relay-load{index} operator')['conversation']
             groups.append({'index':index,'channel':channel,'members':members})
-        def enroll(group):
-            # MLS membership changes remain ordered within each channel.
-            # Different channels and member profiles have independent state.
-            for client in group['members'][1:]:
-                code=until(lambda:self.remote_invitation(group['channel']),setup,'64-client invitation')
+        # The channels have independent MLS state but share this owner's inbox
+        # and transport. Pace admissions globally, in the original round-robin
+        # client order; a failed join must not leave other chains minting invites.
+        memberships={client:group for group in groups for client in group['members'][1:]}
+        for client,group in sorted(memberships.items()):
+            code=until(lambda:self.remote_invitation(group['channel']),setup,'64-client invitation')
+            began=time.monotonic()
+            try:
                 if self.join_invitation(client,code,f'participant{client}')['conversation'] != group['channel']:
                     raise RuntimeError('participant joined another channel')
-                self.event('load_member_joined',client=client,channel_index=group['index'])
-            return group
-        return parallel_setup(enroll,groups)
+            except Exception:
+                self.event('load_member_join_failed',client=client,channel_index=group['index'],
+                           seconds=time.monotonic()-began,owner_transport=self.status(0),
+                           member_transport=self.status(client))
+                raise
+            self.event('load_member_joined',client=client,channel_index=group['index'])
+        return groups
 
     def restart_load_relay(self, relay):
         started=time.monotonic()
@@ -1364,7 +1372,7 @@ def main():
     evidence.update({p.name:sha256(p) for p in root.glob('client*.log')})
     if args.mode=='relay-load':
         evidence.update({name:digest for name,digest in worker.get('evidence',{}).items()
-                         if name.startswith('r') and '/metrics.jsonl' in name
+                         if name.startswith(('r','c')) and '/metrics.jsonl' in name
                          or name.startswith('c') and name.endswith('/contribution.json')})
     report={'evidence':evidence,'retired_namespace_pids':residual,'scope':SCOPE,'worker_exit':result.returncode,'host_links_unchanged':base.link_identity(before)==base.link_identity(after),
             'host_before':before,'host_after':after,'build_unchanged':base.build_binding(args.build.resolve())==build,

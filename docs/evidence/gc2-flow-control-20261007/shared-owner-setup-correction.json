@@ -1,0 +1,69 @@
+{
+  "schema": 1,
+  "date_utc": "2026-10-07",
+  "kind": "shared_owner_setup_correction",
+  "release_qualified": false,
+  "original_hosted_failure": {
+    "run_id": 37659106992,
+    "job_id": 112928762532,
+    "artifact_id": 11500519764,
+    "artifact_sha256": "fc92d6373b92b319e474930c21dd01cc71ad3e3a8a4dd7a99a8f2b64a8cbf413",
+    "source_pair": {
+      "gchat": {
+        "commit": "6c0123f51486d76ec5d2aa892e3cfc1edcb99497",
+        "tree": "c27c782adb705b1d99b6cc0d73dc87581a1b93ef"
+      },
+      "gcoms": {
+        "commit": "de5480ef5601005d68aa73a55a5f0b8ac1101184",
+        "tree": "84e725cc81d986a915390404448a9864f6da253b"
+      }
+    },
+    "failed_client": 53,
+    "joined_clients": 60,
+    "campaign_started": false,
+    "analysis_sha256": "406a641ab2025fef48f622bcd60192e6494a0dee35a2561fed17f136e335921b"
+  },
+  "local_reproduction": {
+    "reused_binary_archive_sha256": "15ec6eea7b7ff0a6c9f7ae576e2cf5b6df5bf259043bbac7bbf79ab8a06750cb",
+    "native_compilation": false,
+    "clients": 64,
+    "failed_client": 39,
+    "owner_wait_seconds": 119.82711064303294,
+    "late_owner_admission_seconds_after_failure": 35.047080993652344,
+    "joined_clients": 49,
+    "campaign_started": false,
+    "children_stopped": true,
+    "retired_namespace_pids": [],
+    "host_links_unchanged": false,
+    "host_link_drift": "Two unrelated host veth interfaces appeared, two disappeared, and Wi-Fi address metadata changed. This run is retained as diagnostic failure, never qualification.",
+    "analysis_sha256": "45856f4c5713ca70be5b9d2d81172a8e8208dbd4d4ba389cd8bf15f4d3fed89e"
+  },
+  "correction": {
+    "independent_setup_workers": 4,
+    "shared_owner_admission_workers": 1,
+    "admission_order": "clients1 through63, round-robin across four channels",
+    "stop_after_failed_join": true,
+    "retained_diagnostics": "client and relay protocol metrics including rotations; failed join timing and transport readiness; no profile/card payloads"
+  },
+  "unchanged_gates": {
+    "clients": 64,
+    "campaign_seconds": 1800,
+    "refusal_fraction_less_than": 0.01,
+    "recipient_p95_seconds_less_than": 5,
+    "file_bytes": 5235248,
+    "owner_wait_seconds": 120,
+    "relay_restart_and_authenticated_receipts_required": true
+  },
+  "validation": {
+    "focused_harness_tests": 46,
+    "focused_builder_tests": 2,
+    "passed": true,
+    "source_audit_passed": true,
+    "corrected_local_diagnostic": "running separately; no pass claimed"
+  },
+  "files": {
+    "scripts/gchat-turnover.py": "b92efd1e5109670002564651be1c4fd1413e8e8459808a3a0e824f61d6ba1051",
+    "scripts/tests/gchat_turnover_test.py": "f3f572789f92748a94e075bf36df75bfd198505a3105d7c0202808ece40a2874"
+  },
+  "limits": "The original owner-delivery delay is observed, but its deeper transport cause is not declared fixed. Restoring established shared-owner pacing avoids treating its inbox as four independent transports. The full campaign and installed delivery acceptance remain required."
+}
