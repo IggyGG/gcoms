@@ -42,6 +42,174 @@ class ControllerTests(unittest.TestCase):
         self.assertEqual(bounded['pending_commands'],68)
         self.assertEqual(len(bounded['commands']),64)
 
+    def test_restart_readiness_waits_for_bind_and_keeps_absolute_deadline(self):
+        now=[10.0];calls=[]
+        process=mock.Mock();process.poll.return_value=None
+        bundle=base64.urlsafe_b64encode(turnover.bootstrap_bytes([self.introduction(1)])).decode()
+        def control(relay,command,deadline):
+            calls.append((relay,command,deadline,now[0]))
+            if len(calls)<3:raise ConnectionRefusedError('not bound yet')
+            return {'routing_bundle_b64':bundle}
+        with mock.patch.object(turnover.time,'monotonic',side_effect=lambda:now[0]), \
+                mock.patch.object(turnover.time,'sleep',side_effect=lambda seconds:now.__setitem__(0,now[0]+seconds)):
+            ready=turnover.wait_restarted_relay(process,0,40,control)
+        self.assertAlmostEqual(ready,10.2)
+        self.assertEqual([row[:3] for row in calls],[(0,'routing_bootstrap',40)]*3)
+        self.assertGreater(calls[-1][3],calls[0][3])
+
+    def test_restart_readiness_does_not_hide_exit_bad_receipt_or_wedge(self):
+        process=mock.Mock();process.poll.return_value=1
+        control=mock.Mock()
+        with self.assertRaisesRegex(RuntimeError,'exited before readiness'):
+            turnover.wait_restarted_relay(process,0,turnover.time.monotonic()+30,control)
+        control.assert_not_called()
+        process.poll.return_value=None
+        control.return_value={'routing_bundle_b64':base64.urlsafe_b64encode(b'bad').decode()}
+        with self.assertRaisesRegex(ValueError,'invalid bounded'):
+            turnover.wait_restarted_relay(process,0,turnover.time.monotonic()+30,control)
+        self.assertEqual(control.call_count,1)
+        control.reset_mock();control.side_effect=ConnectionRefusedError('not bound')
+        now=[0.0]
+        with mock.patch.object(turnover.time,'monotonic',side_effect=lambda:now[0]), \
+                mock.patch.object(turnover.time,'sleep',side_effect=lambda seconds:now.__setitem__(0,now[0]+seconds)):
+            with self.assertRaisesRegex(TimeoutError,'within 30 seconds'):
+                turnover.wait_restarted_relay(process,0,30,control)
+        self.assertEqual(now[0],30)
+        self.assertTrue(all(call.args[2]==30 for call in control.call_args_list))
+
+    def test_control_deadline_includes_partial_response_bytes(self):
+        now=[0.0];stream=mock.MagicMock()
+        stream.__enter__.return_value=stream
+        def receive(_):
+            now[0]+=1
+            return b' '
+        stream.recv.side_effect=receive
+        with mock.patch.object(turnover.time,'monotonic',side_effect=lambda:now[0]), \
+                mock.patch.object(turnover.socket,'create_connection',return_value=stream):
+            with self.assertRaisesRegex(TimeoutError,'relay control deadline'):
+                turnover.bounded_control(0,'routing_bootstrap',3)
+        self.assertEqual(stream.recv.call_count,3)
+        self.assertEqual([call.args[0] for call in stream.settimeout.call_args_list],[3,3,2,1])
+
+    def test_restart_records_real_downtime_without_changing_delivery_deadline(self):
+        now=[10.0];old=mock.Mock();old.poll.return_value=None;new=mock.Mock()
+        self.worker.children=[('relay0-configured',old)];self.worker.rpc_deadline=1800
+        def stop(process):
+            self.assertIs(process,old);now[0]+=2
+        def spawn(*args):now[0]+=1;return new
+        def ready(process,relay,deadline):
+            self.assertIs(process,new);self.assertEqual(deadline,43)
+            now[0]+=4;return now[0]
+        with mock.patch.object(turnover.time,'monotonic',side_effect=lambda:now[0]), \
+                mock.patch.object(self.worker,'stop',side_effect=stop), \
+                mock.patch.object(self.worker,'relay',side_effect=spawn), \
+                mock.patch.object(turnover,'wait_restarted_relay',side_effect=ready):
+            receipt=self.worker.restart_load_relay(0)
+        self.assertEqual(receipt['stop_and_spawn_seconds'],3)
+        self.assertEqual(receipt['control_ready_seconds'],4)
+        self.assertEqual(receipt['observed_downtime_seconds'],7)
+        self.assertTrue(receipt['ready'])
+        self.assertEqual(self.worker.rpc_deadline,1800)
+
+    def test_directory_sampling_skips_only_the_known_pending_restart(self):
+        bundle=base64.urlsafe_b64encode(turnover.bootstrap_bytes([self.introduction(1)])).decode()
+        with mock.patch.object(self.worker,'status',return_value=None), \
+                mock.patch.object(self.worker,'control',return_value={'routing_bundle_b64':bundle}) as control:
+            self.worker.sample(restarting=(0,))
+        self.assertEqual([call.args[0] for call in control.call_args_list],list(range(1,6)))
+        row=self.worker.events[-1]
+        self.assertEqual(row['relays'][0],{'relay':0,'restart_pending':True})
+        self.worker.directory_sample=None
+        with mock.patch.object(self.worker,'status',return_value=None), \
+                mock.patch.object(self.worker,'control',side_effect=ConnectionRefusedError('unexpected relay failure')):
+            with self.assertRaises(ConnectionRefusedError):self.worker.sample()
+
+    def test_campaign_observes_commands_while_relay_readiness_is_pending(self):
+        class Observed(Exception):pass
+        now=[0.0];entered=threading.Event();release=threading.Event();observed=[];pending_samples=[]
+        worker=self.worker
+        worker.spec['config'].update(load_topology='fleet-four-channels',load_seconds=2,file_bytes=5235248)
+        process=mock.Mock();process.poll.return_value=None
+        worker.children=[(f'client{i}',process) for i in range(64)]
+        groups=[dict(index=0,channel='channel',members=list(range(64)))]
+        def history(client,channel,token):
+            if not entered.is_set():return []
+            observed.append(client)
+            return [dict(id=token,mine=client==0,delivery='delivered')]
+        def restart(relay):
+            self.assertEqual(relay,0);entered.set()
+            if not release.wait(5):raise TimeoutError('test did not release relay readiness')
+            return {'ready':True}
+        def sample(restarting=()):
+            if restarting:
+                self.assertTrue(entered.wait(5))
+                pending_samples.append(now[0])
+                if len(pending_samples)==1:return
+                try:
+                    self.assertFalse(release.is_set())
+                    self.assertEqual(restarting,(0,))
+                    self.assertEqual(set(observed),set(range(64)))
+                    self.assertTrue(any(row['event']=='load_command_delivered' for row in worker.events))
+                    raise Observed
+                finally:release.set()
+        with mock.patch.object(turnover.time,'monotonic',side_effect=lambda:now[0]), \
+                mock.patch.object(turnover.time,'sleep',side_effect=lambda seconds:now.__setitem__(0,now[0]+seconds)), \
+                mock.patch.object(worker,'start_client'),mock.patch.object(worker,'request',return_value=True), \
+                mock.patch.object(worker,'readiness',return_value=True),mock.patch.object(worker,'files'), \
+                mock.patch.object(worker,'prepare_load_channels',return_value=groups), \
+                mock.patch.object(worker,'start_file',return_value='original-file'), \
+                mock.patch.object(worker,'submit'),mock.patch.object(worker,'history',side_effect=history), \
+                mock.patch.object(worker,'restart_load_relay',side_effect=restart), \
+                mock.patch.object(worker,'sample',side_effect=sample):
+            with self.assertRaises(Observed):worker.relay_load()
+        self.assertGreater(pending_samples[1],pending_samples[0])
+        self.assertAlmostEqual(worker.rpc_deadline,12.8+2+120)
+
+    def test_parallel_setup_bounds_all_64_clients_and_preserves_results(self):
+        barrier=threading.Barrier(4);lock=threading.Lock();active=0;peak=0;seen=[]
+        def prepare(client):
+            nonlocal active,peak
+            with lock:active+=1;peak=max(peak,active);seen.append(client)
+            try:
+                if client<4:barrier.wait(timeout=5)
+                return client*2
+            finally:
+                with lock:active-=1
+        result=turnover.parallel_setup(prepare,range(64))
+        self.assertEqual(peak,4)
+        self.assertEqual(sorted(seen),list(range(64)))
+        self.assertEqual(result,[i*2 for i in range(64)])
+        with self.assertRaisesRegex(RuntimeError,'prepare failed'):
+            turnover.parallel_setup(lambda _:(_ for _ in ()).throw(RuntimeError('prepare failed')),range(4))
+
+    def test_parallel_enrollment_preserves_each_channel_chain_and_all_members(self):
+        self.worker.spec['config']['load_topology']='fleet-four-channels'
+        self.worker.rpc_deadline=turnover.time.monotonic()+60
+        barrier=threading.Barrier(4);lock=threading.Lock();joined={i:[] for i in range(4)};created=[]
+        def create(client,text):
+            self.assertEqual(client,0);index=len(created);created.append(text)
+            return {'conversation':f'channel{index}'}
+        def invitation(channel):
+            index=int(channel[-1])
+            if not joined[index]:barrier.wait(timeout=5)
+            return channel
+        def join(client,code,nickname):
+            index=int(code[-1])
+            with lock:joined[index].append(client)
+            self.assertEqual(nickname,f'participant{client}')
+            return {'conversation':code}
+        with mock.patch.object(self.worker,'submit',side_effect=create), \
+                mock.patch.object(self.worker,'remote_invitation',side_effect=invitation), \
+                mock.patch.object(self.worker,'join_invitation',side_effect=join):
+            groups=self.worker.prepare_load_channels(self.worker.rpc_deadline)
+        self.assertEqual(len(created),4)
+        self.assertEqual([g['members'] for g in groups],turnover.load_channel_members())
+        self.assertEqual([joined[i] for i in range(4)],[g[1:] for g in turnover.load_channel_members()])
+        events=[row for row in self.worker.events if row['event']=='load_member_joined']
+        self.assertEqual(sorted(row['client'] for row in events),list(range(1,64)))
+        # Every threaded event must also survive as one complete JSONL record.
+        self.assertEqual(len((self.root/'events.jsonl').read_text().splitlines()),63)
+
     @staticmethod
     def introduction(identity, expiry=3600, epoch=1):
         return bytes([identity])*83+bytes([epoch])*64+expiry.to_bytes(8,'big')

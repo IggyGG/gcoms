@@ -29,6 +29,33 @@ def source_patches(gcoms):
                 patches.append(f'{json.dumps(name)} = {{ path = {json.dumps(str(folder))} }}')
     return '\n'.join(patches) + '\n'
 
+
+def supplied_relay(directory, sources):
+    """Only the exact frozen production feature graph may supply the relay."""
+    receipt = json.loads((directory / 'receipt.json').read_text())
+    command = ['cargo', 'build', '--locked', '--release', '-p', 'gcoms-node',
+               '-p', 'gcoms-catalog', '-p', 'gcoms-channel-service', '--features',
+               'gcoms-node/experimental-gc2,gcoms-node/push-gateway,gcoms-catalog/experimental-gc2']
+    if (receipt.get('schema') != 1 or receipt.get('kind') != 'linux_native_services'
+            or receipt.get('passed') is not True or receipt.get('commands') != [command]
+            or receipt.get('target') != 'x86_64-unknown-linux-gnu'
+            or receipt.get('rustc') != subprocess.check_output(['rustc', '-vV'], text=True)
+            or receipt.get('rustflags') != os.environ.get('RUSTFLAGS', '')
+            or receipt.get('compiler_environment') != {
+                **{key: os.environ.get(key, '') for key in
+                   ('RUSTFLAGS', 'CARGO_ENCODED_RUSTFLAGS', 'CARGO_BUILD_TARGET')},
+                **{key: value for key, value in os.environ.items()
+                   if key.startswith('CARGO_PROFILE_RELEASE_')}}):
+        raise ValueError('supplied relay is not the exact production build')
+    for name, root in sources.items():
+        commit = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=root, text=True).strip()
+        if receipt.get('sources', {}).get(name, {}).get('commit') != commit:
+            raise ValueError('supplied relay source differs from the fixture')
+    binary = directory / 'gcnode'
+    if not binary.is_file() or binary.is_symlink() or digest(binary) != receipt.get('files', {}).get('gcnode'):
+        raise ValueError('supplied production relay bytes changed')
+    return receipt
+
 def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument('--gchat', type=Path, required=True)
@@ -36,11 +63,13 @@ def main():
     p.add_argument('--target-dir', type=Path, default=ROOT / 'target/fleet-build-cache')
     p.add_argument('--fetch', action='store_true',
                    help='fetch dependencies in the isolated source copy before the offline build')
+    p.add_argument('--relay-build', type=Path, help='verified production service build supplying gcnode unchanged')
     args = p.parse_args()
     output = args.output.resolve()
     output.mkdir(parents=True, exist_ok=False)
     os.chmod(output, 0o700)
     sources = {'gcoms': ROOT, 'gchat': args.gchat.resolve()}
+    relay = supplied_relay(args.relay_build.resolve(), sources) if args.relay_build else None
     report = {'schema': 1, 'passed': False, 'sources': {}, 'commands': [], 'artifacts': {}}
     try:
         for name, root in sources.items():
@@ -64,14 +93,25 @@ def main():
         ]
         if args.fetch:
             commands.insert(0, ('gchat', ['cargo', 'fetch', '--config', str(patch)]))
+        if relay is not None:
+            # Compile only the three fixture/client executables. Their graph is
+            # deliberately separate from the production relay's push-gateway graph.
+            command = commands[-1][1]
+            position = command.index('gcnode')
+            del command[position - 1:position + 1]
+            report['provided_relay'] = {'receipt_sha256': digest(args.relay_build / 'receipt.json'),
+                                        'receipt': relay}
         for name, command in commands:
             report['commands'].append({'repository': name, 'argv': command})
             subprocess.run(command, cwd=output / name, env=env, check=True)
         (output / 'bin').mkdir()
         for name, relative in [('gcnode', 'gcnode'), ('gchat', 'gchat'), ('fleet_probe', 'examples/fleet_probe'), ('turnover_daemon', 'examples/turnover_daemon')]:
             dest = output / 'bin' / name
-            shutil.copy2(args.target_dir / 'release' / relative, dest)
+            source = args.relay_build / 'gcnode' if name == 'gcnode' and relay is not None else args.target_dir / 'release' / relative
+            shutil.copy2(source, dest)
             report['artifacts'][name] = {'sha256': digest(dest), 'size': dest.stat().st_size}
+            if name == 'gcnode' and relay is not None and digest(dest) != relay['files']['gcnode']:
+                raise ValueError('supplied production relay changed during fixture build')
         for name, root in sources.items():
             report['sources'][name]['unchanged'] = unchanged(root, report['sources'][name]['files'])
             report['sources'][name]['resolved_lock_sha256'] = digest(output / name / 'Cargo.lock')

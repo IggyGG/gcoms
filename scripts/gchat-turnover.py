@@ -13,6 +13,63 @@ FIXTURE, FIXTURE6 = base.FIXTURE, base.FIXTURE6
 RELAYS = tuple(f'11.231.97.{n}' for n in range(10, 16))
 CLIENT, CLIENT6 = base.CLIENT, base.CLIENT6
 SCOPE = 'actual_gchat_disconnected_fivehop_turnover_v2'
+LOAD_SETUP_WORKERS = 4
+
+def parallel_setup(function, items):
+    # Independent profiles/listeners/channels only; preserve input order and
+    # stop queued work on failure before advancing to the unchanged campaign.
+    with concurrent.futures.ThreadPoolExecutor(max_workers=LOAD_SETUP_WORKERS) as pool:
+        futures={pool.submit(function,item):index for index,item in enumerate(items)}
+        results=[None]*len(futures)
+        try:
+            for future in concurrent.futures.as_completed(futures):
+                results[futures[future]]=future.result()
+        except BaseException:
+            for future in futures:future.cancel()
+            raise
+        return results
+
+def bounded_control(relay, command, deadline):
+    def remaining():
+        value=deadline-time.monotonic()
+        if value<=0:raise TimeoutError('relay control deadline')
+        return value
+    with socket.create_connection(('127.0.0.1',19500+relay),timeout=remaining()) as stream:
+        stream.settimeout(remaining())
+        stream.sendall((json.dumps({'id':1,'cmd':command,'version':2})+'\n').encode())
+        pending=b'';rows=0
+        while rows<100:
+            stream.settimeout(remaining())
+            chunk=stream.recv(65536)
+            if not chunk:raise RuntimeError('relay control closed before receipt')
+            pending+=chunk
+            while b'\n' in pending:
+                row,pending=pending.split(b'\n',1);rows+=1
+                if len(row)>1048576:raise ValueError('oversize relay control receipt')
+                value=json.loads(row)
+                if value.get('id')==1:
+                    if not value.get('ok'):raise RuntimeError('relay control rejected command')
+                    remaining()
+                    return value['data']
+                if rows>=100:break
+            if len(pending)>1048576:raise ValueError('oversize relay control receipt')
+    raise RuntimeError('relay control receipt missing')
+
+def wait_restarted_relay(process, relay, deadline, control=bounded_control):
+    while time.monotonic()<deadline:
+        if process.poll() is not None:raise RuntimeError('restarted relay exited before readiness')
+        try:
+            encoded=control(relay,'routing_bootstrap',deadline)['routing_bundle_b64']
+        except OSError:
+            # Connection refusal while the fresh process binds its control
+            # listener is expected. Invalid/rejected receipts are not retried.
+            time.sleep(min(.1,max(0,deadline-time.monotonic())))
+            continue
+        bootstrap_records(base64.urlsafe_b64decode(encoded+'='*(-len(encoded)%4)))
+        if time.monotonic()>=deadline:break
+        if process.poll() is not None:raise RuntimeError('restarted relay exited during readiness')
+        return time.monotonic()
+    raise TimeoutError('restarted relay control not ready within 30 seconds')
 
 def bootstrap_records(raw):
     if len(raw)<6 or raw[:5]!=b'GCRB\x02' or not 1<=raw[5]<=8 or len(raw)!=6+155*raw[5]:
@@ -223,6 +280,7 @@ class Journey(base.Worker):
         self.result.update(scope=SCOPE, privacy_qualified=False, release_qualified=False,
                            relay_count=len(self.relay_addresses), route_relay_hops=5)
         self.origin = time.monotonic(); self.roles = {}; self.latest = {}; self.chat_count = 0
+        self.process_lock = threading.RLock()
         if self.spec['config'].get('mode') in ('carrier-cap', 'entry-loss'):
             self.env['GCOMS_GC2_LIFECYCLE'] = '1'
 
@@ -240,15 +298,17 @@ class Journey(base.Worker):
         return status
 
     def event(self, kind, **facts):
-        super().event(kind, elapsed=time.monotonic() - self.origin, **facts)
+        with self.process_lock:
+            super().event(kind, elapsed=time.monotonic() - self.origin, **facts)
 
     def spawn(self, role, command, **kwargs):
         if role.startswith('relay') and len(command) > 1 and command[1] == 'serve':
             command = [*command, *load_relay_capacity(self.spec['config'])]
-        generation = self.roles.get(role, 0); self.roles[role] = generation + 1
-        actual = role if generation == 0 else f'{role}-reopen-{generation}'
-        self.latest[role] = actual
-        return super().spawn(actual, command, **kwargs)
+        with self.process_lock:
+            generation = self.roles.get(role, 0); self.roles[role] = generation + 1
+            actual = role if generation == 0 else f'{role}-reopen-{generation}'
+            self.latest[role] = actual
+            return super().spawn(actual, command, **kwargs)
 
     def topology(self):
         if os.geteuid() != 0 or os.readlink('/proc/self/ns/net') == self.spec['host_netns']:
@@ -328,7 +388,7 @@ class Journey(base.Worker):
             raw = (self.root / 'bootstrap').read_bytes()
             records = [raw[6+i*155:6+(i+1)*155] for i in range(raw[5])]
             count = 64 if self.spec['config'].get('mode') == 'relay-load' else 10
-            for client in range(2, count):
+            def provision(client):
                 folder = self.root / f'c{client}'
                 (folder / 'fixtures').mkdir(mode=0o700)
                 os.chown(folder / 'fixtures', self.uid, self.gid)
@@ -337,8 +397,9 @@ class Journey(base.Worker):
                 self.private(folder / 'card', card + '\n')
                 self.private(folder / 'bootstrap', b'GCRB\x02' + bytes([len(records)-1]) +
                              b''.join(r for i, r in enumerate(records) if i != inbox))
-                for name in ('card', 'bootstrap'):
-                    self.result['private_inputs'][f'c{client}/{name}'] = sha256(folder / name)
+                return {f'c{client}/{name}':sha256(folder/name) for name in ('card','bootstrap')}
+            for inputs in parallel_setup(provision,range(2,count)):
+                self.result['private_inputs'].update(inputs)
         if host := self.spec.get('fixture_host'):
             process = self.spawn('network-config', [host['path'], 'network',
                 self.root / 'bootstrap', self.root / 'network.json'],
@@ -367,8 +428,8 @@ class Journey(base.Worker):
 
     def prepare_contributions(self):
         host = self.spec['fixture_host']['path']
-        records = []
-        for i in range(32):
+        started=time.monotonic()
+        def prepare(i):
             folder = self.root / f'c{i+2}'
             env = {'GCHAT_FIXTURE_NETNS': self.result['boundary']['fixture_netns'],
                    'GCHAT_FIXTURE_HOST_NETNS': self.spec['host_netns']}
@@ -385,7 +446,8 @@ class Journey(base.Worker):
             raw = (folder / 'contribution').read_bytes()
             if len(raw)!=161 or raw[:6]!=b'GCRB\x02\x01':
                 raise RuntimeError('invalid contribution introduction')
-            records.append(raw[6:])
+            return raw[6:]
+        records=parallel_setup(prepare,range(32))
         for i in range(64):
             path=self.root/f'c{i}/bootstrap'
             seeds=path.read_bytes()[6:]
@@ -394,6 +456,7 @@ class Journey(base.Worker):
             selected=[records[(i*3+j)%len(records)] for j in range(3)]
             self.private(path,b'GCRB\x02\x08'+seeds+b''.join(selected))
         self.result['contributions']={'count':32,'listener_proofs':32,
+            'setup_workers':LOAD_SETUP_WORKERS,'setup_seconds':time.monotonic()-started,
             'scope':'source-bound core contribution services colocated with application clients; native device guards and provider admission qualified separately'}
 
     def lifecycle(self, i):
@@ -580,13 +643,16 @@ class Journey(base.Worker):
         expected=subscriptions if subscriptions is not None else getattr(self, 'expected_subscriptions', 2)
         return status if status and status.get('profile_id') == 46 and status.get('bootstrap_version') == 2 and status.get('usable_terminal_routes', 0) > 0 and status.get('interactive_subscriptions', 0) >= expected and status.get('bulk_subscriptions', 0) >= expected else None
 
-    def sample(self):
+    def sample(self, restarting=()):
         if renewal:=getattr(self,'routing_renewal',None):renewal.check()
         self.event('transport_sample', clients=[self.status(i) for i in (0,1)])
         if int(time.time()) // 30 != getattr(self, 'directory_sample', None):
             self.directory_sample = int(time.time()) // 30
             redacted = []
             for i in range(len(self.relay_addresses)):
+                if i in restarting:
+                    redacted.append({'relay':i,'restart_pending':True})
+                    continue
                 encoded = self.control(i, 'routing_bootstrap')['routing_bundle_b64']
                 raw = base64.urlsafe_b64decode(encoded + '=' * (-len(encoded) % 4))
                 if raw[:5] != b'GCRB\x02' or len(raw) != 6 + 155 * raw[5]: raise RuntimeError('unexpected current bundle')
@@ -904,44 +970,76 @@ class Journey(base.Worker):
         self.assert_topology(self.result['boundary']['after'])
         self.result['completed'] = True
 
+    def prepare_load_channels(self, setup):
+        groups=[]
+        for index,members in enumerate(load_channel_members(self.spec['config']['load_topology'])):
+            channel=self.submit(0,f'/create #relay-load{index} operator')['conversation']
+            groups.append({'index':index,'channel':channel,'members':members})
+        def enroll(group):
+            # MLS membership changes remain ordered within each channel.
+            # Different channels and member profiles have independent state.
+            for client in group['members'][1:]:
+                code=until(lambda:self.remote_invitation(group['channel']),setup,'64-client invitation')
+                if self.join_invitation(client,code,f'participant{client}')['conversation'] != group['channel']:
+                    raise RuntimeError('participant joined another channel')
+                self.event('load_member_joined',client=client,channel_index=group['index'])
+            return group
+        return parallel_setup(enroll,groups)
+
+    def restart_load_relay(self, relay):
+        started=time.monotonic()
+        receipt={'relay':relay,'started_unix':time.time(),'ready':False}
+        self.result['relay_restart_readiness']=receipt
+        self.event('load_relay_restart_started',relay=relay)
+        process=next(p for role,p in reversed(self.children) if role.startswith(f'relay{relay}') and p.poll() is None)
+        self.stop(process)
+        process=self.relay(relay,self.root/'bootstrap')
+        spawned=time.monotonic()
+        receipt['stop_and_spawn_seconds']=spawned-started
+        self.event('load_relay_restarted',relay=relay)
+        ready=wait_restarted_relay(process,relay,spawned+30)
+        receipt.update(ready=True,control_ready_seconds=ready-spawned,
+                       observed_downtime_seconds=ready-started,ready_unix=time.time())
+        self.event('load_relay_control_ready',**receipt)
+        return receipt
+
     def relay_load(self):
         clients=list(range(64))
-        setup=time.monotonic()+2400
+        setup_started=time.monotonic();setup=setup_started+2400
         self.rpc_deadline=setup
         for i in clients:
             self.start_client(i)
             # Stagger unauthenticated TLS admission without relaxing its
             # original eight-connections-per-source protection.
             time.sleep(.2)
-        for i in clients:
+        def ready(i):
             until(lambda i=i:self.request(i,'snapshot'),setup,'64-client IPC startup')
             until(lambda i=i:self.readiness(i),setup,'64-client protected readiness')
+        parallel_setup(ready,clients)
         for i in (0,1): self.files(i,'configure',quota_bytes=str(32*1024*1024),retention_days=7)
-        groups=[]
-        for index,members in enumerate(load_channel_members(self.spec['config']['load_topology'])):
-            channel=self.submit(0,f'/create #relay-load{index} operator')['conversation']
-            groups.append({'index':index,'channel':channel,'members':members})
-            for client in members[1:]:
-                code=until(lambda:self.remote_invitation(channel),setup,'64-client invitation')
-                if self.join_invitation(client,code,f'participant{client}')['conversation'] != channel:
-                    raise RuntimeError('participant joined another channel')
-                self.event('load_member_joined',client=client,channel_index=index)
+        groups=self.prepare_load_channels(setup)
         self.expected_subscriptions=4
-        for i in clients:
+        def subscribed(i):
             expected=2+2*len(groups) if i==0 else 4
             until(lambda i=i,expected=expected:self.readiness(i,expected),setup,'64-client subscription readiness')
+        parallel_setup(subscribed,clients)
+        self.result['load_setup']={'clients':64,'workers':LOAD_SETUP_WORKERS,
+                                  'seconds':time.monotonic()-setup_started}
         duration=self.spec['config']['load_seconds']
         began=time.monotonic(); end=began+duration; began_unix=time.time()
         self.rpc_deadline=end+120
-        records=[]; attempts=0; refused=0; pending=[]; restart=False
+        records=[]; attempts=0; refused=0; pending=[]; restart=None
         transfer=self.start_file(groups[0]['channel'],self.spec['config']['file_bytes'],'release-payload')
         self.event('relay_load_started',clients=64,contributions=32,seconds=duration,file=transfer,
             channels=len(groups),channel_members=[len(g['members']) for g in groups])
         next_send=began; sender=0
         with concurrent.futures.ThreadPoolExecutor(max_workers=8) as sends, \
-                concurrent.futures.ThreadPoolExecutor(max_workers=16) as observations:
+                concurrent.futures.ThreadPoolExecutor(max_workers=16) as observations, \
+                concurrent.futures.ThreadPoolExecutor(max_workers=1) as recovery:
             while time.monotonic()<end or pending:
                 now=time.monotonic()
+                if restart is not None and restart.done():
+                    restart.result()  # Surface exit, invalid receipt or bounded readiness failure.
                 if now>end+120:
                     self.result['relay_load_incomplete']=incomplete_load_commands(pending,now)
                     raise TimeoutError('load delivery did not drain within its bound')
@@ -989,15 +1087,16 @@ class Journey(base.Worker):
                             'authenticated_ack_seconds':time.monotonic()-item['started']}
                         records.append(record); pending.remove(item)
                         self.event('load_command_delivered',**record)
-                if not restart and now-began>=duration/2:
-                    process=next(p for role,p in reversed(self.children) if role.startswith('relay0') and p.poll() is None)
-                    self.stop(process); self.relay(0,self.root/'bootstrap'); restart=True
-                    self.event('load_relay_restarted',relay=0)
-                self.sample()
+                if restart is None and now-began>=duration/2:
+                    restart=recovery.submit(self.restart_load_relay,0)
+                if restart is not None and restart.done():restart.result()
+                self.sample(restarting=(0,) if restart is not None and not restart.done() else ())
                 for i in clients:
                     process=next(p for role,p in reversed(self.children) if role.startswith(f'client{i}-') or role==f'client{i}')
                     if process.poll() is not None: raise RuntimeError('load client exited')
                 time.sleep(.2)
+            if restart is None:raise RuntimeError('load relay restart was not exercised')
+            restart.result()
         completed_unix=time.time();observed_seconds=time.monotonic()-began
         self.finish_file(transfer,120)
         latencies=sorted(value for record in records for value in record['recipient_seconds'])
@@ -1012,7 +1111,7 @@ class Journey(base.Worker):
             'topology':self.spec['config']['load_topology'],'channels':len(groups),
             'channel_members':[len(g['members']) for g in groups],'recipient_deliveries_per_round':63,
             'application_refusals':refused,'application_refusal_fraction':refused/max(1,attempts),'recipient_p95_seconds':p95,
-            'authenticated_commands':records,'file':transfer,'relay_restart':restart,'contribution_transferred_bytes':carried,
+            'authenticated_commands':records,'file':transfer,'relay_restart':True,'contribution_transferred_bytes':carried,
             'relay_data_accepted':data_accepted,'relay_forwarding_accepted':forwarding_accepted,'relay_refusals':relay_refusals,'relay_refusal_fraction':relay_fraction,
             'qualified_duration':duration>=1800,'provider_policy_qualified':False}
         if refused/max(1,attempts)>=.01 or relay_fraction>=.01 or p95>=5 or carried==0:

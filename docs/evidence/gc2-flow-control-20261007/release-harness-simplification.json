@@ -1,0 +1,72 @@
+{
+  "schema": 1,
+  "scope": "F5 bounded release harness and production relay reuse",
+  "observed_at": "2026-10-07T17:15:04.029472+00:00",
+  "source_head_before_landing": "bb4701184c64cacd35c39bc5c3a7f570304355b2",
+  "source_sha256": {
+    "scripts/gchat-turnover.py": "ecd931aaef753408339dd15070c3896ee9cc6756223bf72af206bc5593fba355",
+    "scripts/tests/gchat_turnover_test.py": "a679f5342f6096766baed788f3b8eeef8ffbf6d0cc2baa0555b8b73d1fd5053f",
+    "scripts/build-fleet-files.py": "d7a4a5206fe3407a94fb30b5c7f9450b99fa0543c4435cae6fd0ad697da5be3a",
+    "scripts/tests/fleet_build_binding_test.py": "bd85591ee63c931ae5e3f27f2bc5ffedef565ea045a31da84921366a7403bde2"
+  },
+  "passed": true,
+  "checks": [
+    {
+      "command": [
+        "python3",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "scripts/tests",
+        "-p",
+        "gchat_turnover_test.py"
+      ],
+      "returncode": 0,
+      "output": ".............................................\n----------------------------------------------------------------------\nRan 45 tests in 0.179s\n\nOK\n"
+    },
+    {
+      "command": [
+        "python3",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "scripts/tests",
+        "-p",
+        "fleet_build_binding_test.py"
+      ],
+      "returncode": 0,
+      "output": "..\n----------------------------------------------------------------------\nRan 2 tests in 0.012s\n\nOK\n"
+    }
+  ],
+  "tests": 47,
+  "release_gates": {
+    "clients": 64,
+    "campaign_seconds": 1800,
+    "refusal_fraction_less_than": 0.01,
+    "recipient_p95_seconds_less_than": 5,
+    "file_bytes": 5235248,
+    "authenticated_delivery_and_restart": "required"
+  },
+  "limits": [
+    "Focused Python controls only; no native compilation or full campaign run.",
+    "No deployed release or Android delivery acceptance follows from these checks."
+  ],
+  "source_audit": {
+    "command": [
+      "python3",
+      "scripts/check-source.py"
+    ],
+    "returncode": 0,
+    "paths_checked": 1065
+  },
+  "diff_check": {
+    "command": [
+      "git",
+      "diff",
+      "--check"
+    ],
+    "returncode": 0
+  }
+}
