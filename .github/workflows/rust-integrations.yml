@@ -30,8 +30,10 @@ on:
       - 'crates/**'
       - 'examples/rust-integration/**'
       - 'scripts/check-rust-integrations.py'
+      - 'scripts/merge-rust-integrations.py'
       - 'scripts/sdk_size_policy.py'
       - 'scripts/tests/rust_integration_size_test.py'
+      - 'scripts/tests/rust_integration_merge_test.py'
       - 'scripts/check-released-facade.py'
       - 'release/contracts/**'
       - 'scripts/prepare-rust-tests.py'
@@ -72,6 +74,8 @@ jobs:
         run: ${{ runner.os == 'Windows' && 'python' || 'python3' }} scripts/prepare-rust-tests.py
       - name: Check feature-release and stable size boundaries
         run: ${{ runner.os == 'Windows' && 'python' || 'python3' }} -m unittest discover -s scripts/tests -p rust_integration_size_test.py
+      - name: Check complete Intel qualification merge
+        run: ${{ runner.os == 'Windows' && 'python' || 'python3' }} -m unittest discover -s scripts/tests -p rust_integration_merge_test.py
       - name: Require clean source before native qualification
         run: ${{ runner.os == 'Windows' && 'python' || 'python3' }} -c "import subprocess; assert not subprocess.check_output(['git', 'status', '--porcelain']), 'native source is not clean'"
       - name: Check real native backends
@@ -88,6 +92,9 @@ jobs:
           result=$?
           tail -100 test-evidence/integration-evidence/native.log
           exit "$result"
+      - name: Bind passing Intel backend to this attempt
+        if: matrix.runner == 'macos-15-intel'
+        run: python3 scripts/merge-rust-integrations.py backend --directory test-evidence/integration-evidence
       - name: Retain completed backend diagnostics before size builds
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
@@ -97,20 +104,88 @@ jobs:
           path: |
             test-evidence/integration-evidence/native.log
             test-evidence/integration-evidence/source.txt
+            test-evidence/integration-evidence/native-backend.json
           if-no-files-found: error
       - name: Check and measure isolated consumer graphs
-        if: ${{ !cancelled() && steps.rust.outcome == 'success' && steps.tests.outcome == 'success' }}
+        if: ${{ matrix.runner != 'macos-15-intel' && !cancelled() && steps.rust.outcome == 'success' && steps.tests.outcome == 'success' }}
         env:
           CARGO_BUILD_JOBS: '2'
         run: ${{ runner.os == 'Windows' && 'python' || 'python3' }} scripts/check-rust-integrations.py --measure --output test-evidence/integration-evidence --baseline docs/evidence/rust-integrations-20260921/${{ matrix.baseline }}.json
       - name: Verify clean measurement source and exact revision
-        if: ${{ !cancelled() && steps.rust.outcome == 'success' && steps.tests.outcome == 'success' }}
+        if: ${{ matrix.runner != 'macos-15-intel' && !cancelled() && steps.rust.outcome == 'success' && steps.tests.outcome == 'success' }}
         run: ${{ runner.os == 'Windows' && 'python' || 'python3' }} -c "import json,os,pathlib,subprocess; report=json.loads(pathlib.Path('test-evidence/integration-evidence/summary.json').read_text()); assert report['revision']==os.environ['GITHUB_SHA'] and report['dirty'] is False and report['passed'] is True; assert not subprocess.check_output(['git','status','--porcelain'])"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: ${{ always() && matrix.runner != 'macos-15-intel' }}
+        with:
+          retention-days: 30
+          name: rust-integrations-${{ matrix.runner }}-${{ github.sha }}
+          path: test-evidence/integration-evidence/
+          if-no-files-found: error
+
+  intel-consumers:
+    if: ${{ !inputs.subscription_diagnostic && !inputs.local_pipe_diagnostic && !inputs.mac_overlay_diagnostic && !inputs.machine_scope_diagnostic }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        mode: [ipc, embedded, network-client]
+    runs-on: macos-15-intel
+    steps:
+      - name: Preserve source bytes
+        run: git config --global core.autocrlf false
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Install pinned Rust
+        run: |
+          rustup toolchain install 1.98.0 --profile minimal
+          rustup default 1.98.0
+      - name: Prepare short private test directory
+        run: python3 scripts/prepare-rust-tests.py
+      - name: Check feature-release and stable size boundaries
+        run: python3 -m unittest discover -s scripts/tests -p rust_integration_size_test.py
+      - name: Require clean source
+        run: python3 -c "import subprocess; assert not subprocess.check_output(['git', 'status', '--porcelain']), 'native source is not clean'"
+      - name: Measure all profiles of one isolated graph
+        env:
+          CARGO_BUILD_JOBS: '2'
+        run: python3 scripts/check-rust-integrations.py --measure --modes ${{ matrix.mode }} --output test-evidence/integration-evidence --baseline docs/evidence/rust-integrations-20260921/darwin-x86_64.json
+      - name: Bind complete measurements to this attempt
+        run: python3 scripts/merge-rust-integrations.py shard --mode ${{ matrix.mode }} --directory test-evidence/integration-evidence
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: always()
         with:
           retention-days: 30
-          name: rust-integrations-${{ matrix.runner }}-${{ github.sha }}
+          name: rust-integrations-intel-${{ matrix.mode }}-${{ github.sha }}-${{ github.run_attempt }}
+          path: test-evidence/integration-evidence/
+          if-no-files-found: error
+
+  intel-qualification:
+    # A failed/cancelled backend or any incomplete shard prevents publication.
+    needs: [native, intel-consumers]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Download this run's native backend attempts
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          pattern: native-backend-macos-15-intel-${{ github.sha }}-*
+          path: test-evidence/intel-backend
+      - name: Download this run's consumer shard attempts
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          pattern: rust-integrations-intel-*-${{ github.sha }}-*
+          path: test-evidence/intel-shards
+      - name: Require complete exact-source native qualification
+        run: |
+          python3 scripts/merge-rust-integrations.py merge --backend test-evidence/intel-backend --shards test-evidence/intel-shards/rust-integrations-intel-* --output test-evidence/integration-evidence
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          retention-days: 30
+          name: rust-integrations-macos-15-intel-${{ github.sha }}
           path: test-evidence/integration-evidence/
           if-no-files-found: error
 

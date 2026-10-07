@@ -25,7 +25,7 @@ use std::{
         atomic::{AtomicUsize, Ordering},
         Arc, Mutex,
     },
-    time::Duration,
+    time::{Duration, SystemTime, UNIX_EPOCH},
 };
 use tokio::{
     io::AsyncReadExt,
@@ -843,6 +843,7 @@ async fn stalled_subscription_credit_resumes_without_blocking_finite_push() {
 
 /// Real GCT2 entry + three middles + TLS/H2 terminal: public scheduler API, separate
 /// authenticated subscriptions, many bulk records and interleaved chat.
+/// This fixed-subscription fixture does not exercise hourly authority turnover.
 #[tokio::test]
 async fn natural_scheduler_delivers_bulk_and_chat_over_owned_ready_entries() {
     use gcoms_node::{
@@ -854,6 +855,7 @@ async fn natural_scheduler_delivers_bulk_and_chat_over_owned_ready_entries() {
         directory::{BootstrapBundle, Directory as Gc2Directory},
         owner::EntryOwner,
     };
+    wait_for_fixed_subscription_epoch().await;
     let mut fixture = Fixture::new().await;
     let entry = fixture.relay("127.0.0.88", true).await;
     let middle = fixture.relay("127.0.0.89", false).await;
@@ -861,6 +863,13 @@ async fn natural_scheduler_delivers_bulk_and_chat_over_owned_ready_entries() {
     let third = fixture.relay("127.0.0.91", false).await;
     let now = now_unix();
     let intro = entry.gc2_introduction(now);
+    assert!(
+        (UNIX_EPOCH + Duration::from_secs(intro.expires_at))
+            .duration_since(SystemTime::now())
+            .unwrap_or_default()
+            >= Duration::from_secs(175),
+        "fixture setup consumed the fixed-subscription authority window"
+    );
     let guard = intro.service_id;
     let directory = Arc::new(Gc2Directory::for_loopback_fixture());
     directory
@@ -982,4 +991,73 @@ async fn natural_scheduler_delivers_bulk_and_chat_over_owned_ready_entries() {
     assert_eq!(fixture.entry_connections.load(Ordering::SeqCst), 2);
     fixture.finish().await;
     transferred.expect("bulk delivery must ride the shared carrier lattice");
+}
+
+// The unchanged setup bounds (15 + 20 + 20s) and transfer bound (120s),
+// plus 5s sampling margin, must fit in one real authenticated epoch. Otherwise
+// an hourly carrier expiry correctly closes this fixture's retained streams.
+// Wait before creating any lease, connection or application work; never retry
+// a failed transfer or extend production authority to make the test pass.
+const FIXED_SUBSCRIPTION_WINDOW: Duration = Duration::from_secs(180);
+
+fn fixed_subscription_epoch_delay(now: Duration) -> Duration {
+    let remaining = Duration::from_secs(3600 - now.as_secs() % 3600)
+        - Duration::from_nanos(u64::from(now.subsec_nanos()));
+    if remaining < FIXED_SUBSCRIPTION_WINDOW {
+        remaining
+    } else {
+        Duration::ZERO
+    }
+}
+
+async fn wait_for_fixed_subscription_epoch() {
+    let wall_now = || SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
+    let delay = fixed_subscription_epoch_delay(wall_now());
+    if delay.is_zero() {
+        return;
+    }
+    eprintln!("fixed_subscription_epoch_wait_ms={}", delay.as_millis());
+    // One bounded wait (<181s), including a small sampling margin. Unexpected
+    // wall-clock movement fails explicitly instead of creating a retry loop.
+    tokio::time::sleep(delay + Duration::from_millis(10)).await;
+    assert_eq!(
+        fixed_subscription_epoch_delay(wall_now()),
+        Duration::ZERO,
+        "wall clock changed during fixed-subscription epoch preflight"
+    );
+}
+
+#[test]
+fn fixed_subscription_epoch_preflight_is_fractional_and_bounded() {
+    for (now, expected) in [
+        (Duration::ZERO, Duration::ZERO),
+        (Duration::from_secs(3420), Duration::ZERO),
+        (
+            Duration::from_secs(3420) + Duration::from_nanos(1),
+            Duration::from_secs(180) - Duration::from_nanos(1),
+        ),
+        (
+            Duration::from_secs(3600) - Duration::from_nanos(1),
+            Duration::from_nanos(1),
+        ),
+        (Duration::from_secs(3600), Duration::ZERO),
+        (Duration::from_secs(7021), Duration::from_secs(179)),
+    ] {
+        let delay = fixed_subscription_epoch_delay(now);
+        assert_eq!(delay, expected);
+        assert!(delay < FIXED_SUBSCRIPTION_WINDOW);
+        // Bind the calculation to the real service's advertised epoch rather
+        // than silently assuming a different credential lifetime in tests.
+        let intro = gcoms_routing::service::gc2_introduction_from(
+            "127.0.0.88:443".parse().unwrap(),
+            [8; 32],
+            &[9; 32],
+            now.as_secs(),
+        );
+        let remaining = Duration::from_secs(intro.expires_at) - now;
+        assert_eq!(delay.is_zero(), remaining >= FIXED_SUBSCRIPTION_WINDOW);
+        if !delay.is_zero() {
+            assert_eq!(delay, remaining);
+        }
+    }
 }

@@ -204,5 +204,65 @@
     "source_audit_paths": 1061,
     "source_audit_passed": true,
     "diff_check_passed": true
+  },
+  "linux_native_epoch_followup": {
+    "source": "950f31694d86756e732f5477019aadf0fdb50e84",
+    "workflow_run": 37629884926,
+    "qualification_job": 112821072237,
+    "original_failure": {
+      "test": "natural_scheduler_delivers_bulk_and_chat_over_owned_ready_entries",
+      "location": "crates/node/tests/gc2_queue_service.rs:958",
+      "at_utc": "2026-10-07T14:00:00.005555Z",
+      "error": "stream closed because of a broken pipe",
+      "failed_log_sha256": "6abb591cda48cb0413e907eb9075220a444fca26cdffa0d67da95f8b7a007e01"
+    },
+    "cause": "The fixed-subscription fixture began just before the real hourly relay-authority expiry. Its retained stream closed exactly at the production hour boundary while the bulk transfer was incomplete. The unchanged fixture passed locally in 53.61s away from rollover.",
+    "production_rule": "service::gc2_introduction_from expires at (epoch + 1) * 3600; entry::run and server-channel enforce the same authenticated absolute deadline.",
+    "correction": "Before any fixture allocation, require 180s remaining authority for the existing 15 + 20 + 20 + 120s bounds plus 5s margin. Otherwise wait once until the next hour, bounded below 181s, then recheck. No application retry, security/production change, or transfer deadline extension. A fresh advertised-expiry assertion after relay allocation verifies that the 175s scenario budget still remains.",
+    "scope": "This fixture tests one retained subscription, not epoch turnover. Existing authenticated-expiry and same-authority renewal regressions remain separate and unchanged.",
+    "validation": {
+      "unchanged_test_passed": true,
+      "unchanged_runtime_seconds": 53.61,
+      "unchanged_log_sha256": "a34ebfbfac8b18dc2f95d9896552b763a62c9e71aaad1daa7291c0fd10c45b69",
+      "new_boundary_and_queue_tests": "passed: 10 tests, 0 failed, 0 ignored, 71.47s runtime",
+      "format_and_diff_checks": "passed",
+      "strict_targeted_clippy": "passed with -D warnings",
+      "test_source_sha256": "93ba8e95d52ff9f6ad1b30b6151bf1a4946779421785e2ed646e05489fe2e088",
+      "summary_receipt_sha256": "700e46225c7d9c4ed53c005c2815ef6e25b095e315418ba9cc3e1b5d2f58ae66",
+      "checks": [
+        {
+          "name": "queue-suite",
+          "elapsed_seconds": 127.428,
+          "log_sha256": "30c90a5d0c6777372ff0f28272e43d8ef45b00a506cc311f88d7614d64c040be"
+        },
+        {
+          "name": "queue-clippy",
+          "elapsed_seconds": 51.109,
+          "log_sha256": "86b78fce9f25ea2d112bdef8b9f63e8c95fb0d4aa22463870cc5c9891b33f27b"
+        }
+      ]
+    },
+    "release_limit": "Local fixture validation does not replace frozen native qualification or signed application acceptance."
+  },
+  "sdk_payload_contact_followup": {
+    "test": "crates/sdk/tests/bootstrap_ipc.rs",
+    "test_source_sha256": "1236a83b3ea6166126c9ba4c5433c6e2aa5744b5ff481b5d4cf8cd3d73fa6440",
+    "passed": true,
+    "test_runtime_seconds": 4.19,
+    "strict_scoped_clippy": "passed with -D warnings",
+    "scope": "Real EmbeddedClient and authenticated machine IPC over a local Legacy fixture. Verifies bootstrap admission, exact canonical 268-byte payload-contact delivery, component and independent-connection isolation, clone reuse and readmission after reconnect.",
+    "limits": "No Android or production GC/2 qualification. This passing test does not establish that the missing live Android contact was submitted or received.",
+    "receipt_sha256": "f732e5a21970c2058790c028bd3421e29c8f46cf66c950f77059c1a4221cae49"
+  },
+  "sdk_intel_parallel_followup": {
+    "original_run": 37625305239,
+    "original_job": 112805425643,
+    "cause": "Native backend passed; serial full-LTO size builds exceeded the 90-minute job deadline.",
+    "correction": "Run native backend and three isolated consumer modes concurrently on Intel Mac, preserving all three profiles, separate host measurement, compatibility, size ceilings and exact-source evidence. Merge only the complete ten measurements with a passing backend.",
+    "retry": "Reuse completed original attempts only within the same workflow run and revision; newest partial or failed evidence blocks instead of falling back.",
+    "local_merge_controls_passed": 15,
+    "local_size_controls_passed": 6,
+    "native_parallel_workflow_executed": false,
+    "receipt_sha256": "9d9ad76815ea17857260290cffc84b789b5128a20d84cc7e12d730575dd43f1c"
   }
 }
