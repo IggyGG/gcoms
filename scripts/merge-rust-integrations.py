@@ -164,7 +164,7 @@ def merge(root, backend, shards, output, baseline, binding):
         raise ValueError('backend source differs')
     checked_file(backend, 'native.log', native.get('native_log_sha256'))
     inputs = source_hashes(root)
-    consumers = {str(path.relative_to(root)): digest(path) for path in (
+    consumers = {path.relative_to(root).as_posix(): digest(path) for path in (
         root / 'examples/rust-integration/Cargo.toml', root / 'examples/rust-integration/src/main.rs')}
     common = None
     graphs, binaries, modes, files = {}, [], set(), []
