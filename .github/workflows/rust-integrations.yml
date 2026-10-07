@@ -18,6 +18,10 @@ on:
       mac_overlay_diagnostic:
         type: boolean
         default: false
+      machine_scope_diagnostic:
+        description: Run only the cold member recovery regression on Intel Mac
+        type: boolean
+        default: false
   push:
     branches: [main]
     paths:
@@ -36,7 +40,7 @@ permissions:
   contents: read
 jobs:
   native:
-    if: ${{ !inputs.subscription_diagnostic && !inputs.local_pipe_diagnostic && !inputs.mac_overlay_diagnostic }}
+    if: ${{ !inputs.subscription_diagnostic && !inputs.local_pipe_diagnostic && !inputs.mac_overlay_diagnostic && !inputs.machine_scope_diagnostic }}
     timeout-minutes: 90
     strategy:
       fail-fast: false
@@ -111,7 +115,7 @@ jobs:
           if-no-files-found: error
 
   subscription-diagnostic:
-    if: ${{ inputs.subscription_diagnostic && !inputs.local_pipe_diagnostic && !inputs.mac_overlay_diagnostic }}
+    if: ${{ inputs.subscription_diagnostic && !inputs.local_pipe_diagnostic && !inputs.mac_overlay_diagnostic && !inputs.machine_scope_diagnostic }}
     strategy:
       fail-fast: false
       matrix:
@@ -167,7 +171,7 @@ jobs:
           if-no-files-found: error
 
   local-pipe-diagnostic:
-    if: ${{ inputs.local_pipe_diagnostic && !inputs.mac_overlay_diagnostic }}
+    if: ${{ inputs.local_pipe_diagnostic && !inputs.mac_overlay_diagnostic && !inputs.machine_scope_diagnostic }}
     runs-on: windows-2022
     timeout-minutes: 45
     steps:
@@ -198,7 +202,7 @@ jobs:
           if-no-files-found: error
 
   mac-overlay-diagnostic:
-    if: ${{ inputs.mac_overlay_diagnostic }}
+    if: ${{ inputs.mac_overlay_diagnostic && !inputs.machine_scope_diagnostic }}
     runs-on: macos-15
     timeout-minutes: 30
     steps:
@@ -224,4 +228,34 @@ jobs:
         with:
           name: mac-overlay-${{ github.sha }}
           path: overlay-evidence/
+          if-no-files-found: error
+
+  machine-scope-diagnostic:
+    if: ${{ inputs.machine_scope_diagnostic }}
+    runs-on: macos-15-intel
+    timeout-minutes: 45
+    env:
+      CARGO_BUILD_JOBS: '4'
+      CARGO_PROFILE_TEST_DEBUG: '0'
+      CARGO_PROFILE_DEV_DEBUG: '0'
+      CARGO_INCREMENTAL: '0'
+      RUST_BACKTRACE: '1'
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c
+        with:
+          python-version: '3.12'
+      - name: Prepare pinned native worker
+        run: |
+          rustup toolchain install 1.98.0 --profile minimal
+          python3 scripts/prepare-rust-tests.py
+      - name: Repeat the exact cold member recovery regression
+        run: python3 scripts/check-machine-scope-recovery.py --output test-evidence/machine-scope-recovery
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: machine-scope-recovery-${{ github.sha }}
+          path: test-evidence/machine-scope-recovery/
           if-no-files-found: error
