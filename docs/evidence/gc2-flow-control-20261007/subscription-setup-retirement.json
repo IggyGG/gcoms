@@ -1,0 +1,208 @@
+{
+  "schema": 1,
+  "at": "2026-10-07T12:56:33.479439+00:00",
+  "passed": true,
+  "source_files": {
+    "crates/transport/src/client.rs": "2d9bf1b1415d6192c546ff44c37b2d986dae01eaa571081c97d68f75fcbaca33",
+    "crates/transport/src/client/gc2.rs": "5944016edb5b4a628b639a8dea4741cf53c0598ed83e78dc071d34ecc0636f52",
+    "crates/node/tests/gc2_queue_service.rs": "c956f133753e134b9c2aaa8619ee9c952b8945db8dfeecaac3a9a9a5c924f88b",
+    "crates/node/src/node/persist/gc2_volatile_tests.rs": "08e5e0fabfd5075c965c64fc0549bae8f8d5f3287ab1def07a82b7599eb49c0a"
+  },
+  "production_changed": [
+    "crates/transport/src/client/gc2.rs"
+  ],
+  "patch": "test-evidence/gc2-subscription-recovery-20261007/final.patch",
+  "patch_sha256": "dab5151679e0c45cfb7ea58f318819033558aa6293df6c73acbbbce231aa9f87",
+  "cause": "GC2 subscription setup outer timeout canceled the inner request before its stage-aware stalled-header connection retirement.",
+  "correction": "Use the same RequestProgress with request_inner at the existing absolute setup deadline; invoke existing exact-entry retirement on timeout, then retain the original GC2 deadline error.",
+  "assertions": [
+    "Baseline fails only because stalled pool entry remains1 instead of0.",
+    "Authenticated queue renewal delayed beyond expiry returns404 without consuming268-byte queued MSG or changing lease.",
+    "Fresh same-capability subscription delivers the exact retained MSG once and drains the queue.",
+    "Timed-out stalled-header request is prepared and seen exactly once, with no retry.",
+    "Acceptance-body timeout preserves the pooled connection.",
+    "Headers-timeout retires only exact current pool entry; already leased subscriber still delivers.",
+    "Next request creates a new connection."
+  ],
+  "checks": [
+    {
+      "name": "subscription-renewal",
+      "passed": true,
+      "exit_code": 0,
+      "elapsed_seconds": 25.107,
+      "receipt": "test-evidence/queued-bootstrap-contact-20261007/subscription-renewal.json",
+      "receipt_sha256": "da3bc60ddadfb4ecb2ba16a0f35fc415a5cb094d66ddf646c76ff397b128a7d9",
+      "log": "test-evidence/queued-bootstrap-contact-20261007/subscription-renewal.log",
+      "log_sha256": "4f2ab369f47870b8e7a8856a05bbce12ac90b3c00fbf6bcc806442a7f3cbf4d4",
+      "tests": {
+        "passed": 1,
+        "failed": 0,
+        "ignored": 0
+      }
+    },
+    {
+      "name": "pool-timeout-baseline",
+      "passed": false,
+      "exit_code": 101,
+      "elapsed_seconds": 17.25,
+      "receipt": "test-evidence/queued-bootstrap-contact-20261007/pool-timeout-baseline.json",
+      "receipt_sha256": "7be57a546d60415bbcf834bd8f7e92868bb9631941ea6fa4f1fd662fbe810aa7",
+      "log": "test-evidence/queued-bootstrap-contact-20261007/pool-timeout-baseline.log",
+      "log_sha256": "1be1133c3bb0043b2ab498fa4f6860c3aa8f54fec3eb474751dbf56e35055786",
+      "tests": {
+        "passed": 0,
+        "failed": 1,
+        "ignored": 0
+      }
+    },
+    {
+      "name": "pool-timeout-fixed",
+      "passed": true,
+      "exit_code": 0,
+      "elapsed_seconds": 8.409,
+      "receipt": "test-evidence/gc2-subscription-recovery-20261007/pool-timeout-fixed.json",
+      "receipt_sha256": "002267f8b8be35f1ed1407b82d4c508459304ff9d3bfb9456c4b1835f678a223",
+      "log": "test-evidence/gc2-subscription-recovery-20261007/pool-timeout-fixed.log",
+      "log_sha256": "a6697173daa382b3d8ea0d06284cfcafe16cc9e54f3175050216ebf47bff6568",
+      "tests": {
+        "passed": 1,
+        "failed": 0,
+        "ignored": 0
+      }
+    },
+    {
+      "name": "transport-all",
+      "passed": true,
+      "exit_code": 0,
+      "elapsed_seconds": 43.641,
+      "receipt": "test-evidence/gc2-subscription-recovery-20261007/transport-all.json",
+      "receipt_sha256": "d931d670775ba0a277f6da7776264924525409d2d34ec48c84f07227c6a36687",
+      "log": "test-evidence/gc2-subscription-recovery-20261007/transport-all.log",
+      "log_sha256": "e032518ccaa399d3592ff8c2289e88de645e23c4248e82124a061761dfe21fe6",
+      "tests": {
+        "passed": 72,
+        "failed": 0,
+        "ignored": 4
+      }
+    },
+    {
+      "name": "transport-clippy",
+      "passed": true,
+      "exit_code": 0,
+      "elapsed_seconds": 20.657,
+      "receipt": "test-evidence/gc2-subscription-recovery-20261007/transport-clippy.json",
+      "receipt_sha256": "50a3b6a045f3cb08aed522195cda88b457d707afdc0641076ff8b0a582d66c57",
+      "log": "test-evidence/gc2-subscription-recovery-20261007/transport-clippy.log",
+      "log_sha256": "36d180a7f1f6f81876ec394e2840ea83d200c5658e9567204e87f57ddaf84032"
+    }
+  ],
+  "limits": [
+    "Not deployed by this task.",
+    "Live relay65 subscribe refusal classification remains unauthorized_or_invalid; envelope expiry is not established as its observed cause.",
+    "Queue test uses opaque MSG bytes; authenticated payload-contact/session recovery is covered separately by queued-bootstrap-contact-20261007/node-summary.json.",
+    "Four native C transport probes require an external executable and remain explicitly ignored; no outside repository inspected."
+  ],
+  "committed": false,
+  "baseline_gcoms_commit": "1841d13016a1c605b9541b221db242ca20b4587f",
+  "summary_receipt_sha256": "f5d8d1f2c47b9a418d3bcc76ce3099bde33554ad17e21964fa51ea796829b026",
+  "complementary_checks": {
+    "focused.json": {
+      "receipt_sha256": "0af0ed269249de5004083e20b4b2b1ead7c42b390d3e957729c35071cdcea505",
+      "result": {
+        "passed": true,
+        "command": [
+          "cargo",
+          "test",
+          "--offline",
+          "--locked",
+          "-p",
+          "gcoms-node",
+          "--all-features",
+          "--lib",
+          "node::persist::tests::gc2_bootstrap_contact_survives_subscription_gap_and_either_peer_recovery",
+          "--",
+          "--exact",
+          "--test-threads=1",
+          "--nocapture"
+        ],
+        "exit_code": 0,
+        "elapsed_seconds": 39.766,
+        "source_head": "1841d13016a1c605b9541b221db242ca20b4587f",
+        "test_source_sha256": "08e5e0fabfd5075c965c64fc0549bae8f8d5f3287ab1def07a82b7599eb49c0a",
+        "cargo_target_dir": "/run/media/user/SSD-2/.workstation-builds/pool/slots/5c9d38ac9534494f978d66a4ddcbb6f8/target",
+        "log_sha256": "490822a083e582be7e57ff97d7768b33b554538d9c95b5a0be991bc3e3cd352a",
+        "scope": "Production direct-record node state machine; withheld packet delivery, not a real relay subscription test; no live actions."
+      }
+    },
+    "node-summary.json": {
+      "receipt_sha256": "b29702f2e423e08332acbc304734e990636db4579eee9112f3f35bf7554b76d3",
+      "result": {
+        "scope": "own GComs only, production node direct-record path, no live services, no SDK admission or real carrier claimed",
+        "source_head": "1841d13016a1c605b9541b221db242ca20b4587f",
+        "production_changed": false,
+        "test_committed": false,
+        "proof": "A valid 268-byte payload contact remains queued across withheld terminal delivery and a signed queue replacement; unchanged session, sender recovery, and receiver recovery each deliver exactly once. Only recipient application ACK retires pending. Same-generation fresh FirstMove is rejected; duplicate UnknownReceipt does not change flow window, receipt ledger or ACK outbox.",
+        "limits": [
+          "Withheld in-memory wire packets model the interruption; no real terminal subscription in this test.",
+          "Bootstrap application fixtures are opaque request/reply markers, not DS-MIN signatures or SDK per-connection admission.",
+          "No claim that the observed Android peer performed a session reset; current operational error lacks peer correlation."
+        ],
+        "inputs": {
+          "focused.json": "0af0ed269249de5004083e20b4b2b1ead7c42b390d3e957729c35071cdcea505",
+          "focused.log": "490822a083e582be7e57ff97d7768b33b554538d9c95b5a0be991bc3e3cd352a",
+          "volatile-contact-regression.patch": "ebd233d978c9e969b289d43a5eaefe01cbc4e806ce762b32240ab9e355462425"
+        }
+      }
+    },
+    "independent-timeout-review.json": {
+      "receipt_sha256": "d2e32603edd72b0d6fb9407c6e31a1557129e1c75b61fa93d756a16904b23b93",
+      "result": {
+        "schema": 1,
+        "review": "source review passed; post-fix runtime verification is owned separately by transport_validation",
+        "source_head": "1841d13016a1c605b9541b221db242ca20b4587f",
+        "reviewed_files": {
+          "crates/transport/src/client.rs": "2d9bf1b1415d6192c546ff44c37b2d986dae01eaa571081c97d68f75fcbaca33",
+          "crates/transport/src/client/gc2.rs": "5944016edb5b4a628b639a8dea4741cf53c0598ed83e78dc071d34ecc0636f52"
+        },
+        "checks": {
+          "deadline_and_public_error": "PASS: unchanged deadline.min(now+REQUEST_TIMEOUT); elapsed still returns GC/2 subscription deadline elapsed.",
+          "retirement": "PASS: reuse request_timeout stage4 only; existing remove_connection validates exact Arc under pinned service/exclusion/class key.",
+          "no_replay": "PASS: elapsed path performs cleanup and returns; no new request/body preparation retry.",
+          "subscriber_survival": "PASS source: ConnectionLease owns old connection Arc and driver; removing pool reference does not cancel a healthy leased subscription.",
+          "body_timeout": "PASS source: accepted headers exit setup wrapper; NaturalStream handles body timeout locally and retains healthy pooled connection.",
+          "security": "PASS: no identity, authentication, session generation, ratchet, capability, wire format or public API changes."
+        },
+        "baseline": "Original header timeout cancels nested request() before its stage-aware retirement. Real pinned TLS/H2 regression observed one prepared/submitted request and the expected timeout; healthy subscriber/body-timeout controls passed; pool incorrectly retained one connection instead of zero.",
+        "contact_evidence": "Queued 268-byte contact survives signed route renewal and either-peer recovery in production node state machine; real relay queue test preserves that size across expired-renewal 404. Neither establishes the exact observed Android failure as this timeout defect.",
+        "evidence": {
+          "focused.json": "0af0ed269249de5004083e20b4b2b1ead7c42b390d3e957729c35071cdcea505",
+          "subscription-renewal.json": "da3bc60ddadfb4ecb2ba16a0f35fc415a5cb094d66ddf646c76ff397b128a7d9",
+          "pool-timeout-baseline.json": "7be57a546d60415bbcf834bd8f7e92868bb9631941ea6fa4f1fd662fbe810aa7",
+          "node-summary.json": "b29702f2e423e08332acbc304734e990636db4579eee9112f3f35bf7554b76d3"
+        },
+        "changes_by_reviewer": "No production edits, builds, live actions or publication."
+      }
+    }
+  },
+  "native_qualification": "pending new frozen release; local source tests do not replace native or installed acceptance",
+  "landing_checks": {
+    "checks": [
+      {
+        "name": "format",
+        "exit_code": 0,
+        "elapsed_seconds": 2.118
+      },
+      {
+        "name": "node-clippy",
+        "exit_code": 0,
+        "elapsed_seconds": 73.9
+      }
+    ],
+    "passed": true,
+    "target": "/run/media/user/SSD-2/.workstation-builds/pool/slots/ac5d095435cc44baa888d4d64fce24ea/target",
+    "receipt_sha256": "2c737f6120301554f36b6d9ae1a9ff18ca70e9c2b36250a3005c578995924932",
+    "source_audit_paths": 1061,
+    "source_audit_passed": true,
+    "diff_check_passed": true
+  }
+}

@@ -1,6 +1,8 @@
 //! Explicit natural-cell transport. It never accepts GC/1 framing and adds no
 //! cover schedule. A protected route must be provided by the caller's connector.
-use super::{ConnectionLease, RequestBody, Result, Route, Tp1Client, REQUEST_TIMEOUT};
+use super::{
+    ConnectionLease, RequestBody, RequestProgress, Result, Route, Tp1Client, REQUEST_TIMEOUT,
+};
 use crate::hop::HopReply;
 use bytes::Bytes;
 use gcoms_core::{
@@ -137,18 +139,31 @@ impl Tp1Client {
             return Err("GC/2 subscription deadline elapsed".into());
         }
         let setup_deadline = deadline.min(Instant::now() + REQUEST_TIMEOUT);
-        let (response, connection) = tokio::time::timeout_at(
+        let progress = RequestProgress::new(false);
+        let (response, connection) = match tokio::time::timeout_at(
             setup_deadline,
-            self.request(
+            self.request_inner(
                 route.route(),
                 Method::POST,
                 &format!("/{}", route.token),
                 prepared(route.class, make),
+                &progress,
                 route.class,
             ),
         )
         .await
-        .map_err(|_| "GC/2 subscription deadline elapsed")??;
+        {
+            Ok(result) => result?,
+            Err(_) => {
+                // The subscription's absolute deadline must perform the same
+                // stage-aware retirement as finite requests. An outer timeout
+                // around request() would cancel its cleanup before it runs.
+                let _ = self
+                    .request_timeout::<()>(route.route(), route.class, &progress)
+                    .await;
+                return Err("GC/2 subscription deadline elapsed".into());
+            }
+        };
         if response.status() != StatusCode::OK {
             return Err(format!("GC/2 stream refused: {}", response.status()).into());
         }
@@ -287,6 +302,172 @@ mod tests {
         time::Duration,
     };
     use tokio::sync::oneshot;
+
+    #[tokio::test]
+    async fn subscription_setup_timeout_retires_only_the_stalled_pool_entry() {
+        use crate::server::Dispatch;
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        let connections = Arc::new(AtomicUsize::new(0));
+        let stalled_requests = Arc::new(AtomicUsize::new(0));
+        let (release, released) = oneshot::channel();
+        let released = Arc::new(Mutex::new(Some(released)));
+        let message = NaturalCell::new(CellType::Msg, 0, vec![42; 128]).unwrap();
+        let identity = TlsIdentity::generate().unwrap();
+        let server = Tp1Server::bind_with_identity(
+            "127.0.0.1:0".parse().unwrap(),
+            TokenRegistry::new(),
+            Arc::new(|_, _| Ok(None)),
+            Arc::new(|_| None),
+            &identity,
+        )
+        .await
+        .unwrap()
+        .with_dispatch_factory(Arc::new({
+            let connections = connections.clone();
+            let stalled_requests = stalled_requests.clone();
+            let message = message.clone();
+            move || {
+                let connection = connections.fetch_add(1, Ordering::SeqCst) + 1;
+                let stalled_requests = stalled_requests.clone();
+                let released = released.clone();
+                let message = message.clone();
+                Arc::new(move |token, _| {
+                    let held = match token {
+                        "healthy" => Some(released.lock().unwrap().take().unwrap()),
+                        "stalled" | "body-stalled" | "fresh" => None,
+                        _ => return Dispatch::Pass,
+                    };
+                    let stalled = token == "stalled";
+                    let body_stalled = token == "body-stalled";
+                    let payload = if token == "healthy" {
+                        message.clone()
+                    } else {
+                        NaturalCell::new(CellType::Msg, 0, vec![connection as u8]).unwrap()
+                    };
+                    let stalled_requests = stalled_requests.clone();
+                    Dispatch::Accepted(Box::new(move |mut body, mut respond| {
+                        Box::pin(async move {
+                            crate::server::read_body(&mut body, MAX_CELL).await.unwrap();
+                            if stalled {
+                                stalled_requests.fetch_add(1, Ordering::SeqCst);
+                                // Withhold response headers after receiving the exact request.
+                                std::future::pending::<()>().await;
+                            }
+                            let mut send = respond
+                                .send_response(
+                                    http::Response::builder().status(200).body(()).unwrap(),
+                                    false,
+                                )
+                                .unwrap();
+                            if body_stalled {
+                                // A body-stage timeout must not condemn the connection.
+                                std::future::pending::<()>().await;
+                            }
+                            send.send_data(
+                                Bytes::from(status_cell(HopReply::Accepted).encode()),
+                                false,
+                            )
+                            .unwrap();
+                            if let Some(held) = held {
+                                held.await.unwrap();
+                            }
+                            send.send_data(Bytes::from(payload.encode()), false)
+                                .unwrap();
+                            let _ = poll_fn(|cx| send.poll_reset(cx)).await;
+                        })
+                    }))
+                })
+            }
+        }));
+        let address = server.local_addr().unwrap();
+        let (stop, stopped) = oneshot::channel();
+        let server = tokio::spawn(server.run_until(async {
+            let _ = stopped.await;
+        }));
+        let client = Tp1Client::new().unwrap();
+        let route = NaturalRoute {
+            addr: address,
+            service_id: identity.service_id(),
+            token: "healthy",
+            excluded: &[],
+            class: TrafficClass::Interactive,
+        };
+        let make = || Ok(NaturalCell::new(CellType::RelaySub, 0, vec![0])?);
+        let mut healthy = client
+            .open_natural_prepared(route, Instant::now() + Duration::from_secs(10), make)
+            .await
+            .unwrap();
+        let body_error = match client
+            .open_natural_prepared(
+                NaturalRoute {
+                    token: "body-stalled",
+                    ..route
+                },
+                Instant::now() + Duration::from_millis(250),
+                make,
+            )
+            .await
+        {
+            Ok(_) => panic!("subscription without an acceptance cell was accepted"),
+            Err(error) => error.to_string(),
+        };
+        let pooled_after_body_timeout = client.pooled_connections().await;
+        let prepared = AtomicUsize::new(0);
+        let error = match client
+            .open_natural_prepared(
+                NaturalRoute {
+                    token: "stalled",
+                    ..route
+                },
+                Instant::now() + Duration::from_millis(250),
+                || {
+                    prepared.fetch_add(1, Ordering::SeqCst);
+                    make()
+                },
+            )
+            .await
+        {
+            Ok(_) => panic!("stalled subscription was accepted"),
+            Err(error) => error.to_string(),
+        };
+        let pooled_after_timeout = client.pooled_connections().await;
+        release.send(()).unwrap();
+        let survivor = healthy.recv().await.unwrap().unwrap();
+        let mut fresh = client
+            .open_natural_prepared(
+                NaturalRoute {
+                    token: "fresh",
+                    ..route
+                },
+                Instant::now() + Duration::from_secs(3),
+                make,
+            )
+            .await
+            .unwrap();
+        let fresh_message = fresh.recv().await.unwrap().unwrap();
+        drop(healthy);
+        drop(fresh);
+        drop(client);
+        stop.send(()).unwrap();
+        server.await.unwrap().unwrap();
+
+        assert_eq!(error, "GC/2 subscription deadline elapsed");
+        assert_eq!(body_error, "GC/2 subscription deadline elapsed");
+        assert_eq!(pooled_after_body_timeout, 1);
+        assert_eq!(prepared.load(Ordering::SeqCst), 1);
+        assert_eq!(stalled_requests.load(Ordering::SeqCst), 1);
+        assert_eq!(
+            survivor, message,
+            "the active subscriber must survive retirement"
+        );
+        assert_eq!(
+            pooled_after_timeout, 0,
+            "stalled headers must retire the pool entry"
+        );
+        assert_eq!(connections.load(Ordering::SeqCst), 2);
+        assert_eq!(fresh_message.payload(), &[2]);
+    }
 
     #[tokio::test]
     async fn cancelled_partial_read_resumes_and_deadline_releases_connection_lease() {

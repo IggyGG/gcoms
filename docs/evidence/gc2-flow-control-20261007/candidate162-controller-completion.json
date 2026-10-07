@@ -1,0 +1,177 @@
+{
+  "schema": 1,
+  "observed_utc": "2026-10-07T12:49:23.905425+00:00",
+  "deployment": {
+    "all17_healthy_matching": true,
+    "archive": {
+      "bytes": 92160,
+      "path": "test-evidence/controller-completion-20261007/rbac/final-observation/original-proof-closure.tar",
+      "sha256": "c9f7ff9d771e8482f00a37eb7a533250db6b2e26db6c398eccbf02c3d9016456"
+    },
+    "authenticated_ack_count": 6,
+    "authenticated_ack_senders": [
+      0,
+      1
+    ],
+    "authenticated_delivery": true,
+    "baseline_release_id": "ed941e223994db5d4391c834b1f259c1db707ea4cb1f223eb86f1b47f06b3089",
+    "baseline_sources": {
+      "gchat": {
+        "commit": "a36603a9b3d265ffe6efd29a75ce96cb958dcc18",
+        "tree": "d60d72ac4b8aa740f28e61e1e992fe034e24073a"
+      },
+      "gcoms": {
+        "commit": "d818da9209011c0287f906bc0ed42680997298f4",
+        "tree": "46b3197abb51df610715ad10003ef3fcfbbbbd84"
+      }
+    },
+    "binary_sha256": "a21ebf8e2129a36cb58eca295166b1d0d89ce7623ac448302cf969ce44b17701",
+    "binary_unchanged": true,
+    "children_stopped": true,
+    "controller_intent": "6b54f9f1b1ebe0a3dd9f01d5701778f599a847657820c48853388eb0e51ada8c",
+    "controller_source": {
+      "gchat": {
+        "commit": "1dc5c8b3eff4c2730256cb6fa9685923d6fc21e4",
+        "tree": "30cbae3a2bc1220fb717aca5ca433d3d47d49a62"
+      },
+      "gcoms": {
+        "commit": "d818da9209011c0287f906bc0ed42680997298f4",
+        "tree": "46b3197abb51df610715ad10003ef3fcfbbbbd84"
+      }
+    },
+    "elapsed_seconds": 188.79897810705006,
+    "file_check": {
+      "abrupt_stop": true,
+      "bytes": 16777216,
+      "completion_elapsed_seconds": 89.84926429390907,
+      "hash_verified_after_reopen": true,
+      "sha256": "287547022abb45cc9ad5b1ac0cbb2e1af00aaedff83bf61d4a50eb2c85faba4a",
+      "verified_pieces_retained": true
+    },
+    "grant_cleanup": {
+      "invitation_removed": true,
+      "revoked": true
+    },
+    "inputs_unchanged": true,
+    "journal_state": "deployed",
+    "network_check": "full",
+    "observed_at": "2026-10-07T12:46:10.771470+00:00",
+    "passed": true,
+    "receipts": {
+      "binding/final-journal.json": "10670a1d555234a6d647c358eda08e13c6098deccf8a9c4fc0e3bdb341142bea",
+      "binding/intent.json": "aa55cb33db4965c6dff6d92bcb9f6d52c97e217607df235655f3ceb15e8a592f",
+      "binding/qualification.json": "cf6a3e6d078f7e99c64ddfcf6e86feb0b00ce8e8e79bb2e41f6cbe05dd24e718",
+      "binding/ready.json": "c43a9ce880231dc457f1f507f46839d102c83cb4404be4c6d537384ae5612ba3",
+      "closure/canary-2d9bcd2e730c7f1fd690e734b5ecc25a3075e816d5cd842020cf5c3fc61a27d6/client0-f734a4d8e087464987986b50bd021d88.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "closure/canary-2d9bcd2e730c7f1fd690e734b5ecc25a3075e816d5cd842020cf5c3fc61a27d6/client1-5f0afecf888d424fb4b67663b5c667cf.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "closure/canary-2d9bcd2e730c7f1fd690e734b5ecc25a3075e816d5cd842020cf5c3fc61a27d6/client1-7fff810a335c4f30ad3728302b1d32b0.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "closure/canary-2d9bcd2e730c7f1fd690e734b5ecc25a3075e816d5cd842020cf5c3fc61a27d6/client1-c678157417c34e65928a69d6313d5e20.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "closure/canary-2d9bcd2e730c7f1fd690e734b5ecc25a3075e816d5cd842020cf5c3fc61a27d6/grant-cleanup.json": "317cf795530842a46735b13957f0f75700ded8de4e3f913ed3348d9812a69c8e",
+      "closure/canary-2d9bcd2e730c7f1fd690e734b5ecc25a3075e816d5cd842020cf5c3fc61a27d6/report.json": "b4531d947c83cfa4a11c10449b4d169736028a537a321207c11c3a09861e5120",
+      "closure/check-1791376889905946564.observation.json": "21306a5982de1a959269a7dc1f87ea22ea956b7b908f2f863bbd6434e9737522",
+      "closure/check-passed.json": "a77308b41c5567fa177e624a2def4a82f613ec6c8d3c727e3553d1cf411125c8",
+      "closure/observe-1791376768009616903.observation.json": "a91de40a7ca443f30b08ba2da41442dcd4d56d3ca1eaac4582a810459765deb5",
+      "closure/observe-passed.json": "8611983bd4355840281b374573ac3c743f166f48229ea768913bfda359fa636c"
+    },
+    "running": {
+      "images": [
+        {
+          "container": "coordinator",
+          "image_id": "127.0.0.1:30444/ghost/gchat-release@sha256:a74d8f68a253d46664af8737c1c8c94bcb2398f8e07cbffb14311295e30a1b38",
+          "pod_uid": "f13b91d2-c1f4-477b-baf8-dbd976bfa6b6"
+        }
+      ]
+    },
+    "schema": 1,
+    "temporary_profile_removed": true
+  },
+  "deployment_proof_sha256": "198b3cbb4d054b2abc4bc00bfa08dc4a57b72783cbd6a9892acdf2d5bba53cf4",
+  "automation": {
+    "controller_revision": "1dc5c8b3eff4c2730256cb6fa9685923d6fc21e4",
+    "qualified_tests_local": 380,
+    "qualified_tests_kubernetes": 380,
+    "coordinator_poll_seconds": 10,
+    "github_poll_seconds": 120,
+    "store_poll_seconds": 900,
+    "changes": [
+      "Source-bound controller-only image qualification and rollout without rebuilding native apps",
+      "Bounded quiescence scan excludes native build artifact recursion",
+      "Configured lab DNS and node exclusions retained for Kubernetes qualification",
+      "Namespace-limited qualification pod/log read access",
+      "Durable provider cooldown and observation resumes the original accepted Android submission",
+      "Intel-only successor retains explicit deployed baseline provenance"
+    ]
+  },
+  "hub": {
+    "installed_version": "0.1.167",
+    "binary_sha256": "a21ebf8e2129a36cb58eca295166b1d0d89ce7623ac448302cf969ce44b17701",
+    "daemon_pid": 725150,
+    "destructive_watchdog_disabled": true,
+    "backup_only_timer_enabled": true,
+    "native_systemd_crash_restart_retained": true,
+    "fresh_android_window_ipc_disconnects": 0
+  },
+  "mobile": {
+    "gchat_android": {
+      "version": "1182",
+      "state": "available",
+      "provider_status": "RELEASE_LIFECYCLE_STATE_PUBLISHED",
+      "new_upload_performed": false,
+      "publication_receipt_sha256": "258f5f33337f92dc52427be8f28b922f04b7e0b8944882e10b3702180b89df17"
+    },
+    "gchat_ios": {
+      "version": "1.1.82",
+      "state": "submitting",
+      "encryption_declaration_state": "IN_REVIEW",
+      "encryption_declaration_id": "670c5156-d5db-40f6-a137-3417dae28965",
+      "published": false
+    }
+  },
+  "intel": {
+    "candidate": 164,
+    "release_id": "c0da6255f27b066dcbcdb26423cd5012c40037f65d1249123b8ee6100b591b6f",
+    "version": "0.1.169",
+    "selected_platforms": [
+      "macos-x86_64"
+    ],
+    "github_run": 37622510215,
+    "state": "building",
+    "qualified": false,
+    "published": false,
+    "baseline_release_id": "ed941e223994db5d4391c834b1f259c1db707ea4cb1f223eb86f1b47f06b3089",
+    "gchat_upstream": "1fe2346247ca011f574d2e051a0761c27a8f0e6c",
+    "gchat_prepared": "e14e2c3ad4b636811c141ed8b38def6b6baad7bf",
+    "gcoms_source": "1841d13016a1c605b9541b221db242ca20b4587f",
+    "previous_failed_candidate": 163,
+    "change": "Fixture waits for both owned child processes before cleanup; production application unchanged"
+  },
+  "android_bootstrap_investigation": {
+    "application_proof_complete": false,
+    "other_agent_repository_inspected": false,
+    "admission_received": true,
+    "bootstrap_payload_request_received": true,
+    "payload_contact_received": false,
+    "capacity_refusals_in_window": 0,
+    "correlated_relay_subscribe_authorization_refusals": 4,
+    "authorization_failure_subtype_unknown": true,
+    "correlation_is_not_peer_identity_proof": true,
+    "tests_in_progress": false,
+    "source_checks": {
+      "queued_contact_session_recovery": "passed all three variants",
+      "expired_subscription_queue_retention": "passed",
+      "subscription_setup_connection_cleanup": "failed before fix; passed after fix",
+      "transport_tests_passed": 72,
+      "transport_clippy": "passed",
+      "live_android_cause_established": false
+    }
+  },
+  "local_evidence_sha256": {
+    "readonly-investigation.json": "6df7dd444c7806657fd71c4f686b7f2f1687b534941bd57c6d9cb8e174751f2f",
+    "disabled-independent-verification.json": "28fee817df3ce6ba675058629ffe5deb1ebeca54badea89202a4bf12e6b4e904",
+    "android-contact-window-readonly.json": "08c6aaab5e27acb5ba608895491bb033089f80d922edf2cea63bb06d0479aa6a",
+    "subscription-recovery-source-trace.json": "1a01aaa29af3e3c08f268a64e3d1d781fee9b00082913ec28e233d5920a2c14c",
+    "relay-window-all8.json": "2f8b5cdffc685da428009571f29857a3bb8689cc73a7deb39afaed0fbd8071e2",
+    "relay65-refusal-times.json": "1e8d756f1f072511355663cd0383eb34e7214b6c56f36562d8b9d6500029f1a2",
+    "backup-only/proposal.json": "241e96cf1ce77c539b1ae3c0a4b2bd615528c276f0a27d27f68bc5dec473a2a0"
+  }
+}

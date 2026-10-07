@@ -20,6 +20,9 @@ the client retires its exact cached connection so later work can reconnect.
 The timed-out request is not replayed, and its outcome remains uncertain.
 Existing subscribers keep their connection driver. Waiting for admission or a
 partially received response body does not evict an otherwise healthy connection.
+GC/2 subscription setup uses the same retirement path at its absolute setup
+deadline. An accepted HTTP response whose subscription acceptance cell stalls
+still follows the body-timeout rule; it does not retire the connection.
 
 An unknown-path HTTP 404 also retires only its exact cached connection, allowing
 later queue recovery to reconnect. It returns the original refusal without

@@ -533,6 +533,97 @@ async fn idle_subscription_stops_at_its_authenticated_expiry() {
     fixture.finish().await;
 }
 
+/// Delayed, correctly authenticated renewal bytes must expire without consuming
+/// queued data. A new subscription can recover the same queue and capability;
+/// an expired request is not evidence that the owner must replace its authority.
+#[tokio::test]
+async fn expired_subscription_renewal_preserves_queued_data_for_fresh_same_authority() {
+    let fixture = Fixture::new().await;
+    let client = Tp1Client::new().unwrap();
+    let before = fixture.store.lock().unwrap().lease(&QUEUE, now_unix());
+    let sub = Subscription {
+        class: I,
+        queue_id: QUEUE,
+        epoch: 1,
+        expiry: now_unix() + 3,
+        nonce: [1; 16],
+    };
+    let mut stream = client
+        .open_natural_prepared(
+            fixture.route(&queue_token(&QUEUE), I),
+            Instant::now() + Duration::from_secs(10),
+            || Ok(sub.encode(&CAPS.sub, &fixture.pin)?),
+        )
+        .await
+        .unwrap();
+    let renewal = Subscription {
+        nonce: [2; 16],
+        ..sub.clone()
+    };
+    let delayed = renewal.encode(&CAPS.sub, &fixture.pin).unwrap();
+    assert_eq!(
+        Subscription::decode(&delayed, &CAPS.sub, &fixture.pin, now_unix()).unwrap(),
+        renewal
+    );
+
+    // Hold the exact renewal bytes across the old stream's authenticated expiry,
+    // modelling transport delay without extending either authorization deadline.
+    assert!(timeout(Duration::from_secs(4), stream.recv())
+        .await
+        .unwrap()
+        .is_none());
+    assert!(now_unix() >= renewal.expiry);
+    fixture.inactive().await;
+    let queued = fixture.push(I, 9, 268);
+    assert_eq!(
+        fixture.deposit(&client, &queued).await,
+        NaturalOutcome::Accepted(None)
+    );
+    let bytes_before = fixture.store.lock().unwrap().total_queue_bytes();
+    assert!(bytes_before > 0);
+    let refused = client
+        .open_natural_prepared(
+            fixture.route(&queue_token(&QUEUE), I),
+            Instant::now() + Duration::from_secs(3),
+            || Ok(delayed),
+        )
+        .await;
+    let error = match refused {
+        Ok(_) => panic!("expired subscription was accepted"),
+        Err(error) => error,
+    };
+    assert_eq!(error.to_string(), "GC/2 stream refused: 404 Not Found");
+    {
+        let mut store = fixture.store.lock().unwrap();
+        assert_eq!(store.lease(&QUEUE, now_unix()), before);
+        assert_eq!(store.queue_len(&QUEUE, now_unix()), 1);
+        assert_eq!(store.total_queue_bytes(), bytes_before);
+    }
+    assert_eq!(fixture.service.active_subscriptions(), 0);
+
+    let mut recovered = fixture.subscribe(&client, I, 3).await;
+    assert_eq!(
+        timeout(Duration::from_secs(3), recovered.recv())
+            .await
+            .unwrap()
+            .unwrap()
+            .unwrap(),
+        queued.msg.unwrap()
+    );
+    {
+        let mut store = fixture.store.lock().unwrap();
+        assert_eq!(store.lease(&QUEUE, now_unix()), before);
+        assert_eq!(store.queue_len(&QUEUE, now_unix()), 0);
+        assert_eq!(store.total_queue_bytes(), 0);
+    }
+    assert!(timeout(Duration::from_millis(100), recovered.recv())
+        .await
+        .is_err());
+    drop(recovered);
+    fixture.inactive().await;
+    fixture.finish().await;
+}
+
 #[tokio::test]
 async fn revoked_subscription_cancels_a_writer_blocked_on_receive_credit() {
     let fixture = Fixture::new().await;
