@@ -164,6 +164,71 @@ async fn machine_send_ready(node: &NodeHandle, text: &[u8]) -> Result<(), String
     .map_err(|_| "channel route deadline")?
 }
 
+type MachineCheckpoint = Arc<Mutex<Option<Vec<u8>>>>;
+
+fn machine_checkpoint_sink() -> (DurableStateSink, MachineCheckpoint) {
+    let saved = Arc::new(Mutex::new(None));
+    let capture = saved.clone();
+    let sink: DurableStateSink = Arc::new(move |bytes| {
+        *capture.lock().unwrap() = Some(bytes);
+        Ok(())
+    });
+    (sink, saved)
+}
+
+// A live export is a point-in-time snapshot, not a shutdown barrier. A real
+// authenticated receive after export persists and sends an MLS ACK before the
+// node stops. Restoring the old export reuses that ACK's sender generation.
+#[tokio::test]
+async fn machine_checkpoint_after_authenticated_post_export_ack_prevents_secret_reuse() {
+    let name = "machine-checkpoint";
+    let (mut node, mut owner, owner_route) = channel_member_fixture(name);
+    node.channels
+        .get_mut(name)
+        .unwrap()
+        .directory
+        .insert("owner".into(), owner_route);
+    let (sink, saved) = machine_checkpoint_sink();
+    node.durable_state_sink = Some(sink);
+    let earlier_export = encode_state(&node).unwrap();
+    let incoming = owner
+        .send(&crate::channel::encode_text(b"arrived after export", false))
+        .unwrap();
+    let id = crate::channel::msg_id(name, &incoming);
+    let (events, mut received) = broadcast::channel(8);
+    assert!(deliver_mls(
+        &mut node,
+        name,
+        &incoming,
+        std::time::Instant::now(),
+        &events,
+    ));
+    assert!(matches!(received.try_recv(), Ok(Ev::ChannelMessage { msg_id, .. }) if msg_id == id));
+    let ack = &node.channels[name].commit_ack_cache[&id].1;
+    assert!(matches!(
+        owner.receive_outcome(ack).unwrap(),
+        gcoms_mls::ReceiveOutcome::Application { payload, .. }
+            if payload == crate::channel::encode_text_ack(id, false)
+    ));
+    let mut stale = decode_v2(&earlier_export, &TEST_SEED).unwrap();
+    let checkpoint = saved.lock().unwrap().take().unwrap();
+    let mut current = decode_v2(&checkpoint, &TEST_SEED).unwrap();
+    assert!(stale.channels[0].commit_acks.is_empty());
+    assert_eq!(current.channels[0].commit_acks.len(), 1);
+    let stale_wire = stale.channels[0].role.send(b"after restart").unwrap();
+    let error = owner
+        .receive_outcome(&stale_wire)
+        .err()
+        .expect("the earlier export must reuse the already consumed ACK generation");
+    assert!(error.to_string().contains("SecretReuse"), "{error}");
+    let current_wire = current.channels[0].role.send(b"after restart").unwrap();
+    assert!(matches!(
+        owner.receive_outcome(&current_wire).unwrap(),
+        gcoms_mls::ReceiveOutcome::Application { payload, .. } if payload == b"after restart"
+    ));
+    node.scheduler.shutdown();
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn component_authority_actual_signed_join_v15_migration_and_cold_member_reopen() {
     let cfg = |seed| NodeConfig {
@@ -175,11 +240,12 @@ async fn component_authority_actual_signed_join_v15_migration_and_cold_member_re
         profile: NodeProfile::fixture(),
         alias_lifecycle: Default::default(),
     };
-    let sink: DurableStateSink = Arc::new(|_| Ok(()));
-    let owner = super::super::start_persistent_restored(cfg([0x91; 32]), None, sink.clone(), None)
+    let owner_sink: DurableStateSink = Arc::new(|_| Ok(()));
+    let (member_sink, saved_member) = machine_checkpoint_sink();
+    let owner = super::super::start_persistent_restored(cfg([0x91; 32]), None, owner_sink, None)
         .await
         .unwrap();
-    let member = super::super::start_persistent_restored(cfg(TEST_SEED), None, sink.clone(), None)
+    let member = super::super::start_persistent_restored(cfg(TEST_SEED), None, member_sink.clone(), None)
         .await
         .unwrap();
     let joined: Result<_, String> = async {
@@ -210,20 +276,6 @@ async fn component_authority_actual_signed_join_v15_migration_and_cold_member_re
         machine_channel_message(&owner, b"before cold restart").await?;
         let roster = member.channel_roster("General").await?;
         let views = member.list_channels().await?;
-        let mut bytes = historical_archive_from_unified(
-            &member.export_state().await?,
-            &TEST_SEED,
-            HistoricalArchive::Machine16,
-        )?;
-        let archive = decode_v2(&bytes, &TEST_SEED)?;
-        let original_epoch = archive.channels[0].role.epoch();
-        let record = archive.owner_aliases.ok_or("missing owner record")?;
-        let owner_len =
-            4 + owner_aliases::seal(&record, record.active_target()?, &TEST_SEED)?.len();
-        let machine_len = 4 + seal_machine_ownership(false, &TEST_SEED)?.len();
-        let end = bytes.len() - owner_len;
-        bytes.drain(end - machine_len..end);
-        bytes[..6].copy_from_slice(MAGIC_V15);
         // Owning a channel remains incompatible even with a matching host authorization.
         let owner_binding = machine_binding([0x91; 32]);
         if owner
@@ -233,19 +285,36 @@ async fn component_authority_actual_signed_join_v15_migration_and_cold_member_re
         {
             return Err("owner channel adopted as machine".into());
         }
-        Ok((bytes, roster, views, original_epoch))
+        Ok((roster, views))
     }
     .await;
     member.shutdown().await;
     if joined.is_err() {
         owner.shutdown().await;
     }
-    let (bytes, roster, views, original_epoch) = joined.unwrap();
+    let (roster, views) = joined.unwrap();
+    // Shutdown joins ingress/maintenance before selecting the last durable
+    // checkpoint. Never roll back a send/ACK that escaped after a live export.
+    let checkpoint = saved_member.lock().unwrap().take().expect("member checkpoint");
+    let mut bytes = historical_archive_from_unified(
+        &checkpoint,
+        &TEST_SEED,
+        HistoricalArchive::Machine16,
+    ).unwrap();
+    let archive = decode_v2(&bytes, &TEST_SEED).unwrap();
+    let original_epoch = archive.channels[0].role.epoch();
+    let record = archive.owner_aliases.expect("missing owner record");
+    let owner_len =
+        4 + owner_aliases::seal(&record, record.active_target().unwrap(), &TEST_SEED).unwrap().len();
+    let machine_len = 4 + seal_machine_ownership(false, &TEST_SEED).unwrap().len();
+    let end = bytes.len() - owner_len;
+    bytes.drain(end - machine_len..end);
+    bytes[..6].copy_from_slice(MAGIC_V15);
     let migrated =
-        super::super::start_persistent_restored(cfg(TEST_SEED), None, sink.clone(), Some(&bytes))
+        super::super::start_persistent_restored(cfg(TEST_SEED), None, member_sink.clone(), Some(&bytes))
             .await
             .unwrap();
-    let migration: Result<Vec<u8>, String> = async {
+    let migration: Result<(), String> = async {
         if migrated.machine_ownership_required().await? {
             return Err("v15 acquired implicit ownership".into());
         }
@@ -267,16 +336,17 @@ async fn component_authority_actual_signed_join_v15_migration_and_cold_member_re
         {
             return Err("migration changed roster or channel".into());
         }
-        migrated.export_state().await
+        Ok(())
     }
     .await;
     migrated.shutdown().await;
     if migration.is_err() {
         owner.shutdown().await;
     }
-    let bytes = migration.unwrap();
+    migration.unwrap();
+    let bytes = saved_member.lock().unwrap().take().expect("migrated checkpoint");
     let reopened =
-        super::super::start_persistent_restored(cfg(TEST_SEED), None, sink, Some(&bytes))
+        super::super::start_persistent_restored(cfg(TEST_SEED), None, member_sink, Some(&bytes))
             .await
             .unwrap();
     let result: Result<(), String> = async {

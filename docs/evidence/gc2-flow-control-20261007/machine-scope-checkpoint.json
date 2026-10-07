@@ -1,0 +1,64 @@
+{
+  "passed": true,
+  "complete": true,
+  "source_head": "d818da9209011c0287f906bc0ed42680997298f4",
+  "test_source_sha256": "8dea5f0706752322520fa43d1db8e88cee831859ffc59087fe2c977ad55cc16a",
+  "cargo_target_dir": "/run/media/user/SSD-2/.workstation-builds/pool/slots/5c9d38ac9534494f978d66a4ddcbb6f8/target",
+  "checks": [
+    {
+      "name": "machine_checkpoint_after_authenticated_post_export_ack_prevents_secret_reuse",
+      "command": [
+        "cargo",
+        "test",
+        "--offline",
+        "--locked",
+        "-p",
+        "gcoms-node",
+        "--all-features",
+        "--lib",
+        "node::persist::tests::machine_checkpoint_after_authenticated_post_export_ack_prevents_secret_reuse",
+        "--",
+        "--exact",
+        "--test-threads=1",
+        "--nocapture"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 125.863,
+      "log": "test-evidence/machine-scope-checkpoint-20261007/machine_checkpoint_after_authenticated_post_export_ack_prevents_secret_reuse.log",
+      "log_sha256": "2e93a27266c53f8c783bb13cfdf0640144f7435a20b7ae4cdbc77eed37a952a8"
+    },
+    {
+      "name": "component_authority_actual_signed_join_v15_migration_and_cold_member_reopen",
+      "command": [
+        "cargo",
+        "test",
+        "--offline",
+        "--locked",
+        "-p",
+        "gcoms-node",
+        "--all-features",
+        "--lib",
+        "node::persist::tests::component_authority_actual_signed_join_v15_migration_and_cold_member_reopen",
+        "--",
+        "--exact",
+        "--test-threads=1",
+        "--nocapture"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 5.475,
+      "log": "test-evidence/machine-scope-checkpoint-20261007/component_authority_actual_signed_join_v15_migration_and_cold_member_reopen.log",
+      "log_sha256": "e6b74826131d68d80e34c7e71b717c67ad49644a5a7b04ad207492b74ef4519d"
+    }
+  ],
+  "schema": 1,
+  "scope": "test fixture only; no production/API/wire changes",
+  "claim": "An authenticated ACK after a live export makes that export stale; restoring the recorded successful checkpoint preserves MLS generation.",
+  "original_intel_failure_cause": "not established by the original native failure log",
+  "native_intel_status": "pending source-bound focused diagnostic",
+  "delivery_timeout_seconds": 15,
+  "runtime_seconds": {
+    "post_export_interleave": 0.8,
+    "signed_join_v15_cold_reopen": 4.66
+  },
+  "focused_receipt_sha256": "b8e3df94deaf15bff91c01f61bc46f9ff116bfb2d722542447f56b2c8ab8d7bf"
+}
