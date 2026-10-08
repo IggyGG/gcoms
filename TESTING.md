@@ -1,5 +1,7 @@
 # Validation
 
+Invitation publication disk-write regression: `cargo test -p gcoms-node --all-features --locked --lib node::invitation_directory::tests -- --test-threads=1` covers repeated offline publication, one durable descriptor across 64 exact retries, durable success, failed-save rollback, revision/descriptor races and capped backoff. The fixture deliberately lacks a publication grant so the real retry path fails before HTTP; it uses no personal profile or network outage. This does not establish zero total idle I/O or native installed acceptance.
+
 The current [reliability requirements](docs/RELIABILITY_RELEASE.md) define the
 cluster/device release matrix. Use `python3 scripts/reliability-suite.py --manifest
 SUITE.json --root . --output target/reliability/UNIQUE-RUN` on a cluster worker

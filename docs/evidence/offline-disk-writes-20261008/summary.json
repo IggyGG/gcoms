@@ -1,0 +1,23 @@
+{
+  "scope": "Invitation publication retry disk-write amplification; source fix, not installed acceptance",
+  "baseline_source": "55aa58ccf2ed9a478e911d368a7444523386a413",
+  "live_observation": {
+    "sample_seconds": 60,
+    "checkpoint_calls": 144,
+    "invitation_publication_checkpoint_calls": 140,
+    "encrypted_profile_bytes": 17759285,
+    "profile_rewrites_bytes_across_observed_intervals_today": 459599665492,
+    "note": "Aggregate counters and symbol-only probes; the reported Wi-Fi outage time has not been confirmed."
+  },
+  "causal_regression": {
+    "baseline": "failed: a failed initial upload writes twice instead of once",
+    "fixed": "6 focused tests passed; initial descriptor writes once; 64 exact failed retries add zero profile writes"
+  },
+  "checks": {
+    "node_gate": "pending",
+    "strict_clippy": "pending",
+    "source_audit": "pending"
+  },
+  "codematch": "unreachable: not exposed in this session",
+  "installed": "unchanged; signed package release and native acceptance remain required"
+}

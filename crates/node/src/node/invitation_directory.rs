@@ -5,6 +5,10 @@ use gcoms_network::channel_invitation::{Descriptor, Reference, ResolvedInvitatio
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
+#[cfg(all(test, feature = "client-persist"))]
+#[path = "invitation_publication_tests.rs"]
+mod tests;
+
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct Publication {
@@ -137,7 +141,7 @@ async fn publish(handle: &NodeHandle, channel: &str, id: [u8; 16]) -> Result<(),
     }) {
         return Ok(());
     }
-    let mut publication = if let Some(old) = record.publication.as_ref().filter(|old| {
+    let publication = if let Some(old) = record.publication.as_ref().filter(|old| {
         old.route_digest == digest && old.descriptor.body.expires_at > now.saturating_add(90)
     }) {
         old.clone()
@@ -168,48 +172,75 @@ async fn publish(handle: &NodeHandle, channel: &str, id: [u8; 16]) -> Result<(),
     };
     {
         let mut st = state.lock().unwrap_or_else(|p| p.into_inner());
-        let cs = st.channels.get_mut(channel).ok_or("no channel")?;
-        let current = cs
-            .invitations
-            .records
-            .iter_mut()
-            .find(|r| r.id == id)
-            .ok_or("invite not found")?;
-        if current.revision != record.revision
-            || current
-                .publication
-                .as_ref()
-                .map(|p| p.descriptor.body.sequence)
-                != record
-                    .publication
-                    .as_ref()
-                    .map(|p| p.descriptor.body.sequence)
-        {
-            return Err("invitation changed during publication; retry".into());
-        }
-        let old = current.publication.replace(publication.clone());
-        if let Err(error) = persist_current_direct_state(&st) {
-            st.channels
-                .get_mut(channel)
-                .unwrap()
-                .invitations
-                .records
-                .iter_mut()
-                .find(|r| r.id == id)
-                .unwrap()
-                .publication = old;
-            return Err(error);
-        }
+        stage_publication(&mut st, channel, &record, &publication)?;
     }
     let result = network
         .publish_invitation(&publication.descriptor, deadline)
         .await;
-    publication.published_until = result
-        .as_ref()
-        .ok()
-        .map(|_| publication.descriptor.body.expires_at);
-    publication.last_error = result.as_ref().err().cloned();
     let mut st = state.lock().unwrap_or_else(|p| p.into_inner());
+    finish_publication(&mut st, channel, id, &publication.descriptor, &result)?;
+    result
+}
+
+fn stage_publication(
+    st: &mut NodeState,
+    channel: &str,
+    record: &crate::channel_invite::policy::InvitationRecord,
+    publication: &Publication,
+) -> Result<(), String> {
+    let current = st
+        .channels
+        .get_mut(channel)
+        .ok_or("no channel")?
+        .invitations
+        .records
+        .iter_mut()
+        .find(|r| r.id == record.id)
+        .ok_or("invite not found")?;
+    if current.revision != record.revision
+        || current
+            .publication
+            .as_ref()
+            .map(|p| p.descriptor.body.sequence)
+            != record
+                .publication
+                .as_ref()
+                .map(|p| p.descriptor.body.sequence)
+    {
+        return Err("invitation changed during publication; retry".into());
+    }
+    // A retry uses the exact ciphertext already behind the durable barrier.
+    // Rewriting the entire profile adds no durability and amplifies outages.
+    if current
+        .publication
+        .as_ref()
+        .is_some_and(|old| old.descriptor == publication.descriptor)
+    {
+        return Ok(());
+    }
+    let old = current.publication.replace(publication.clone());
+    if let Err(error) = persist_current_direct_state(st) {
+        st.channels
+            .get_mut(channel)
+            .unwrap()
+            .invitations
+            .records
+            .iter_mut()
+            .find(|r| r.id == record.id)
+            .unwrap()
+            .publication = old;
+        return Err(error);
+    }
+    Ok(())
+}
+
+fn finish_publication(
+    st: &mut NodeState,
+    channel: &str,
+    id: [u8; 16],
+    descriptor: &Descriptor,
+    result: &Result<(), String>,
+) -> Result<(), String> {
     if let Some(current) = st
         .channels
         .get_mut(channel)
@@ -218,10 +249,23 @@ async fn publish(handle: &NodeHandle, channel: &str, id: [u8; 16]) -> Result<(),
         if current
             .publication
             .as_ref()
-            .is_some_and(|p| p.descriptor == publication.descriptor)
+            .is_some_and(|p| p.descriptor == *descriptor)
         {
-            let previous = current.publication.replace(publication);
-            if let Err(error) = persist_current_direct_state(&st) {
+            let publication = current.publication.as_mut().unwrap();
+            // Retry errors are diagnostic, not new protocol authority. Leave a
+            // concurrent confirmed publication intact and let ordinary saves
+            // retain the latest error without forcing another profile fsync.
+            if publication.published_until == Some(descriptor.body.expires_at) {
+                return Ok(());
+            }
+            if let Err(error) = result {
+                publication.last_error = Some(error.clone());
+                return Ok(());
+            }
+            let previous = publication.clone();
+            publication.published_until = Some(descriptor.body.expires_at);
+            publication.last_error = None;
+            if let Err(error) = persist_current_direct_state(st) {
                 st.channels
                     .get_mut(channel)
                     .unwrap()
@@ -230,16 +274,37 @@ async fn publish(handle: &NodeHandle, channel: &str, id: [u8; 16]) -> Result<(),
                     .iter_mut()
                     .find(|r| r.id == id)
                     .unwrap()
-                    .publication = previous;
+                    .publication = Some(previous);
                 return Err(error);
             }
         }
     }
-    result
+    Ok(())
 }
+
+struct Retry {
+    failures: u32,
+    next_attempt: tokio::time::Instant,
+}
+
+impl Retry {
+    fn failed(&mut self, now: tokio::time::Instant) {
+        self.failures = self.failures.saturating_add(1);
+        let seconds = (30u64 << self.failures.saturating_sub(1).min(4)).min(300);
+        let delay = jittered(std::time::Duration::from_secs(seconds)).clamp(
+            std::time::Duration::from_secs(30),
+            std::time::Duration::from_secs(300),
+        );
+        self.next_attempt = now + delay;
+    }
+}
+
 pub(crate) async fn run(handle: NodeHandle) {
     let mut interval = tokio::time::interval(std::time::Duration::from_secs(30));
     interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+    // Scheduling is process-local: connectivity failures must not themselves
+    // dirty every retained invitation. Entries disappear with their jobs.
+    let mut retries = HashMap::<(String, [u8; 16]), Retry>::new();
     loop {
         interval.tick().await;
         let Some(state) = handle.state.upgrade() else {
@@ -274,14 +339,38 @@ pub(crate) async fn run(handle: NodeHandle) {
                 })
                 .collect::<Vec<_>>()
         };
+        let live: HashSet<_> = jobs.iter().cloned().collect();
+        retries.retain(|key, _| live.contains(key));
+        let now = tokio::time::Instant::now();
         use futures_util::{stream, StreamExt};
-        stream::iter(jobs)
-            .for_each_concurrent(4, |(name, id)| {
-                let handle = &handle;
-                async move {
-                    let _ = publish(handle, &name, id).await;
-                }
-            })
-            .await;
+        let results = stream::iter(jobs.into_iter().filter(|key| {
+            retries
+                .get(key)
+                .is_none_or(|retry| retry.next_attempt <= now)
+        }))
+        .map(|(name, id)| {
+            let handle = &handle;
+            async move {
+                let success = publish(handle, &name, id).await.is_ok();
+                ((name, id), success)
+            }
+        })
+        .buffer_unordered(4)
+        .collect::<Vec<_>>()
+        .await;
+        for (key, success) in results {
+            if success {
+                retries.remove(&key);
+            } else {
+                let now = tokio::time::Instant::now();
+                retries
+                    .entry(key)
+                    .or_insert(Retry {
+                        failures: 0,
+                        next_attempt: now,
+                    })
+                    .failed(now);
+            }
+        }
     }
 }

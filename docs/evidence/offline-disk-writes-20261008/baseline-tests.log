@@ -1,0 +1,25 @@
+   Compiling gcoms-node v0.1.0 (<source>/crates/node)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 24.73s
+     Running unittests src/lib.rs (<build>/target/debug/deps/gcoms_node-766eaec7223a5eee)
+
+running 2 tests
+test node::invitation_directory::tests::failed_descriptor_checkpoint_rolls_back_before_publication ... ok
+test node::invitation_directory::tests::failed_publication_retries_reuse_durable_ciphertext_without_profile_writes ... FAILED
+
+failures:
+
+---- node::invitation_directory::tests::failed_publication_retries_reuse_durable_ciphertext_without_profile_writes stdout ----
+
+thread 'node::invitation_directory::tests::failed_publication_retries_reuse_durable_ciphertext_without_profile_writes' (677641) panicked at crates/node/src/node/invitation_publication_tests.rs:108:5:
+assertion `left == right` failed: only the new descriptor needs a durable write; failure status is volatile
+  left: 2
+ right: 1
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    node::invitation_directory::tests::failed_publication_retries_reuse_durable_ciphertext_without_profile_writes
+
+test result: FAILED. 1 passed; 1 failed; 0 ignored; 0 measured; 418 filtered out; finished in 1.45s
+
+error: test failed, to rerun pass `-p gcoms-node --lib`
