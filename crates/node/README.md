@@ -9,6 +9,13 @@ then requires verified resumed content and a recipient completion acknowledgment
 
 # gcoms-node
 
+Invitation-directory publication reuses an already saved descriptor during failed
+uploads. Failure status does not force a profile write; new descriptors and their
+successful confirmation remain synchronous durable transactions. Background
+publication retries back off from 30 seconds to five minutes per invitation,
+checked on the maintenance tick, while explicit sharing can retry immediately.
+This bounds retry work without deleting invitations or weakening delivery state.
+
 Part of **GComs**, a developer-preview encrypted communication platform.
 This crate is licensed under MIT OR Apache-2.0. GC/1 wire identifiers retain their
 historical names. See the repository README, SPEC.md and SECURITY.md for the

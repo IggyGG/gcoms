@@ -1,5 +1,5 @@
 {
-  "scope": "Invitation publication retry disk-write amplification; source fix, not installed acceptance",
+  "scope": "Verified invitation publication retry source repair; installed acceptance pending",
   "baseline_source": "55aa58ccf2ed9a478e911d368a7444523386a413",
   "live_observation": {
     "sample_seconds": 60,
@@ -14,10 +14,75 @@
     "fixed": "6 focused tests passed; initial descriptor writes once; 64 exact failed retries add zero profile writes"
   },
   "checks": {
-    "node_gate": "pending",
-    "strict_clippy": "pending",
-    "source_audit": "pending"
+    "node_gate": {
+      "passed": 525,
+      "failed": 0,
+      "ignored": 2,
+      "command": "cargo test -p gcoms-node --all-features --locked -- --test-threads=1",
+      "exit_code": 0
+    },
+    "strict_clippy": "passed: node, all targets/features, warnings denied",
+    "no_default_features": "passed with client-persist",
+    "format": "passed: cargo fmt --all -- --check",
+    "source_audit": "passed: 1041 paths",
+    "diff_check": "passed"
   },
   "codematch": "unreachable: not exposed in this session",
-  "installed": "unchanged; signed package release and native acceptance remain required"
+  "installed": "unchanged; signed package release and native acceptance remain required",
+  "code_commit": "a9d1e68",
+  "validation_runs": [
+    {
+      "name": "node-tests",
+      "command": [
+        "cargo",
+        "test",
+        "-p",
+        "gcoms-node",
+        "--all-features",
+        "--locked",
+        "--",
+        "--test-threads=1"
+      ],
+      "exit_code": 0,
+      "seconds": 1326.69
+    },
+    {
+      "name": "clippy",
+      "command": [
+        "cargo",
+        "clippy",
+        "-p",
+        "gcoms-node",
+        "--all-targets",
+        "--all-features",
+        "--locked",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "exit_code": 0,
+      "seconds": 35.49
+    },
+    {
+      "name": "no-default-check",
+      "command": [
+        "cargo",
+        "check",
+        "-p",
+        "gcoms-node",
+        "--no-default-features",
+        "--features",
+        "client-persist",
+        "--locked"
+      ],
+      "exit_code": 0,
+      "seconds": 10.06
+    }
+  ],
+  "retained_log_sha256": {
+    "node-tests.log": "bca8f714bee6c280758166381d420aa3861d0d469749730e66ff72626590a197",
+    "clippy.log": "6a97b55504f4dfbacd2e31eeeb1c64258d93c6c3a456c9595161e796c262fdfb",
+    "no-default-check.log": "fd805da4f2b297ce4788e17dfcfb4d405439061f8c890ba00613bead456bdf68",
+    "fmt.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  }
 }
