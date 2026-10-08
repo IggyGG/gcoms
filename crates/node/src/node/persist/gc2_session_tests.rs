@@ -163,6 +163,53 @@ async fn gc2_runtime_durable_delivery_credit_and_ack_survive_restart() {
 }
 
 #[tokio::test]
+async fn gc2_duplicate_setup_retains_one_credit_across_restart() {
+    let alice = Arc::new(Mutex::new(gc2_node(91)));
+    let mut bob = gc2_node(92);
+    let scheduler = alice.lock().unwrap().scheduler.clone();
+    send_durable_1to1(&alice, &scheduler, &bob.info, b"original", None)
+        .await
+        .unwrap();
+    let first = alice
+        .lock()
+        .unwrap()
+        .pending_1to1
+        .values()
+        .next()
+        .unwrap()
+        .delivery
+        .cells[0]
+        .payload
+        .clone();
+    let (events, _) = broadcast::channel(32);
+    gc2_direct::incoming(&mut bob, &first, &events).unwrap();
+    let credit = bob.direct_ack_outbox[0].cells.clone();
+    let usage = bob.retained_payload(None).unwrap();
+    for _ in 0..32 {
+        gc2_direct::incoming(&mut bob, &first, &events).unwrap();
+        assert_eq!(
+            bob.direct_ack_outbox.len(),
+            1,
+            "replaying exact setup must not multiply retained credits"
+        );
+    }
+    assert_eq!(bob.retained_payload(None).unwrap(), usage);
+    // Exercise a checkpoint produced by the old runtime, before coalescing.
+    let duplicate = bob.direct_ack_outbox[0].clone();
+    bob.direct_ack_outbox
+        .extend(std::iter::repeat_n(duplicate, 16));
+    let restored = gc2_restore(&bob, 92).await;
+    let mut reopened = restored.lock().unwrap();
+    for _ in 0..8 {
+        gc2_direct::incoming(&mut reopened, &first, &events).unwrap();
+    }
+    assert_eq!(reopened.direct_ack_outbox.len(), 1);
+    assert_eq!(reopened.direct_ack_outbox[0].cells, credit);
+    assert_eq!(reopened.retained_payload(None).unwrap(), usage);
+    scheduler.shutdown();
+    bob.scheduler.shutdown();
+}
+#[tokio::test]
 async fn gc2_runtime_failed_receive_write_has_no_application_effect_or_credit() {
     let alice=Arc::new(Mutex::new(gc2_node(23)));
     let mut bob=gc2_node(24);

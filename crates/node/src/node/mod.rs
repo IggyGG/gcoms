@@ -1736,7 +1736,13 @@ fn persist_received_direct_transaction(
     credit: Option<&[u8]>,
 ) -> Result<(), String> {
     let previous_outbox_len = st.direct_ack_outbox.len();
-    if let Some(credit) = credit {
+    if let Some(credit) = credit.filter(|credit| {
+        !st.direct_ack_outbox.iter().any(|delivery| {
+            delivery.peer.identity_pk == peer
+                && delivery.cells.len() == 1
+                && delivery.cells[0].payload == *credit
+        })
+    }) {
         if previous_outbox_len >= 1024 {
             return Err("direct credit outbox is full".into());
         }

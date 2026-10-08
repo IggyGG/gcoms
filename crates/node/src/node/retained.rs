@@ -71,7 +71,20 @@ impl NodeState {
                 },
             )
             .map(Some)
-            .map_err(|e| format!("direct retained payload admission: {e}"))
+            .map_err(|e| {
+                let shared = self.scheduler.combined_resource_snapshot();
+                metrics::log_event(
+                    "direct_retained_admission_wait",
+                    &[
+                        ("control", control.to_string()),
+                        ("requested_items", usage.items.to_string()),
+                        ("requested_bytes", usage.bytes.to_string()),
+                        ("node_jobs", shared.jobs.to_string()),
+                        ("node_bytes", shared.bytes.to_string()),
+                    ],
+                );
+                format!("direct retained payload admission: {e}")
+            })
     }
 
     pub(crate) fn stage_retained(

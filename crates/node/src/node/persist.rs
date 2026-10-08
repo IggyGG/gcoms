@@ -2590,7 +2590,7 @@ pub(super) async fn decode_state_at_startup(
             },
         ));
     }
-    let direct_acks = archive
+    let mut direct_acks = archive
         .direct_acks
         .into_iter()
         .map(|mut delivery| {
@@ -2598,6 +2598,11 @@ pub(super) async fn decode_state_at_startup(
             delivery
         })
         .collect::<Vec<_>>();
+    // Old checkpoints may contain one identical credit per retry of the same
+    // incoming packet. Maintenance already owns one attempt per exact wire;
+    // restore that same invariant before reserving the shared retained budget.
+    let mut ack_keys = HashSet::new();
+    direct_acks.retain(|delivery| ack_keys.insert(direct::direct_attempt_key(delivery)));
     let processed_direct = archive
         .processed_direct
         .into_iter()

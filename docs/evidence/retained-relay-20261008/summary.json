@@ -1,0 +1,64 @@
+{
+  "schema": "ghost.retained-relay-repair.v1",
+  "date": "2026-10-08",
+  "component": "gcoms-node",
+  "baseCommit": "0f9a98d0210f465f4a04e0c3915774d0b4da29f5",
+  "sourceSha256": {
+    "crates/node/src/node/direct.rs": "3217e6f4d4ec825ed98c57788abb10e1f128048b82aee389a5b07bb381f9895d",
+    "crates/node/src/node/mod.rs": "ed9e75ce264422f9715cd55dcf72a89cae4ff0db71f4d20c9ae72bda7f530b22",
+    "crates/node/src/node/persist.rs": "e0179a3764d97b826e0032b6cd84d97b980c3703762ad3ab36dd384489860ed2",
+    "crates/node/src/node/retained.rs": "3085ce2666f99770461d76556a63329948f8ada5646e1509fd9bd7fae684ac93",
+    "crates/node/src/node/persist/gc2_session_tests.rs": "30a8edf7812c0cf92f8e79a2b1059d536fc724b02a9e2116b1d04fd38c5dda8b"
+  },
+  "confirmedDefect": "An exact authenticated setup retry appended a second identical durable transport credit; old checkpoints retained the duplicate copies.",
+  "repair": [
+    "Coalesce exact peer/credit on transactional receive.",
+    "Normalize exact peer/cell deliveries from old checkpoints before retained admission.",
+    "Emit safe numeric admission diagnostics."
+  ],
+  "causalBaseline": {
+    "test": "gc2_duplicate_setup_retains_one_credit_across_restart",
+    "result": "failed before fix",
+    "expectedCredits": 1,
+    "observedCredits": 2
+  },
+  "checks": [
+    {
+      "command": "cargo test --offline --locked -p gcoms-node --all-features --lib node::persist::tests::gc2_ -- --test-threads=1",
+      "passed": 25,
+      "failed": 0,
+      "filteredOut": 400,
+      "testSeconds": 130.14
+    },
+    {
+      "command": "cargo clippy --offline --locked -p gcoms-node --all-features --lib -- -D warnings",
+      "exitCode": 0,
+      "seconds": 44.38
+    },
+    {
+      "command": "python3 scripts/check-source.py",
+      "exitCode": 0,
+      "pathsChecked": 1043
+    },
+    {
+      "command": "git diff --check",
+      "exitCode": 0
+    }
+  ],
+  "runner": "opencode-test / workstation-batch; same-user refreshed group membership; SSD scratch",
+  "limitsUnchanged": {
+    "applicationBytes": 3145728,
+    "controlBytes": 4194304,
+    "nodeBytes": 67108864
+  },
+  "codematch": "unreachable",
+  "productionExercised": false,
+  "androidRunsResumed": false,
+  "limitations": [
+    "Exact live hub saturation attribution is unproven.",
+    "No retained state was deleted or expired early.",
+    "No production restart or deployment was performed.",
+    "Full Android download and in-process load remain unqualified."
+  ],
+  "nextAcceptance": "Use an isolated controller identity and relay budget for a bounded full transfer before resuming one production smoke."
+}

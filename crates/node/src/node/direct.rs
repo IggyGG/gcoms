@@ -155,7 +155,7 @@ const MAX_DIRECT_RETRY_ATTEMPTS: usize = 48;
 /// Identify committed ciphertext independently of mutable relay/contact routes.
 /// A rekey can replace ciphertext under the same logical message ID; that is a
 /// distinct attempt. Lengths and every cell header make the digest unambiguous.
-fn direct_attempt_key(delivery: &DirectDelivery) -> [u8; 32] {
+pub(super) fn direct_attempt_key(delivery: &DirectDelivery) -> [u8; 32] {
     let mut hash = Sha256::new();
     hash.update(b"gcoms.direct-maintenance.v1\0");
     hash.update((delivery.peer.identity_pk.len() as u64).to_be_bytes());

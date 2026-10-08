@@ -1,3 +1,5 @@
+GC/2 transport-credit retries retain one copy of an exact peer/credit delivery. Older checkpoints are normalized on reopen before the shared retained budget is reserved. Failed admission records numeric requested payload and combined node usage without peer identities or payload contents; normal limits and persistence barriers still apply.
+
 ## Established sessions and renewed contacts
 
 Contact announcements replace routes and advertise bundles for new handshakes.
