@@ -103,6 +103,38 @@ fn component_record(kind: &str, body: &[u8]) -> Vec<u8> {
     crate::proto::encode_direct_durable_data([9; 16], 1, &routed.encode().unwrap())
 }
 
+fn volatile_component_record(kind: &str, body: &[u8]) -> Vec<u8> {
+    let mut application = b"GCAPP1".to_vec();
+    application.extend_from_slice(&(kind.len() as u16).to_be_bytes());
+    application.extend_from_slice(kind.as_bytes());
+    application.extend_from_slice(body);
+    let routed = gcoms_core::component::RoutedApplication {
+        source: [7; 16],
+        destination: [8; 16],
+        application,
+    };
+    crate::proto::encode_volatile_application([9; 16], 1, &routed.encode().unwrap())
+}
+
+#[test]
+fn bootstrap_applications_reserve_the_control_retained_allowance() {
+    // A stalled bulk transfer must not be able to block the admission/reply
+    // path: bootstrap control applications stay on the control allowance while
+    // file records and contacts remain on the application allowance.
+    assert!(direct_control_record(&volatile_component_record(
+        gcoms_core::bootstrap::CONTENT_TYPE,
+        b"admission-page"
+    )));
+    assert!(!direct_control_record(&volatile_component_record(
+        gcoms_core::VOLATILE_FILE_CONTENT_TYPE,
+        b"chunk"
+    )));
+    assert!(!direct_control_record(&volatile_component_record(
+        gcoms_core::VOLATILE_CONTACT_CONTENT_TYPE,
+        b"contact"
+    )));
+}
+
 #[test]
 fn file_records_are_bulk_while_chat_control_and_acknowledgements_stay_interactive() {
     assert_eq!(
