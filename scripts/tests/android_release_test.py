@@ -289,7 +289,7 @@ class Releases(unittest.TestCase):
         self.git(self.root, 'clone', '-q', self.config['sources']['gcoms']['repository'], str(legacy / 'gcoms'))
         manifest = release.freeze(self.config, time.time())
         first = host.source_workspace(self.config, manifest, 'sdk')
-        self.assertEqual(first.resolve(), legacy)
+        self.assertEqual(first.resolve(), legacy.resolve())
         manifest['inputs']['sdk'] = 'b' * 64
         second = host.source_workspace(self.config, manifest, 'sdk')
         self.assertEqual(second.resolve(), first.resolve())
