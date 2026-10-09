@@ -535,3 +535,8 @@ transport state when a stage fails. The bootstrap API also exposes the 24-hour
 contact-lifetime bound required by the newer Drone companion; relay-admission
 proofs retain their five-minute bound. See [bootstrap validation and paired-worker
 checks](docs/GC2_NETWORK_BOOTSTRAP.md#bootstrap-fixture-and-companion-validation-2026-10-06).
+
+The opt-in Android agent uses a bounded workstation release lane; see
+[Android agent releases](docs/ANDROID_AGENT_RELEASE.md). Its 600-second deadline
+starts at the original Forgejo push. Successful installation alone does not
+qualify downloaded worker readiness.
