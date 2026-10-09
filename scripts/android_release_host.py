@@ -25,12 +25,13 @@ ABIS = {'arm64-v8a': 'aarch64-linux-android', 'x86_64': 'x86_64-linux-android'}
 def build_identity():
     # Provisioning/observation changes do not force recompilation. These are
     # the complete builtin compiler invocation and source preparation functions.
-    body = json.dumps(ABIS, sort_keys=True) + ''.join(inspect.getsource(f) for f in (build, checkout, patch_gcoms))
+    body = json.dumps(ABIS, sort_keys=True) + ''.join(inspect.getsource(f) for f in
+              (build, checkout, patch_gcoms, pinned_resolution))
     return hashlib.sha256(body.encode()).hexdigest()
 
 
-def output(argv, timeout=20):
-    return subprocess.check_output([str(a) for a in argv], stderr=subprocess.PIPE, timeout=timeout)
+def output(argv, timeout=20, cwd=None, env=None):
+    return subprocess.check_output([str(a) for a in argv], stderr=subprocess.PIPE, timeout=timeout, cwd=cwd, env=env)
 
 
 def checkout(config, name, commit, parent):
@@ -56,6 +57,15 @@ def patch_gcoms(consumer, companion):
             patches.append(json.dumps(name) + ' = { path = ' + json.dumps(str(path.parent)) + ' }')
     config.parent.mkdir(exist_ok=True)
     config.write_text('[patch.crates-io]\n' + '\n'.join(patches) + '\n')
+
+
+def pinned_resolution(original, companion, resolved):
+    """Local patches may change resolution, never invent registry versions."""
+    def external(data):
+        return {(p['name'], p['version'], p['source'], p.get('checksum'))
+                for p in tomllib.loads(data.decode()).get('package', []) if p.get('source')}
+    if not external(resolved).issubset(external(original) | external(companion)):
+        raise ValueError('derived dependencies differ from frozen source lockfiles')
 
 
 def build(request):
@@ -110,8 +120,28 @@ def build(request):
         environment.update(GCHAT_SOURCE_COMMIT=manifest['sources']['gchat'],
                            GCOMS_SOURCE_COMMIT=manifest['sources']['gcoms'],
                            GCHAT_RELEASE_ID=manifest['release_id'])
-        run(['cargo', 'build', '--offline', '--release', '--locked', '-p', 'gchat-tui',
-             '--bin', 'gchat', '--features', 'gc2-carrier'], sources['gchat'])
+        lock = sources['gchat'] / 'Cargo.lock'
+        original = lock.read_bytes()
+        names = sorted(p['name'] for p in tomllib.loads(original.decode())['package']
+                       if p['name'] == 'gcoms' or p['name'].startswith('gcoms-'))
+        try:
+            run(['cargo', 'update', '--offline', *[arg for name in names for arg in ('-p', name)]], sources['gchat'])
+            pinned_resolution(original, (sources['gcoms'] / 'Cargo.lock').read_bytes(), lock.read_bytes())
+            shutil.copy2(lock, artifact / 'resolved-Cargo.lock')
+            metadata = json.loads(output(['cargo', 'metadata', '--offline', '--locked', '--format-version', '1',
+                                          '--manifest-path', sources['gchat'] / 'Cargo.toml'], timeout=45,
+                                         cwd=sources['gchat'], env=environment))
+            for package in metadata['packages']:
+                if package['name'] == 'gcoms' or package['name'].startswith('gcoms-'):
+                    if not Path(package['manifest_path']).resolve().is_relative_to(sources['gcoms'].resolve()):
+                        raise ValueError('headless hub resolved an unselected registry SDK')
+            run(['cargo', 'build', '--offline', '--release', '--locked', '-p', 'gchat-tui',
+                 '--bin', 'gchat', '--features', 'gc2-carrier'], sources['gchat'])
+        finally:
+            # This is an owned detached build overlay. Preserve the committed
+            # source lock, including after cancellation, and retain the actual
+            # resolution separately with the artifact's byte hashes.
+            lock.write_bytes(original)
         shutil.copy2(target / 'release/gchat', artifact / 'gchat')
     elif component == 'worker':
         llvm = Path(environment['ANDROID_NDK_HOME']) / 'toolchains/llvm/prebuilt/linux-x86_64/bin'

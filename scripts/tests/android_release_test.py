@@ -13,7 +13,7 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import android_release as release
-from android_release_host import aligned_loads, ready, route_expiry
+from android_release_host import aligned_loads, pinned_resolution, ready, route_expiry
 import android_release_queue as queue
 import android_release_setup as setup
 import android_release_host as host
@@ -257,6 +257,15 @@ class Releases(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'adapter bytes changed'):
             release.deploy(self.config, manifest)
         self.assertFalse(Path(self.config['state']).exists())
+
+    def test_local_sdk_resolution_preserves_committed_external_pins(self):
+        original = b'[[package]]\nname="serde"\nversion="1"\nsource="registry+example"\nchecksum="a"\n'
+        companion = original.replace(b'name="serde"', b'name="crypto"')
+        pinned_resolution(original, companion, original + companion)
+        for changed in (original.replace(b'version="1"', b'version="2"'),
+                        original.replace(b'checksum="a"', b'checksum="different"')):
+            with self.assertRaisesRegex(ValueError, 'frozen source lockfiles'):
+                pinned_resolution(original, companion, changed)
 
 
 if __name__ == '__main__':
