@@ -46,7 +46,9 @@ python3 scripts/android_release.py --config /absolute/SSD/android-release/config
 
 The consumer timer polls the mailbox every five seconds. Warming runs twice
 daily. A queued release stops this lane's warming unit before dispatch; other jobs
-remain protected, and setup refuses to replace a running lane. The
+remain protected. Preparation resumes after dispatch, including a failed
+preflight, so the next push need not wait for the twelve-hour tick. Setup refuses
+to replace a running lane. The
 private config lists exact source refs, target inventory, certificate pin,
 toolchains (Rust/NDK 27.3, JNI NDK 28.2, CMake 3.22.1 and Java 21), storage
 reservations and existing managed hub activation/rollback

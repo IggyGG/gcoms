@@ -227,6 +227,8 @@ def adapter(config, name, request, deadline, directory, activation=True):
 
 
 def deploy(config, manifest, warm=False):
+    if any(digest(path) != sha for path, sha in config.get('runtime_sha256', {}).items()):
+        raise ValueError('release adapter bytes changed after configuration was prepared')
     unsigned = {k: v for k, v in manifest.items() if k != 'release_id'}
     if (manifest.get('release_id') != hashlib.sha256(canonical(unsigned)).hexdigest()
             or manifest.get('configuration_sha256') != hashlib.sha256(canonical(config)).hexdigest()

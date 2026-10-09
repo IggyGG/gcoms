@@ -16,7 +16,9 @@ from android_release_host import build_identity
 
 def prepare(state, install=False):
     for unit in ('gcoms-android-release.service', 'gcoms-android-warm.service'):
-        if subprocess.run(['systemctl', '--user', 'is-active', '--quiet', unit], capture_output=True).returncode == 0:
+        observation = subprocess.run(['systemctl', '--user', 'show', unit, '-p', 'ActiveState', '--value'],
+                                     capture_output=True, text=True, check=True)
+        if observation.stdout.strip() in ('active', 'activating', 'deactivating'):
             raise ValueError('preserve the active Android release/warming job')
     state = state.resolve()
     state.mkdir(mode=0o700, parents=True, exist_ok=True)
@@ -47,6 +49,7 @@ def prepare(state, install=False):
     dependencies = {'sdk': ['gcoms'], 'installer': ['dropship', 'gcoms', 'drone', 'gchat'],
                     'apk': ['agent'], 'hub': ['gchat', 'gcoms'], 'worker': ['drone', 'gcoms', 'gchat']}
     config = {'schema': 1, 'state': str(state), 'event_directory': str(events), 'sources': sources,
+              'runtime_sha256': {str(runtime / name): digest(runtime / name) for name in names},
               'targets': [{'id': 'hub', 'kind': 'hub'}, {'id': 'android-x64', 'kind': 'android',
                            'serial': 'emulator-5554', 'abi': 'x86_64', 'channel': 'android-x64'}],
               'adb': sdk + '/platform-tools/adb', 'apksigner': apksigner,

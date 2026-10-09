@@ -8,12 +8,15 @@ import sys
 import tempfile
 import time
 import unittest
+from types import SimpleNamespace
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import android_release as release
 from android_release_host import aligned_loads, ready, route_expiry
 import android_release_queue as queue
+import android_release_setup as setup
+import android_release_host as host
 
 
 ADAPTER = '''import hashlib,json,pathlib,sys,time
@@ -229,9 +232,31 @@ class Releases(unittest.TestCase):
             for value in self.config['sources'].values():
                 value['project'] = 'agent'
             queue.consume(self.config)
-        stop.assert_called_once()
-        self.assertEqual(stop.call_args.args[0], ['systemctl', '--user', 'stop', 'gcoms-android-warm.service'])
-        self.assertLessEqual(stop.call_args.kwargs['timeout'], 15)
+        self.assertEqual(stop.call_count, 2)
+        self.assertEqual(stop.call_args_list[0].args[0], ['systemctl', '--user', 'stop', 'gcoms-android-warm.service'])
+        self.assertLessEqual(stop.call_args_list[0].kwargs['timeout'], 15)
+        self.assertEqual(stop.call_args_list[1].args[0],
+                         ['systemctl', '--user', 'start', '--no-block', 'gcoms-android-warm.service'])
+
+    def test_setup_refuses_activating_oneshot_before_copying_runtime(self):
+        with patch.object(setup.subprocess, 'run', return_value=SimpleNamespace(stdout='activating\n')):
+            with self.assertRaisesRegex(ValueError, 'preserve the active'):
+                setup.prepare(self.root / 'service')
+        self.assertFalse((self.root / 'service').exists())
+
+    def test_builder_cannot_claim_an_older_frozen_invocation(self):
+        with self.assertRaisesRegex(ValueError, 'adapter changed'):
+            host.build({'config': {'toolchain': {'builder_sha256': 'wrong'}},
+                        'manifest': {}, 'component': 'sdk'})
+
+    def test_modified_provisioning_adapter_is_refused_before_activation(self):
+        file = self.root / 'adapter.py'
+        self.config['runtime_sha256'] = {str(file): release.digest(file)}
+        manifest = release.freeze(self.config, time.time())
+        file.write_text('changed provisioning')
+        with self.assertRaisesRegex(ValueError, 'adapter bytes changed'):
+            release.deploy(self.config, manifest)
+        self.assertFalse(Path(self.config['state']).exists())
 
 
 if __name__ == '__main__':
