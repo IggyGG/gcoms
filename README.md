@@ -540,3 +540,5 @@ The opt-in Android agent uses a bounded workstation release lane; see
 [Android agent releases](docs/ANDROID_AGENT_RELEASE.md). Its 600-second deadline
 starts at the original Forgejo push. Successful installation alone does not
 qualify downloaded worker readiness.
+
+[Android deployment measurements](docs/evidence/android-ten-minute-20261009/summary.json) retain cold preparation, actual cache reuse, signed APK installation and the original server push clocks. The full download/load gate remains failed; the shared controller baseline currently prevents main integration of the standalone operations files.
