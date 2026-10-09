@@ -4,6 +4,7 @@ import argparse
 import json
 import os
 from pathlib import Path
+import pwd
 import re
 import shutil
 import subprocess
@@ -93,6 +94,11 @@ def prepare(state, install=False):
         commands = {'gcoms-android-release': [sys.executable, str(runtime / 'android_release_queue.py'), '--config', str(destination)],
                     'gcoms-android-warm': [sys.executable, str(runtime / 'android_release.py'), '--config', str(destination), 'warm']}
         for unit, argv in commands.items():
+            # The long-lived user manager predates docker-group membership.
+            # Refresh this same user's supplementary groups, as the workstation
+            # harness does; never restart the manager and its healthy services.
+            argv = ['/usr/bin/sudo', '-n', '--preserve-env=PATH,DBUS_SESSION_BUS_ADDRESS,XDG_RUNTIME_DIR,TMPDIR',
+                    '-u', pwd.getpwuid(os.getuid()).pw_name, *argv]
             # This workstation layout uses simple absolute paths. Refuse rather
             # than incorrectly quote a changed path in systemd's argv syntax.
             if any(re.search(r'[\s%"\\]', arg) for arg in argv):
