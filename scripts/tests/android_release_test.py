@@ -294,6 +294,15 @@ class Releases(unittest.TestCase):
         second = host.source_workspace(self.config, manifest, 'sdk')
         self.assertEqual(second.resolve(), first.resolve())
 
+    def test_added_target_abi_rebuilds_only_its_downloadable_worker_input(self):
+        self.config['targets'][0]['abi'] = 'x86_64'
+        first = release.freeze(self.config, time.time())
+        self.config['targets'].append({'id': 'android-arm', 'kind': 'android', 'abi': 'arm64-v8a'})
+        second = release.freeze(self.config, time.time())
+        self.assertNotEqual(first['inputs']['worker'], second['inputs']['worker'])
+        self.assertTrue(all(first['inputs'][c] == second['inputs'][c]
+                            for c in release.COMPONENTS if c != 'worker'))
+
 
 if __name__ == '__main__':
     unittest.main()

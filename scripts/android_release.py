@@ -143,7 +143,9 @@ def inputs(config, sources):
             'schema': 1, 'component': component, 'sources': rows,
             'toolchain': config['toolchain'], 'build': specification,
             'environment': config.get('environment', {}),
-            'dependencies': {name: keys[name] for name in DEPENDENCIES[component]}
+            'dependencies': {name: keys[name] for name in DEPENDENCIES[component]},
+            'worker_abis': sorted({row.get('abi') for row in config['targets'] if row['kind'] == 'android'})
+                             if component == 'worker' else None
         })).hexdigest()
     return keys
 

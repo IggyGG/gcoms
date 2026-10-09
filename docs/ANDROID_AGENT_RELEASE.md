@@ -23,9 +23,12 @@ deployment. Source manifests and original cached artifact provenance are retaine
 | 600 seconds | Reserved restoration window |
 
 Independent SDK, installer, headless hub and worker builds run concurrently.
+The APK includes ARM64 and x86_64 native client inputs; downloadable workers
+compile only the ABIs in the declared Android target inventory.
 APK packaging waits only for SDK and installer inputs. Cached artifacts require
 unchanged reviewed Git input hashes, toolchains, compiler settings and verified
-bytes; their original source revisions remain in receipts. Android application
+bytes; their original source revisions remain in receipts. Stable owned source directories preserve Cargo's paths across source changes;
+compiler outputs and artifact hashes remain separate. Android application
 edits do not rebuild unchanged native dependencies. Unknown native source inputs
 remain conservative; this is not permission to relabel old tests for changed code.
 

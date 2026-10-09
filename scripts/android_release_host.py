@@ -66,7 +66,7 @@ def source_workspace(config, manifest, component):
         workspace.mkdir(exist_ok=True)
     if not workspace.resolve().is_relative_to(root.resolve()):
         raise ValueError('release source workspace escapes its owned build root')
-    return workspace
+    return workspace.resolve()
 
 
 def patch_gcoms(consumer, companion):
@@ -167,7 +167,12 @@ def build(request):
         shutil.copy2(target / 'release/gchat', artifact / 'gchat')
     elif component == 'worker':
         llvm = Path(environment['ANDROID_NDK_HOME']) / 'toolchains/llvm/prebuilt/linux-x86_64/bin'
+        requested = {row['abi'] for row in manifest['targets'] if row['kind'] == 'android'}
+        if not requested or not requested.issubset(ABIS):
+            raise ValueError('declared Android targets require supported worker ABIs')
         for abi, triple in ABIS.items():
+            if abi not in requested:
+                continue
             environment['CARGO_TARGET_' + triple.replace('-', '_').upper() + '_LINKER'] = str(llvm / (triple + '26-clang'))
             environment['CC_' + triple.replace('-', '_')] = str(llvm / (triple + '26-clang'))
             environment['AR_' + triple.replace('-', '_')] = str(llvm / 'llvm-ar')
