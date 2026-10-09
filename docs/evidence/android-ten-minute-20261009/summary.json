@@ -79,7 +79,7 @@
     "installer_session_controls": 10,
     "native_repeat_receipt_regression": "failed old code; passes ASAN/UBSAN",
     "source_audits": {
-      "automation_paths": 1050,
+      "automation_paths": 1051,
       "mobile_agent_paths": 1001,
       "gchat_paths": 871
     },
