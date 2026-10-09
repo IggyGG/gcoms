@@ -281,6 +281,19 @@ class Releases(unittest.TestCase):
         self.assertEqual(result['state'], 'live')
         self.assertTrue((Path(self.config['state']) / 'apk-started').exists())
 
+    def test_new_input_key_keeps_existing_companion_compiler_paths(self):
+        self.config['build_directory'] = str(self.root / 'build')
+        root = self.root / 'build' / 'sdk'
+        legacy = root / ('a' * 64)
+        legacy.mkdir(parents=True)
+        self.git(self.root, 'clone', '-q', self.config['sources']['gcoms']['repository'], str(legacy / 'gcoms'))
+        manifest = release.freeze(self.config, time.time())
+        first = host.source_workspace(self.config, manifest, 'sdk')
+        self.assertEqual(first.resolve(), legacy)
+        manifest['inputs']['sdk'] = 'b' * 64
+        second = host.source_workspace(self.config, manifest, 'sdk')
+        self.assertEqual(second.resolve(), first.resolve())
+
 
 if __name__ == '__main__':
     unittest.main()

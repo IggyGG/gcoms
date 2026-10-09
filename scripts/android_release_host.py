@@ -26,7 +26,7 @@ def build_identity():
     # Provisioning/observation changes do not force recompilation. These are
     # the complete builtin compiler invocation and source preparation functions.
     body = json.dumps(ABIS, sort_keys=True) + ''.join(inspect.getsource(f) for f in
-              (build, checkout, patch_gcoms, pinned_resolution))
+              (build, checkout, source_workspace, patch_gcoms, pinned_resolution))
     return hashlib.sha256(body.encode()).hexdigest()
 
 
@@ -44,6 +44,29 @@ def checkout(config, name, commit, parent):
     if git(destination, 'status', '--porcelain', '--untracked-files=no').strip():
         raise ValueError('release source checkout was modified')
     return destination
+
+
+def source_workspace(config, manifest, component):
+    root = Path(config['build_directory']) / component
+    root.mkdir(parents=True, exist_ok=True)
+    workspace = root / 'sources'
+    if not workspace.exists():
+        # Keep an already prepared physical path when upgrading the first
+        # hash-per-directory runner. Future source keys must not move unchanged
+        # companion crates and invalidate Cargo's entire local dependency cache.
+        for candidate in sorted(root.iterdir(), key=lambda p: p.stat().st_mtime, reverse=True):
+            if not re.fullmatch('[0-9a-f]{64}', candidate.name) or not candidate.is_dir():
+                continue
+            names = config['builds'][component]['sources']
+            if all((candidate / name / '.git').is_dir() and
+                   git(candidate / name, 'rev-parse', 'HEAD').decode().strip() == manifest['sources'][name]
+                   for name in names):
+                workspace.symlink_to(candidate.name, target_is_directory=True)
+                break
+        workspace.mkdir(exist_ok=True)
+    if not workspace.resolve().is_relative_to(root.resolve()):
+        raise ValueError('release source workspace escapes its owned build root')
+    return workspace
 
 
 def patch_gcoms(consumer, companion):
@@ -75,8 +98,7 @@ def build(request):
     specification = config['builds'][component]
     artifact = Path(request['output'])
     artifact.mkdir(parents=True, mode=0o700, exist_ok=True)
-    workspace = Path(config['build_directory']) / component / manifest['inputs'][component]
-    workspace.mkdir(parents=True, exist_ok=True)
+    workspace = source_workspace(config, manifest, component)
     sources = {name: checkout(config, name, manifest['sources'][name], workspace)
                for name in specification['sources']}
     environment = dict(os.environ, **config.get('environment', {}))
