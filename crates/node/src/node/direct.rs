@@ -2411,11 +2411,27 @@ pub(crate) async fn complete_direct_record(
     Ok(message_id)
 }
 
-fn direct_control_record(record: &[u8]) -> bool {
-    !matches!(
-        decode_direct_record(record),
-        Some(DirectRecord::Data { .. } | DirectRecord::VolatileApplication { .. })
-    )
+pub(crate) fn direct_control_record(record: &[u8]) -> bool {
+    match crate::proto::decode_direct_record(record) {
+        Some(crate::proto::DirectRecord::Data { .. }) => false,
+        // The bootstrap admission/payload exchange is control-plane. Keeping it
+        // on the control retained allowance means a stalled bulk application
+        // transfer (file records, contacts, acknowledgements) cannot exhaust the
+        // application allowance and block the admission/reply path.
+        Some(crate::proto::DirectRecord::VolatileApplication { body, .. }) => {
+            control_volatile_application(&body)
+        }
+        _ => true,
+    }
+}
+
+fn control_volatile_application(body: &[u8]) -> bool {
+    gcoms_core::component::RoutedApplication::decode(body)
+        .ok()
+        .is_some_and(|application| {
+            gcoms_core::component::application_parts(&application.application)
+                .is_some_and(|(kind, _)| kind == gcoms_core::bootstrap::CONTENT_TYPE)
+        })
 }
 
 pub(super) fn materialize_deferred(st: &mut NodeState) -> Result<(), String> {
