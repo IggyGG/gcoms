@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Bounded Android-agent releases; artifacts and live readiness are separate."""
 import argparse
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import fcntl
 import hashlib
 import json
@@ -287,11 +287,17 @@ def deploy(config, manifest, warm=False):
             done('preflight')
             stage('building')
             with ThreadPoolExecutor(max_workers=4) as pool:
-                pending = {c: pool.submit(build, config, manifest, c, deadline, directory)
+                pending = {pool.submit(build, config, manifest, c, deadline, directory): c
                            for c in COMPONENTS if not DEPENDENCIES[c]}
-                for c, task in pending.items():
-                    receipt['artifacts'][c] = task.result()
-                receipt['artifacts']['apk'] = build(config, manifest, 'apk', deadline, directory)
+                apk_started = False
+                while pending:
+                    task = next(as_completed(pending))
+                    component = pending.pop(task)
+                    receipt['artifacts'][component] = task.result()
+                    write_json(marker, receipt)
+                    if not apk_started and all(c in receipt['artifacts'] for c in DEPENDENCIES['apk']):
+                        pending[pool.submit(build, config, manifest, 'apk', deadline, directory)] = 'apk'
+                        apk_started = True
             done('building')
             stage('verifying')
             save_request()

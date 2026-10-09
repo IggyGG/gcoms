@@ -24,6 +24,14 @@ r=json.loads(pathlib.Path(sys.argv[-1]).read_text())
 c=r['config'];m=r['manifest']
 if 'component' in r:
  p=pathlib.Path(r['output']);p.mkdir(parents=True,exist_ok=True)
+ if c.get('fault')=='apk_overlap':
+  gate=pathlib.Path(c['state'])/'apk-started'
+  if r['component']=='apk':gate.write_text('started after SDK and installer')
+  if r['component']=='hub':
+   until=time.monotonic()+3
+   while not gate.exists():
+    if time.monotonic()>until:raise RuntimeError('APK waited for independent hub')
+    time.sleep(.01)
  (p/'artifact').write_bytes(r['component'].encode())
  (p/'receipt.json').write_text(json.dumps({'component':r['component'],'input_sha256':m['inputs'][r['component']],
    'sources':{n:m['sources'][n] for n in c['builds'][r['component']]['sources']},
@@ -266,6 +274,12 @@ class Releases(unittest.TestCase):
                         original.replace(b'checksum="a"', b'checksum="different"')):
             with self.assertRaisesRegex(ValueError, 'frozen source lockfiles'):
                 pinned_resolution(original, companion, changed)
+
+    def test_apk_packaging_does_not_wait_for_independent_hub(self):
+        self.config['fault'] = 'apk_overlap'
+        _, result = self.run_release()
+        self.assertEqual(result['state'], 'live')
+        self.assertTrue((Path(self.config['state']) / 'apk-started').exists())
 
 
 if __name__ == '__main__':
