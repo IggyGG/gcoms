@@ -4234,13 +4234,19 @@ pub(in crate::node) mod tests {
             "control update emitted app event"
         );
 
-        process_frame(&mut node, alice_pk.clone(), frame, &events);
+        for _ in 0..32 {
+            process_frame(&mut node, alice_pk.clone(), frame.clone(), &events);
+        }
         assert_eq!(
             node.direct_ack_outbox.len(),
-            2,
-            "duplicate did not replay ACK"
+            1,
+            "duplicates multiplied the retained ACK"
         );
-        assert_eq!(node.direct_ack_outbox[1].cells, exact_ack);
+        assert_eq!(node.direct_ack_outbox[0].cells, exact_ack);
+        node.direct_ack_outbox.pop_front().unwrap();
+        process_frame(&mut node, alice_pk.clone(), frame, &events);
+        assert_eq!(node.direct_ack_outbox.len(), 1);
+        assert_eq!(node.direct_ack_outbox[0].cells, exact_ack);
 
         let mut tampered = ContactUpdate::sign(
             10,
@@ -4256,7 +4262,7 @@ pub(in crate::node) mod tests {
             .unwrap();
         process_frame(&mut node, alice_pk.clone(), frame, &events);
         assert_eq!(node.peer_route_generations[&alice_pk], 9);
-        assert_eq!(node.direct_ack_outbox.len(), 2);
+        assert_eq!(node.direct_ack_outbox.len(), 1);
 
         let stale = ContactUpdate::sign(
             8,
@@ -4271,7 +4277,7 @@ pub(in crate::node) mod tests {
             .unwrap();
         process_frame(&mut node, alice_pk.clone(), frame, &events);
         assert_eq!(node.peer_route_generations[&alice_pk], 9);
-        assert_eq!(node.direct_ack_outbox.len(), 2);
+        assert_eq!(node.direct_ack_outbox.len(), 1);
     }
 
     #[test]
@@ -5550,14 +5556,29 @@ pub(in crate::node) mod tests {
             b"survives daemon crash"
         );
         assert_eq!(candidate.application_inbox.next_sequence, 2);
-        process_frame(&mut node, peer, wire, &events);
+        let exact_ack = node.direct_ack_outbox[0].cells.clone();
+        let committed = writes.lock().unwrap().len();
+        for _ in 0..32 {
+            process_frame(&mut node, peer.clone(), wire.clone(), &events);
+        }
         assert_eq!(node.application_inbox.entries.len(), 1);
         assert_eq!(node.application_inbox.next_sequence, 2);
         assert_eq!(
             node.direct_ack_outbox.len(),
-            2,
-            "exact replay returns the retained ACK"
+            1,
+            "exact replay reuses the retained ACK"
         );
+        assert_eq!(node.direct_ack_outbox[0].cells, exact_ack);
+        assert_eq!(writes.lock().unwrap().len(), committed);
+        node.direct_ack_outbox.pop_front().unwrap();
+        process_frame(&mut node, peer, wire, &events);
+        assert_eq!(node.direct_ack_outbox.len(), 1);
+        assert_eq!(node.direct_ack_outbox[0].cells, exact_ack);
+        flush_changed_state(&node).unwrap();
+        let saved = writes.lock().unwrap();
+        let candidate = decode_v2(saved.last().unwrap(), &TEST_SEED).unwrap();
+        assert_eq!(candidate.direct_acks.len(), 1);
+        assert_eq!(candidate.application_inbox.entries.len(), 1);
     }
 
     #[test]

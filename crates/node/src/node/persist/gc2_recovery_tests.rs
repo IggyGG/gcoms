@@ -5,8 +5,15 @@ async fn gc2_recovery_waits_for_owned_inbox_without_rotating_or_writing() {
     let (alice, bob, id) = gc2_recovery_pair(41, 42).await;
     let mut a = alice.lock().unwrap();
     let peer = bob.info.identity_pk.clone();
-    let runtime = routing::RoutingRuntime::new(RoutingConfig::default(), gcoms_routing::Directory::new(), true).unwrap();
-    runtime.recovering_owner.store(false, std::sync::atomic::Ordering::Release);
+    let runtime = routing::RoutingRuntime::new(
+        RoutingConfig::default(),
+        gcoms_routing::Directory::new(),
+        true,
+    )
+    .unwrap();
+    runtime
+        .recovering_owner
+        .store(false, std::sync::atomic::Ordering::Release);
     a.routing = Some(runtime);
     let generation = gc2_generation(&a, &peer);
     let cells = a.pending_1to1[&id].delivery.cells.clone();
@@ -451,10 +458,9 @@ async fn gc2_recovery_expired_data_only_repairs_counter_and_generation_cannot_wr
     b.scheduler.shutdown();
 }
 
-#[tokio::test]
-async fn gc2_recovery_maintenance_replaces_session_at_skipped_key_horizon() {
-    let mut a = gc2_node(71);
-    let mut b = gc2_node(72);
+fn gc2_expired_recovery_pair(a_seed: u8, b_seed: u8) -> (NodeState, NodeState) {
+    let mut a = gc2_node(a_seed);
+    let mut b = gc2_node(b_seed);
     let now = now_unix();
     let then = now - gcoms_crypto::session::SKIP_KEY_TTL.as_secs();
     for node in [&mut a, &mut b] {
@@ -484,9 +490,31 @@ async fn gc2_recovery_maintenance_replaces_session_at_skipped_key_horizon() {
     a.session_states
         .insert(bi.clone(), DirectSessionState::Established);
     persist_current_direct_state(&a).unwrap();
+    (a, b)
+}
+
+#[tokio::test]
+async fn gc2_recovery_maintenance_replaces_session_at_skipped_key_horizon() {
+    let (a, mut b) = gc2_expired_recovery_pair(71, 72);
+    let bi = b.info.identity_pk.clone();
+    let (events, _) = broadcast::channel(32);
     let scheduler = a.scheduler.clone();
+    let writes = a.durability.snapshot().writes;
     let state = Arc::new(Mutex::new(a));
     let mut maintenance = DirectMaintenance::default();
+    for _ in 0..100 {
+        maintenance.tick(&state, &scheduler, &events);
+    }
+    {
+        let a = state.lock().unwrap();
+        assert_eq!(gc2_generation(&a, &bi), 1);
+        assert_eq!(a.durability.snapshot().writes, writes);
+    }
+    let prepared = prepare_durable_1to1(&state, &b.info, b"new durable work", None).unwrap();
+    assert!(state.lock().unwrap().pending_1to1[&prepared.message_id]
+        .delivery
+        .cells
+        .is_empty());
     maintenance.tick(&state, &scheduler, &events);
     let first = {
         let a = state.lock().unwrap();
@@ -499,6 +527,45 @@ async fn gc2_recovery_maintenance_replaces_session_at_skipped_key_horizon() {
     };
     gc2_direct::incoming(&mut b, &first, &events).unwrap();
     drop(maintenance);
+    scheduler.shutdown();
+    b.scheduler.shutdown();
+}
+
+#[tokio::test]
+async fn gc2_fresh_volatile_work_recovers_an_expired_idle_session_once() {
+    let (a, mut b) = gc2_expired_recovery_pair(75, 76);
+    let bi = b.info.identity_pk.clone();
+    let scheduler = a.scheduler.clone();
+    let state = Arc::new(Mutex::new(a));
+    let body = b"fresh volatile application";
+    assert!(prepare_volatile_application(&state, &b.info, body).is_err());
+    let (first, writes) = {
+        let a = state.lock().unwrap();
+        assert_eq!(gc2_generation(&a, &bi), 2);
+        assert!(a.pending_1to1.is_empty());
+        (gc2_setup_packet(&a, &bi), a.durability.snapshot().writes)
+    };
+    for _ in 0..32 {
+        assert!(prepare_volatile_application(&state, &b.info, body).is_err());
+    }
+    {
+        let a = state.lock().unwrap();
+        assert_eq!(gc2_generation(&a, &bi), 2);
+        assert_eq!(a.durability.snapshot().writes, writes);
+    }
+    let (events, _) = broadcast::channel(32);
+    gc2_direct::incoming(&mut b, &first, &events).unwrap();
+    let credit = b.direct_ack_outbox.back().unwrap().cells[0].payload.clone();
+    gc2_direct::incoming(&mut state.lock().unwrap(), &credit, &events).unwrap();
+    let prepared = prepare_volatile_application(&state, &b.info, body).unwrap();
+    let cells = state.lock().unwrap().pending_1to1[&prepared.message_id]
+        .delivery
+        .cells
+        .clone();
+    assert!(!cells.is_empty());
+    for cell in &cells {
+        gc2_direct::incoming(&mut b, &cell.payload, &events).unwrap();
+    }
     scheduler.shutdown();
     b.scheduler.shutdown();
 }

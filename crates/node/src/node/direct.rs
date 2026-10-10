@@ -2199,6 +2199,23 @@ where
         // An explicit caller class overrides the record-derived reservation for
         // this preparation; deferred copies re-derive from the record.
         let traffic = class.unwrap_or_else(|| direct_traffic_class(&direct));
+        #[cfg(feature = "experimental-gc2")]
+        if crate::proto::is_volatile_application(&direct) {
+            // Volatile sends cannot wait in the durable deferred queue. Fresh
+            // demand must restart an expired session before asking the caller
+            // to retry after confirmation; idle maintenance stays write-free.
+            let expired_setup = matches!(
+                st.session_states.get(&peer.identity_pk),
+                Some(DirectSessionState::InitiatedUnconfirmed { expires })
+                    if *expires <= std::time::Instant::now()
+            );
+            if st.sessions.get(&peer.identity_pk).is_some_and(|session| {
+                matches!(session, PeerSession::Credited(session)
+                    if session.window().recovery_required(now_unix()) || expired_setup)
+            }) {
+                super::gc2_direct::recover_peer(&mut st, &peer.identity_pk)?;
+            }
+        }
         if crate::proto::is_volatile_application(&direct)
             && (!st.sessions.contains_key(&peer.identity_pk)
                 || !matches!(
