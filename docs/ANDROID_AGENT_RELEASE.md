@@ -42,9 +42,10 @@ Source notifications coalesce before preparation. Promotion tags are processed i
 Prepare the owned workstation (no private configuration is committed):
 
 ```sh
-python3 scripts/android_release_setup.py --state /absolute/SSD/android-release --install
+python3 scripts/android_release_setup.py --state /absolute/SSD/android-release
 python3 scripts/android_release.py --config /absolute/SSD/android-release/config.json prepare
 python3 scripts/android_release.py --config /absolute/SSD/android-release/config.json enroll-hub --prepared-id PREPARED_SHA256
+python3 scripts/android_release_setup.py --state /absolute/SSD/android-release --install-existing
 python3 scripts/android_release.py --config /absolute/SSD/android-release/config.json promote --prepared-id PREPARED_SHA256
 python3 scripts/android_release.py --config /absolute/SSD/android-release/config.json status
 ```
@@ -53,7 +54,7 @@ The consumer timer polls the mailbox every five seconds. Warming runs twice
 daily. A queued release stops this lane's warming unit before dispatch; other jobs
 remain protected. Preparation resumes after dispatch, including a failed
 preflight, so the next push need not wait for the twelve-hour tick. Setup refuses
-to replace a running lane. The
+to replace a running lane. `--install-existing` installs the owned hooks and timers without regenerating the prepared configuration or its shared compiler pins. The
 private config lists exact source refs, target inventory, certificate pin,
 toolchains (Rust/NDK 27.3, JNI NDK 28.2, CMake 3.22.1 and Java 21), storage
 reservations and existing managed hub activation/rollback
@@ -92,15 +93,7 @@ real deployments under 600 seconds and a real failed-canary restoration before
 claiming the ten-minute target. Keep the original retained delivery and pull
 latency failures until independently repaired and verified.
 
-On 2026-10-09, the shared GChat controller still nominated an undeployed
-runtime baseline for its own update, and the currently selected deployment
-journal was blocked. The classifier correction is published on GChat main;
-its activation must pass the existing controller gates. Until then, keep this
-standalone operations change on its published task branch: an older classifier
-would treat the new files as native SDK inputs and enqueue unrelated matrices.
-The installed workstation lane independently observes the existing Android
-feature refs and retains its original push receipts. No failed journal is
-relabelled as deployed to unblock the shared controller.
+On 2026-10-10, the qualified shared controller image `d1eab766f382` activated the exact Android operation classifier after 417 portable/Kubernetes controls and its normal authenticated-delivery canary. Its scoped journal is deployed; the original fleet journal remains blocked. Controller recovery holds the shared rollout lock and does not publish a failed application release. The workstation lane independently observes Android feature refs and retains original push receipts.
 
 
 Initial Android runtime qualification uses the existing isolated fleet and the

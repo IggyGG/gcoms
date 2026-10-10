@@ -14,12 +14,16 @@ from android_release import command, digest, write_json
 from android_release_host import build_identity
 
 
-def prepare(state, install=False):
+def require_idle():
     for unit in ('gcoms-android-release.service', 'gcoms-android-warm.service'):
         observation = subprocess.run(['systemctl', '--user', 'show', unit, '-p', 'ActiveState', '--value'],
                                      capture_output=True, text=True, check=True)
         if observation.stdout.strip() in ('active', 'activating', 'deactivating'):
             raise ValueError('preserve the active Android release/warming job')
+
+
+def prepare(state, install=False):
+    require_idle()
     state = state.resolve()
     state.mkdir(mode=0o700, parents=True, exist_ok=True)
     runtime = state / 'runtime'
@@ -96,44 +100,66 @@ def prepare(state, install=False):
             if previous.get(name): config[name] = previous[name]
     write_json(destination, config)
     if install:
-        hooks = root / 'home/hooks/post-receive.d'
-        hooks.mkdir(exist_ok=True)
-        hook = hooks / '90-android-release'
-        shutil.copy2(scripts / 'android_release_push_hook.sh', hook)
-        hook.chmod(0o755)
-        guards = root / 'home/hooks/pre-receive.d'
-        guards.mkdir(exist_ok=True)
-        guard = guards / '90-android-release'
-        shutil.copy2(scripts / 'android_release_pre_receive.sh', guard)
-        guard.chmod(0o755)
-        units = Path.home() / '.config/systemd/user'
-        units.mkdir(parents=True, exist_ok=True)
-        commands = {'gcoms-android-release': [sys.executable, str(runtime / 'android_release_queue.py'), '--config', str(destination)],
-                    'gcoms-android-warm': [sys.executable, str(runtime / 'android_release.py'), '--config', str(destination), 'prepare']}
-        for unit, argv in commands.items():
-            # The long-lived user manager predates docker-group membership.
-            # Refresh this same user's supplementary groups, as the workstation
-            # harness does; never restart the manager and its healthy services.
-            argv = ['/usr/bin/sudo', '-n', '--preserve-env=PATH,DBUS_SESSION_BUS_ADDRESS,XDG_RUNTIME_DIR,TMPDIR',
-                    '-u', pwd.getpwuid(os.getuid()).pw_name, *argv]
-            # This workstation layout uses simple absolute paths. Refuse rather
-            # than incorrectly quote a changed path in systemd's argv syntax.
-            if any(re.search(r'[\s%"\\]', arg) for arg in argv):
-                raise ValueError('systemd release paths need simple absolute names')
-            (units / (unit + '.service')).write_text('[Unit]\nDescription=Bounded Android agent release\n\n[Service]\nType=oneshot\nUMask=0077\nExecStart=' +
-                  ' '.join(argv) + '\nTimeoutStopSec=10\nTimeoutStartSec=' + ('3700' if unit.endswith('warm') else '620') + '\n')
-            timer = ('OnBootSec=2min\nOnUnitActiveSec=12h\n' if unit.endswith('warm') else
-                     'OnBootSec=15s\nOnUnitInactiveSec=5s\n')
-            (units / (unit + '.timer')).write_text('[Unit]\nDescription=Android agent release scheduling\n\n[Timer]\n' + timer +
-                  'AccuracySec=1s\nUnit=' + unit + '.service\n\n[Install]\nWantedBy=timers.target\n')
-        command(['systemctl', '--user', 'daemon-reload'])
-        command(['systemctl', '--user', 'enable', '--now', 'gcoms-android-release.timer', 'gcoms-android-warm.timer'])
+        install_services(destination)
     return destination
+
+
+def install_services(destination):
+    """Install the owned hooks/units after an exact configuration is prepared."""
+    destination = Path(destination)
+    config = json.loads(destination.read_text())
+    state = Path(config['state'])
+    if destination != state / 'config.json':
+        raise ValueError('service configuration must be in its declared private state')
+    if any(digest(path) != sha for path, sha in config.get('runtime_sha256', {}).items()):
+        raise ValueError('preserve the changed release runtime')
+    require_idle()
+    runtime = state / 'runtime'
+    scripts = Path(__file__).resolve().parent
+    root = Path('/run/media/user/SSD-2/forgejo-data')
+    hooks = root / 'home/hooks/post-receive.d'
+    hooks.mkdir(exist_ok=True)
+    hook = hooks / '90-android-release'
+    shutil.copy2(scripts / 'android_release_push_hook.sh', hook)
+    hook.chmod(0o755)
+    guards = root / 'home/hooks/pre-receive.d'
+    guards.mkdir(exist_ok=True)
+    guard = guards / '90-android-release'
+    shutil.copy2(scripts / 'android_release_pre_receive.sh', guard)
+    guard.chmod(0o755)
+    units = Path.home() / '.config/systemd/user'
+    units.mkdir(parents=True, exist_ok=True)
+    commands = {'gcoms-android-release': [sys.executable, str(runtime / 'android_release_queue.py'), '--config', str(destination)],
+                'gcoms-android-warm': [sys.executable, str(runtime / 'android_release.py'), '--config', str(destination), 'prepare']}
+    for unit, argv in commands.items():
+        # The long-lived user manager predates docker-group membership.
+        # Refresh this same user's supplementary groups, as the workstation
+        # harness does; never restart the manager and its healthy services.
+        argv = ['/usr/bin/sudo', '-n', '--preserve-env=PATH,DBUS_SESSION_BUS_ADDRESS,XDG_RUNTIME_DIR,TMPDIR',
+                '-u', pwd.getpwuid(os.getuid()).pw_name, *argv]
+        # This workstation layout uses simple absolute paths. Refuse rather
+        # than incorrectly quote a changed path in systemd's argv syntax.
+        if any(re.search(r'[\s%"\\]', arg) for arg in argv):
+            raise ValueError('systemd release paths need simple absolute names')
+        (units / (unit + '.service')).write_text('[Unit]\nDescription=Bounded Android agent release\n\n[Service]\nType=oneshot\nUMask=0077\nExecStart=' +
+              ' '.join(argv) + '\nTimeoutStopSec=10\nTimeoutStartSec=' + ('3700' if unit.endswith('warm') else '620') + '\n')
+        timer = ('OnBootSec=2min\nOnUnitActiveSec=12h\n' if unit.endswith('warm') else
+                 'OnBootSec=15s\nOnUnitInactiveSec=5s\n')
+        (units / (unit + '.timer')).write_text('[Unit]\nDescription=Android agent release scheduling\n\n[Timer]\n' + timer +
+              'AccuracySec=1s\nUnit=' + unit + '.service\n\n[Install]\nWantedBy=timers.target\n')
+    command(['systemctl', '--user', 'daemon-reload'])
+    command(['systemctl', '--user', 'enable', '--now', 'gcoms-android-release.timer', 'gcoms-android-warm.timer'])
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--state', type=Path, required=True)
-    parser.add_argument('--install', action='store_true')
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument('--install', action='store_true')
+    group.add_argument('--install-existing', action='store_true')
     args = parser.parse_args()
-    print(prepare(args.state, args.install))
+    if args.install_existing:
+        install_services(args.state.resolve() / 'config.json')
+        print(args.state.resolve() / 'config.json')
+    else:
+        print(prepare(args.state, args.install))
