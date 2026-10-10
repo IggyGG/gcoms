@@ -97,7 +97,7 @@ def build(request):
     if config['toolchain'].get('builder_sha256') != build_identity():
         raise ValueError('compiler adapter changed after inputs were frozen')
     specification = config['builds'][component]
-    artifact = Path(request['output'])
+    artifact = Path(request['output']).resolve()
     artifact.mkdir(parents=True, mode=0o700, exist_ok=True)
     workspace = source_workspace(config, manifest, component)
     sources = {name: checkout(config, name, manifest['sources'][name], workspace)

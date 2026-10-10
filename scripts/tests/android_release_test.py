@@ -457,6 +457,10 @@ class Releases(unittest.TestCase):
         binary = target / 'release/gdrone-fleet'
         binary.parent.mkdir(parents=True)
         binary.write_bytes(b'test controller')
+        actual_artifacts = self.root / 'actual-artifacts'
+        actual_artifacts.mkdir()
+        linked_artifacts = self.root / 'linked-artifacts'
+        linked_artifacts.symlink_to(actual_artifacts, target_is_directory=True)
         commands = []
         with patch.object(host, 'build_identity', return_value=self.config['toolchain']['builder_sha256']), \
              patch.object(host, 'checkout', side_effect=lambda config, name, commit, parent:
@@ -464,12 +468,14 @@ class Releases(unittest.TestCase):
              patch.object(host, 'command', side_effect=lambda argv, **kwargs: commands.append(kwargs['env'])), \
              patch.dict(os.environ, {'CARGO_BUILD_BUILD_DIR': str(self.root / 'temporary-outer-job')}):
             host.build({'config': self.config, 'manifest': manifest, 'component': 'controller',
-                        'output': str(self.root / 'artifact')})
+                        'output': str(linked_artifacts / 'controller')})
         self.assertEqual(len(commands), 2)
         for environment in commands:
             self.assertEqual(environment['CARGO_TARGET_DIR'], str(target.resolve()))
             self.assertEqual(environment['CARGO_BUILD_BUILD_DIR'], str(target.resolve()))
             self.assertIn(str(target.resolve()), json.loads(environment['WORKSTATION_BUILD_OUTPUTS']))
+            self.assertIn(str((actual_artifacts / 'controller').resolve()),
+                          json.loads(environment['WORKSTATION_BUILD_OUTPUTS']))
 
     def test_local_sdk_resolution_preserves_committed_external_pins(self):
         original = b'[[package]]\nname="serde"\nversion="1"\nsource="registry+example"\nchecksum="a"\n'
