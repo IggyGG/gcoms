@@ -1,3 +1,5 @@
+Android preparation pins both Cargo final output and intermediate build storage in each component’s declared SSD cache, so a fresh workstation job can reuse checked dependency outputs. Compiler invocation identity remains part of native keys; a changed builder requires new verified receipts. Promotion uses immutable prepared artifacts.
+
 The prepared Android lane treats the five reviewed GChat release-controller operation/test files as separately qualified operations. Changes there reuse exact native receipts; unknown build helpers still invalidate their native consumers. Android readiness remains bound to the actual full-download and in-process-load receipt.
 
 F5 prepared configuration installation, 2026-10-10: `android_release_setup.py --install-existing` installs this lane's owned hooks/timers using the exact already-prepared config and runtime pins. It refuses active or transitioning lane jobs and does not regenerate shared compiler commands. All 41 focused release/maintenance controls and 1,056 source-path checks pass. The real Android reference remains required before production promotion. See `docs/ANDROID_AGENT_RELEASE.md`.

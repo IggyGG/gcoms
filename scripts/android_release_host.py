@@ -107,6 +107,10 @@ def build(request):
     environment['CARGO_BUILD_JOBS'] = '2'
     target = (Path(config['compiler_directory']) / component).resolve()
     environment['CARGO_TARGET_DIR'] = str(target)
+    # The workstation runner supplies a fresh intermediate directory per job.
+    # Pin it alongside this component's declared cache as well as final output;
+    # otherwise every new preparation recompiles dependencies on Cargo 1.98.
+    environment['CARGO_BUILD_BUILD_DIR'] = str(target)
     environment['WORKSTATION_BUILD_OUTPUTS'] = json.dumps([str(workspace), str(target), str(artifact)])
     environment['WORKSTATION_BUILD_BUDGET'] = str(config.get('build_budgets', {}).get(component, 16 * 1024 ** 3))
     log = Path(config['state']) / 'build-logs' / (component + '-' + manifest['inputs'][component] + '.log')

@@ -376,6 +376,29 @@ class Releases(unittest.TestCase):
             release.deploy(self.config, manifest)
         self.assertFalse(Path(self.config['state']).exists())
 
+    def test_compiler_cache_survives_the_outer_jobs_temporary_build_directory(self):
+        self.config.update(build_directory=str(self.root / 'build'),
+                           compiler_directory=str(self.root / 'compiler'))
+        self.config['toolchain']['builder_sha256'] = host.build_identity()
+        manifest = release.freeze(self.config, time.time())
+        target = self.root / 'compiler/controller'
+        binary = target / 'release/gdrone-fleet'
+        binary.parent.mkdir(parents=True)
+        binary.write_bytes(b'test controller')
+        commands = []
+        with patch.object(host, 'build_identity', return_value=self.config['toolchain']['builder_sha256']), \
+             patch.object(host, 'checkout', side_effect=lambda config, name, commit, parent:
+                          Path(config['sources'][name]['repository'])), \
+             patch.object(host, 'command', side_effect=lambda argv, **kwargs: commands.append(kwargs['env'])), \
+             patch.dict(os.environ, {'CARGO_BUILD_BUILD_DIR': str(self.root / 'temporary-outer-job')}):
+            host.build({'config': self.config, 'manifest': manifest, 'component': 'controller',
+                        'output': str(self.root / 'artifact')})
+        self.assertEqual(len(commands), 2)
+        for environment in commands:
+            self.assertEqual(environment['CARGO_TARGET_DIR'], str(target.resolve()))
+            self.assertEqual(environment['CARGO_BUILD_BUILD_DIR'], str(target.resolve()))
+            self.assertIn(str(target.resolve()), json.loads(environment['WORKSTATION_BUILD_OUTPUTS']))
+
     def test_local_sdk_resolution_preserves_committed_external_pins(self):
         original = b'[[package]]\nname="serde"\nversion="1"\nsource="registry+example"\nchecksum="a"\n'
         companion = original.replace(b'name="serde"', b'name="crypto"')
