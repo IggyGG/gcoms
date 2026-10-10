@@ -25,6 +25,9 @@ OPERATION_FILES = frozenset({
     'scripts/android_release_pre_receive.sh', 'scripts/android_release_setup.py',
     'scripts/android_release_hub.py', 'scripts/android_release_network.py',
     'scripts/android_release_qualify.py', 'scripts/tests/android_release_test.py',
+    # Dispatch-only hosted relay diagnostics never enter these native builds.
+    '.github/workflows/relay-recovery.yml', 'scripts/qualify-relay-recovery.py',
+    'scripts/tests/relay_recovery_test.py',
 })
 GCHAT_OPERATION_FILES = frozenset({
     'scripts/release_controller.py', 'scripts/release_deployment.py',

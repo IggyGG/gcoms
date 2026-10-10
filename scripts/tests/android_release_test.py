@@ -350,6 +350,26 @@ class Releases(unittest.TestCase):
         self.assertNotEqual(second['inputs']['hub'], third['inputs']['hub'])
         self.assertNotEqual(second['inputs']['controller'], third['inputs']['controller'])
 
+    def test_hosted_relay_diagnostics_preserve_native_cache_but_unknown_helpers_invalidate_it(self):
+        first = release.freeze(self.config, time.time())
+        repo = Path(self.config['sources']['gcoms']['repository'])
+        for name in ('.github/workflows/relay-recovery.yml', 'scripts/qualify-relay-recovery.py',
+                     'scripts/tests/relay_recovery_test.py'):
+            path = repo / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text('hosted isolated diagnostic; no Android compiler invocation')
+        self.git(repo, 'add', '.')
+        self.git(repo, 'commit', '-qm', 'hosted diagnostic')
+        second = release.freeze(self.config, time.time())
+        self.assertEqual(first['inputs'], second['inputs'])
+        unknown = repo / 'scripts/qualify_unknown_native_helper.py'
+        unknown.write_text('new unreviewed compiler helper')
+        self.git(repo, 'add', '.')
+        self.git(repo, 'commit', '-qm', 'unknown build helper')
+        third = release.freeze(self.config, time.time())
+        for component in release.COMPONENTS:
+            self.assertNotEqual(second['inputs'][component], third['inputs'][component])
+
     def test_deadline_uses_wall_and_monotonic_time(self):
         with patch.object(release.time, 'time', return_value=1000), patch.object(release.time, 'monotonic', return_value=20):
             deadline = release.Deadline(900)
