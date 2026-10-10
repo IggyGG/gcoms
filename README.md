@@ -1,3 +1,5 @@
+The Android agent and dropship are available on main under `mobile/android/agent`; build with `-PgcomsAgent=true` and the exact prepared DS-MIN archives. The service retains one owned installer run per process, reloads private profile configuration on restart, and writes deployment readiness only after verified in-process worker startup. See `mobile/android/agent/README.md`.
+
 Android preparation pins both Cargo final output and intermediate build storage in each component’s declared SSD cache, so a fresh workstation job can reuse checked dependency outputs. Compiler invocation identity remains part of native keys; a changed builder requires new verified receipts. Promotion uses immutable prepared artifacts.
 
 The prepared Android lane treats the five reviewed GChat release-controller operation/test files as separately qualified operations. Changes there reuse exact native receipts; unknown build helpers still invalidate their native consumers. Android readiness remains bound to the actual full-download and in-process-load receipt.
