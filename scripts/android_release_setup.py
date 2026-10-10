@@ -26,7 +26,7 @@ def prepare(state, install=False):
     runtime.mkdir(mode=0o700, exist_ok=True)
     scripts = Path(__file__).resolve().parent
     names = ('android_release.py', 'android_release_host.py', 'android_release_queue.py',
-             'android_release_hub.py', 'android_release_network.py')
+             'android_release_hub.py', 'android_release_network.py', 'android_release_qualify.py')
     for name in names:
         shutil.copy2(scripts / name, runtime / name)
     root = Path('/run/media/user/SSD-2/forgejo-data')

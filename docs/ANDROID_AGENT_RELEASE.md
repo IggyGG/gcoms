@@ -101,3 +101,35 @@ would treat the new files as native SDK inputs and enqueue unrelated matrices.
 The installed workstation lane independently observes the existing Android
 feature refs and retains its original push receipts. No failed journal is
 relabelled as deployed to unblock the shared controller.
+
+
+Initial Android runtime qualification uses the existing isolated fleet and the
+owned `emulator-5554`. The production baseline gate cannot be bypassed by this
+operation. After preparing the six artifacts with an isolated configuration:
+
+```sh
+python3 scripts/android_release_qualify.py --config PRIVATE_LAB_CONFIG \
+  --prepared-id PREPARED_ID adopt-isolated
+python3 scripts/android_release_qualify.py --config PRIVATE_LAB_CONFIG \
+  --prepared-id PREPARED_ID reference
+```
+
+One-time adoption pins the standalone owner's Unix-socket PID/UID and private
+home, checkpoints its current protocol state, stops through a pidfd and retains
+its executable before installing headless user services. It preserves every
+profile, identity and queue. Routine promotion does not rewrite those units.
+
+The driver publishes the prepared worker plus trailing padding through the
+normal signed fleet publication. All 42 MiB participate in the file digest and
+normal authorized load. It interrupts the application after at least 8 MiB,
+keeps the same private profile and deployment nonce, and requires a changed PID,
+unchanged identity and sender confirmation of the same run's saved frontier.
+Only the actual installed APK hash, current-process ready observation and exact
+native payload receipt can produce the source-bound baseline. Failed attempts
+retain their receipt and never update the successful baseline. Mullvad remains
+connected throughout. The entire reference check has a six-minute budget.
+
+This source implementation is not live qualification. Three real promotion
+pushes and a real failed-canary functional rollback remain required before
+claiming the ten-minute end-to-end objective. ARM64 compilation is not physical
+ARM64 device acceptance.

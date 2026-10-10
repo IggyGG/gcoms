@@ -209,6 +209,9 @@ def build(request):
 
 
 def artifact(request, component, name):
+    if component == 'worker' and request['manifest'].get('purpose') == 'android-runtime-qualification':
+        from android_release_qualify import worker
+        return worker(request, component, name)
     return Path(request['config']['state']) / 'artifacts' / component / request['manifest']['inputs'][component] / name
 
 

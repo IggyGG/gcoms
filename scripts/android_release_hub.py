@@ -327,7 +327,8 @@ def enroll(config, source):
     shutil.copy2(fragment, before / 'unit')
     for path in dropins: shutil.copy2(path, before / Path(path).name)
     argv = [str(root / 'active/gchat'), 'daemon', '--home', str(home), '--gc2-carrier',
-            '--fleet-config', fleet['fleet'], '--chat-passphrase-file', str(passphrase)]
+            '--fleet-config', str(Path(fleet['state']) / 'gchat-fleet.json'),
+            '--chat-passphrase-file', str(passphrase)]
     if any(re.search(r'[\s%"\\]', arg) for arg in argv):
         raise ValueError('headless service paths need explicit systemd quoting support')
     original = fragment.read_text()

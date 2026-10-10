@@ -1,6 +1,7 @@
 """Release regressions use a simulated adapter, never the production hub."""
 import json
 import base64
+import hashlib
 import os
 from pathlib import Path
 import subprocess
@@ -21,6 +22,7 @@ import android_release_queue as queue
 import android_release_setup as setup
 import android_release_host as host
 import android_release_hub as hub
+import android_release_qualify as qualify
 import android_release_network as network
 
 
@@ -394,6 +396,21 @@ class Releases(unittest.TestCase):
 
 
 class Maintenance(unittest.TestCase):
+    def test_initial_reference_cannot_target_production(self):
+        with self.assertRaisesRegex(ValueError, 'isolated'):
+            qualify.isolated({'qualification_scope': 'isolated', 'hub_unit': 'gchat-fleet-host.service'})
+
+    def test_reference_frontier_binds_actual_target_size_hash_and_checksum(self):
+        raw = bytearray(156); raw[:8] = b'DSRSUM1\0'; raw[40:72] = b'x' * 32
+        raw[72:80] = qualify.REFERENCE_BYTES.to_bytes(8, 'little'); raw[80:84] = (7).to_bytes(4, 'big')
+        raw[84:92] = (22000).to_bytes(8, 'little'); raw[124:] = hashlib.sha256(raw[:124]).digest()
+        self.assertEqual(qualify.frontier(bytes(raw), (b'x' * 32).hex()), 22000)
+        for index in (0, 40, 72, 80, 84, 124):
+            changed = bytearray(raw); changed[index] ^= 1
+            self.assertIsNone(qualify.frontier(bytes(changed), (b'x' * 32).hex()))
+        raw[84:92] = (22001).to_bytes(8, 'little'); raw[124:] = hashlib.sha256(raw[:124]).digest()
+        self.assertIsNone(qualify.frontier(bytes(raw), (b'x' * 32).hex()))
+
     def test_oversized_private_frame_is_rejected_before_allocation(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / 'hub.sock'
