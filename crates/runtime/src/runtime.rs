@@ -950,7 +950,10 @@ impl ProtocolRuntime {
         let started = std::time::Instant::now();
         self.0.persistence.begin(cause);
         let _save = self.0.save_lock.lock().await;
-        let result = self.0.node.persist_state().await;
+        let result = match cause {
+            SaveCause::Periodic | SaveCause::Event => self.0.node.flush_changed_state().await,
+            SaveCause::Explicit | SaveCause::Shutdown => self.0.node.persist_state().await,
+        };
         self.0.persistence.finish(cause, started, result.is_ok());
         result
     }

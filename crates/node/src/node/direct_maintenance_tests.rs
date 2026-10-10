@@ -4,6 +4,51 @@ use std::time::{Duration, Instant};
 use tokio::net::TcpListener;
 use tokio_rustls::TlsAcceptor;
 
+#[tokio::test]
+async fn failed_ack_retries_back_off_without_changing_ciphertext_or_saving() {
+    let mut node = persist::tests::state();
+    let ack = delivery(&node, 29);
+    let key = direct_attempt_key(&ack);
+    node.direct_ack_outbox.push_back(ack.clone());
+    node.durable_state_sink = Some(Arc::new(|_| Ok(())));
+    persist_current_direct_state(&node).unwrap();
+    let state = Arc::new(Mutex::new(node));
+    let scheduler = state.lock().unwrap().scheduler.clone();
+    let (events, _) = broadcast::channel(4);
+    let mut maintenance = DirectMaintenance::default();
+    for failure in 1..=10 {
+        let destination = ack.peer.primary().cloned();
+        maintenance.active.insert(key, true);
+        maintenance.completions.push(Box::pin(async move {
+            DirectAttempt {
+                key,
+                ack: true,
+                destination,
+                accepted: false,
+                route_unavailable: true,
+            }
+        }));
+        maintenance.complete_next(&state).await;
+        let retry = &maintenance.retry_backoffs[&key];
+        assert_eq!(retry.failures, failure);
+        let delay = retry.due.saturating_duration_since(Instant::now());
+        assert!(delay <= Duration::from_secs(120));
+        if failure >= 6 {
+            assert!(delay >= Duration::from_secs(71));
+        }
+        maintenance.tick(&state, &scheduler, &events);
+        assert!(
+            maintenance.is_empty(),
+            "a failed ACK must not restart every tick"
+        );
+        let node = state.lock().unwrap();
+        flush_changed_state(&node).unwrap();
+        assert_eq!(node.durability.snapshot().writes, 1);
+        assert_eq!(node.direct_ack_outbox[0].cells, ack.cells);
+    }
+    scheduler.shutdown();
+}
+
 fn delivery(st: &NodeState, tag: u8) -> DirectDelivery {
     let mut peer = st.info.clone();
     for alias in &mut peer.aliases {
@@ -393,7 +438,7 @@ async fn bounds_fair_retries_and_ack_archive_survive_owner_cancellation() {
     node.next_direct_sequence = 81;
     for id in 160..180 {
         let ack = delivery(&node, id);
-        // Duplicate receives may enqueue the same cached ACK more than once.
+        // Checkpoints from older versions may contain exact cached ACK copies.
         node.direct_ack_outbox.extend([ack.clone(), ack]);
     }
     let state = Arc::new(Mutex::new(node));
@@ -428,10 +473,12 @@ async fn bounds_fair_retries_and_ack_archive_survive_owner_cancellation() {
     let st = restored.lock().unwrap();
     assert_eq!(
         st.direct_ack_outbox.len(),
-        40,
-        "in-flight ACKs remain archived"
+        20,
+        "every distinct in-flight ACK remains archived; exact copies normalize"
     );
-    assert_eq!(st.direct_ack_outbox[0].cells[0].payload, vec![160; 32]);
+    for (index, ack) in st.direct_ack_outbox.iter().enumerate() {
+        assert_eq!(ack.cells[0].payload, vec![160 + index as u8; 32]);
+    }
     assert_eq!(st.pending_1to1.len(), 80);
     st.scheduler.shutdown();
     scheduler.shutdown();
@@ -614,9 +661,13 @@ async fn stalled_retry_does_not_block_new_ack_retry_or_presence_expiry() {
     }
     // A rejected hop receipt must get a fresh maintenance opportunity while the
     // other lane is still waiting. Both attempts reuse the exact cached MSG.
-    for _ in 0..2 {
+    for attempt in 0..2 {
+        // The initial attempt still has the original five-second bound. A
+        // refused ACK now intentionally waits for the first 5s backoff (up to
+        // 6.25s with jitter) plus the compressed maintenance scheduling tick.
+        let wait = if attempt == 0 { 5 } else { 8 };
         let (wire, response) =
-            tokio::time::timeout(Duration::from_secs(5), healthy.requests.recv())
+            tokio::time::timeout(Duration::from_secs(wait), healthy.requests.recv())
                 .await
                 .unwrap()
                 .unwrap();
@@ -724,8 +775,10 @@ async fn late_acceptance_on_old_receive_queue_cannot_clear_renewed_ack() {
         .unwrap();
     // The old queue accepted this ciphertext, but it still needs delivery to
     // the authenticated replacement. The new queue verifies its new push cap.
-    for _ in 0..2 {
-        let (wire, _) = tokio::time::timeout(Duration::from_secs(5), healthy.requests.recv())
+    for attempt in 0..2 {
+        // The replacement's first refusal uses the bounded jittered ACK retry.
+        let wait = if attempt == 0 { 5 } else { 8 };
+        let (wire, _) = tokio::time::timeout(Duration::from_secs(wait), healthy.requests.recv())
             .await
             .unwrap()
             .unwrap();

@@ -497,6 +497,34 @@ pub(crate) fn recovering(st: &NodeState) -> bool {
         .is_some_and(|r| r.recovering_owner.load(Ordering::Acquire))
 }
 
+/// New session generations need a working reply path. Retrying already sealed
+/// control/ACK bytes remains independent so inbox recovery can still progress.
+pub(crate) fn inbox_receiving(st: &NodeState) -> bool {
+    st.routing.is_none()
+        || (!recovering(st)
+            && st.client_relay.aliases.iter().any(|alias| {
+                st.subscribed_contact_aliases
+                    .contains(&alias.contact.queue_id)
+                    && owner_alias_receiving(st, alias)
+            }))
+}
+
+/// Lease expiry can stop a subscription before it reports a transport error.
+/// Enter ordinary authority recovery then; an unavailable entry alone must
+/// retain valid authority and simply reopen it when the route returns.
+pub(crate) fn observe_owner_expiry(st: &NodeState) {
+    if let Some(runtime) = &st.routing {
+        if !st
+            .client_relay
+            .aliases
+            .iter()
+            .any(|alias| owner_alias_receiving(st, alias))
+        {
+            runtime.recovering_owner.store(true, Ordering::Release);
+        }
+    }
+}
+
 pub(crate) fn owner_unavailable(st: &NodeState, alias: &OwnedAlias) {
     if st
         .client_relay
@@ -534,6 +562,7 @@ pub(crate) fn refresh_public_info(st: &mut NodeState) {
         })
         .map(|a| a.contact.clone())
         .collect();
+    observe_owner_expiry(st);
 }
 
 /// Unavailable internal route for old archives that never stored owned channel
@@ -638,11 +667,12 @@ pub(crate) fn spawn(
             if !current_protocol {
                 let _ = runtime.discovery.refresh().await;
             }
-            // Cache and guard changes are sealed even while inboxes are offline.
+            // Alias lifecycle transitions have synchronous barriers. Merely
+            // refreshing their derived public view must not rewrite the archive.
             {
                 let mut st = state.lock().unwrap_or_else(|p| p.into_inner());
                 refresh_public_info(&mut st);
-                if let Err(error) = persist_current_direct_state(&st) {
+                if let Err(error) = flush_changed_state(&st) {
                     runtime.recovery_observed("checkpoint failed", Some(&error));
                     return;
                 }

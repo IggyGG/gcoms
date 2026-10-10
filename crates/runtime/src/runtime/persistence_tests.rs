@@ -2,6 +2,34 @@ use super::*;
 use std::time::Duration;
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn idle_periodic_checkpoints_do_not_rewrite_the_encrypted_profile() {
+    let dir = tempfile::tempdir().unwrap();
+    crate::private_fs::make_private(dir.path(), true).unwrap();
+    let runtime = ProtocolRuntime::create_fixture(
+        &dir.path().join("idle"),
+        "test-only-passphrase",
+        "127.0.0.1:0".parse().unwrap(),
+        None,
+        None,
+        &["127.0.0.0/8".to_owned()],
+    )
+    .await
+    .unwrap();
+    runtime.save().await.unwrap();
+    let before = runtime.persistence_diagnostics().profile;
+    for _ in 0..20 {
+        runtime.save_for(SaveCause::Periodic).await.unwrap();
+    }
+    let after = runtime.persistence_diagnostics().profile;
+    runtime.shutdown().await.unwrap();
+    assert_eq!(
+        after.completed, before.completed,
+        "idle checkpoint wrote disk"
+    );
+    assert_eq!(after.committed_bytes, before.committed_bytes);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn channel_text_survives_a_failed_hop_and_sender_reopen() {
     channel_text_admission_reopen(AdmissionBoundary::FailedHop).await;
 }
@@ -288,6 +316,7 @@ async fn fixture() -> (tempfile::TempDir, ProtocolRuntime) {
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn event_write_measurement_by_subscriber_count() {
     let (_dir, runtime) = fixture().await;
+    runtime.save().await.unwrap();
     for observers in [0, 1, 4] {
         let (background, source) = mpsc::channel(1);
         runtime.spawn_event_persistence_from(source);
@@ -320,7 +349,7 @@ async fn event_write_measurement_by_subscriber_count() {
             after.calls["event"].completed - before.calls["event"].completed,
             1
         );
-        assert_eq!(after.profile.completed - before.profile.completed, 1);
+        assert_eq!(after.profile.completed - before.profile.completed, 0);
         println!(
             "{}",
             serde_json::json!({
@@ -341,6 +370,14 @@ async fn event_write_measurement_by_subscriber_count() {
 async fn persistence_barrier_precedes_every_observer_and_failed_write_closes_them() {
     let (dir, runtime) = fixture().await;
     runtime.set_error_sink(Arc::new(|_| {}));
+    // Mutate through the node API, whose caller owns the wrapper barrier.
+    // A synthetic diagnostic event alone has no durable state to flush.
+    runtime
+        .0
+        .node
+        .prepare_channel_join("before-event")
+        .await
+        .unwrap();
     let (input, source) = mpsc::channel(2);
     runtime.spawn_event_persistence_from(source);
     let mut first = runtime.sdk_client().subscribe_events();
@@ -389,6 +426,12 @@ async fn persistence_barrier_precedes_every_observer_and_failed_write_closes_the
     let committed_before_failure = runtime.persistence_diagnostics().profile.committed_bytes;
     let profile = dir.path().join("protocol");
     let retained = dir.path().join("retained");
+    runtime
+        .0
+        .node
+        .prepare_channel_join("failed-event")
+        .await
+        .unwrap();
     std::fs::rename(&profile, &retained).unwrap();
     std::fs::create_dir(&profile).unwrap();
     input

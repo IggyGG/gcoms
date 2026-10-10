@@ -2752,6 +2752,7 @@ pub(super) async fn decode_state_at_startup(
     st.direct_presence_counters.clear();
     st.channel_presence.clear();
     st.channel_presence_counters.clear();
+    st.durability.changed();
     st.direct_presence_opt_in = archive.direct_presence_opt_in;
     st.channel_presence_opt_in = archive.channel_presence_opt_in;
     for grant in restored_grants {
@@ -3170,6 +3171,7 @@ pub(in crate::node) mod tests {
             invite_redeem_inbox: VecDeque::new(),
             pending_invite_redemptions: HashMap::new(),
             durable_state_sink: None,
+            durability: super::checkpoint::CheckpointState::default(),
         }
     }
 

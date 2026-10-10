@@ -47,6 +47,7 @@ pub mod channel_inbox;
 mod channel_direct;
 mod channel_recovery;
 mod channels;
+mod checkpoint;
 mod commands;
 mod direct;
 mod enrollment;
@@ -1409,6 +1410,7 @@ async fn start_role(
             invite_redeem_inbox: VecDeque::new(),
             pending_invite_redemptions: HashMap::new(),
             durable_state_sink,
+            durability: checkpoint::CheckpointState::default(),
         }));
 
         #[cfg(feature = "client-persist")]
@@ -1729,6 +1731,32 @@ async fn start_role(
     result
 }
 
+fn persist_duplicate_direct_transaction(
+    st: &mut NodeState,
+    peer: &[u8],
+    prepared: &peer_session::PreparedReceive,
+) -> Result<(), String> {
+    if st
+        .sessions
+        .get(peer)
+        .is_some_and(|session| prepared.matches_committed(session))
+        && matches!(
+            st.session_states.get(peer),
+            Some(DirectSessionState::Established)
+        )
+        && prepared.credit().is_some_and(|credit| {
+            st.direct_ack_outbox.iter().any(|delivery| {
+                delivery.peer.identity_pk == peer
+                    && delivery.cells.len() == 1
+                    && delivery.cells[0].payload == credit
+            })
+        })
+    {
+        return flush_changed_state(st);
+    }
+    persist_received_direct_transaction(st, peer, prepared.sealed_state(), prepared.credit())
+}
+
 fn persist_received_direct_transaction(
     st: &mut NodeState,
     peer: &[u8],
@@ -1779,6 +1807,10 @@ fn persist_current_direct_state(st: &NodeState) -> Result<(), String> {
     persist_direct_state(st, None, false)
 }
 
+fn flush_changed_state(st: &NodeState) -> Result<(), String> {
+    checkpoint_state(st, None, false, false).map_err(DirectPersistenceError::into_string)
+}
+
 enum DirectPersistenceError {
     #[cfg(feature = "experimental-gc2")]
     Admission(String),
@@ -1811,6 +1843,36 @@ fn checkpoint_direct_state(
     session_override: Option<(&[u8], &peer_session::Snapshot)>,
     control: bool,
 ) -> Result<(), DirectPersistenceError> {
+    checkpoint_state(st, session_override, control, true)
+}
+
+fn checkpoint_state(
+    st: &NodeState,
+    session_override: Option<(&[u8], &peer_session::Snapshot)>,
+    control: bool,
+    force: bool,
+) -> Result<(), DirectPersistenceError> {
+    // An uncertain transaction can never be hidden by a clean revision.
+    #[cfg(feature = "client-persist")]
+    if st.owner_transition_failed {
+        return Err(DirectPersistenceError::Storage(
+            "owner lifecycle persistence outcome is unconfirmed".into(),
+        ));
+    }
+    let Some(revision) = st.durability.begin(force) else {
+        return Ok(());
+    };
+    let result = write_checkpoint(st, session_override, control);
+    st.durability
+        .finish(revision, result.as_ref().copied().map_err(|_| ()));
+    result.map(|_| ())
+}
+
+fn write_checkpoint(
+    st: &NodeState,
+    session_override: Option<(&[u8], &peer_session::Snapshot)>,
+    control: bool,
+) -> Result<Option<usize>, DirectPersistenceError> {
     #[cfg(feature = "experimental-gc2")]
     let retained = st
         .stage_retained(session_override, control)
@@ -1818,7 +1880,7 @@ fn checkpoint_direct_state(
     #[cfg(not(feature = "experimental-gc2"))]
     let _ = control;
     #[cfg(feature = "client-persist")]
-    if let Some(sink) = &st.durable_state_sink {
+    let written = if let Some(sink) = &st.durable_state_sink {
         let bytes = match session_override {
             Some((peer, sealed)) => persist::encode_state_with_session(st, peer, sealed),
             None => persist::encode_state(st),
@@ -1832,6 +1894,7 @@ fn checkpoint_direct_state(
             }
             DirectPersistenceError::Storage(error)
         })?;
+        let len = bytes.len();
         sink(bytes).map_err(|error| {
             if !st.owner_transition_failed {
                 eprintln!(
@@ -1841,14 +1904,19 @@ fn checkpoint_direct_state(
             }
             DirectPersistenceError::Storage(error)
         })?;
-    }
+        Some(len)
+    } else {
+        None
+    };
     #[cfg(not(feature = "client-persist"))]
     let _ = (st, session_override);
+    #[cfg(not(feature = "client-persist"))]
+    let written = None;
     #[cfg(feature = "experimental-gc2")]
     if let Some(retained) = retained {
         retained.commit();
     }
-    Ok(())
+    Ok(written)
 }
 
 // ---------------------------------------------------------------------------
@@ -1859,6 +1927,7 @@ fn checkpoint_direct_state(
 // ---------------------------------------------------------------------------
 
 pub use api::ComponentAuthority;
+pub use checkpoint::CheckpointDiagnostics;
 
 fn schedulers(
     client: Arc<Tp1Client>,

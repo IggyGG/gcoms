@@ -31,12 +31,7 @@ pub(super) fn incoming(
             let prepared = st.sessions[&peer]
                 .prepare_first_move_retry(&packet, &wrapping, &context)
                 .map_err(|e| e.to_string())?;
-            persist_received_direct_transaction(
-                st,
-                &peer,
-                prepared.sealed_state(),
-                prepared.credit(),
-            )?;
+            persist_duplicate_direct_transaction(st, &peer, &prepared)?;
             st.sessions
                 .get_mut(&peer)
                 .expect("selected session")
@@ -249,6 +244,16 @@ pub(super) fn recover_peer(st: &mut NodeState, peer: &[u8]) -> Result<bool, Stri
         st,
         st.peer_routes.get(peer).ok_or("missing recovery route")?,
     )?;
+    if !super::routing::inbox_receiving(st)
+        || st.gc2_carrier.as_ref().is_some_and(|ready| {
+            !route
+                .aliases
+                .iter()
+                .any(|alias| ready.can_route((alias.target.address, alias.target.relay_service_id)))
+        })
+    {
+        return Ok(false);
+    }
     if st
         .pending_1to1
         .values()

@@ -185,6 +185,7 @@ async fn gc2_duplicate_setup_retains_one_credit_across_restart() {
     gc2_direct::incoming(&mut bob, &first, &events).unwrap();
     let credit = bob.direct_ack_outbox[0].cells.clone();
     let usage = bob.retained_payload(None).unwrap();
+    let writes = bob.durability.snapshot().writes;
     for _ in 0..32 {
         gc2_direct::incoming(&mut bob, &first, &events).unwrap();
         assert_eq!(
@@ -194,6 +195,7 @@ async fn gc2_duplicate_setup_retains_one_credit_across_restart() {
         );
     }
     assert_eq!(bob.retained_payload(None).unwrap(), usage);
+    assert_eq!(bob.durability.snapshot().writes, writes, "exact authenticated setup retries must not rewrite the profile");
     // Exercise a checkpoint produced by the old runtime, before coalescing.
     let duplicate = bob.direct_ack_outbox[0].clone();
     bob.direct_ack_outbox
@@ -206,6 +208,31 @@ async fn gc2_duplicate_setup_retains_one_credit_across_restart() {
     assert_eq!(reopened.direct_ack_outbox.len(), 1);
     assert_eq!(reopened.direct_ack_outbox[0].cells, credit);
     assert_eq!(reopened.retained_payload(None).unwrap(), usage);
+    scheduler.shutdown();
+    bob.scheduler.shutdown();
+}
+
+#[tokio::test]
+async fn gc2_duplicate_setup_with_new_credit_coverage_still_requires_a_checkpoint() {
+    let alice = Arc::new(Mutex::new(gc2_node(93)));
+    let mut bob = gc2_node(94);
+    let scheduler = alice.lock().unwrap().scheduler.clone();
+    send_durable_1to1(&alice, &scheduler, &bob.info, b"coverage advances", None).await.unwrap();
+    let cells = alice.lock().unwrap().pending_1to1.values().next().unwrap().delivery.cells.clone();
+    assert_eq!(cells.len(), 2);
+    let (events, _) = broadcast::channel(32);
+    gc2_direct::incoming(&mut bob, &cells[0].payload, &events).unwrap();
+    gc2_direct::incoming(&mut bob, &cells[1].payload, &events).unwrap();
+    assert_eq!(bob.application_inbox.entries.len(), 1);
+    let before = bob.durability.snapshot().writes;
+    // The old first-move credit covered only counter 1. A replay after receiving
+    // counter 2 creates different authenticated coverage and must persist it.
+    gc2_direct::incoming(&mut bob, &cells[0].payload, &events).unwrap();
+    assert_eq!(bob.durability.snapshot().writes, before + 1);
+    for _ in 0..16 {
+        gc2_direct::incoming(&mut bob, &cells[0].payload, &events).unwrap();
+    }
+    assert_eq!(bob.durability.snapshot().writes, before + 1);
     scheduler.shutdown();
     bob.scheduler.shutdown();
 }

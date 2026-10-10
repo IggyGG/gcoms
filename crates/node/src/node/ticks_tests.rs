@@ -4,6 +4,47 @@ use std::time::Duration;
 use tokio::net::TcpListener;
 use tokio_rustls::TlsAcceptor;
 
+#[tokio::test]
+async fn expired_owned_inboxes_enter_recovery_without_rewriting_authority() {
+    use std::sync::atomic::Ordering;
+    let runtime = super::super::routing::RoutingRuntime::new(
+        RoutingConfig::default(),
+        gcoms_routing::Directory::new(),
+        true,
+    )
+    .unwrap();
+    runtime.recovering_owner.store(false, Ordering::Release);
+    let mut node = persist::tests::state();
+    node.routing = Some(runtime.clone());
+    super::super::routing::observe_owner_expiry(&node);
+    assert!(!runtime.recovering_owner.load(Ordering::Acquire));
+    for alias in &mut node.client_relay.aliases {
+        alias.contact.expiry = now_unix() - 1;
+    }
+    let retained = node.client_relay.clone();
+    let scheduler = node.scheduler.clone();
+    let state = Arc::new(Mutex::new(node));
+    let (events, _) = broadcast::channel(4);
+    let pump = spawn_contact_subscription_pump(
+        state.clone(),
+        scheduler.clone(),
+        events,
+        Duration::from_millis(10),
+    );
+    tokio::time::timeout(Duration::from_secs(2), async {
+        while !runtime.recovering_owner.load(Ordering::Acquire) {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("expiry must wake authority recovery without a failed subscription");
+    pump.stop.send(true).unwrap();
+    pump.task.await.unwrap();
+    assert_eq!(state.lock().unwrap().client_relay, retained);
+    assert_eq!(state.lock().unwrap().durability.snapshot().writes, 0);
+    scheduler.shutdown();
+}
+
 #[cfg(feature = "experimental-gc2")]
 #[path = "ticks_route_tests.rs"]
 mod protected_routes;

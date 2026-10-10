@@ -1,5 +1,34 @@
 // Real hybrid-crypto, node archive and inbox transactions, with selected packet
 // loss. The independent TLS integration suite exercises the carrier separately.
+#[tokio::test]
+async fn gc2_recovery_waits_for_owned_inbox_without_rotating_or_writing() {
+    let (alice, bob, id) = gc2_recovery_pair(41, 42).await;
+    let mut a = alice.lock().unwrap();
+    let peer = bob.info.identity_pk.clone();
+    let runtime = routing::RoutingRuntime::new(RoutingConfig::default(), gcoms_routing::Directory::new(), true).unwrap();
+    runtime.recovering_owner.store(false, std::sync::atomic::Ordering::Release);
+    a.routing = Some(runtime);
+    let generation = gc2_generation(&a, &peer);
+    let cells = a.pending_1to1[&id].delivery.cells.clone();
+    let expiry = a.pending_1to1[&id].expires;
+    let before = a.durability.snapshot().writes;
+    for _ in 0..100 {
+        assert!(!gc2_direct::recover_peer(&mut a, &peer).unwrap());
+    }
+    assert_eq!(a.durability.snapshot().writes, before);
+    assert_eq!(gc2_generation(&a, &peer), generation);
+    assert_eq!(a.pending_1to1[&id].delivery.cells, cells);
+    assert_eq!(a.pending_1to1[&id].expires, expiry);
+    let inbox = a.client_relay.aliases[0].contact.queue_id;
+    a.subscribed_contact_aliases.insert(inbox);
+    assert!(gc2_direct::recover_peer(&mut a, &peer).unwrap());
+    assert_eq!(gc2_generation(&a, &peer), generation + 1);
+    assert_eq!(a.durability.snapshot().writes, before + 1);
+    assert_eq!(a.pending_1to1[&id].expires, expiry);
+    a.scheduler.shutdown();
+    bob.scheduler.shutdown();
+}
+
 fn gc2_setup_packet(node: &NodeState, peer: &[u8]) -> Vec<u8> {
     let PeerSession::Credited(session) = &node.sessions[peer] else {
         panic!("GC2")

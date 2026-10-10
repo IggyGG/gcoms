@@ -350,6 +350,7 @@ pub enum Cmd {
         done: tokio::sync::oneshot::Sender<Result<(), String>>,
     },
     PersistState {
+        force: bool,
         done: tokio::sync::oneshot::Sender<Result<(), String>>,
     },
 }
@@ -488,6 +489,7 @@ pub(crate) struct ShutdownTask {
 /// Local aggregate counters only; no contacts, message IDs or payloads.
 #[derive(Debug, serde::Serialize)]
 pub struct NodeDiagnostics {
+    pub checkpoints: super::CheckpointDiagnostics,
     pub transport: TransportStatus,
     /// Shared node allowance; do not sum the independent local peak values.
     pub resources: crate::scheduler::ResourceSnapshot,
@@ -561,6 +563,7 @@ impl NodeHandle {
     /// Approximate during concurrent updates; quiesce before reconciling counts.
     pub fn diagnostics(&self) -> NodeDiagnostics {
         NodeDiagnostics {
+            checkpoints: self.checkpoint_diagnostics(),
             #[cfg(all(feature = "experimental-gc2", feature = "relay-host"))]
             forwarding: self.forwarding.as_ref().map(|pool| pool.snapshot()),
             transport: self.transport_status(),
@@ -2053,9 +2056,32 @@ impl NodeHandle {
     }
 
     pub async fn persist_state(&self) -> Result<(), String> {
+        self.checkpoint(true).await
+    }
+
+    /// Flush outstanding logical changes. Idle/event callers may coalesce;
+    /// transaction barriers and explicit saves retain their forced semantics.
+    pub async fn flush_changed_state(&self) -> Result<(), String> {
+        self.checkpoint(false).await
+    }
+
+    pub fn checkpoint_diagnostics(&self) -> super::CheckpointDiagnostics {
+        self.state
+            .upgrade()
+            .map(|state| {
+                state
+                    .lock()
+                    .unwrap_or_else(|p| p.into_inner())
+                    .durability
+                    .snapshot()
+            })
+            .unwrap_or_default()
+    }
+
+    async fn checkpoint(&self, force: bool) -> Result<(), String> {
         let (done, done_rx) = tokio::sync::oneshot::channel();
         self.cmd_tx
-            .send(Cmd::PersistState { done })
+            .send(Cmd::PersistState { force, done })
             .await
             .map_err(|error| error.to_string())?;
         done_rx.await.map_err(|error| error.to_string())?

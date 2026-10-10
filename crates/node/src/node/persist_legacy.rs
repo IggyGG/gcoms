@@ -180,6 +180,7 @@ pub async fn decode_state(
     let mut st = state
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner());
+    st.durability.changed();
     for (pk, session) in sessions {
         st.sessions.insert(pk.clone(), session.into());
         st.session_states

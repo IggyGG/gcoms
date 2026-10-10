@@ -201,6 +201,7 @@ pub(crate) fn fresh_msg_id() -> [u8; 16] {
 }
 
 pub struct NodeState {
+    pub(super) durability: super::checkpoint::CheckpointState,
     #[cfg(feature = "experimental-gc2")]
     pub(crate) gc2_sessions: bool,
     /// Retained GC/2 carrier readiness. The background owner future is owned by

@@ -16,6 +16,14 @@ verification and durable cache; a transport receipt is not completion. Ordinary
 private text and stateful events retain their profile-save barriers and errors,
 as do explicit save and shutdown.
 
+Periodic and event barriers flush only outstanding logical node changes. An idle
+30-second timer or an event whose transaction is already durable does not encrypt
+and replace the profile again. Explicit save and shutdown remain forced barriers.
+Failed writes leave the revision dirty; event publication still waits for a
+successful barrier and closes existing observers on failure. Node diagnostics
+report forced/conditional checkpoint counts, skipped clean requests, revisions,
+failures and encoded bytes alongside the runtime's actual encrypted-write costs.
+
 Hosted requests authorize only providers from the current verified signed network
 defaults, merged with the host's explicit catalog allowlist. Configuring ordinary
 catalogs does not drop hosted origins. Unsigned invitation destinations remain
