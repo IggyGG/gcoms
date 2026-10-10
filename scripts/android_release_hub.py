@@ -5,7 +5,9 @@ import os
 from pathlib import Path
 import re
 import secrets
+import select as polling
 import shutil
+import signal
 import socket
 import stat
 import struct
@@ -65,6 +67,30 @@ def attached(config):
     if result.get('kind') != 'instance' or result['instance'].get('id') != fleet['instanceId']:
         raise ValueError('hub attachment does not match the retained fleet')
     return hub, fleet, result['instance']
+
+
+def enrollment_owner(config):
+    """The desktop can hold the pinned production socket after a unit stops."""
+    state = manager(config['hub_unit'], 'show', '-p', 'ActiveState', '--value')
+    if state == 'active': return (*attached(config), None)
+    if state not in ('inactive', 'failed'):
+        raise ValueError('preserve the transitioning hub owner')
+    fleet = json.loads(Path(config['fleet_config']).read_text())
+    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as stream:
+        stream.settimeout(5); stream.connect(fleet['chatEndpoint'])
+        pid, uid, _gid = struct.unpack('3i', stream.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, 12))
+    if uid != os.getuid(): raise ValueError('enrollment socket belongs to another owner')
+    handle = os.pidfd_open(pid)
+    try:
+        argv = Path('/proc', str(pid), 'cmdline').read_bytes().split(b'\0')
+        if Path(os.fsdecode(argv[0])).name not in ('gchat', 'gchat-desktop', 'g-chat'):
+            raise ValueError('pinned socket is not a native GChat profile owner')
+        instance = exchange(fleet['chatEndpoint'], fleet['instanceId'], pid, {'kind': 'identify'})
+        if instance.get('kind') != 'instance' or instance['instance'].get('id') != fleet['instanceId']:
+            raise ValueError('enrollment changed the retained profile identity')
+        return ({'pid': pid, 'sha256': digest(Path('/proc', str(pid), 'exe'))}, fleet, instance['instance'], handle)
+    except BaseException:
+        os.close(handle); raise
 
 
 def install_binary(root, source, name='gchat'):
@@ -307,7 +333,14 @@ def rollback(request):
 
 def enroll(config, source):
     """One owner-requested transition; routine promotion never edits the unit."""
-    hub, fleet, instance = attached(config)
+    hub, fleet, instance, standalone = enrollment_owner(config)
+    try:
+        return enroll_owner(config, source, hub, fleet, instance, standalone)
+    finally:
+        if standalone is not None: os.close(standalone)
+
+
+def enroll_owner(config, source, hub, fleet, instance, standalone):
     fragment = Path(manager(config['hub_unit'], 'show', '-p', 'FragmentPath', '--value'))
     if fragment != Path.home() / '.config/systemd/user' / config['hub_unit']:
         raise ValueError('enrollment only owns the configured local user unit')
@@ -339,7 +372,14 @@ def enroll(config, source):
     disconnected = exchange(fleet['chatEndpoint'], fleet['instanceId'], hub['pid'], {'kind': 'disconnect'})
     if disconnected.get('kind') != 'snapshot' or disconnected['snapshot']['instance'].get('protocolLocked') is not True:
         raise ValueError('enrollment did not checkpoint the existing protocol identity')
-    manager(config['hub_unit'], 'stop')
+    if standalone is None:
+        manager(config['hub_unit'], 'stop')
+    else:
+        # Disconnect above is the durable barrier. Do not force-kill a desktop
+        # owner or manufacture a second profile; wait for this pinned process.
+        signal.pidfd_send_signal(standalone, signal.SIGTERM)
+        if not polling.select([standalone], [], [], 20)[0]:
+            raise TimeoutError('native desktop owner did not stop cooperatively')
     try:
         select(root, desired)
         fragment.write_text(updated)

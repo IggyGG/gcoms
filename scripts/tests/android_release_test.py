@@ -396,6 +396,21 @@ class Releases(unittest.TestCase):
 
 
 class Maintenance(unittest.TestCase):
+    def test_enrollment_keeps_the_active_unit_path_and_refuses_transitioning_owners(self):
+        attached = ({'pid': 123}, {'instanceId': 'a' * 64}, {'bootId': 'old'})
+        with patch.object(hub, 'manager', return_value='active'), \
+             patch.object(hub, 'attached', return_value=attached):
+            self.assertEqual(hub.enrollment_owner({'hub_unit': 'gchat-test.service'}), (*attached, None))
+        with patch.object(hub, 'manager', return_value='activating'), patch.object(hub, 'attached') as attach:
+            with self.assertRaisesRegex(ValueError, 'transitioning'):
+                hub.enrollment_owner({'hub_unit': 'gchat-test.service'})
+            attach.assert_not_called()
+
+    def test_only_reviewed_operation_paths_are_excluded_from_native_inputs(self):
+        self.assertFalse(release.included('gcoms', 'sdk', 'scripts/android_release_qualify.py'))
+        self.assertTrue(release.included('gcoms', 'sdk', 'scripts/android_release_unknown.py'))
+        self.assertTrue(release.included('gcoms', 'sdk', 'crates/node/src/scheduler/retained.rs'))
+
     def test_initial_reference_cannot_target_production(self):
         with self.assertRaisesRegex(ValueError, 'isolated'):
             qualify.isolated({'qualification_scope': 'isolated', 'hub_unit': 'gchat-fleet-host.service'})

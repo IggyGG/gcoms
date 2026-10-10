@@ -19,6 +19,13 @@ STAGE_SECONDS = {'preflight': 60, 'building': 60, 'verifying': 60,
                  'activation': 180, 'readiness': ACTIVATION_SECONDS}
 DEPENDENCIES = {'sdk': (), 'installer': (), 'hub': (), 'worker': (), 'controller': (),
                 'apk': ('sdk', 'installer')}
+OPERATION_FILES = frozenset({
+    'scripts/android_release.py', 'scripts/android_release_host.py',
+    'scripts/android_release_queue.py', 'scripts/android_release_push_hook.sh',
+    'scripts/android_release_pre_receive.sh', 'scripts/android_release_setup.py',
+    'scripts/android_release_hub.py', 'scripts/android_release_network.py',
+    'scripts/android_release_qualify.py', 'scripts/tests/android_release_test.py',
+})
 
 
 def canonical(value):
@@ -127,7 +134,7 @@ def included(project, component, name):
             return component == 'apk' and not name.startswith(('mobile/android/sample/', 'mobile/android/probe/'))
         if name.startswith('mobile/native/'):
             return component == 'sdk'
-        if name.startswith(('scripts/android_release', 'scripts/tests/android_release')):
+        if name in OPERATION_FILES:
             return False  # Release operations have their own focused gate.
         if name.startswith(('scripts/', '.github/', '.forgejo/')):
             return component in ('sdk', 'installer', 'hub', 'worker', 'controller')
