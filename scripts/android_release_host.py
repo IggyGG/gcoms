@@ -132,7 +132,7 @@ def build(request):
         run(['cargo', 'test', '--offline', '--locked', '--manifest-path', 'minimal/Cargo.toml',
              '-p', 'ds-minimal-core', '--features', 'qualification', '--lib', 'session'], sources['dropship'])
         run(['cargo', 'test', '--offline', '--locked', '--manifest-path', 'minimal/Cargo.toml',
-             '-p', 'ds-minimal-core', '--features', 'qualification', '--lib', 'transfer::tests'], sources['dropship'])
+             '-p', 'ds-minimal-core', '--features', 'qualification', '--lib', 'transfer::'], sources['dropship'])
         run(['sh', 'build/test-minimal-mobile-install.sh'], sources['dropship'])
         run(['sh', 'build/test-minimal-transfer-resume.sh'], sources['dropship'])
         for abi in ('arm64', 'x86_64'):
