@@ -26,6 +26,11 @@ OPERATION_FILES = frozenset({
     'scripts/android_release_hub.py', 'scripts/android_release_network.py',
     'scripts/android_release_qualify.py', 'scripts/tests/android_release_test.py',
 })
+GCHAT_OPERATION_FILES = frozenset({
+    'scripts/release_controller.py', 'scripts/release_deployment.py',
+    'scripts/release_inputs.py', 'scripts/tests/release_controller_test.py',
+    'scripts/tests/release_inputs_test.py',
+})
 
 
 def canonical(value):
@@ -127,6 +132,8 @@ def included(project, component, name):
     """Reviewed platform/prose exclusions; unknown files remain build inputs."""
     if name.endswith('.md') or name.startswith(('docs/', 'test-evidence/')):
         return False
+    if project == 'gchat' and name in GCHAT_OPERATION_FILES:
+        return False  # Independently qualified controller operations, not native code.
     if project == 'gcoms':
         if name.startswith(('mobile/apple/', 'mobile/push/', 'packages/', 'examples/', 'fuzz/')):
             return False

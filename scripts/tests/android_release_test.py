@@ -259,6 +259,25 @@ class Releases(unittest.TestCase):
             with self.assertRaises(ValueError):
                 release.checked_targets(manifest, {'release_id': 'r', 'targets': rows})
 
+    def test_qualified_gchat_operations_do_not_recompile_native_artifacts(self):
+        first = release.freeze(self.config, time.time())
+        repo = Path(self.config['sources']['gchat']['repository'])
+        for name in release.GCHAT_OPERATION_FILES:
+            path = repo / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text('independently qualified controller operations')
+        self.git(repo, 'add', '.')
+        self.git(repo, 'commit', '-qm', 'controller operations')
+        second = release.freeze(self.config, time.time())
+        self.assertEqual(first['inputs'], second['inputs'])
+        unknown = repo / 'scripts/release_unknown_native_builder.py'
+        unknown.write_text('new native compiler helper')
+        self.git(repo, 'add', '.')
+        self.git(repo, 'commit', '-qm', 'unknown build input')
+        third = release.freeze(self.config, time.time())
+        self.assertNotEqual(second['inputs']['hub'], third['inputs']['hub'])
+        self.assertNotEqual(second['inputs']['controller'], third['inputs']['controller'])
+
     def test_deadline_uses_wall_and_monotonic_time(self):
         with patch.object(release.time, 'time', return_value=1000), patch.object(release.time, 'monotonic', return_value=20):
             deadline = release.Deadline(900)
@@ -410,6 +429,8 @@ class Maintenance(unittest.TestCase):
         self.assertFalse(release.included('gcoms', 'sdk', 'scripts/android_release_qualify.py'))
         self.assertTrue(release.included('gcoms', 'sdk', 'scripts/android_release_unknown.py'))
         self.assertTrue(release.included('gcoms', 'sdk', 'crates/node/src/scheduler/retained.rs'))
+        self.assertFalse(release.included('gchat', 'hub', 'scripts/release_controller.py'))
+        self.assertTrue(release.included('gchat', 'hub', 'scripts/release_unknown_native_builder.py'))
 
     def test_initial_reference_cannot_target_production(self):
         with self.assertRaisesRegex(ValueError, 'isolated'):
