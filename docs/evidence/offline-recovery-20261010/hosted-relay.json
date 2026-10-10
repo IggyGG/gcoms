@@ -1,0 +1,217 @@
+{
+  "schema": 1,
+  "scope": "isolated hosted Linux runtime recovery and throughput diagnostic",
+  "recorded_at": "2026-10-10T22:07:07.064801+00:00",
+  "observed_at": "2026-10-10T22:05:47.490619+00:00",
+  "run_id": 38087028059,
+  "url": "https://github.com/IggyGG/gcoms/actions/runs/38087028059",
+  "run_conclusion": "success",
+  "provider": {
+    "kind": "github-actions-diagnostic",
+    "repository": "IggyGG/gcoms",
+    "run_id": "38087028059",
+    "run_attempt": 1,
+    "workflow_commit": "9b192984e06b81eb5f3e109765c56b8d1f0cb7e3"
+  },
+  "sources": {
+    "gcoms": {
+      "commit": "9b192984e06b81eb5f3e109765c56b8d1f0cb7e3",
+      "tree": "46392e56296dd860cd8e8704ecd46d9d9eb4a91e"
+    },
+    "gchat": {
+      "commit": "31a9009f21b8511fbf21e9abf4e55743305aeb1e",
+      "tree": "bdfe18b67b04f4f619d5d88ed6d5136e64414ee0"
+    }
+  },
+  "artifact_id": 11684057668,
+  "archive_sha256": "265e4450eb1f2f4f737dac06b61ad814db9a8ca850271697d08c485ab2373e70",
+  "passed": true,
+  "strict_verifier_passed": true,
+  "release_qualified": false,
+  "deployment_owner": "Android completion task",
+  "load": {
+    "clients": 64,
+    "seconds": 1800,
+    "observed_seconds": 1800.090464053,
+    "commands": 720,
+    "attempts": 720,
+    "recipient_p95_seconds": 2.09712654499981,
+    "application_refusals": 0,
+    "relay_refusals": 0,
+    "relay_restart": true,
+    "file": {
+      "id": "cfe854d4a32d4631b2e8768a47a358f5",
+      "name": "release-payload.bin",
+      "sha256": "3a504f60c577fcd86196f64735823a0765c81b3eb7aaaa4d72645b4f82f10c2b",
+      "size": 5235248
+    }
+  },
+  "children_stopped": true,
+  "production_modified_by_this_test": false,
+  "production_load_test": false,
+  "verifier_source": {
+    "gchat_commit": "31a9009f21b8511fbf21e9abf4e55743305aeb1e",
+    "path": "scripts/release_relay_load.py",
+    "sha256": "b15b12ac34a9ab0fabb722669804cc7c7193a561c674ead7c98b11bcd8278e30"
+  },
+  "runtime_equivalence": {
+    "runtime_fix_commit": "c41f8b516d03623ab5b8230812e6a666c934984b",
+    "hosted_build_commit": "9b192984e06b81eb5f3e109765c56b8d1f0cb7e3",
+    "equivalent_gcoms_paths": [
+      "crates",
+      "Cargo.toml",
+      "Cargo.lock",
+      ".cargo",
+      "scripts/gchat-turnover.py",
+      "scripts/build-fleet-files.py"
+    ],
+    "current_integration_commit": "9b3da5bbab1cdcec853b7cf0013536e99cf806fd",
+    "current_integration_has_identical_runtime_inputs": true,
+    "original_gchat_commit": "452eae65c2974d0b53c215bd8bbb1c97611e346d",
+    "equivalent_gchat_paths": [
+      "crates",
+      "Cargo.toml",
+      "Cargo.lock",
+      "scripts/relay_load_run.py",
+      "scripts/release_relay_load.py",
+      "scripts/release_evidence.py",
+      "apps/tui",
+      ".cargo",
+      "rust-toolchain.toml"
+    ]
+  },
+  "artifacts": {
+    "gcnode": {
+      "sha256": "a219be149c83874b709095033da14703c77a7474f2b5f56711e114fa8871fb41",
+      "size": 20144352
+    },
+    "gchat": {
+      "sha256": "c48f8dde2bae661590500a738d0454991a57f5f4c7612b102ab4ad11c84f8a21",
+      "size": 42108864
+    },
+    "fleet_probe": {
+      "sha256": "c46c463af42fc602c4c39f4a36b0e86034b14949eeface40a52f9bcdd5b82368",
+      "size": 3375728
+    },
+    "turnover_daemon": {
+      "sha256": "0a94d52e9a72bbf62ade60e3496be3c4a0df9f754ffffc827c617803f6cc3731",
+      "size": 37740416
+    }
+  },
+  "validation": {
+    "new_failure_and_identity_controls_passed": 7,
+    "existing_retention_and_verifier_controls_passed": 17,
+    "source_paths_checked_before_evidence": 1076,
+    "runtime_node_tests_passed": 537,
+    "runtime_persistence_tests_passed": 9,
+    "native_recovery_journeys_passed": 3,
+    "previous_source_evidence": "summary.json",
+    "codematch": "unreachable",
+    "source_paths_checked_with_evidence": 1077
+  },
+  "previous_failures": {
+    "preserved": true,
+    "evidence": "summary.json",
+    "full_local_recipient_p95_seconds": 17.766642178001348,
+    "additional_local_latency_failures": 2
+  },
+  "older_hosted_comparison": {
+    "passed": true,
+    "scope": "older-source comparison; does not qualify offline runtime fix",
+    "sources": {
+      "gchat": {
+        "commit": "58dc25ffc3d2dd5c319faad30cc6a4d53c132fcd",
+        "tree": "d6cfa1b8765bad9c3a2c57990444ca631960e0bb"
+      },
+      "gcoms": {
+        "commit": "719e19949ecdeb6398f5f47f50e92f4f663c5377",
+        "tree": "205bf55d4cc69d9c2a6e37f9abd20f1096997cd4"
+      }
+    },
+    "provider": {
+      "repository": "IggyGG/gchat",
+      "run_attempt": 1,
+      "run_id": "38079329417",
+      "workflow_commit": "58dc25ffc3d2dd5c319faad30cc6a4d53c132fcd"
+    },
+    "strict_verifier": "scripts/release_relay_load.py:verify",
+    "recipient_p95_seconds": 2.1453073370000766,
+    "run_url": "https://github.com/IggyGG/gchat/actions/runs/38079329417",
+    "archive_sha256": "480a0c2b9f78ff3689e62b581380747dcdf208e681ff0f36ba7092059624df0b",
+    "overall_run_conclusion": "failure",
+    "overall_failure": "native GComs unit test expected 40 archived ACKs but restored 20; this older source precedes the corrected runtime task",
+    "reused_as_runtime_qualification": false
+  },
+  "persistence_observations": {
+    "scope": "hub process diagnostics; each sampled window lies within its full 1800-second campaign; not physical block-device byte counters",
+    "comparisons": [
+      {
+        "label": "older-hosted",
+        "log_sha256": "8d70c2d0648119ae3825f82766a21e2d46a9d11a3be6447e3c09e6ef27bbf4a6",
+        "campaign_recipient_p95_seconds": 2.1453073370000766,
+        "sampled_campaign_seconds": 1796,
+        "profile_counter_deltas": {
+          "completed": 3037,
+          "committed_bytes": 18195968561,
+          "atomic_write_us": 136992164,
+          "total_us": 188733920,
+          "failed": 0
+        },
+        "final_cumulative_profile": {
+          "atomic_write_us": 167863367,
+          "attempts": 5068,
+          "committed_bytes": 24401103667,
+          "completed": 5068,
+          "encrypt_us": 35317255,
+          "failed": 0,
+          "lock_wait_us": 29,
+          "max_save_us": 730130,
+          "serialize_us": 24947379,
+          "serialized_bytes": 24400789451,
+          "total_us": 231551276,
+          "write_attempted_bytes": 24401103667
+        }
+      },
+      {
+        "label": "fixed-hosted",
+        "log_sha256": "6434334a04a32d65a456657bebb5c31353c75f46a5af409eb40e5282be9a45c8",
+        "campaign_recipient_p95_seconds": 2.09712654499981,
+        "sampled_campaign_seconds": 1795,
+        "profile_counter_deltas": {
+          "completed": 2305,
+          "committed_bytes": 13778213391,
+          "atomic_write_us": 122247045,
+          "total_us": 163840154,
+          "failed": 0
+        },
+        "final_cumulative_profile": {
+          "atomic_write_us": 157594733,
+          "attempts": 4074,
+          "committed_bytes": 19354849374,
+          "completed": 4074,
+          "encrypt_us": 28684207,
+          "failed": 0,
+          "lock_wait_us": 6,
+          "max_save_us": 544873,
+          "serialize_us": 20754583,
+          "serialized_bytes": 19354596786,
+          "total_us": 209895172,
+          "write_attempted_bytes": 19354849374
+        }
+      }
+    ],
+    "storage_root_cause_proven": false
+  },
+  "limitations": [
+    "Diagnostic uses the source-bound fixture feature graph; production artifacts still require their managed release gates.",
+    "Original workstation filesystem sync stalls remain observed; their underlying cause is unproven.",
+    "Android task owns combined managed deployment, full worker download/digest/current-process load/resume, and 30-minute/24-hour live observation."
+  ],
+  "deployable": false,
+  "isolated_runtime_relay_gate_passed": true,
+  "command_seconds": {
+    "build": 525.6,
+    "preflight": 105.9,
+    "load_including_setup": 2201.8
+  }
+}
