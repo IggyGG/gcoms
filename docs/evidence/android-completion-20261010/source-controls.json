@@ -1,0 +1,32 @@
+{
+  "schema": 1,
+  "scope": "Android source controls only",
+  "release_controls": 39,
+  "maintenance_controls": 10,
+  "native_unknown_path_control": 1,
+  "installer_core_controls": 56,
+  "receiver_controls": 9,
+  "controller_library_controls": 29,
+  "sender_controls": 6,
+  "strict_controller_clippy": "passed",
+  "controller_recovery_controls": 12,
+  "source_audit_gcoms": 1055,
+  "source_audit_gchat": 871,
+  "live_android": "not yet qualified",
+  "codematch": "unreachable",
+  "logs": {
+    "release-controls-final.log": "62f107f67c41016075b16be36431768dce0e3064cbbec98368a865e3980afe4f",
+    "maintenance-controls-final.log": "92edcc7399486d49d9cbc98deb0c048b5bc63330f8a7ecbe4dcae1a8f76f1bcb",
+    "operation-classifier-control.log": "fb184ea57734512b1f088f9181209901b9cd46df3eb7eaa2500ea9e48dde20b5",
+    "minimal-core-controls.log": "466a7427c2bb97dade60881623fa4d1780eb274c7af697a7ca2296caaccaf2ae",
+    "sender-resume-controls.log": "4243305a3d9faee156e54383880ae20c27119ba9147abc86191e17be1d24d971",
+    "sender-clippy-clean.log": "1c08a21c7d87c9a0fd49fbf3d52e97fa82c4576943702bed9c4e1c9b5f559445",
+    "controller-controls.log": "6c487e174ca711055768c79a467d86fd289643da69881945e6fd46b16e851ff3"
+  },
+  "commits": {
+    "installer": "b08e087",
+    "sender": "40437fd",
+    "reference": "6432add",
+    "classifier": "c00b087"
+  }
+}

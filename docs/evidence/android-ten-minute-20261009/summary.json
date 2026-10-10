@@ -1,0 +1,165 @@
+{
+  "schema": 1,
+  "date": "2026-10-09",
+  "scope": "owned Android emulator; opt-in boo.gcoms.agent; no Play Store or physical-phone deployment claim",
+  "automation_commit": "ac604654e56668ca9ffe0d0cadd8e986f8e74759",
+  "publication": {
+    "automation_branch": "agent/android-ten-minute-70b7b9b6",
+    "automation_merged_to_main": false,
+    "standalone_services_installed": true,
+    "gchat_classifier_main": "452eae65c2974d0b53c215bd8bbb1c97611e346d",
+    "gchat_classifier_active": false,
+    "reason_main_integration_deferred": "shared controller nominates an undeployed baseline; selected deployment journal is blocked; old classifier would enqueue unrelated native matrices"
+  },
+  "timing": {
+    "deadline_from_original_server_push_seconds": 600,
+    "cold_initial_preparation_seconds": 1130.034,
+    "subsequent_preparation_with_recipe_change_seconds": 390.707,
+    "all_cached_preparation_seconds": 0.729,
+    "prepared_worker_cargo_seconds": 1.08,
+    "apk_cold_build_and_lint_seconds": 30,
+    "apk_prepared_build_seconds": 2,
+    "final_install_seconds": 4.086
+  },
+  "installation": {
+    "apk_sha256": "f34ee5a5eb21de49085046530a80efcf33d8bc8f08f40451a98a45cd6631a34b",
+    "source_commits": {
+      "gcoms": "0970f66cd544325f2da08a37fcc23f2f3fbc5faf",
+      "agent": "761e131e802b89d07cd032e891013324ac0936b5",
+      "dropship": "789b813c81593bb54f266a972781444acc9e50f3",
+      "gchat": "452eae65c2974d0b53c215bd8bbb1c97611e346d",
+      "drone": "836a755a103bd48621efc73566ba37062aa4d988"
+    },
+    "app_started": false,
+    "full_download_verified": false,
+    "loaded_worker_ready": false,
+    "identity_preserved": true,
+    "installation_seconds": 4.086
+  },
+  "worker_abis_in_current_inventory": [
+    "x86_64"
+  ],
+  "apk_abis": [
+    "arm64-v8a",
+    "x86_64"
+  ],
+  "real_push_receipts": [
+    {
+      "release_id": "dc87729fa741a7d2c55f9e9b808501c2f681ad714cc35ae8fe54ca0c7e218b84",
+      "pushed_at": 1791545175,
+      "state": "failed",
+      "elapsed_seconds": 5.52751898765564,
+      "blocker": "android_runtime_download_load_baseline_failed",
+      "activation_started": null
+    },
+    {
+      "release_id": "a2316f726cdd0c608be1b74b4ac542fa12a1a654fa6373cd9b3bf50043e37799",
+      "pushed_at": 1791545592,
+      "state": "failed",
+      "elapsed_seconds": 2.7774457931518555,
+      "blocker": "android_runtime_download_load_baseline_failed",
+      "activation_started": null
+    },
+    {
+      "release_id": "cd554a019a0aae67bb073715698129d95b2168371c85327ac64bb9d2e8bdd133",
+      "pushed_at": 1791548083,
+      "state": "failed",
+      "elapsed_seconds": 1.5808374881744385,
+      "blocker": "android_runtime_download_load_baseline_failed",
+      "activation_started": null
+    }
+  ],
+  "validation": {
+    "release_controls": {
+      "passed": 24,
+      "full_run_seconds": 6.366
+    },
+    "gchat_classifier_controls": 2,
+    "sdk_cache_controls": 7,
+    "installer_session_controls": 10,
+    "native_repeat_receipt_regression": "failed old code; passes ASAN/UBSAN",
+    "source_audits": {
+      "automation_paths": 1051,
+      "mobile_agent_paths": 1001,
+      "gchat_paths": 871
+    },
+    "signing_certificate_zip_alignment_native_load_segments_and_sdk_byte_equality": "passed",
+    "codematch": "unreachable"
+  },
+  "cached_artifacts": {
+    "installer": {
+      "input_sha256": "c8692e58d10b28476d0dd6405d0da98bf817b576af7b7be6cc36b15b3e06995f",
+      "sources": {
+        "dropship": "789b813c81593bb54f266a972781444acc9e50f3",
+        "gcoms": "0970f66cd544325f2da08a37fcc23f2f3fbc5faf",
+        "drone": "836a755a103bd48621efc73566ba37062aa4d988",
+        "gchat": "452eae65c2974d0b53c215bd8bbb1c97611e346d"
+      },
+      "files": {
+        "libdsminimal-android-arm64.a": "23c91c3a23dc9279efac91a05bff794ed008cb4073cc63fdf56bce4c570f9121",
+        "libdsminimal-android-x86_64.a": "eb50231026add24f9a58564e2aa81e9950250e705718f34f6cf2dc0a50870829"
+      },
+      "cache_hit": true
+    },
+    "hub": {
+      "input_sha256": "fdbb9c0c5686eb6312131ea21e2dde5b5d2918b032397c525d5649690ad0dc96",
+      "sources": {
+        "gchat": "452eae65c2974d0b53c215bd8bbb1c97611e346d",
+        "gcoms": "0970f66cd544325f2da08a37fcc23f2f3fbc5faf"
+      },
+      "files": {
+        "resolved-Cargo.lock": "91a316a0d4473419f15d08a67fe63af0d0b86d3b360612e538f2ab9eef9241c1",
+        "gchat": "7962bb3e5ca5413bbc84ce7f8179e4763cd6a090971a92a99350efdf4e29f896"
+      },
+      "cache_hit": true
+    },
+    "worker": {
+      "input_sha256": "85cfb73db726272867502d1db25a03c553f7bafee20625df97ecdaa24b3aa5c1",
+      "sources": {
+        "drone": "836a755a103bd48621efc73566ba37062aa4d988",
+        "gcoms": "0970f66cd544325f2da08a37fcc23f2f3fbc5faf",
+        "gchat": "452eae65c2974d0b53c215bd8bbb1c97611e346d"
+      },
+      "files": {
+        "x86_64/worker.so": "59b3f00993e690671695e9ef1ee334750fe2a5a9b1b7ef6f0b797de9cf107a76"
+      },
+      "cache_hit": true
+    },
+    "sdk": {
+      "input_sha256": "488a47af7ff80ab6b5d065de8f317d41e2e51af39ab21ce4042bc5412e392cfd",
+      "sources": {
+        "gcoms": "0970f66cd544325f2da08a37fcc23f2f3fbc5faf"
+      },
+      "files": {
+        "original-summary.json": "9caeda76b68aa792134ab4b0033065e7b450e60c616b947fd90b38e56d4bc689",
+        "evidence/client-x86_64-linux-android-opt-z.so": "5f744c3a80e457b743f392c6c836b828402c04f104314fd548296d9fb39bf0dd",
+        "evidence/client-aarch64-linux-android-opt-z.so": "b49325a812c55286a53c6d9e636106363e9fe7e253dcbf1aab0f59c63be348ba",
+        "android/client/build.json": "9ff2de7e0b1df9bcac10a17ffe30ff4df051da1da8f25bdf08ae360c19189ad7",
+        "android/client/x86_64/libgcoms_mobile.so": "5f744c3a80e457b743f392c6c836b828402c04f104314fd548296d9fb39bf0dd",
+        "android/client/arm64-v8a/libgcoms_mobile.so": "b49325a812c55286a53c6d9e636106363e9fe7e253dcbf1aab0f59c63be348ba"
+      },
+      "cache_hit": true
+    },
+    "apk": {
+      "input_sha256": "272e469798d186865dd04b74b50f64e96524dc4dcd0ce83a3145d23da01b6f54",
+      "sources": {
+        "agent": "761e131e802b89d07cd032e891013324ac0936b5"
+      },
+      "files": {
+        "agent.apk": "f34ee5a5eb21de49085046530a80efcf33d8bc8f08f40451a98a45cd6631a34b"
+      },
+      "cache_hit": true
+    }
+  },
+  "runtime_disposition": {
+    "full_download_verified": false,
+    "loaded_worker_ready": false,
+    "three_real_unattended_live_deployments_under_600s": "not qualified",
+    "functional_failed_canary_rollback": "not qualified",
+    "known_baseline": "2026-10-08 failed receipt retained; automatic production attempts blocked before activation",
+    "new_isolated_runtime_evidence": "Dropship 789b813 records reserved control admission verified with GComs dee5005 in isolation; bulk relay throughput still degrades to 60-92 seconds per chunk",
+    "managed_hub_activation_and_rollback_adapters": "required and not configured; existing hub binary override is preserved",
+    "production_mutations_by_push_lane": false
+  },
+  "retained_evidence": "/run/media/user/SSD-2/retained/ghost/android-ten-minute-20261009"
+}
