@@ -217,6 +217,8 @@ pub(crate) struct DirectMaintenance {
     #[cfg(feature = "experimental-gc2")]
     ready_revision: u64,
     #[cfg(feature = "experimental-gc2")]
+    pending_without_route: HashSet<[u8; 32]>,
+    #[cfg(feature = "experimental-gc2")]
     repair_due: HashMap<[u8; 32], std::time::Instant>,
     #[cfg(feature = "experimental-gc2")]
     recovery_due: HashMap<Vec<u8>, std::time::Instant>,
@@ -228,6 +230,60 @@ pub(crate) struct DirectMaintenance {
 }
 
 impl DirectMaintenance {
+    #[cfg(feature = "experimental-gc2")]
+    fn observe_ready_routes(
+        &mut self,
+        pending: &mut HashMap<[u8; 16], PendingDirect>,
+        now: std::time::Instant,
+        revision: u64,
+        can_route: impl Fn(&RelayTarget) -> bool,
+    ) {
+        let mut woke = HashSet::new();
+        if revision != self.ready_revision {
+            self.ready_revision = revision;
+            for (key, retry) in &self.retry_backoffs {
+                if retry.unavailable && retry.target.as_ref().is_some_and(&can_route) {
+                    woke.insert(*key);
+                }
+            }
+        }
+        let mut live = HashSet::new();
+        for pending in pending.values_mut() {
+            if pending.delivery.cells.is_empty() || pending.expires <= now {
+                continue;
+            }
+            let key = direct_attempt_key(&pending.delivery);
+            live.insert(key);
+            let ready = pending
+                .delivery
+                .peer
+                .aliases
+                .iter()
+                .any(|alias| can_route(&alias.target));
+            if !ready {
+                // The initial send runs outside this receipt owner. Remember
+                // its missing route even when there is no failed receipt here.
+                self.pending_without_route.insert(key);
+            } else if self.pending_without_route.remove(&key) {
+                woke.insert(key);
+            }
+            if woke.contains(&key) {
+                pending.next_attempt = pending.next_attempt.min(now);
+            }
+        }
+        // Bound this process-local observation by the existing pending outbox.
+        self.pending_without_route.retain(|key| live.contains(key));
+        for key in woke {
+            if let Some(retry) = self.retry_backoffs.get_mut(&key) {
+                if retry.unavailable {
+                    retry.unavailable = false;
+                    retry.due = now;
+                    self.repair_due.remove(&key);
+                }
+            }
+        }
+    }
+
     fn failed_attempt(&mut self, attempt: &DirectAttempt) -> std::time::Instant {
         let now = std::time::Instant::now();
         self.retry_backoffs.retain(|_, retry| {
@@ -330,33 +386,13 @@ impl DirectMaintenance {
             return;
         }
         #[cfg(feature = "experimental-gc2")]
-        if let Some(connector) = &st.gc2_carrier {
-            let revision = connector.readiness_revision();
-            if revision != self.ready_revision {
-                self.ready_revision = revision;
-                if connector.ready_entries() > 0 {
-                    // Wake a failed exact route once when it becomes usable.
-                    // Unrelated entry churn cannot reset that peer's backoff.
-                    let mut woke = HashSet::new();
-                    for (key, retry) in &mut self.retry_backoffs {
-                        if retry.unavailable
-                            && retry.target.as_ref().is_some_and(|target| {
-                                connector.can_route((target.address, target.relay_service_id))
-                            })
-                        {
-                            retry.unavailable = false;
-                            retry.due = now;
-                            woke.insert(*key);
-                            self.repair_due.remove(key);
-                        }
-                    }
-                    for pending in st.pending_1to1.values_mut() {
-                        if woke.contains(&direct_attempt_key(&pending.delivery)) {
-                            pending.next_attempt = pending.next_attempt.min(now);
-                        }
-                    }
-                }
-            }
+        if let Some(connector) = st.gc2_carrier.clone() {
+            self.observe_ready_routes(
+                &mut st.pending_1to1,
+                now,
+                connector.readiness_revision(),
+                |target| connector.can_route((target.address, target.relay_service_id)),
+            );
         }
         #[cfg(feature = "experimental-gc2")]
         {
@@ -2132,6 +2168,8 @@ pub(crate) struct PreparedDirect {
     /// legacy relay path for this delivery.
     #[cfg(feature = "experimental-gc2")]
     natural: Option<std::sync::Arc<gcoms_transport::Tp1Client>>,
+    #[cfg(feature = "experimental-gc2")]
+    state: std::sync::Weak<Mutex<NodeState>>,
 }
 
 pub(crate) fn prepare_direct_record<F>(
@@ -2362,6 +2400,8 @@ where
                 traffic,
                 #[cfg(feature = "experimental-gc2")]
                 natural: natural_client_for(&mut st, traffic),
+                #[cfg(feature = "experimental-gc2")]
+                state: Arc::downgrade(state),
             });
         }
 
@@ -2475,9 +2515,32 @@ where
             traffic: direct_transport_class(&st, &peer.identity_pk, traffic),
             #[cfg(feature = "experimental-gc2")]
             natural: natural_client_for(&mut st, traffic),
+            #[cfg(feature = "experimental-gc2")]
+            state: Arc::downgrade(state),
         }
     };
     Ok(prepared)
+}
+
+#[cfg(feature = "experimental-gc2")]
+fn retry_initial_unavailable_route(
+    state: &mut NodeState,
+    message_id: &[u8; 16],
+    delivery: &DirectDelivery,
+    result: &Result<(), String>,
+) {
+    if !local_route_unavailable(result) {
+        return;
+    }
+    if let Some(pending) = state.pending_1to1.get_mut(message_id) {
+        if direct_attempt_key(&pending.delivery) == direct_attempt_key(delivery) {
+            // Readiness may have returned before maintenance observed the
+            // outage. A confirmed unsent initial attempt still retries promptly.
+            pending.next_attempt = pending
+                .next_attempt
+                .min(std::time::Instant::now() + retry_backoff_delay(1));
+        }
+    }
 }
 
 pub(crate) async fn complete_direct_record(
@@ -2486,6 +2549,8 @@ pub(crate) async fn complete_direct_record(
 ) -> Result<[u8; 16], String> {
     #[cfg(feature = "experimental-gc2")]
     let natural = prepared.natural.clone();
+    #[cfg(feature = "experimental-gc2")]
+    let state = prepared.state.clone();
     #[cfg(not(feature = "experimental-gc2"))]
     let natural: Option<std::sync::Arc<gcoms_transport::Tp1Client>> = None;
     let PreparedDirect {
@@ -2508,9 +2573,16 @@ pub(crate) async fn complete_direct_record(
     }
     #[cfg(feature = "experimental-gc2")]
     if let Some(client) = &natural {
-        if let Err(error) =
-            super::gc2_carrier::deliver_all(client, scheduler, &delivery, traffic).await
-        {
+        let result = super::gc2_carrier::deliver_all(client, scheduler, &delivery, traffic).await;
+        if let Some(state) = state.upgrade().filter(|_| local_route_unavailable(&result)) {
+            retry_initial_unavailable_route(
+                &mut state.lock().unwrap_or_else(|p| p.into_inner()),
+                &message_id,
+                &delivery,
+                &result,
+            );
+        }
+        if let Err(error) = result {
             metrics::log_event("natural_delivery_deferred", &[("e", error)]);
         }
         return Ok(message_id);

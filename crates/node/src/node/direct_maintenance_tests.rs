@@ -72,6 +72,62 @@ fn pending(delivery: DirectDelivery, sequence: u64, now: Instant) -> PendingDire
     }
 }
 
+#[cfg(feature = "experimental-gc2")]
+#[test]
+fn initial_send_without_a_maintenance_receipt_wakes_once_for_its_route() {
+    let mut node = persist::tests::state();
+    let now = Instant::now();
+    let mut first = delivery(&node, 1);
+    first.peer.aliases.truncate(1);
+    let mut other = delivery(&node, 2);
+    other.peer.aliases.truncate(1);
+    other.peer.aliases[0].target.relay_service_id = [92; 32];
+    let first_target = first.peer.aliases[0].target.clone();
+    let exact = first.cells.clone();
+    for (id, work) in [(1, first), (2, other)] {
+        let mut work = pending(work, id, now);
+        work.next_attempt = now + Duration::from_secs(60);
+        node.pending_1to1.insert([id as u8; 16], work);
+    }
+    node.durable_state_sink = Some(Arc::new(|_| Ok(())));
+    persist_current_direct_state(&node).unwrap();
+    let mut owner = DirectMaintenance::default();
+    // Neither failed initial send created a DirectMaintenance receipt.
+    assert!(owner.retry_backoffs.is_empty());
+    owner.observe_ready_routes(&mut node.pending_1to1, now, 0, |_| false);
+    assert_eq!(owner.pending_without_route.len(), 2);
+    let ready_at = now + Duration::from_secs(3);
+    owner.observe_ready_routes(&mut node.pending_1to1, ready_at, 1, |target| {
+        target == &first_target
+    });
+    assert_eq!(node.pending_1to1[&[1; 16]].next_attempt, ready_at);
+    assert_eq!(node.pending_1to1[&[1; 16]].delivery.cells, exact);
+    assert_eq!(
+        node.pending_1to1[&[1; 16]].expires,
+        now + Duration::from_secs(600)
+    );
+    assert_eq!(
+        node.pending_1to1[&[2; 16]].next_attempt,
+        now + Duration::from_secs(60)
+    );
+
+    let later = ready_at + Duration::from_secs(60);
+    node.pending_1to1.get_mut(&[1; 16]).unwrap().next_attempt = later;
+    // Unrelated entry publications and ordinary ticks cannot wake it again.
+    for revision in 2..34 {
+        owner.observe_ready_routes(&mut node.pending_1to1, ready_at, revision, |target| {
+            target == &first_target
+        });
+        assert_eq!(node.pending_1to1[&[1; 16]].next_attempt, later);
+    }
+    flush_changed_state(&node).unwrap();
+    assert_eq!(node.durability.snapshot().writes, 1);
+    node.pending_1to1.remove(&[2; 16]);
+    owner.observe_ready_routes(&mut node.pending_1to1, ready_at, 34, |_| true);
+    assert!(owner.pending_without_route.is_empty());
+    node.scheduler.shutdown();
+}
+
 #[tokio::test]
 async fn local_route_failure_retries_exact_work_without_shortening_unknown_outcomes() {
     for failure in [
@@ -133,6 +189,40 @@ async fn local_route_failure_retries_exact_work_without_shortening_unknown_outco
         drop(st);
         scheduler.shutdown();
     }
+}
+
+#[cfg(feature = "experimental-gc2")]
+#[test]
+fn initial_route_failure_retries_exact_pending_work_even_after_readiness_returns() {
+    let mut node = persist::tests::state();
+    let now = Instant::now();
+    let work = delivery(&node, 7);
+    let mut retained = pending(work.clone(), 1, now);
+    let original_due = now + Duration::from_secs(60);
+    retained.next_attempt = original_due;
+    let deadline = retained.expires;
+    node.pending_1to1.insert([7; 16], retained);
+    node.durable_state_sink = Some(Arc::new(|_| Ok(())));
+    persist_current_direct_state(&node).unwrap();
+    for outcome in [Ok(()), Err("tp1 request timed out".into())] {
+        retry_initial_unavailable_route(&mut node, &[7; 16], &work, &outcome);
+        assert_eq!(node.pending_1to1[&[7; 16]].next_attempt, original_due);
+    }
+    let unavailable = Err("no ready independent GC/2 route".into());
+    let mut stale = work.clone();
+    stale.cells[0].payload[0] ^= 1;
+    retry_initial_unavailable_route(&mut node, &[7; 16], &stale, &unavailable);
+    assert_eq!(node.pending_1to1[&[7; 16]].next_attempt, original_due);
+    let before = Instant::now();
+    retry_initial_unavailable_route(&mut node, &[7; 16], &work, &unavailable);
+    let due = node.pending_1to1[&[7; 16]].next_attempt;
+    assert!(due >= before + Duration::from_millis(3750));
+    assert!(due <= Instant::now() + Duration::from_millis(6250));
+    assert_eq!(node.pending_1to1[&[7; 16]].expires, deadline);
+    assert_eq!(node.pending_1to1[&[7; 16]].delivery.cells, work.cells);
+    flush_changed_state(&node).unwrap();
+    assert_eq!(node.durability.snapshot().writes, 1);
+    node.scheduler.shutdown();
 }
 
 fn component_record(kind: &str, body: &[u8]) -> Vec<u8> {

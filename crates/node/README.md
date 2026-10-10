@@ -30,7 +30,11 @@ Direct retry failures back off with jitter from five seconds to at most 120 seco
 with a bounded process-local cache. A newly usable exact route can wake an attempt
 once. Retries keep the same ciphertext and expiry. Expired owned inboxes enter
 ordinary authority recovery; missing carrier entries retain valid queue authority.
-Peer-session replacement requires live pending work and a receiving local inbox.
+Peer-session replacement requires fresh work and a receiving local inbox. Idle
+expired sessions stay quiet; a fresh volatile send can initiate recovery without
+retaining its body while confirmation is pending. Initial sends queued without a
+route also wake once when their own route becomes usable, even if no maintenance
+receipt exists. Unrelated ready-entry changes do not repeatedly wake them.
 The existing control/ACK path remains available during recovery.
 
 Part of **GComs**, a developer-preview encrypted communication platform.

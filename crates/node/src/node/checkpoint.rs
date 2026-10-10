@@ -137,23 +137,24 @@ mod tests {
         let state = Arc::new(Mutex::new(node));
         let scheduler = state.lock().unwrap().scheduler.clone();
         create_channel_invite(&state, "dirty", 600).unwrap();
-        let mut node = state.lock().unwrap();
-        let good_sink = node.durable_state_sink.clone();
-        node.durable_state_sink = Some(Arc::new(|_| Err("disk failpoint".into())));
-        assert!(flush_changed_state(&node).is_err());
-        let failed = node.durability.snapshot();
-        assert_ne!(failed.revision, failed.durable_revision);
-        assert_eq!(failed.failed, 1);
-        node.durable_state_sink = good_sink;
-        flush_changed_state(&node).unwrap();
-        assert_eq!(node.durability.snapshot().writes, 2);
-        flush_changed_state(&node).unwrap();
-        assert_eq!(node.durability.snapshot().writes, 2);
-        persist_current_direct_state(&node).unwrap();
-        assert_eq!(node.durability.snapshot().writes, 3);
-        node.owner_transition_failed = true;
-        assert!(flush_changed_state(&node).is_err());
-        drop(node);
+        {
+            let mut node = state.lock().unwrap();
+            let good_sink = node.durable_state_sink.clone();
+            node.durable_state_sink = Some(Arc::new(|_| Err("disk failpoint".into())));
+            assert!(flush_changed_state(&node).is_err());
+            let failed = node.durability.snapshot();
+            assert_ne!(failed.revision, failed.durable_revision);
+            assert_eq!(failed.failed, 1);
+            node.durable_state_sink = good_sink;
+            flush_changed_state(&node).unwrap();
+            assert_eq!(node.durability.snapshot().writes, 2);
+            flush_changed_state(&node).unwrap();
+            assert_eq!(node.durability.snapshot().writes, 2);
+            persist_current_direct_state(&node).unwrap();
+            assert_eq!(node.durability.snapshot().writes, 3);
+            node.owner_transition_failed = true;
+            assert!(flush_changed_state(&node).is_err());
+        }
 
         let mut reopened = persist::tests::state();
         reopened.routing = Some(
