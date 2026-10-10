@@ -7,7 +7,7 @@ routine activation. Relevant protocol/load qualification belongs before the
 release push; the required focused auth/persistence checks remain in this lane.
 
 The deadline is 600 wall-clock seconds from the original Forgejo post-receive
-timestamp, including consumer polling, queueing, builds and retries. Native
+timestamp, including consumer polling, queueing, artifact checks, activation and retries. The clock starts at promotion of a fully prepared immutable release; source pushes request preparation. Native
 signatures, byte hashes and every declared target remain mandatory. Deadlines
 and failures survive restarting the consumer; restarting cannot buy more time.
 Build-only preparation has a separate one-hour bound and never claims live
@@ -16,13 +16,13 @@ deployment. Source manifests and original cached artifact provenance are retaine
 | Deadline after push | Stage |
 | --- | --- |
 | 60 seconds | Capacity/toolchain/baseline preflight |
-| 300 seconds | Required component builds and focused checks |
-| 360 seconds | Artifact and signing verification |
-| 420 seconds | Activation and fresh private provisioning |
+| 60 seconds | Verify all prepared artifact cache entries; no compilation |
+| 60 seconds | Artifact and signing verification |
+| 180 seconds | Activation and fresh private provisioning |
 | 540 seconds | Full downloaded worker readiness on every Android target |
 | 600 seconds | Reserved restoration window |
 
-Independent SDK, installer, headless hub and worker builds run concurrently.
+Preparation builds the SDK, installer, headless hub, downloaded worker and fleet controller in bounded parallel jobs. The running controller is verified against its prepared artifact so the sender cannot remain on an older fixed binary.
 The APK includes ARM64 and x86_64 native client inputs; downloadable workers
 compile only the ABIs in the declared Android target inventory.
 APK packaging waits only for SDK and installer inputs. Cached artifacts require
@@ -37,13 +37,15 @@ eight-core shared cap and storage reservations. Compiler outputs and scratch are
 declared to the manager. Signed artifacts and private receipts live on SSD outside
 disposable scratch. An additive Forgejo hook writes small push notifications on
 the existing mounted SSD; it neither changes ownership hooks nor blocks pushes.
-Only undispatched notifications coalesce. Failed requests and artifacts remain.
+Source notifications coalesce before preparation. Promotion tags are processed individually with their original server push times. A pre-receive guard refuses tag rewriting/deletion and annotated or malformed tags. Failed requests and artifacts remain.
 
 Prepare the owned workstation (no private configuration is committed):
 
 ```sh
 python3 scripts/android_release_setup.py --state /absolute/SSD/android-release --install
-python3 scripts/android_release.py --config /absolute/SSD/android-release/config.json warm
+python3 scripts/android_release.py --config /absolute/SSD/android-release/config.json prepare
+python3 scripts/android_release.py --config /absolute/SSD/android-release/config.json enroll-hub --prepared-id PREPARED_SHA256
+python3 scripts/android_release.py --config /absolute/SSD/android-release/config.json promote --prepared-id PREPARED_SHA256
 python3 scripts/android_release.py --config /absolute/SSD/android-release/config.json status
 ```
 
@@ -55,13 +57,11 @@ to replace a running lane. The
 private config lists exact source refs, target inventory, certificate pin,
 toolchains (Rust/NDK 27.3, JNI NDK 28.2, CMake 3.22.1 and Java 21), storage
 reservations and existing managed hub activation/rollback
-commands. A changed hub requires those qualified managed adapters; the lane
-never creates another persistent service binary override. It publishes Android
+commands. The one-time enrollment retains the original local units and known legacy overrides, switches their base commands to stable headless paths, and requires the existing private passphrase file for automatic unlock. Routine hub changes attach through the owner-authenticated API, Prepare, Disconnect/checkpoint and Exit before swapping the executable. Another attached view or an unreviewed override refuses activation. Routine promotion never edits the service unit. It publishes Android
 workers through the existing controller's normal file publication API, then
 waits for that controller to select the exact bytes. It retains previous worker
 and APK bytes for restoration without replacing the identity or download state.
-Restoration receipts distinguish verified previous artifacts from functional
-readiness; restoring bytes alone does not prove the previous app is working.
+Restoration runs APK and hub work concurrently within the original last-minute budget, restores the controller and worker, mints fresh routing introductions, and requires a fresh exact release/worker/APK/PID readiness receipt. A byte-only restoration fails the functional gate. The latest protocol checkpoint and identity are preserved.
 
 Profiles are minted after hub activation and their actual GCRB/2 introduction
 expiries must cover the deployment window. Private provisioning is outside the
@@ -74,9 +74,7 @@ in-process ready signal. The host also checks the installed APK hash and current
 process ID. A stale receipt, an installed APK, or a healthy hub alone cannot pass.
 
 The 2026-10-08 baseline failed full download/load. Routine activation refuses
-that known failure before building or adding production traffic. Initial real
-runtime qualification must supply a truthful successful baseline and the managed
-hub adapters before production automation becomes eligible. Never edit failure
+that known failure before building or adding production traffic. Initial real runtime qualification must supply a current source-bound successful 42 MiB reference transfer (at most 360 seconds), downloaded worker load, identity-preserving resume and connected Mullvad observation. Generic HTTPS speed probes never qualify relay delivery. Managed hub/controller enrollment and that baseline are required before promotion. Never edit failure
 flags into passes. `latest.json` records the latest attempted release;
 `live.json` records the last fully verified release and cannot be replaced by a
 failed attempt. Missing capacity or a cold build is a visible deadline miss.

@@ -9,14 +9,15 @@ import os
 from pathlib import Path
 import signal
 import subprocess
+import tempfile
 import time
 
 LIMIT_SECONDS = 600
 ACTIVATION_SECONDS = 540  # Reserve the last minute for restoration.
-COMPONENTS = ('sdk', 'installer', 'apk', 'hub', 'worker')
-STAGE_SECONDS = {'preflight': 60, 'building': 300, 'verifying': 360,
-                 'activation': 420, 'readiness': ACTIVATION_SECONDS}
-DEPENDENCIES = {'sdk': (), 'installer': (), 'hub': (), 'worker': (),
+COMPONENTS = ('sdk', 'installer', 'apk', 'hub', 'worker', 'controller')
+STAGE_SECONDS = {'preflight': 60, 'building': 60, 'verifying': 60,
+                 'activation': 180, 'readiness': ACTIVATION_SECONDS}
+DEPENDENCIES = {'sdk': (), 'installer': (), 'hub': (), 'worker': (), 'controller': (),
                 'apk': ('sdk', 'installer')}
 
 
@@ -32,14 +33,20 @@ def digest(path):
 def write_json(path, value):
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-    temporary = path.with_suffix('.new')
-    with temporary.open('w') as stream:
-        os.chmod(temporary, 0o600)
-        json.dump(value, stream, indent=2)
-        stream.write('\n')
-        stream.flush()
-        os.fsync(stream.fileno())
-    os.replace(temporary, path)
+    descriptor, name = tempfile.mkstemp(prefix=path.name + '.', dir=path.parent)
+    temporary = Path(name)
+    try:
+        with os.fdopen(descriptor, 'w') as stream:
+            json.dump(value, stream, indent=2)
+            stream.write('\n')
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, path)
+        directory = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY)
+        try: os.fsync(directory)
+        finally: os.close(directory)
+    finally:
+        temporary.unlink(missing_ok=True)
 
 
 class Deadline:
@@ -123,8 +130,8 @@ def included(project, component, name):
         if name.startswith(('scripts/android_release', 'scripts/tests/android_release')):
             return False  # Release operations have their own focused gate.
         if name.startswith(('scripts/', '.github/', '.forgejo/')):
-            return component in ('sdk', 'installer', 'hub', 'worker')
-        return component in ('sdk', 'installer', 'hub', 'worker')
+            return component in ('sdk', 'installer', 'hub', 'worker', 'controller')
+        return component in ('sdk', 'installer', 'hub', 'worker', 'controller')
     if project == 'agent':
         return name.startswith('mobile/android/') and not name.startswith((
             'mobile/android/sample/', 'mobile/android/probe/'))
@@ -179,6 +186,75 @@ def cached_artifact(config, component, key):
         if not path.resolve().is_relative_to(root.resolve()) or path.is_symlink() or digest(path) != sha:
             raise ValueError('cached artifact bytes changed')
     return value
+
+
+def prepare_release(config, manifest=None):
+    """Prepare exact sources without starting a live deployment clock."""
+    manifest = manifest or freeze(config, time.time())
+    receipt = deploy(config, manifest, warm=True)
+    if receipt['state'] != 'warmed':
+        raise ValueError('release preparation failed; original receipt retained')
+    value = {key: manifest[key] for key in ('sources', 'inputs', 'targets', 'configuration_sha256')}
+    value.update(schema=1, kind='android-prepared-release',
+                 artifacts={name: hashlib.sha256(canonical(cached_artifact(config, name, manifest['inputs'][name]))).hexdigest()
+                            for name in COMPONENTS})
+    value['prepared_id'] = hashlib.sha256(canonical(value)).hexdigest()
+    path = Path(config['state']) / 'prepared' / (value['prepared_id'] + '.json')
+    if path.exists() and json.loads(path.read_text()) != value:
+        raise ValueError('immutable prepared release changed')
+    write_json(path, value)
+    write_json(Path(config['state']) / 'prepared-latest.json', {'prepared_id': value['prepared_id']})
+    return value
+
+
+def prepared_release(config, ident):
+    import re
+    if not isinstance(ident, str) or not re.fullmatch('[0-9a-f]{64}', ident):
+        raise ValueError('invalid prepared release identifier')
+    path = Path(config['state']) / 'prepared' / (ident + '.json')
+    if path.is_symlink() or path.stat().st_size > 128 * 1024:
+        raise ValueError('unsafe prepared release receipt')
+    value = json.loads(path.read_text())
+    unsigned = {key: item for key, item in value.items() if key != 'prepared_id'}
+    if (value.get('schema') != 1 or value.get('kind') != 'android-prepared-release'
+            or value.get('prepared_id') != ident or hashlib.sha256(canonical(unsigned)).hexdigest() != ident
+            or value.get('configuration_sha256') != hashlib.sha256(canonical(config)).hexdigest()
+            or value.get('targets') != config['targets'] or value.get('inputs') != inputs(config, value['sources'])):
+        raise ValueError('prepared source/configuration binding changed')
+    for component in COMPONENTS:
+        artifact = cached_artifact(config, component, value['inputs'][component])
+        if artifact is None or hashlib.sha256(canonical(artifact)).hexdigest() != value['artifacts'].get(component):
+            raise ValueError('prepared artifact missing or changed')
+    return value
+
+
+def promotion_manifest(config, ident, pushed_at):
+    prepared = prepared_release(config, ident)
+    value = {key: prepared[key] for key in ('sources', 'inputs', 'targets', 'configuration_sha256')}
+    value.update(schema=1, pushed_at=pushed_at, prepared_id=ident)
+    value['release_id'] = hashlib.sha256(canonical(value)).hexdigest()
+    return value
+
+
+def promote(config, ident):
+    """Gate before the immutable tag push; the server supplies the live clock."""
+    prepared = prepared_release(config, ident)
+    manifest = promotion_manifest(config, ident, time.time())
+    directory = Path(config['state']) / 'promotion-checks' / ident
+    directory.mkdir(parents=True, exist_ok=True, mode=0o700)
+    request = directory / 'request.json'
+    write_json(request, {'config': config, 'manifest': manifest, 'directory': str(directory),
+                         'artifacts': {c: cached_artifact(config, c, manifest['inputs'][c]) for c in COMPONENTS},
+                         'warm': False})
+    adapter(config, 'preflight', request, Deadline(manifest['pushed_at']), directory)
+    tag = 'refs/tags/android-release/' + ident
+    repository = config['sources']['gcoms']['repository']
+    if git(repository, 'for-each-ref', '--format=%(objectname)', tag).strip():
+        raise ValueError('release tag already promoted; retain its original push receipt')
+    command(['git', '--shallow-file', '/dev/null', '-C', repository, 'push',
+             config['promotion_remote'], prepared['sources']['gcoms'] + ':' + tag],
+            timeout=45, log=directory / 'push.log')
+    return {'state': 'promotion_pushed', 'prepared_id': ident, 'ref': tag}
 
 
 def build(config, manifest, component, deadline, directory):
@@ -236,6 +312,8 @@ def deploy(config, manifest, warm=False):
             or manifest.get('configuration_sha256') != hashlib.sha256(canonical(config)).hexdigest()
             or manifest['inputs'] != inputs(config, manifest['sources'])):
         raise ValueError('immutable release inputs/configuration changed')
+    if not warm and config.get('require_prepared') and not manifest.get('prepared_id'):
+        raise ValueError('live deployment requires an immutable prepared promotion')
     root = Path(config['state'])
     root.mkdir(parents=True, exist_ok=True, mode=0o700)
     directory = root / ('warming' if warm else 'runs') / manifest['release_id']
@@ -288,18 +366,24 @@ def deploy(config, manifest, warm=False):
             adapter(config, 'preflight', request, deadline, directory)
             done('preflight')
             stage('building')
-            with ThreadPoolExecutor(max_workers=4) as pool:
-                pending = {pool.submit(build, config, manifest, c, deadline, directory): c
-                           for c in COMPONENTS if not DEPENDENCIES[c]}
-                apk_started = False
-                while pending:
-                    task = next(as_completed(pending))
-                    component = pending.pop(task)
-                    receipt['artifacts'][component] = task.result()
-                    write_json(marker, receipt)
-                    if not apk_started and all(c in receipt['artifacts'] for c in DEPENDENCIES['apk']):
-                        pending[pool.submit(build, config, manifest, 'apk', deadline, directory)] = 'apk'
-                        apk_started = True
+            if not warm and manifest.get('prepared_id'):
+                prepared_release(config, manifest['prepared_id'])
+                receipt['artifacts'] = {c: dict(cached_artifact(config, c, manifest['inputs'][c]), cache_hit=True)
+                                        for c in COMPONENTS}
+                write_json(marker, receipt)
+            else:
+                with ThreadPoolExecutor(max_workers=4) as pool:
+                    pending = {pool.submit(build, config, manifest, c, deadline, directory): c
+                               for c in COMPONENTS if not DEPENDENCIES[c]}
+                    apk_started = False
+                    while pending:
+                        task = next(as_completed(pending))
+                        component = pending.pop(task)
+                        receipt['artifacts'][component] = task.result()
+                        write_json(marker, receipt)
+                        if not apk_started and all(c in receipt['artifacts'] for c in DEPENDENCIES['apk']):
+                            pending[pool.submit(build, config, manifest, 'apk', deadline, directory)] = 'apk'
+                            apk_started = True
             done('building')
             stage('verifying')
             save_request()
@@ -341,6 +425,8 @@ def deploy(config, manifest, warm=False):
                         raise ValueError('previous artifact restoration was not verified')
                     receipt['rollback'] = ('ready' if proof.get('functional_readiness_verified') is True
                                            else 'previous_artifacts_verified')
+                    if config.get('require_functional_rollback') and receipt['rollback'] != 'ready':
+                        raise ValueError('previous Android functional readiness missing')
                 except Exception as rollback_error:
                     receipt['rollback'] = 'failed'
                     receipt['rollback_failure_type'] = type(rollback_error).__name__
@@ -358,13 +444,32 @@ def main():
         child.add_argument('--pushed-at', type=float, required=operation != 'warm')
         child.add_argument('--manifest', type=Path)
     sub.add_parser('status')
+    child = sub.add_parser('enroll-hub')
+    child.add_argument('--prepared-id', required=True)
+    child = sub.add_parser('prepare')
+    child.add_argument('--manifest', type=Path)
+    child = sub.add_parser('promote')
+    child.add_argument('--prepared-id', required=True)
     args = parser.parse_args()
     config = json.loads(args.config.read_text())
+    if args.operation == 'enroll-hub':
+        from android_release_hub import enroll, enroll_controller
+        prepared = prepared_release(config, args.prepared_id)
+        enroll(config, Path(config['state']) / 'artifacts/hub' / prepared['inputs']['hub'] / 'gchat')
+        enroll_controller(config, Path(config['state']) / 'artifacts/controller' / prepared['inputs']['controller'] / 'gdrone-fleet')
+        print(json.dumps({'state': 'headless_hub_enrolled', 'prepared_id': args.prepared_id}))
+        return
     if args.operation == 'status':
         root = Path(config['state'])
         print(json.dumps({name: json.loads((root / (name + '.json')).read_text())
                           if (root / (name + '.json')).exists() else None
-                          for name in ('latest', 'live')}, indent=2))
+                          for name in ('latest', 'live', 'prepared-latest')}, indent=2))
+        return
+    if args.operation == 'promote':
+        print(json.dumps(promote(config, args.prepared_id), indent=2))
+        return
+    if args.operation == 'prepare':
+        print(json.dumps(prepare_release(config, json.loads(args.manifest.read_text()) if args.manifest else None), indent=2))
         return
     manifest = (json.loads(args.manifest.read_text()) if args.manifest
                 else freeze(config, args.pushed_at if args.pushed_at is not None else time.time()))

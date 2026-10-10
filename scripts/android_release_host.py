@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Linux workstation adapters for the Android release runner (no store upload)."""
 import base64
+from concurrent.futures import ThreadPoolExecutor
 import hashlib
 import inspect
 import json
@@ -165,6 +166,12 @@ def build(request):
             # resolution separately with the artifact's byte hashes.
             lock.write_bytes(original)
         shutil.copy2(target / 'release/gchat', artifact / 'gchat')
+    elif component == 'controller':
+        run(['cargo', 'test', '--offline', '--locked', '-p', 'gdrone-fleet', '--lib',
+             '--', '--test-threads=1'], sources['drone'])
+        run(['cargo', 'build', '--offline', '--release', '--locked', '-p', 'gdrone-fleet',
+             '--bin', 'gdrone-fleet'], sources['drone'])
+        shutil.copy2(target / 'release/gdrone-fleet', artifact / 'gdrone-fleet')
     elif component == 'worker':
         llvm = Path(environment['ANDROID_NDK_HOME']) / 'toolchains/llvm/prebuilt/linux-x86_64/bin'
         requested = {row['abi'] for row in manifest['targets'] if row['kind'] == 'android'}
@@ -206,8 +213,8 @@ def adb(config, target, *args):
     return [config['adb'], '-s', target['serial'], *args]
 
 
-def active_hub(config):
-    unit = config['hub_unit']
+def active_hub(config, unit=None):
+    unit = unit or config['hub_unit']
     state = output(['systemctl', '--user', 'show', unit, '-p', 'ActiveState', '--value']).decode().strip()
     pid = int(output(['systemctl', '--user', 'show', unit, '-p', 'MainPID', '--value']).strip())
     if state != 'active' or pid < 1:
@@ -231,13 +238,20 @@ def preflight(request):
     # Do not repeatedly exercise a production hub with an already known failed
     # Android baseline. Initial qualification is a separate explicit operation.
     baseline = json.loads(Path(config['baseline_receipt']).read_text())
-    android = baseline.get('android', {})
-    if (android.get('full_download_verified') is not True
-            or android.get('loaded_worker_ready') is not True):
+    try:
+        from android_release_network import reference, vpn
+        reference(baseline, request['manifest']['inputs'])
+        vpn()
+        from android_release_hub import eligible
+        eligible(config)
+    except ValueError:
         write_json(Path(request['directory']) / 'preflight-block.json',
                    {'reason': 'android_runtime_download_load_baseline_failed'})
-        raise ValueError('Android runtime baseline needs full download/load qualification')
+        raise ValueError('Android runtime needs current source-bound transfer/load/resume and managed hub qualification')
     active_hub(config)
+    if config.get('fleet_unit'):
+        from android_release_hub import eligible_controller
+        eligible_controller(config)
     for target in request['manifest']['targets']:
         if target['kind'] == 'android':
             if not target['serial'].startswith('emulator-'):
@@ -305,7 +319,7 @@ def route_expiry(value):
                for i in range(raw[5]))
 
 
-def publish_worker(request, target, file, restoring=False):
+def publish_worker(request, target, file, restoring=False, deadline=None):
     config = request['config']
     fleet = json.loads(Path(config['fleet_config']).read_text())
     row = next(r for r in fleet['channels'] if r['name'] == target['channel'])
@@ -317,16 +331,18 @@ def publish_worker(request, target, file, restoring=False):
     staged = folder / name
     shutil.copy2(file, staged)
     os.chmod(staged, 0o600)
+    budget = min(45, deadline - time.monotonic()) if deadline is not None else 45
+    if budget <= 0: raise TimeoutError('worker restoration publication deadline expired')
     command([config['fleet_binary'], 'publish', '--config', config['fleet_config'],
-             '--channel', target['channel'], '--file', staged], timeout=45, log=folder / 'publish.log')
+             '--channel', target['channel'], '--file', staged], timeout=budget, log=folder / 'publish.log')
     wanted = digest(file)
-    until = min(time.time() + 20, request['manifest']['pushed_at'] + (595 if restoring else 415))
+    until = min(time.time() + 20, request['manifest']['pushed_at'] + (595 if restoring else 175))
     while True:
         state = json.loads((Path(fleet['state']) / 'releases.json').read_text())
         current = state.get('active', {}).get(target['channel'], {})
         if current.get('publication', {}).get('sha256') == wanted:
             return
-        if time.time() >= until:
+        if time.time() >= until or (deadline is not None and time.monotonic() >= deadline):
             raise TimeoutError('controller has not selected the published Android worker')
         time.sleep(.5)
 
@@ -334,6 +350,9 @@ def publish_worker(request, target, file, restoring=False):
 def activate(request):
     config, manifest = request['config'], request['manifest']
     directory = Path(request['directory'])
+    if config.get('fleet_unit'):
+        from android_release_hub import controller_activate
+        controller_activate(request)
     hub = active_hub(config)
     desired_hub = digest(artifact(request, 'hub', 'gchat'))
     if hub['sha256'] != desired_hub:
@@ -354,8 +373,6 @@ def activate(request):
         current = releases.get('active', {}).get(target['channel'], {})
         previous_sha = current.get('publication', {}).get('sha256', '')
         worker = artifact(request, 'worker', target['abi'] + '/worker.so')
-        if previous_sha == digest(worker):
-            continue
         if not re.fullmatch('[0-9a-f]{64}', previous_sha):
             raise ValueError('a retained previous Android worker is required for restoration')
         previous_file = Path(fleet['state']) / 'artifacts' / previous_sha
@@ -364,6 +381,8 @@ def activate(request):
         folder = directory / target['id']
         folder.mkdir(mode=0o700, exist_ok=True)
         write_json(folder / 'worker-before.json', {'sha256': previous_sha, 'path': str(previous_file)})
+        if previous_sha == digest(worker):
+            continue
         publish_worker(request, target, worker)
     states = []
     for target in manifest['targets']:
@@ -399,7 +418,7 @@ def activate(request):
                  '--property=StandardError=append:' + str(folder / 'mint.log'),
                  config['fleet_binary'], 'mint-ds', '--config', config['fleet_config'],
                  '--channel', target['channel'], '--output', profile, '--keep-alive', '600'])
-        until = min(time.time() + 45, manifest['pushed_at'] + 415)
+        until = min(time.time() + 45, manifest['pushed_at'] + 175)
         while not profile.exists():
             if time.time() >= until:
                 raise TimeoutError('fresh Android profile mint did not complete')
@@ -431,6 +450,8 @@ def readiness(request):
             if active_hub(config)['sha256'] != digest(artifact(request, 'hub', 'gchat')):
                 raise ValueError('running hub artifact differs')
             rows.append(dict(target, healthy=True, matches=True))
+            if config.get('fleet_unit') and active_hub(config, config['fleet_unit'])['sha256'] != digest(artifact(request, 'controller', 'gdrone-fleet')):
+                raise ValueError('running fleet sender differs from its verified release artifact')
             continue
         expected = json.loads((directory / target['id'] / 'deployment-request.json').read_text())
         until = manifest['pushed_at'] + 535
@@ -480,44 +501,107 @@ def cleanup(request):
 
 def rollback(request):
     directory, config = Path(request['directory']), request['config']
-    marker = directory / 'android-before.json'
-    if marker.exists():
-        for before in json.loads(marker.read_text()):
+    # APK bytes and hub maintenance proceed independently. All commands and
+    # current-process readiness share one restoration deadline.
+    until = min(time.monotonic() + 55, time.monotonic() + max(0, request['manifest']['pushed_at'] + 600 - time.time()))
+    def bounded(argv, limit=15):
+        remaining = until - time.monotonic()
+        if remaining <= 0: raise TimeoutError('functional Android restoration deadline expired')
+        command(argv, timeout=min(limit, remaining))
+    def restore_hub():
+        if (directory / 'hub-before.json').exists():
+            bounded(config['hub_rollback'] + [str(directory / 'request.json')], 30)
+            before = json.loads((directory / 'hub-before.json').read_text())
+            if active_hub(config)['sha256'] != before['sha256']:
+                raise ValueError('previous hub artifact was not restored')
+        if config.get('fleet_unit'):
+            from android_release_hub import controller_rollback
+            controller_rollback(request)
+    def restore_apks():
+        marker = directory / 'android-before.json'
+        if not marker.exists(): return []
+        states = json.loads(marker.read_text())
+        for before in states:
             target = before['target']
-            command(adb(config, target, 'root'), timeout=10)
-            command(adb(config, target, 'wait-for-device'), timeout=10)
-            command(adb(config, target, 'shell', 'am', 'force-stop', PACKAGE), timeout=10)
+            bounded(adb(config, target, 'root'), 8)
+            bounded(adb(config, target, 'wait-for-device'), 8)
+            bounded(adb(config, target, 'shell', 'am', 'force-stop', PACKAGE), 5)
             folder = directory / target['id']
             if digest(folder / 'previous.apk') != before['previous_apk_sha256']:
                 raise ValueError('retained previous Android APK changed')
-            command(adb(config, target, 'install', '-r', '-d', folder / 'previous.apk'), timeout=25)
-            installed = output(adb(config, target, 'shell', 'pm', 'path', PACKAGE)).decode().strip().removeprefix('package:')
-            installed_sha = output(adb(config, target, 'shell', 'sha256sum', installed)).decode().split()[0]
-            if installed_sha != before['previous_apk_sha256']:
-                raise ValueError('previous Android APK was not restored')
-            if identity(config, target) != before['identity_sha256']:
-                raise ValueError('Android restoration changed the retained identity')
-            destination = '/data/user/0/' + PACKAGE + '/files/dropship-config.json'
-            command(adb(config, target, 'push', folder / 'previous-config.json', destination), timeout=10)
-            uid = output(adb(config, target, 'shell', 'stat', '-c', '%u', '/data/user/0/' + PACKAGE)).decode().strip()
-            command(adb(config, target, 'shell', 'chown', uid + ':' + uid, destination), timeout=10)
-            command(adb(config, target, 'shell', 'chmod', '600', destination), timeout=10)
-    if (directory / 'hub-before.json').exists():
-        command(config['hub_rollback'] + [str(directory / 'request.json')], timeout=45,
-                log=directory / 'hub-rollback.log')
-        before = json.loads((directory / 'hub-before.json').read_text())
-        if active_hub(config)['sha256'] != before['sha256']:
-            raise ValueError('previous hub artifact was not restored')
-    for target in request['manifest']['targets']:
-        marker = directory / target['id'] / 'worker-before.json'
-        if target['kind'] == 'android' and marker.exists():
-            previous = json.loads(marker.read_text())
+            bounded(adb(config, target, 'install', '-r', '-d', folder / 'previous.apk'), 25)
+            installed = output(adb(config, target, 'shell', 'pm', 'path', PACKAGE), timeout=5).decode().strip().removeprefix('package:')
+            installed_sha = output(adb(config, target, 'shell', 'sha256sum', installed), timeout=5).decode().split()[0]
+            if installed_sha != before['previous_apk_sha256'] or identity(config, target) != before['identity_sha256']:
+                raise ValueError('restored Android APK or retained identity differs')
+        return states
+    rows = []
+    try:
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            hub = pool.submit(restore_hub)
+            apks = pool.submit(restore_apks)
+            states = apks.result(); hub.result()
+        for before in states:
+            target = before['target']; folder = directory / target['id']
+            previous = json.loads((folder / 'worker-before.json').read_text())
             if digest(previous['path']) != previous['sha256']:
                 raise ValueError('previous worker changed before restoration')
-            publish_worker(request, target, previous['path'], restoring=True)
-    cleanup(request)
-    write_json(directory / 'rollback.json', {'previous_artifacts_verified': True,
-                                            'functional_readiness_verified': False})
+            publish_worker(request, target, previous['path'], restoring=True, deadline=until)
+            # Restoring the old profile could resurrect obsolete handshake keys.
+            # Mint through the restored owner and require a fresh exact nonce.
+            profile = folder / 'rollback-profile.json'
+            unit = 'android-rollback-mint-' + request['manifest']['release_id'][:16] + '-' + target['id']
+            write_json(folder / 'provider.json', {'unit': unit})
+            bounded(['systemd-run', '--user', '--collect', '--unit=' + unit,
+                '--property=RuntimeMaxSec=120', '--property=TimeoutStopSec=3',
+                '--property=StandardOutput=append:' + str(folder / 'rollback-mint.log'),
+                '--property=StandardError=append:' + str(folder / 'rollback-mint.log'),
+                config['fleet_binary'], 'mint-ds', '--config', config['fleet_config'], '--channel', target['channel'],
+                '--output', profile, '--keep-alive', '120'], 5)
+            while not profile.exists():
+                if time.monotonic() >= until: raise TimeoutError('restored Android profile was not minted')
+                time.sleep(.25)
+            value = json.loads(profile.read_text())
+            if value.get('target') != target['channel'] or route_expiry(value) < time.time() + max(0, until - time.monotonic()):
+                raise ValueError('restored Android route target or expiry differs')
+            expected = {'release_id': hashlib.sha256((request['manifest']['release_id'] + ':rollback').encode()).hexdigest(),
+                        'apk_sha256': before['previous_apk_sha256'], 'worker_sha256': previous['sha256']}
+            write_json(folder / 'rollback-request.json', expected)
+            uid = output(adb(config, target, 'shell', 'stat', '-c', '%u', '/data/user/0/' + PACKAGE), timeout=5).decode().strip()
+            if not uid.isdigit(): raise ValueError('restored Android application owner missing')
+            for source, name in ((profile, 'dropship-config.json'), (folder / 'rollback-request.json', 'deployment-request.json')):
+                destination = '/data/user/0/' + PACKAGE + '/files/' + name
+                bounded(adb(config, target, 'push', source, destination), 5)
+                bounded(adb(config, target, 'shell', 'chown', uid + ':' + uid, destination), 5)
+                bounded(adb(config, target, 'shell', 'chmod', '600', destination), 5)
+            bounded(adb(config, target, 'shell', 'am', 'start', '-n', PACKAGE + '/.MainActivity'), 5)
+            while True:
+                try:
+                    proof = json.loads(private_file(config, target, 'deployment-ready.json'))
+                    pid = output(adb(config, target, 'shell', 'pidof', PACKAGE), timeout=5).decode().strip()
+                    ready(proof, expected, pid)
+                    if identity(config, target) != before['identity_sha256']:
+                        raise ValueError('restored Android identity changed during load')
+                    break
+                except (subprocess.CalledProcessError, json.JSONDecodeError, ValueError):
+                    if time.monotonic() >= until: raise TimeoutError('previous Android loaded worker readiness missing')
+                    time.sleep(.25)
+            rows.append(dict(target, healthy=True, matches=True, identity_preserved=True, loaded_worker_ready=True))
+        # If activation failed before APK mutation, independently observe its
+        # existing current nonce/PID rather than claim a functional restore.
+        if not states:
+            for target in request['manifest']['targets']:
+                if target['kind'] != 'android': continue
+                bounded(adb(config, target, 'root'), 5)
+                bounded(adb(config, target, 'wait-for-device'), 5)
+                expected = json.loads(private_file(config, target, 'deployment-request.json'))
+                ready(json.loads(private_file(config, target, 'deployment-ready.json')), expected,
+                      output(adb(config, target, 'shell', 'pidof', PACKAGE), timeout=5).decode().strip())
+                rows.append(dict(target, healthy=True, matches=True, loaded_worker_ready=True))
+        write_json(directory / 'rollback.json', {'previous_artifacts_verified': True,
+                   'functional_readiness_verified': True, 'targets': rows})
+    finally:
+        cleanup(request)
 
 
 def main():

@@ -8,7 +8,9 @@ from pathlib import Path
 import re
 import time
 
-from android_release import command, deploy, freeze, git, write_json
+from android_release import command, deploy, freeze, git, promotion_manifest, write_json
+
+PROMOTION_PREFIX = 'refs/tags/android-release/'
 
 
 def events(config):
@@ -18,7 +20,10 @@ def events(config):
         if path.is_symlink() or path.stat().st_size > 2048:
             raise ValueError('unsafe push receipt')
         value = json.loads(path.read_text())
-        if ((value.get('project'), value.get('ref')) not in selected
+        promotion = (value.get('project') == 'gcoms' and isinstance(value.get('ref'), str)
+                     and value['ref'].startswith(PROMOTION_PREFIX)
+                     and re.fullmatch('[0-9a-f]{64}', value['ref'][len(PROMOTION_PREFIX):]))
+        if (((value.get('project'), value.get('ref')) not in selected and not promotion)
                 or not re.fullmatch('[0-9a-f]{40}', value.get('commit', ''))
                 or type(value.get('pushed_at')) is not int or not 0 < value['pushed_at'] <= time.time()):
             continue
@@ -40,6 +45,11 @@ def dispatch(config, rows):
     manifest_path = state / 'push-manifests' / path.name
     if manifest_path.exists():
         manifest = json.loads(manifest_path.read_text())
+    elif event['ref'].startswith(PROMOTION_PREFIX):
+        manifest = promotion_manifest(config, event['ref'][len(PROMOTION_PREFIX):], event['pushed_at'])
+        if event['project'] != 'gcoms' or manifest['sources']['gcoms'] != event['commit']:
+            raise ValueError('promotion tag differs from prepared SDK source')
+        write_json(manifest_path, manifest)
     else:
         matching = [name for name, row in config['sources'].items()
                     if (row['project'], row['ref']) == (event['project'], event['ref'])]
@@ -67,13 +77,31 @@ def consume(config):
         rows = events(config)
         if not rows:
             return {'state': 'idle'}
+        promotions = [row for row in rows if row[1]['ref'].startswith(PROMOTION_PREFIX)]
+        if config.get('require_prepared') and not promotions:
+            for path, event in rows:
+                write_json(state / 'pushes' / path.name, {'state': 'preparation_requested', 'push': event})
+            if config.get('warm_unit'):
+                command(['systemctl', '--user', 'start', '--no-block', config['warm_unit']],
+                        timeout=5, log=state / 'warm-preemption.log')
+            return {'state': 'preparation_requested', 'pushes': len(rows)}
         # Live pushes take priority over speculative preparation. Stop only
         # this lane's warming unit; the original push clock keeps running.
         if config.get('warm_unit'):
             command(['systemctl', '--user', 'stop', config['warm_unit']], timeout=15,
                     log=state / 'warm-preemption.log')
         try:
-            return dispatch(config, rows)
+            chosen = [promotions[0]] if promotions else rows
+            try:
+                return dispatch(config, chosen)
+            except Exception as error:
+                path, event = chosen[-1]
+                failed = {'state': 'failed', 'failure_stage': 'promotion_validation',
+                          'failure_type': type(error).__name__, 'push': event,
+                          'pushed_at': event['pushed_at'], 'elapsed_seconds': time.time() - event['pushed_at']}
+                write_json(state / 'pushes' / path.name, failed)
+                write_json(state / 'latest.json', failed)
+                return failed
         finally:
             # Resume preparation immediately for the next push. A preflight
             # failure must not leave caches cold until the next twelve-hour tick.

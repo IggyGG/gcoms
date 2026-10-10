@@ -7,6 +7,12 @@ mailbox=/var/lib/gitea/android-release/events
 [ -d "$mailbox" ] || exit 0
 while read -r before after ref; do
     case "$ref" in
+        refs/tags/android-release/*)
+            [ "$project" = gcoms ] || continue
+            ident=${ref#refs/tags/android-release/}
+            case "$ident" in *[!0-9a-f]*) continue ;; esac
+            [ "${#ident}" = 64 ] || continue
+            ;;
         refs/heads/main|refs/heads/agent/mobile-android-aa5878dc|refs/heads/agent/mobile-android-019529de|refs/heads/agent/mobile-gchat-worker) ;;
         *) continue ;;
     esac

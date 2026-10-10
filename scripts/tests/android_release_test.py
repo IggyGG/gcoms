@@ -4,9 +4,12 @@ import base64
 import os
 from pathlib import Path
 import subprocess
+import socket
+import struct
 import sys
 import tempfile
 import time
+import threading
 import unittest
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -17,6 +20,8 @@ from android_release_host import aligned_loads, pinned_resolution, ready, route_
 import android_release_queue as queue
 import android_release_setup as setup
 import android_release_host as host
+import android_release_hub as hub
+import android_release_network as network
 
 
 ADAPTER = '''import hashlib,json,pathlib,sys,time
@@ -71,7 +76,8 @@ class Releases(unittest.TestCase):
             self.git(repo, 'commit', '-qm', 'first')
             sources[name] = {'repository': str(repo), 'ref': 'HEAD'}
         dependencies = {'sdk': ['gcoms'], 'installer': ['dropship', 'gcoms'],
-                        'apk': ['agent'], 'hub': ['gchat', 'gcoms'], 'worker': ['drone', 'gcoms']}
+                        'apk': ['agent'], 'hub': ['gchat', 'gcoms'], 'worker': ['drone', 'gcoms'],
+                        'controller': ['drone', 'gcoms', 'gchat']}
         self.config = {'state': str(self.root / 'state'), 'sources': sources,
                        'toolchain': {'rust': 'pinned', 'ndk': 'pinned'},
                        'targets': [{'id': 'android-canary', 'kind': 'android'}],
@@ -102,6 +108,89 @@ class Releases(unittest.TestCase):
         _, third = self.run_release()
         self.assertFalse(third['artifacts']['apk']['cache_hit'])
         self.assertTrue(all(third['artifacts'][c]['cache_hit'] for c in release.COMPONENTS if c != 'apk'))
+
+    def test_prepared_promotion_freezes_sources_and_never_builds(self):
+        self.config['require_prepared'] = True
+        prepared = release.prepare_release(self.config)
+        repo = Path(self.config['sources']['agent']['repository'])
+        (repo / 'mobile/android/agent/source.kt').write_text('newer unprepared source')
+        self.git(repo, 'commit', '-qam', 'newer')
+        manifest = release.promotion_manifest(self.config, prepared['prepared_id'], time.time())
+        self.assertEqual(manifest['sources'], prepared['sources'])
+        with patch.object(release, 'build', side_effect=AssertionError('promotion compiled code')):
+            result = release.deploy(self.config, manifest)
+        self.assertEqual(result['state'], 'live')
+        self.assertTrue(all(a['cache_hit'] for a in result['artifacts'].values()))
+
+    def test_prepared_receipt_missing_or_corrupt_artifact_blocks_promotion(self):
+        prepared = release.prepare_release(self.config)
+        path = Path(self.config['state']) / 'artifacts/sdk' / prepared['inputs']['sdk'] / 'artifact'
+        path.write_bytes(b'corrupt')
+        with self.assertRaisesRegex(ValueError, 'bytes changed'):
+            release.promotion_manifest(self.config, prepared['prepared_id'], time.time())
+        path.unlink()
+        with self.assertRaises(FileNotFoundError):
+            release.promotion_manifest(self.config, prepared['prepared_id'], time.time())
+        self.assertFalse((Path(self.config['state']) / 'live.json').exists())
+
+    def test_unprepared_live_manifest_is_refused(self):
+        self.config['require_prepared'] = True
+        with self.assertRaisesRegex(ValueError, 'immutable prepared promotion'):
+            release.deploy(self.config, release.freeze(self.config, time.time()))
+
+    def test_required_functional_rollback_rejects_byte_only_restoration(self):
+        self.config.update(require_functional_rollback=True, fault='missing_worker')
+        _manifest, result = self.run_release()
+        self.assertEqual(result['state'], 'failed')
+        self.assertEqual(result['rollback'], 'failed')
+        self.assertEqual(result['rollback_failure_type'], 'ValueError')
+        self.assertFalse((Path(self.config['state']) / 'live.json').exists())
+
+    def test_source_push_requests_preparation_without_activation(self):
+        self.config.update(require_prepared=True, warm_unit='gcoms-android-warm.service')
+        event_dir = self.root / 'events'
+        event_dir.mkdir()
+        self.config['event_directory'] = str(event_dir)
+        for name, row in self.config['sources'].items():
+            row['project'] = name
+        event = {'project': 'agent', 'ref': 'HEAD', 'commit': 'a' * 40, 'pushed_at': int(time.time())}
+        (event_dir / 'source.json').write_text(json.dumps(event))
+        with patch.object(queue, 'deploy', side_effect=AssertionError('source push activated')), \
+             patch.object(queue, 'command') as scheduling:
+            self.assertEqual(queue.consume(self.config)['state'], 'preparation_requested')
+        self.assertEqual(scheduling.call_args.args[0],
+                         ['systemctl', '--user', 'start', '--no-block', 'gcoms-android-warm.service'])
+        self.assertFalse((Path(self.config['state']) / 'latest.json').exists())
+
+    def test_invalid_promotion_is_consumed_with_original_clock(self):
+        event_dir = self.root / 'events'
+        event_dir.mkdir()
+        self.config.update(event_directory=str(event_dir), require_prepared=True)
+        for name, row in self.config['sources'].items():
+            row['project'] = name
+        pushed = int(time.time()) - 20
+        event = {'project': 'gcoms', 'ref': queue.PROMOTION_PREFIX + 'a' * 64,
+                 'commit': 'b' * 40, 'pushed_at': pushed}
+        (event_dir / 'promotion.json').write_text(json.dumps(event))
+        result = queue.consume(self.config)
+        self.assertEqual(result['failure_stage'], 'promotion_validation')
+        self.assertGreaterEqual(result['elapsed_seconds'], 20)
+        self.assertEqual(queue.consume(self.config)['state'], 'idle')
+
+    def test_promotion_guard_rejects_rewrite_delete_and_annotated_tag(self):
+        repo = Path(self.config['sources']['gcoms']['repository'])
+        commit = self.git(repo, 'rev-parse', 'HEAD').decode().strip()
+        hook = Path(release.__file__).with_name('android_release_pre_receive.sh')
+        ref = queue.PROMOTION_PREFIX + 'a' * 64
+        zero = '0' * 40
+        def guard(before, after):
+            return subprocess.run(['sh', str(hook)], cwd=repo,
+                input=f'{before} {after} {ref}\n', text=True, capture_output=True).returncode
+        self.assertEqual(guard(zero, commit), 0)
+        self.assertNotEqual(guard(commit, commit), 0)
+        self.assertNotEqual(guard(commit, zero), 0)
+        self.git(repo, 'tag', '-am', 'annotated', 'annotated')
+        self.assertNotEqual(guard(zero, self.git(repo, 'rev-parse', 'annotated').decode().strip()), 0)
 
     def test_missing_real_worker_requires_restoration(self):
         self.config['fault'] = 'missing_worker'
@@ -302,6 +391,88 @@ class Releases(unittest.TestCase):
         self.assertNotEqual(first['inputs']['worker'], second['inputs']['worker'])
         self.assertTrue(all(first['inputs'][c] == second['inputs'][c]
                             for c in release.COMPONENTS if c != 'worker'))
+
+
+class Maintenance(unittest.TestCase):
+    def test_oversized_private_frame_is_rejected_before_allocation(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'hub.sock'
+            with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as server:
+                server.bind(str(path)); server.listen()
+                def respond():
+                    with server.accept()[0] as stream:
+                        size = struct.unpack('!I', hub.receive(stream, 4))[0]
+                        hub.receive(stream, size)
+                        stream.sendall(struct.pack('!I', hub.FRAME_LIMIT + 1))
+                thread = threading.Thread(target=respond); thread.start()
+                with self.assertRaisesRegex(ValueError, 'exceeds bounds'):
+                    hub.exchange(path, 'a' * 64, os.getpid(), {'kind': 'identify'})
+                thread.join(timeout=2); self.assertFalse(thread.is_alive())
+
+    def test_private_socket_checks_process_identity_and_bounded_framing(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'hub.sock'
+            server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            server.bind(str(path)); server.listen()
+            self.addCleanup(server.close)
+            def respond():
+                with server.accept()[0] as stream:
+                    size = struct.unpack('!I', hub.receive(stream, 4))[0]
+                    request = json.loads(hub.receive(stream, size))
+                    self.assertEqual(request['request']['kind'], 'identify')
+                    data = json.dumps({'version': 3, 'instance_id': 'a' * 64,
+                        'response': {'kind': 'instance', 'instance': {'id': 'a' * 64}}}).encode()
+                    stream.sendall(struct.pack('!I', len(data)) + data)
+            thread = threading.Thread(target=respond); thread.start()
+            result = hub.exchange(path, 'a' * 64, os.getpid(), {'kind': 'identify'})
+            thread.join(timeout=2); self.assertFalse(thread.is_alive())
+            self.assertEqual(result['instance']['id'], 'a' * 64)
+            with self.assertRaisesRegex(ValueError, 'another hub process'):
+                hub.exchange(path, 'a' * 64, os.getpid() + 1, {'kind': 'identify'})
+
+    def test_checkpoint_disconnects_before_exit_and_rejects_a_busy_owner(self):
+        attached = ({'pid': 123}, {'chatEndpoint': 'private', 'instanceId': 'a' * 64}, {'bootId': 'old'})
+        operations = []
+        def rpc(_endpoint, _instance, _pid, request):
+            action = request.get('request', {}).get('action', request['kind'])
+            operations.append(action)
+            if action == 'disconnect': return {'kind': 'snapshot', 'snapshot': {'instance': {'protocolLocked': True}}}
+            return {'kind': 'update', 'result': {'state': 'ready', 'process_id': 123, 'boot_id': 'old'}}
+        with patch.object(hub, 'eligible', return_value=attached), patch.object(hub, 'exchange', side_effect=rpc), \
+             patch.object(hub, 'manager') as manager:
+            self.assertEqual(hub.checkpoint({'hub_unit': 'gchat-test.service'}, 'b' * 64), (attached[0], 'old'))
+            self.assertEqual(operations, ['heartbeat', 'prepare', 'disconnect', 'exit'])
+            manager.assert_called_once_with('gchat-test.service', 'stop')
+        with patch.object(hub, 'eligible', return_value=attached), \
+             patch.object(hub, 'exchange', return_value={'kind': 'update', 'result': {'state': 'busy'}}), \
+             patch.object(hub, 'manager') as manager:
+            with self.assertRaisesRegex(ValueError, 'busy'): hub.checkpoint({'hub_unit': 'gchat-test.service'}, 'b' * 64)
+            manager.assert_not_called()
+
+    def test_retained_hub_selection_preserves_live_protocol_files(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); binary = root / 'input'; binary.write_bytes(b'qualified executable')
+            profile = root / 'profile.gcprotocol'; profile.write_bytes(b'latest durable ratchet')
+            retained = hub.install_binary(root, binary); hub.select(root, retained)
+            self.assertEqual(release.digest(root / 'active/gchat'), release.digest(binary))
+            self.assertEqual(profile.read_bytes(), b'latest durable ratchet')
+            with self.assertRaisesRegex(ValueError, 'escapes'): hub.select(root, binary)
+            retained.write_bytes(b'changed')
+            with self.assertRaisesRegex(ValueError, 'differs'): hub.install_binary(root, binary)
+
+    def test_reference_requires_real_sized_timely_source_bound_resume_and_load(self):
+        proof = {'schema': 1, 'kind': 'android-runtime-qualification', 'inputs': {'sdk': 'a' * 64},
+                 'observed_at': 100, 'vpn': {'state': 'connected'},
+                 'android': {k: True for k in ('full_download_verified', 'loaded_worker_ready',
+                                               'identity_preserved', 'resume_verified')},
+                 'reference_transfer': {'bytes': 42 * 1024 * 1024, 'elapsed_seconds': 300,
+                    'sha256_verified': True, 'current_process_verified': True}}
+        self.assertEqual(network.reference(proof, proof['inputs'], now=101), proof)
+        for changed in ({'inputs': {}}, {'observed_at': -86401},
+                        {'vpn': {'state': 'disconnected'}}, {'android': {}},
+                        {'reference_transfer': dict(proof['reference_transfer'], elapsed_seconds=361)},
+                        {'reference_transfer': dict(proof['reference_transfer'], bytes=42000)}):
+            with self.assertRaises(ValueError): network.reference(dict(proof, **changed), proof['inputs'], now=101)
 
 
 if __name__ == '__main__':
