@@ -1,0 +1,79 @@
+name: Isolated runtime relay qualification
+run-name: Runtime relay recovery ${{ inputs.request_id }}
+on:
+  workflow_dispatch:
+    inputs:
+      request_id:
+        description: Unique diagnostic request; no production activation
+        type: string
+        required: true
+      gchat_commit:
+        description: Full frozen GChat commit
+        type: string
+        required: true
+permissions:
+  contents: read
+jobs:
+  relay:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 150
+    env:
+      CARGO_BUILD_JOBS: '3'
+      CARGO_INCREMENTAL: '0'
+      CARGO_PROFILE_DEV_DEBUG: '0'
+      CARGO_PROFILE_TEST_DEBUG: '0'
+      RUSTFLAGS: ''
+    steps:
+      - name: Require a frozen companion
+        env:
+          GCHAT_COMMIT: ${{ inputs.gchat_commit }}
+        run: python3 -c 'import os,re; assert re.fullmatch("[0-9a-f]{40}",os.environ["GCHAT_COMMIT"])'
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.sha }}
+          path: gcoms
+          persist-credentials: false
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: IggyGG/gchat
+          ref: ${{ inputs.gchat_commit }}
+          path: gchat
+          persist-credentials: false
+      - uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c
+        with:
+          python-version: '3.12.10'
+      - name: Prepare compiler and isolated network support
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y iproute2 ethtool tcpdump util-linux pkg-config libssl-dev
+          python3 - <<'PY'
+          import os, subprocess, tomllib
+          from pathlib import Path
+          pins = [tomllib.loads(Path(p, 'rust-toolchain.toml').read_text())['toolchain'] for p in ('gchat', 'gcoms')]
+          assert pins[0] == pins[1]
+          subprocess.run(['rustup', 'toolchain', 'install', pins[0]['channel'], '--profile', 'minimal'], check=True)
+          with open(os.environ['GITHUB_ENV'], 'a') as stream:
+              stream.write('RUSTUP_TOOLCHAIN=' + pins[0]['channel'] + '\n')
+          PY
+          sudo -n unshare --net --mount --pid --fork --mount-proc -- true
+      - name: Verify evidence retention and gate controls
+        run: |
+          python3 -m unittest discover -s gcoms/scripts/tests -p relay_recovery_test.py
+          python3 -m unittest discover -s gchat/scripts/tests -p relay_load_run_test.py
+          python3 -m unittest discover -s gchat/scripts/tests -p release_relay_load_test.py
+      - name: Build frozen sources and run the full isolated relay gate
+        run: >-
+          python3 gcoms/scripts/qualify-relay-recovery.py
+          --gchat gchat
+          --output relay-evidence
+          --work "$RUNNER_TEMP/relay-recovery-work"
+          --target-dir "$RUNNER_TEMP/relay-recovery-target"
+      - name: Retain original acceptance or failure reports
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: relay-recovery-${{ github.run_attempt }}
+          include-hidden-files: true
+          retention-days: 30
+          path: relay-evidence/**
+          if-no-files-found: error
