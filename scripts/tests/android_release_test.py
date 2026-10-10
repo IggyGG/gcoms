@@ -460,6 +460,29 @@ class Maintenance(unittest.TestCase):
             retained.write_bytes(b'changed')
             with self.assertRaisesRegex(ValueError, 'differs'): hub.install_binary(root, binary)
 
+    def test_failed_hub_start_restores_only_a_completed_checkpoint(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); old = root / 'old'; old.write_bytes(b'previous executable')
+            new = root / 'new'; new.write_bytes(b'failed replacement')
+            retained = hub.install_binary(root, new); hub.select(root, retained)
+            before = {'path': str(old), 'sha256': release.digest(old), 'checkpoint_completed': True,
+                      'checkpoint_boot_id': 'old-boot', 'next_sha256': release.digest(new)}
+            release.write_json(root / 'hub-managed-before.json', before)
+            request = {'config': {'hub_directory': str(root), 'hub_unit': 'gchat-test.service'},
+                       'directory': str(root), 'manifest': {'release_id': 'a' * 64}}
+            def manager(_unit, *args):
+                return {'ActiveState': 'failed', 'MainPID': '0'}.get(args[2], '') if args[0] == 'show' else ''
+            with patch.object(hub, 'enrolled_unit'), patch.object(hub, 'manager', side_effect=manager), \
+                 patch.object(hub, 'checkpoint') as checkpoint, patch.object(hub, 'select') as select, \
+                 patch.object(hub, 'wait_ready') as ready:
+                hub.rollback(request)
+                checkpoint.assert_not_called(); select.assert_called_once_with(str(root), str(old))
+                ready.assert_called_once_with(request['config'], before['sha256'], 'old-boot')
+                before['checkpoint_completed'] = False
+                release.write_json(root / 'hub-managed-before.json', before)
+                with self.assertRaisesRegex(ValueError, 'no completed'): hub.rollback(request)
+                self.assertEqual(select.call_count, 1)
+
     def test_reference_requires_real_sized_timely_source_bound_resume_and_load(self):
         proof = {'schema': 1, 'kind': 'android-runtime-qualification', 'inputs': {'sdk': 'a' * 64},
                  'observed_at': 100, 'vpn': {'state': 'connected'},

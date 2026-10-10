@@ -127,7 +127,10 @@ def build(request):
         # Essential installer state/auth regressions, never a full platform matrix.
         run(['cargo', 'test', '--offline', '--locked', '--manifest-path', 'minimal/Cargo.toml',
              '-p', 'ds-minimal-core', '--features', 'qualification', '--lib', 'session'], sources['dropship'])
+        run(['cargo', 'test', '--offline', '--locked', '--manifest-path', 'minimal/Cargo.toml',
+             '-p', 'ds-minimal-core', '--features', 'qualification', '--lib', 'transfer::tests'], sources['dropship'])
         run(['sh', 'build/test-minimal-mobile-install.sh'], sources['dropship'])
+        run(['sh', 'build/test-minimal-transfer-resume.sh'], sources['dropship'])
         for abi in ('arm64', 'x86_64'):
             shutil.copy2(sources['dropship'] / ('build/libdsminimal-android-' + abi + '.a'), artifact)
     elif component == 'apk':

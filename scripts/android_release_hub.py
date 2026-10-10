@@ -105,7 +105,7 @@ def select(root, binary):
         temporary.unlink(missing_ok=True)
 
 
-def eligible(config):
+def enrolled_unit(config):
     root = Path(config['hub_directory'])
     receipt = json.loads((root / 'enrollment.json').read_text())
     fragment = manager(config['hub_unit'], 'show', '-p', 'FragmentPath', '--value')
@@ -114,6 +114,12 @@ def eligible(config):
         raise ValueError('headless hub service enrollment changed')
     if manager(config['hub_unit'], 'show', '-p', 'DropInPaths', '--value'):
         raise ValueError('headless hub enrollment has an unreviewed service override')
+    return receipt
+
+
+def eligible(config):
+    root = Path(config['hub_directory'])
+    receipt = enrolled_unit(config)
     hub, fleet, instance = attached(config)
     if digest(root / 'active/gchat') != hub['sha256'] or instance.get('protocolLocked') is not False:
         raise ValueError('enrolled headless hub is not running and unlocked')
@@ -253,8 +259,11 @@ def activate(request):
     root = Path(config['hub_directory'])
     previous = install_binary(root, '/proc/' + str(hub['pid']) + '/exe')
     desired = install_binary(root, artifact(request, 'hub', 'gchat'))
-    write_json(directory / 'hub-managed-before.json', {'path': str(previous), 'sha256': hub['sha256']})
+    before = {'path': str(previous), 'sha256': hub['sha256'], 'checkpoint_completed': False}
+    write_json(directory / 'hub-managed-before.json', before)
     _hub, boot = checkpoint(config, request['manifest']['release_id'])
+    before.update(checkpoint_completed=True, checkpoint_boot_id=boot, next_sha256=digest(desired))
+    write_json(directory / 'hub-managed-before.json', before)
     select(root, desired)
     manager(config['hub_unit'], 'start')
     wait_ready(config, digest(desired), boot)
@@ -269,7 +278,25 @@ def rollback(request):
     before = json.loads(path.read_text())
     if digest(before['path']) != before['sha256']:
         raise ValueError('previous headless executable changed')
-    _hub, boot = checkpoint(config, request['manifest']['release_id'])
+    enrolled_unit(config)
+    state = manager(config['hub_unit'], 'show', '-p', 'ActiveState', '--value')
+    pid = int(manager(config['hub_unit'], 'show', '-p', 'MainPID', '--value'))
+    if state in ('inactive', 'failed') and pid == 0:
+        # A replacement that never started cannot answer maintenance RPCs.
+        # Restore only after the recorded owner completed the original
+        # checkpoint; retain the current profile and never force a live hub.
+        if (before.get('checkpoint_completed') is not True
+                or not before.get('checkpoint_boot_id')
+                or digest(Path(config['hub_directory']) / 'active/gchat') != before.get('next_sha256')):
+            raise ValueError('inactive hub has no completed activation checkpoint')
+        boot = before['checkpoint_boot_id']
+    else:
+        current, _fleet, _instance = eligible(config)
+        if current['sha256'] == before['sha256']:
+            write_json(directory / 'hub-restored.json', {'previous_artifact_verified': True,
+                       'current_checkpoint_preserved': True, 'functional_readiness_verified': True})
+            return
+        _hub, boot = checkpoint(config, request['manifest']['release_id'])
     select(config['hub_directory'], before['path'])
     manager(config['hub_unit'], 'start')
     wait_ready(config, before['sha256'], boot)
