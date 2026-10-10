@@ -247,15 +247,22 @@ def checkpoint(config, release):
     update('heartbeat')
     try:
         prepared = update('prepare')
+        owner_boot = prepared.get('result', {}).get('boot_id')
         if (prepared.get('kind') != 'update' or prepared['result'].get('state') != 'ready'
                 or prepared['result'].get('process_id') != hub['pid']
-                or prepared['result'].get('boot_id') != instance['bootId']):
+                or not isinstance(owner_boot, str) or not re.fullmatch(r'[0-9a-f]{64}', owner_boot)):
             raise ValueError('hub is busy or its checkpoint owner changed')
+        # Identify describes the unlocked protocol service. Update describes its
+        # enclosing profile owner; their boot IDs are intentionally independent.
         disconnected = rpc({'kind': 'disconnect'})
         if (disconnected.get('kind') != 'snapshot'
                 or disconnected['snapshot']['instance'].get('protocolLocked') is not True):
             raise ValueError('hub did not finish its latest protocol checkpoint')
-        update('exit')
+        exited = update('exit')
+        if (exited.get('kind') != 'update' or exited.get('result', {}).get('state') != 'ready'
+                or exited['result'].get('process_id') != hub['pid']
+                or exited['result'].get('boot_id') != owner_boot):
+            raise ValueError('hub checkpoint exit owner changed')
     except BaseException:
         try: update('abort'); update('detach')
         except (OSError, ValueError): pass

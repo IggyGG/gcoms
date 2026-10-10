@@ -262,6 +262,9 @@ def preflight(request):
     if config.get('fleet_unit'):
         from android_release_hub import eligible_controller
         eligible_controller(config)
+    from android_release_network import routing_horizon
+    write_json(Path(request['directory']) / 'preflight-routing.json',
+               routing_horizon(config, request['manifest']['pushed_at'] + 690))
     for target in request['manifest']['targets']:
         if target['kind'] == 'android':
             if not target['serial'].startswith('emulator-'):

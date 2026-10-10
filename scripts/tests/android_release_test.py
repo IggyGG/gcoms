@@ -2,6 +2,7 @@
 import json
 import base64
 import hashlib
+import io
 import os
 from pathlib import Path
 import subprocess
@@ -24,6 +25,77 @@ import android_release_host as host
 import android_release_hub as hub
 import android_release_qualify as qualify
 import android_release_network as network
+
+
+class RoutingHorizon(unittest.TestCase):
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.root = Path(temporary.name)
+        self.config = {'hub_home': str(self.root)}
+        invitation = {'grant': 'private-test-grant', 'expires_at': int(time.time()) + 86400,
+                      'provider_urls': ['https://provider.example/']}
+        path = self.root / 'network-invitation.txt'
+        path.write_text('GCNI1-' + base64.urlsafe_b64encode(json.dumps(invitation).encode()).decode().rstrip('='))
+        path.chmod(0o600)
+        self.until = time.time() + 690
+
+    def response(self, expiry=None):
+        rows = []
+        for i in range(6):
+            address = b'\4' + bytes([8, 8, 8, i + 1]) + bytes(12) + (443).to_bytes(2, 'big')
+            authorities = b''.join(bytes([20 * i + j + 1]) * 32 for j in range(4))
+            rows.append(address + authorities + int(expiry or time.time() + 900).to_bytes(8, 'big'))
+        encoded = base64.urlsafe_b64encode(b'GCRB\2\6' + b''.join(rows)).decode().rstrip('=')
+        return {'version': 3, 'routing_protocol': 'gc2', 'routing_bundle_b64': encoded}
+
+    def check(self, reply):
+        opener = SimpleNamespace(open=lambda *a, **kw: io.BytesIO(json.dumps(reply).encode()))
+        with patch.object(network, 'build_opener', return_value=opener):
+            return network.routing_horizon(self.config, self.until)
+
+    def test_real_introductions_must_cover_the_clock_before_promotion(self):
+        result = self.check(self.response())
+        self.assertGreaterEqual(result['routing_expiry_unix'], self.until)
+        self.assertEqual(result['distinct_relays'], 6)
+        with self.assertRaisesRegex(ValueError, 'deployment window'):
+            self.check(self.response(time.time() + 600))
+
+    def test_provider_uses_authenticated_https_without_grant_redirect(self):
+        requests = []
+        def opened(request, **kwargs):
+            requests.append(request)
+            self.assertLessEqual(kwargs['timeout'], 12)
+            return io.BytesIO(json.dumps(self.response()).encode())
+        with patch.object(network, 'build_opener', return_value=SimpleNamespace(open=opened)):
+            network.routing_horizon(self.config, self.until)
+        self.assertEqual(requests[0].full_url, 'https://provider.example/v1/relay-provisions')
+        self.assertEqual(requests[0].get_header('Authorization'), 'Bearer private-test-grant')
+        self.assertEqual(json.loads(requests[0].data)['supported_versions'], [3])
+        self.assertIsNone(network.NoRedirect().redirect_request(None, None, 302, '', {}, 'https://other.example/'))
+
+    def test_downgrade_private_relays_duplicate_pins_and_oversize_are_refused(self):
+        for case in ('version', 'protocol', 'private', 'pins', 'large'):
+            reply = self.response()
+            if case == 'version': reply['version'] = 2
+            elif case == 'protocol': reply['routing_protocol'] = 'gc1'
+            elif case == 'large': reply['extra'] = 'x' * 4096
+            else:
+                raw = bytearray(base64.urlsafe_b64decode(reply['routing_bundle_b64'] + '==='))
+                if case == 'private': raw[7:11] = bytes([127, 0, 0, 1])
+                else: raw[6 + 155 + 19:6 + 155 + 51] = raw[25:57]
+                reply['routing_bundle_b64'] = base64.urlsafe_b64encode(raw).decode().rstrip('=')
+            with self.subTest(case=case), self.assertRaisesRegex(ValueError, 'deployment window'):
+                self.check(reply)
+
+    def test_private_invitation_permissions_and_symlinks_are_refused(self):
+        path = self.root / 'network-invitation.txt'
+        path.chmod(0o644)
+        with self.assertRaisesRegex(ValueError, 'private owner invitation'):
+            self.check(self.response())
+        path.rename(self.root / 'retained-invitation')
+        path.symlink_to('retained-invitation')
+        with self.assertRaises(OSError): self.check(self.response())
 
 
 ADAPTER = '''import hashlib,json,pathlib,sys,time
@@ -513,7 +585,7 @@ class Maintenance(unittest.TestCase):
             action = request.get('request', {}).get('action', request['kind'])
             operations.append(action)
             if action == 'disconnect': return {'kind': 'snapshot', 'snapshot': {'instance': {'protocolLocked': True}}}
-            return {'kind': 'update', 'result': {'state': 'ready', 'process_id': 123, 'boot_id': 'old'}}
+            return {'kind': 'update', 'result': {'state': 'ready', 'process_id': 123, 'boot_id': 'c' * 64}}
         with patch.object(hub, 'eligible', return_value=attached), patch.object(hub, 'exchange', side_effect=rpc), \
              patch.object(hub, 'manager') as manager:
             self.assertEqual(hub.checkpoint({'hub_unit': 'gchat-test.service'}, 'b' * 64), (attached[0], 'old'))
@@ -524,6 +596,35 @@ class Maintenance(unittest.TestCase):
              patch.object(hub, 'manager') as manager:
             with self.assertRaisesRegex(ValueError, 'busy'): hub.checkpoint({'hub_unit': 'gchat-test.service'}, 'b' * 64)
             manager.assert_not_called()
+
+    def test_checkpoint_exit_must_keep_the_prepared_profile_owner(self):
+        attached = ({'pid': 123}, {'chatEndpoint': 'private', 'instanceId': 'a' * 64}, {'bootId': 'protocol-boot'})
+        def rpc(_endpoint, _instance, _pid, request):
+            action = request.get('request', {}).get('action', request['kind'])
+            if action == 'disconnect': return {'kind': 'snapshot', 'snapshot': {'instance': {'protocolLocked': True}}}
+            return {'kind': 'update', 'result': {'state': 'ready', 'process_id': 123,
+                                              'boot_id': ('d' if action == 'exit' else 'c') * 64}}
+        with patch.object(hub, 'eligible', return_value=attached), patch.object(hub, 'exchange', side_effect=rpc), \
+             patch.object(hub, 'manager') as manager:
+            with self.assertRaisesRegex(ValueError, 'exit owner changed'):
+                hub.checkpoint({'hub_unit': 'gchat-test.service'}, 'b' * 64)
+            manager.assert_not_called()
+
+    def test_reference_progress_ignores_an_old_run_with_the_same_worker(self):
+        root = '/data/user/0/' + host.PACKAGE + '/files/d'
+        paths = [root + '/' + key * 64 + '/downloader.state' for key in ('a', 'b')]
+        raw = bytearray(156); raw[:8] = b'DSRSUM1\0'; raw[8:40] = bytes.fromhex('b' * 64)
+        raw[40:72] = b'x' * 32; raw[72:80] = qualify.REFERENCE_BYTES.to_bytes(8, 'little')
+        raw[80:84] = (7).to_bytes(4, 'big'); raw[84:92] = (22000).to_bytes(8, 'little')
+        raw[124:] = hashlib.sha256(raw[:124]).digest()
+        def output(argv):
+            if 'find' in argv: return '\n'.join(paths).encode()
+            if 'stat' in argv: return b'90' if argv[-1] == paths[0] else b'101'
+            return bytes(raw)
+        with patch.object(host, 'output', side_effect=output), patch.object(host, 'adb', side_effect=lambda _c, _t, *a: list(a)):
+            self.assertEqual(qualify.observe_frontier({}, {}, (b'x' * 32).hex(), 100.5), 22000)
+            raw[8:40] = bytes.fromhex('a' * 64); raw[124:] = hashlib.sha256(raw[:124]).digest()
+            self.assertEqual(qualify.observe_frontier({}, {}, (b'x' * 32).hex(), 100.5), 0)
 
     def test_retained_hub_selection_preserves_live_protocol_files(self):
         with tempfile.TemporaryDirectory() as directory:

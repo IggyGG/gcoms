@@ -165,17 +165,22 @@ def frontier(bytes_, sha):
     return offset
 
 
-def observe_frontier(config, target, sha):
+def observe_frontier(config, target, sha, pushed_at):
     root = '/data/user/0/' + host.PACKAGE + '/files/d'
     paths = host.output(host.adb(config, target, 'shell', 'find', root, '-maxdepth', '2',
                                '-type', 'f', '-name', 'downloader.state')).decode().splitlines()
     if len(paths) > 256: raise ValueError('Android frontier inventory exceeds bounds')
+    current = []
     for path in paths:
         if not re.fullmatch(re.escape(root) + r'/[0-9a-f]{64}/downloader\.state', path): continue
+        modified = host.output(host.adb(config, target, 'shell', 'stat', '-c', '%Y', path)).decode().strip()
+        if not modified.isdigit() or int(modified) < int(pushed_at): continue
         raw = host.output(host.adb(config, target, 'exec-out', 'head', '-c', '157', path))
         offset = frontier(raw, sha)
-        if offset is not None: return offset
-    return 0
+        if offset is not None and raw[8:40].hex() == Path(path).parent.name:
+            current.append(offset)
+    if len(current) > 1: raise ValueError('Android frontier belongs to ambiguous current runs')
+    return current[0] if current else 0
 
 
 def run(config, ident):
@@ -211,7 +216,7 @@ def run(config, ident):
             if time.monotonic() - started >= 360:
                 raise TimeoutError('real Android reference exceeds the six-minute transfer budget')
             if interrupted is None:
-                offset = observe_frontier(config, target, expected['worker_sha256'])
+                offset = observe_frontier(config, target, expected['worker_sha256'], value['pushed_at'])
                 if INTERRUPT_BYTES <= offset < REFERENCE_BYTES:
                     old_pid = host.output(host.adb(config, target, 'shell', 'pidof', host.PACKAGE)).decode().strip()
                     if not old_pid.isdigit(): raise ValueError('no running Android process to interrupt')

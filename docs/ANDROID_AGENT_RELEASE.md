@@ -122,6 +122,23 @@ native payload receipt can produce the source-bound baseline. Failed attempts
 retain their receipt and never update the successful baseline. Mullvad remains
 connected throughout. The entire reference check has a six-minute budget.
 
+Progress inspection requires a frontier modified during the current request,
+the exact reference hash and a checksummed run key matching its private directory.
+Ambiguous current frontiers fail the check. An earlier run of the same padded
+worker cannot trigger the interruption.
+
+Before an immutable promotion push, preflight fetches fresh introductions from
+the configured HTTPS provider using the private invitation. It refuses redirects,
+protocol downgrades and introductions expiring before the release clock plus
+ninety seconds. Near the UTC hour boundary, retry preparation/preflight after
+normal capability rotation; no expiry or server push timestamp is extended.
+Only public expiry/count observations are retained.
+
+The unlocked protocol service and its enclosing profile owner have different
+boot IDs. Maintenance pins the actual socket PID and the profile-owner boot from
+prepare through exit, then waits for a fresh unlocked protocol service. It keeps
+the latest completed checkpoint and every retained identity.
+
 This source implementation is not live qualification. Three real promotion
 pushes and a real failed-canary functional rollback remain required before
 claiming the ten-minute end-to-end objective. ARM64 compilation is not physical

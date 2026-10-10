@@ -1148,6 +1148,16 @@ ten senders already require 4990 entries. Retain the failed 2000-record run.
 Do not skip recipient signatures or count only transcript records. Resource and
 7200-second deadlines remain independent and unchanged for the corrected run.
 
+### Android prepared release follow-up — 2026-10-10
+
+Require fresh authenticated introductions covering the immutable push clock plus
+ninety seconds; reject short horizons, downgrade, duplicate pins, oversized replies,
+redirects and public/symlink invitations. Distinct protocol/profile-owner boot IDs
+must allow a checkpoint, while changing the prepared owner during exit must fail.
+An old same-hash reference frontier cannot trigger interruption; a mismatched run
+directory cannot count as progress. The eight focused controls pass. Preserve the
+six-minute real transfer and ten-minute promotion bounds.
+
 ### IRC-8 operator relay capacity
 
 Cluster checks must include routing `service::capacity_tests`, node

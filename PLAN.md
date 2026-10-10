@@ -1439,6 +1439,13 @@ configuration and resource ceilings as the control. See
 The retained-profile comparison is running; 500-member application qualification
 still remains separate.
 
+### Android prepared release follow-up — 2026-10-10
+
+Fresh routing horizons, separate profile-owner/protocol boot checks and current
+reference-frontier binding are implemented. Eight focused controls pass. The
+real 42 MiB Android transfer/resume/load, three timed promotions and functional
+failed-canary restoration remain the live completion gates.
+
 ### IRC-8 matched relay capacity result — 2026-09-30
 
 The same relay binary and 85 retained independent client profiles pass bootstrap
