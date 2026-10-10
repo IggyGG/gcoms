@@ -1123,6 +1123,7 @@ impl ChannelMaintenance {
             }
             let accepted = plan.accepted == plan.total();
             let mut st = state.lock().unwrap_or_else(|p| p.into_inner());
+            let mut changed = false;
             if let Some(cs) = st.channels.get_mut(&plan.channel) {
                 match plan.work {
                     Work::Forward(id) => cs.settle_forward(id, accepted),
@@ -1141,6 +1142,7 @@ impl ChannelMaintenance {
                             if control_key(route, wire) == key {
                                 if let Some((_, mut wire)) = cs.pending_control.remove(index) {
                                     wire.fill(0);
+                                    changed = true;
                                 }
                             } else {
                                 index += 1;
@@ -1149,6 +1151,9 @@ impl ChannelMaintenance {
                     }
                     _ => {}
                 }
+            }
+            if changed {
+                st.durability.changed();
             }
             metrics::log_event(
                 "chan_tick",

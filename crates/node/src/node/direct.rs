@@ -178,6 +178,26 @@ struct DirectAttempt {
     route_unavailable: bool,
 }
 
+struct RetryBackoff {
+    failures: u32,
+    due: std::time::Instant,
+    #[cfg(feature = "experimental-gc2")]
+    unavailable: bool,
+    #[cfg(feature = "experimental-gc2")]
+    target: Option<RelayTarget>,
+}
+
+const MAX_RETRY_BACKOFFS: usize = 4096;
+
+fn retry_backoff_delay(failures: u32) -> std::time::Duration {
+    // jittered() ranges from 75% to 125%; cap the base at 96s so the
+    // deadline never exceeds 120s. Attempts do not change durable state.
+    jittered(std::time::Duration::from_secs(
+        5u64.saturating_mul(1 << failures.saturating_sub(1).min(5))
+            .min(96),
+    ))
+}
+
 fn local_route_unavailable(result: &Result<(), String>) -> bool {
     result
         .as_ref()
@@ -191,8 +211,13 @@ fn local_route_unavailable(result: &Result<(), String>) -> bool {
 #[derive(Default)]
 pub(crate) struct DirectMaintenance {
     active: HashMap<[u8; 32], bool>,
+    retry_backoffs: HashMap<[u8; 32], RetryBackoff>,
+    #[cfg(feature = "experimental-gc2")]
+    inbox_ready: bool,
     #[cfg(feature = "experimental-gc2")]
     ready_revision: u64,
+    #[cfg(feature = "experimental-gc2")]
+    pending_without_route: HashSet<[u8; 32]>,
     #[cfg(feature = "experimental-gc2")]
     repair_due: HashMap<[u8; 32], std::time::Instant>,
     #[cfg(feature = "experimental-gc2")]
@@ -205,6 +230,101 @@ pub(crate) struct DirectMaintenance {
 }
 
 impl DirectMaintenance {
+    #[cfg(feature = "experimental-gc2")]
+    fn observe_ready_routes(
+        &mut self,
+        pending: &mut HashMap<[u8; 16], PendingDirect>,
+        now: std::time::Instant,
+        revision: u64,
+        can_route: impl Fn(&RelayTarget) -> bool,
+    ) {
+        let mut woke = HashSet::new();
+        if revision != self.ready_revision {
+            self.ready_revision = revision;
+            for (key, retry) in &self.retry_backoffs {
+                if retry.unavailable && retry.target.as_ref().is_some_and(&can_route) {
+                    woke.insert(*key);
+                }
+            }
+        }
+        let mut live = HashSet::new();
+        for pending in pending.values_mut() {
+            if pending.delivery.cells.is_empty() || pending.expires <= now {
+                continue;
+            }
+            let key = direct_attempt_key(&pending.delivery);
+            live.insert(key);
+            let ready = pending
+                .delivery
+                .peer
+                .aliases
+                .iter()
+                .any(|alias| can_route(&alias.target));
+            if !ready {
+                // The initial send runs outside this receipt owner. Remember
+                // its missing route even when there is no failed receipt here.
+                self.pending_without_route.insert(key);
+            } else if self.pending_without_route.remove(&key) {
+                woke.insert(key);
+            }
+            if woke.contains(&key) {
+                pending.next_attempt = pending.next_attempt.min(now);
+            }
+        }
+        // Bound this process-local observation by the existing pending outbox.
+        self.pending_without_route.retain(|key| live.contains(key));
+        for key in woke {
+            if let Some(retry) = self.retry_backoffs.get_mut(&key) {
+                if retry.unavailable {
+                    retry.unavailable = false;
+                    retry.due = now;
+                    self.repair_due.remove(&key);
+                }
+            }
+        }
+    }
+
+    fn failed_attempt(&mut self, attempt: &DirectAttempt) -> std::time::Instant {
+        let now = std::time::Instant::now();
+        self.retry_backoffs.retain(|_, retry| {
+            now.saturating_duration_since(retry.due) < std::time::Duration::from_secs(600)
+        });
+        if self.retry_backoffs.len() >= MAX_RETRY_BACKOFFS
+            && !self.retry_backoffs.contains_key(&attempt.key)
+        {
+            if let Some(oldest) = self
+                .retry_backoffs
+                .iter()
+                .min_by_key(|(_, retry)| retry.due)
+                .map(|(key, _)| *key)
+            {
+                self.retry_backoffs.remove(&oldest);
+            }
+        }
+        let retry = self
+            .retry_backoffs
+            .entry(attempt.key)
+            .or_insert(RetryBackoff {
+                failures: 0,
+                due: now,
+                #[cfg(feature = "experimental-gc2")]
+                unavailable: false,
+                #[cfg(feature = "experimental-gc2")]
+                target: None,
+            });
+        retry.failures = retry.failures.saturating_add(1);
+        retry.due = now + retry_backoff_delay(retry.failures);
+        #[cfg(feature = "experimental-gc2")]
+        {
+            retry.unavailable = attempt.route_unavailable;
+            retry.target = attempt
+                .destination
+                .as_ref()
+                .map(|alias| alias.target.clone());
+        }
+        retry.due
+    }
+
     pub(crate) fn is_empty(&self) -> bool {
         self.active.is_empty()
     }
@@ -266,22 +386,21 @@ impl DirectMaintenance {
             return;
         }
         #[cfg(feature = "experimental-gc2")]
-        if let Some(connector) = &st.gc2_carrier {
-            let revision = connector.readiness_revision();
-            if revision != self.ready_revision {
-                self.ready_revision = revision;
-                if connector.ready_entries() > 0 {
-                    // A fixed entry became usable. Retry already durable work
-                    // through it on this tick, still within the bounded owner
-                    // budget. Never wake an entry or dial a direct fallback.
-                    for pending in st.pending_1to1.values_mut() {
-                        pending.next_attempt = pending.next_attempt.min(now);
-                    }
-                }
-            }
+        if let Some(connector) = st.gc2_carrier.clone() {
+            self.observe_ready_routes(
+                &mut st.pending_1to1,
+                now,
+                connector.readiness_revision(),
+                |target| connector.can_route((target.address, target.relay_service_id)),
+            );
         }
         #[cfg(feature = "experimental-gc2")]
         {
+            let inbox_ready = super::routing::inbox_receiving(&st);
+            if inbox_ready && !self.inbox_ready {
+                self.recovery_due.clear();
+            }
+            self.inbox_ready = inbox_ready;
             self.recovery_due
                 .retain(|peer, deadline| st.sessions.contains_key(peer) && *deadline > now);
             let peer = st.sessions.iter().find_map(|(peer, session)| {
@@ -294,8 +413,8 @@ impl DirectMaintenance {
                     .pending_1to1
                     .values()
                     .any(|p| p.delivery.peer.identity_pk == *peer && p.expires > now);
-                ((session.window().recovery_required(now_unix())
-                    || (expired_setup && live_pending))
+                (live_pending
+                    && (session.window().recovery_required(now_unix()) || expired_setup)
                     && !self.recovery_due.contains_key(peer))
                 .then(|| peer.clone())
             });
@@ -328,7 +447,11 @@ impl DirectMaintenance {
         if let Err(error) = cleanup_expired_unconfirmed(&mut st, now) {
             metrics::log_event("session_cleanup_persist_error", &[("e", error)]);
         }
+        let pending_before = st.pending_1to1.len();
         st.pending_1to1.retain(|_, pending| pending.expires > now);
+        if st.pending_1to1.len() != pending_before {
+            st.durability.changed();
+        }
         #[cfg(feature = "experimental-gc2")]
         st.release_removed_direct_payload();
         expire_direct_presence(&mut st, now, events);
@@ -341,7 +464,12 @@ impl DirectMaintenance {
             .iter()
             .filter(|ack| {
                 let key = direct_attempt_key(ack);
-                !self.active.contains_key(&key) && selected.insert(key)
+                !self.active.contains_key(&key)
+                    && self
+                        .retry_backoffs
+                        .get(&key)
+                        .is_none_or(|retry| retry.due <= now)
+                    && selected.insert(key)
             })
             .take(MAX_DIRECT_ACK_ATTEMPTS - ack_count)
             .cloned()
@@ -383,7 +511,13 @@ impl DirectMaintenance {
                         cells: vec![peer_session::cell(packet.to_vec(), 0)],
                     };
                     let key = direct_attempt_key(&delivery);
-                    if !self.active.contains_key(&key) && !self.repair_due.contains_key(&key) {
+                    if !self.active.contains_key(&key)
+                        && !self.repair_due.contains_key(&key)
+                        && self
+                            .retry_backoffs
+                            .get(&key)
+                            .is_none_or(|retry| retry.due <= now)
+                    {
                         repairs.push((key, delivery, purpose.traffic()));
                     }
                 }
@@ -402,7 +536,12 @@ impl DirectMaintenance {
             .pending_1to1
             .iter()
             .filter(|(_, pending)| {
-                pending.next_attempt <= now && !pending.delivery.cells.is_empty()
+                pending.next_attempt <= now
+                    && !pending.delivery.cells.is_empty()
+                    && self
+                        .retry_backoffs
+                        .get(&direct_attempt_key(&pending.delivery))
+                        .is_none_or(|retry| retry.due <= now)
             })
             .map(|(id, pending)| (pending.next_attempt, pending.sequence, *id))
             .collect();
@@ -445,14 +584,19 @@ impl DirectMaintenance {
         use futures_util::StreamExt;
         if let Some(attempt) = self.completions.next().await {
             self.active.remove(&attempt.key);
+            let retry = if attempt.accepted {
+                self.retry_backoffs.remove(&attempt.key);
+                None
+            } else {
+                Some(self.failed_attempt(&attempt))
+            };
             if !attempt.ack {
                 if attempt.route_unavailable {
                     // No circuit was selected, so no request was dispatched.
                     // A ready-set change may have arrived while this attempt
                     // still owned the key. Do not leave its exact ciphertext
                     // on the longer schedule used to await recipient ACKs.
-                    let retry =
-                        std::time::Instant::now() + jittered(std::time::Duration::from_secs(5));
+                    let retry = retry.expect("unavailable route is a failed attempt");
                     let mut st = state.lock().unwrap_or_else(|p| p.into_inner());
                     for pending in st.pending_1to1.values_mut() {
                         if direct_attempt_key(&pending.delivery) == attempt.key {
@@ -480,6 +624,8 @@ impl DirectMaintenance {
                     // Retry on a later tick, behind other waiting ACKs. Keep the
                     // retained contact, which may have renewed during this wait.
                     st.direct_ack_outbox.push_back(retained);
+                } else {
+                    st.durability.changed();
                 }
             }
             #[cfg(feature = "experimental-gc2")]
@@ -821,6 +967,7 @@ pub(crate) fn accept_reliable_direct(
     while st.processed_direct_order.len() > 8192 {
         if let Some(oldest) = st.processed_direct_order.pop_front() {
             st.processed_direct.remove(&oldest);
+            st.durability.changed();
         }
     }
     // The ACK leaves on the next jittered direct tick from the outbox, never
@@ -851,14 +998,7 @@ pub(crate) fn process_frame(
     let received = session.prepare_receive(&frame, &wrapping_key, &context);
     match received {
         Ok(received) if received.duplicate() => {
-            if persist_received_direct_transaction(
-                st,
-                &sender_pk,
-                received.sealed_state(),
-                received.credit(),
-            )
-            .is_ok()
-            {
+            if persist_duplicate_direct_transaction(st, &sender_pk, &received).is_ok() {
                 let _ = st
                     .sessions
                     .get_mut(&sender_pk)
@@ -1318,8 +1458,14 @@ pub(crate) fn process_frame(
         },
         Err(peer_session::Error::Crypto(gcoms_crypto::CryptoError::Replay)) => {
             if let Some(processed) = st.processed_direct.get(&frame_key) {
-                if processed.frame_hash == frame_hash && st.direct_ack_outbox.len() < 1024 {
+                if processed.frame_hash == frame_hash
+                    && st.direct_ack_outbox.len() < 1024
+                    && !st.direct_ack_outbox.iter().any(|ack| {
+                        direct_attempt_key(ack) == direct_attempt_key(&processed.delivery)
+                    })
+                {
                     st.direct_ack_outbox.push_back(processed.delivery.clone());
+                    st.durability.changed();
                 }
             }
         }
@@ -1549,6 +1695,7 @@ pub(crate) fn install_forward_grant(st: &mut NodeState, mut grant: crate::alias:
     if let Some(mut old) = st.forward_grants.insert(service_id, grant.clone()) {
         old.zeroize();
     }
+    st.durability.changed();
     if st.active_intermediaries.len() < LANE_SET && !st.active_intermediaries.contains(&service_id)
     {
         open_intermediary_lane(st, &grant);
@@ -1606,7 +1753,11 @@ fn open_intermediary_lane(st: &NodeState, grant: &crate::alias::ForwardGrant) {
 /// than tracking message arrivals.
 pub(crate) fn rotate_active_intermediaries(st: &mut NodeState) {
     let now = now_unix();
+    let grants_before = st.forward_grants.len();
     st.forward_grants.retain(|_, grant| grant.expires_at > now);
+    if st.forward_grants.len() != grants_before {
+        st.durability.changed();
+    }
     st.active_intermediaries
         .retain(|service_id| st.forward_grants.contains_key(service_id));
     // Fill empty slots first.
@@ -2017,6 +2168,8 @@ pub(crate) struct PreparedDirect {
     /// legacy relay path for this delivery.
     #[cfg(feature = "experimental-gc2")]
     natural: Option<std::sync::Arc<gcoms_transport::Tp1Client>>,
+    #[cfg(feature = "experimental-gc2")]
+    state: std::sync::Weak<Mutex<NodeState>>,
 }
 
 pub(crate) fn prepare_direct_record<F>(
@@ -2084,6 +2237,23 @@ where
         // An explicit caller class overrides the record-derived reservation for
         // this preparation; deferred copies re-derive from the record.
         let traffic = class.unwrap_or_else(|| direct_traffic_class(&direct));
+        #[cfg(feature = "experimental-gc2")]
+        if crate::proto::is_volatile_application(&direct) {
+            // Volatile sends cannot wait in the durable deferred queue. Fresh
+            // demand must restart an expired session before asking the caller
+            // to retry after confirmation; idle maintenance stays write-free.
+            let expired_setup = matches!(
+                st.session_states.get(&peer.identity_pk),
+                Some(DirectSessionState::InitiatedUnconfirmed { expires })
+                    if *expires <= std::time::Instant::now()
+            );
+            if st.sessions.get(&peer.identity_pk).is_some_and(|session| {
+                matches!(session, PeerSession::Credited(session)
+                    if session.window().recovery_required(now_unix()) || expired_setup)
+            }) {
+                super::gc2_direct::recover_peer(&mut st, &peer.identity_pk)?;
+            }
+        }
         if crate::proto::is_volatile_application(&direct)
             && (!st.sessions.contains_key(&peer.identity_pk)
                 || !matches!(
@@ -2230,6 +2400,8 @@ where
                 traffic,
                 #[cfg(feature = "experimental-gc2")]
                 natural: natural_client_for(&mut st, traffic),
+                #[cfg(feature = "experimental-gc2")]
+                state: Arc::downgrade(state),
             });
         }
 
@@ -2343,9 +2515,32 @@ where
             traffic: direct_transport_class(&st, &peer.identity_pk, traffic),
             #[cfg(feature = "experimental-gc2")]
             natural: natural_client_for(&mut st, traffic),
+            #[cfg(feature = "experimental-gc2")]
+            state: Arc::downgrade(state),
         }
     };
     Ok(prepared)
+}
+
+#[cfg(feature = "experimental-gc2")]
+fn retry_initial_unavailable_route(
+    state: &mut NodeState,
+    message_id: &[u8; 16],
+    delivery: &DirectDelivery,
+    result: &Result<(), String>,
+) {
+    if !local_route_unavailable(result) {
+        return;
+    }
+    if let Some(pending) = state.pending_1to1.get_mut(message_id) {
+        if direct_attempt_key(&pending.delivery) == direct_attempt_key(delivery) {
+            // Readiness may have returned before maintenance observed the
+            // outage. A confirmed unsent initial attempt still retries promptly.
+            pending.next_attempt = pending
+                .next_attempt
+                .min(std::time::Instant::now() + retry_backoff_delay(1));
+        }
+    }
 }
 
 pub(crate) async fn complete_direct_record(
@@ -2354,6 +2549,8 @@ pub(crate) async fn complete_direct_record(
 ) -> Result<[u8; 16], String> {
     #[cfg(feature = "experimental-gc2")]
     let natural = prepared.natural.clone();
+    #[cfg(feature = "experimental-gc2")]
+    let state = prepared.state.clone();
     #[cfg(not(feature = "experimental-gc2"))]
     let natural: Option<std::sync::Arc<gcoms_transport::Tp1Client>> = None;
     let PreparedDirect {
@@ -2376,9 +2573,16 @@ pub(crate) async fn complete_direct_record(
     }
     #[cfg(feature = "experimental-gc2")]
     if let Some(client) = &natural {
-        if let Err(error) =
-            super::gc2_carrier::deliver_all(client, scheduler, &delivery, traffic).await
-        {
+        let result = super::gc2_carrier::deliver_all(client, scheduler, &delivery, traffic).await;
+        if let Some(state) = state.upgrade().filter(|_| local_route_unavailable(&result)) {
+            retry_initial_unavailable_route(
+                &mut state.lock().unwrap_or_else(|p| p.into_inner()),
+                &message_id,
+                &delivery,
+                &result,
+            );
+        }
+        if let Err(error) = result {
             metrics::log_event("natural_delivery_deferred", &[("e", error)]);
         }
         return Ok(message_id);
@@ -2437,7 +2641,7 @@ fn control_volatile_application(body: &[u8]) -> bool {
 pub(super) fn materialize_deferred(st: &mut NodeState) -> Result<(), String> {
     if st.info.primary().is_none()
         || st.client_relay.aliases.is_empty()
-        || super::routing::recovering(st)
+        || !super::routing::inbox_receiving(st)
     {
         return Ok(());
     }

@@ -97,6 +97,9 @@ async fn start_relays_after(delay: Duration) -> Relays {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn cold_entry_readiness_retries_without_the_minute_timer() {
+    let metrics = tempfile::tempdir().unwrap();
+    let metrics_path = metrics.path().join("cold-entry.jsonl");
+    gcoms_node::metrics::init(&metrics_path).unwrap();
     let relays = start_relays_after(Duration::from_secs(3)).await;
     let introductions = seeds(&relays);
     let profile = gcoms_routing::gc2::CandidateProfile::new(4096, 250)
@@ -123,7 +126,7 @@ async fn cold_entry_readiness_retries_without_the_minute_timer() {
         .send_durable_1to1_tracked(&info, b"queued before entry readiness", None)
         .await
         .unwrap();
-    tokio::time::timeout(Duration::from_secs(25), async {
+    let result = tokio::time::timeout(Duration::from_secs(25), async {
         let delivered = receive(&b, 1).await;
         assert_eq!(delivered[0].message_id, id);
         assert_eq!(delivered[0].body, b"queued before entry readiness");
@@ -134,8 +137,23 @@ async fn cold_entry_readiness_retries_without_the_minute_timer() {
             }
         }
     })
-    .await
-    .expect("entry readiness must retry before the 60-second timer");
+    .await;
+    if result.is_err() {
+        eprintln!("sender diagnostics: {:?}", a.diagnostics());
+        eprintln!("receiver diagnostics: {:?}", b.diagnostics());
+        for line in std::fs::read_to_string(metrics_path)
+            .unwrap()
+            .lines()
+            .filter(|line| {
+                !line.contains("\"event\":\"frwd_cover\"")
+                    && !line.contains("\"event\":\"natural_sub_error\"")
+            })
+            .take(64)
+        {
+            eprintln!("{line}");
+        }
+    }
+    result.expect("entry readiness must retry before the 60-second timer");
     a.shutdown().await;
     b.shutdown().await;
 }

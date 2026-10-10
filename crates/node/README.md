@@ -18,6 +18,25 @@ publication retries back off from 30 seconds to five minutes per invitation,
 checked on the maintenance tick, while explicit sharing can retry immediately.
 This bounds retry work without deleting invitations or weakening delivery state.
 
+Background persistence uses process-local logical revisions. Mutations outside a
+synchronous transaction mark the node dirty; successful transaction checkpoints
+cover the complete state under the node mutex. Retry clocks, derived readiness
+and unchanged routing views do not dirty it. The archive format, crypto barriers,
+original expiry limits and fail-closed handling of uncertain writes are unchanged.
+Authenticated duplicate GC/2 receipts reuse an existing durable outbox entry only
+when no ratchet or canonical private flow state changed.
+
+Direct retry failures back off with jitter from five seconds to at most 120 seconds,
+with a bounded process-local cache. A newly usable exact route can wake an attempt
+once. Retries keep the same ciphertext and expiry. Expired owned inboxes enter
+ordinary authority recovery; missing carrier entries retain valid queue authority.
+Peer-session replacement requires fresh work and a receiving local inbox. Idle
+expired sessions stay quiet; a fresh volatile send can initiate recovery without
+retaining its body while confirmation is pending. Initial sends queued without a
+route also wake once when their own route becomes usable, even if no maintenance
+receipt exists. Unrelated ready-entry changes do not repeatedly wake them.
+The existing control/ACK path remains available during recovery.
+
 Part of **GComs**, a developer-preview encrypted communication platform.
 This crate is licensed under MIT OR Apache-2.0. GC/1 wire identifiers retain their
 historical names. See the repository README, SPEC.md and SECURITY.md for the

@@ -1174,10 +1174,14 @@ pub(crate) fn spawn_command_loop(ctx: CommandLoopContext) -> tokio::task::JoinHa
                     };
                     let _ = done.send(result);
                 }
-                Cmd::PersistState { done } => {
+                Cmd::PersistState { force, done } => {
                     let result = {
                         let st = state.lock().unwrap_or_else(|p| p.into_inner());
-                        persist_current_direct_state(&st)
+                        if force {
+                            persist_current_direct_state(&st)
+                        } else {
+                            flush_changed_state(&st)
+                        }
                     };
                     let _ = done.send(result);
                 }

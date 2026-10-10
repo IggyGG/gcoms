@@ -1,0 +1,1043 @@
+{
+  "schema": 1,
+  "kind": "offline_runtime_recovery",
+  "source_commit": "c41f8b516d03623ab5b8230812e6a666c934984b",
+  "gchat_commit": "452eae65c2974d0b53c215bd8bbb1c97611e346d",
+  "commits": [
+    "6066ba8712a6e0558e23e6cc7d28c6e7dfe7fb44",
+    "8020d70cc05589fae8339409f472b194efd0f735",
+    "c41f8b516d03623ab5b8230812e6a666c934984b"
+  ],
+  "scope": "Linux source/runtime and disconnected fixtures. Android task owns combined deployment. Full isolated relay qualification remains blocked.",
+  "implementation_complete": true,
+  "source_checks_passed": true,
+  "native_recovery_checks_passed": true,
+  "passed": false,
+  "relay_qualification_passed": false,
+  "release_qualified": false,
+  "deployable": false,
+  "deployed_by_this_task": false,
+  "causal_failures": [
+    {
+      "baseline": "dee5005",
+      "finding": "20 unchanged periodic requests caused 20 additional encrypted profile writes",
+      "log_sha256": "3fe57bedffb6cbad08302b5b3fe627e9d7c32caf9bc65936300547dfb2250b6d"
+    },
+    {
+      "baseline": "6066ba8",
+      "finding": "Fresh volatile work could not recover an expired idle session; generation stayed 1",
+      "log_sha256": "e3252883477b20bc9c431dca82bbcaaa2044d4736b0133368b0407fdb8fff546"
+    },
+    {
+      "baseline": "8020d70",
+      "finding": "Initial no-route send missed its readiness wake; independent data retries arrived before setup while the original ordered delivery remained on its minute timer",
+      "log_sha256": "73906a6652c0b3684657b5707e3d88bcdbee5ee4a648b319a5192125a4cb95b9"
+    }
+  ],
+  "regressions": {
+    "large_profile_bytes": 16777216,
+    "unchanged_rounds": 100,
+    "additional_writes": 0,
+    "retained_duplicate_trials": 32,
+    "retry_max_seconds": 120,
+    "cold_start_repetitions": 5,
+    "cold_start_delivery_limit_seconds": 25,
+    "final_focused": [
+      {
+        "name": "readiness-maintenance",
+        "command": [
+          "cargo",
+          "test",
+          "-p",
+          "gcoms-node",
+          "--all-features",
+          "--locked",
+          "--lib",
+          "direct::maintenance_tests",
+          "--",
+          "--test-threads=1"
+        ],
+        "exit_code": 0,
+        "seconds": 326.13
+      },
+      {
+        "name": "cold-entry-fixed-1",
+        "command": [
+          "cargo",
+          "test",
+          "-p",
+          "gcoms-node",
+          "--all-features",
+          "--locked",
+          "--test",
+          "gc2_protected_route",
+          "cold_entry_readiness_retries_without_the_minute_timer",
+          "--",
+          "--exact",
+          "--nocapture",
+          "--test-threads=1"
+        ],
+        "exit_code": 0,
+        "seconds": 103.3
+      },
+      {
+        "name": "cold-entry-fixed-2",
+        "command": [
+          "cargo",
+          "test",
+          "-p",
+          "gcoms-node",
+          "--all-features",
+          "--locked",
+          "--test",
+          "gc2_protected_route",
+          "cold_entry_readiness_retries_without_the_minute_timer",
+          "--",
+          "--exact",
+          "--nocapture",
+          "--test-threads=1"
+        ],
+        "exit_code": 0,
+        "seconds": 24.95
+      },
+      {
+        "name": "cold-entry-fixed-3",
+        "command": [
+          "cargo",
+          "test",
+          "-p",
+          "gcoms-node",
+          "--all-features",
+          "--locked",
+          "--test",
+          "gc2_protected_route",
+          "cold_entry_readiness_retries_without_the_minute_timer",
+          "--",
+          "--exact",
+          "--nocapture",
+          "--test-threads=1"
+        ],
+        "exit_code": 0,
+        "seconds": 19.3
+      },
+      {
+        "name": "cold-entry-fixed-4",
+        "command": [
+          "cargo",
+          "test",
+          "-p",
+          "gcoms-node",
+          "--all-features",
+          "--locked",
+          "--test",
+          "gc2_protected_route",
+          "cold_entry_readiness_retries_without_the_minute_timer",
+          "--",
+          "--exact",
+          "--nocapture",
+          "--test-threads=1"
+        ],
+        "exit_code": 0,
+        "seconds": 17.5
+      },
+      {
+        "name": "cold-entry-fixed-5",
+        "command": [
+          "cargo",
+          "test",
+          "-p",
+          "gcoms-node",
+          "--all-features",
+          "--locked",
+          "--test",
+          "gc2_protected_route",
+          "cold_entry_readiness_retries_without_the_minute_timer",
+          "--",
+          "--exact",
+          "--nocapture",
+          "--test-threads=1"
+        ],
+        "exit_code": 0,
+        "seconds": 16.5
+      }
+    ]
+  },
+  "source_gates": [
+    {
+      "name": "node-tests",
+      "command": [
+        "cargo",
+        "test",
+        "-p",
+        "gcoms-node",
+        "--all-features",
+        "--locked",
+        "--no-fail-fast",
+        "--",
+        "--test-threads=1"
+      ],
+      "exit_code": 0,
+      "seconds": 2791.39
+    },
+    {
+      "name": "runtime-persistence-tests",
+      "command": [
+        "cargo",
+        "test",
+        "-p",
+        "gcoms-runtime",
+        "--all-features",
+        "--locked",
+        "runtime::persistence_tests",
+        "--",
+        "--test-threads=1"
+      ],
+      "exit_code": 0,
+      "seconds": 256.02
+    },
+    {
+      "name": "clippy",
+      "command": [
+        "cargo",
+        "clippy",
+        "-p",
+        "gcoms-node",
+        "-p",
+        "gcoms-runtime",
+        "--all-features",
+        "--all-targets",
+        "--locked",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "exit_code": 0,
+      "seconds": 108.97
+    },
+    {
+      "name": "minimal-check",
+      "command": [
+        "cargo",
+        "check",
+        "-p",
+        "gcoms-node",
+        "--no-default-features",
+        "--features",
+        "client-persist",
+        "--locked"
+      ],
+      "exit_code": 0,
+      "seconds": 25.43
+    },
+    {
+      "name": "no-persist-check",
+      "command": [
+        "cargo",
+        "check",
+        "-p",
+        "gcoms-node",
+        "--no-default-features",
+        "--locked"
+      ],
+      "exit_code": 0,
+      "seconds": 9.54
+    },
+    {
+      "name": "source-audit",
+      "command": [
+        "python3",
+        "scripts/check-source.py"
+      ],
+      "exit_code": 0,
+      "seconds": 0.33
+    },
+    {
+      "name": "fmt",
+      "command": [
+        "cargo",
+        "fmt",
+        "--all",
+        "--",
+        "--check"
+      ],
+      "exit_code": 0,
+      "seconds": 2.62
+    },
+    {
+      "name": "diff-check",
+      "command": [
+        "git",
+        "diff",
+        "--check"
+      ],
+      "exit_code": 0,
+      "seconds": 0.01
+    }
+  ],
+  "node_test_results": [
+    {
+      "passed": 434,
+      "failed": 0,
+      "ignored": 2,
+      "seconds": 1414.54
+    },
+    {
+      "passed": 16,
+      "failed": 0,
+      "ignored": 0,
+      "seconds": 0.5
+    },
+    {
+      "passed": 1,
+      "failed": 0,
+      "ignored": 0,
+      "seconds": 0.18
+    },
+    {
+      "passed": 1,
+      "failed": 0,
+      "ignored": 0,
+      "seconds": 74.11
+    },
+    {
+      "passed": 4,
+      "failed": 0,
+      "ignored": 0,
+      "seconds": 33.71
+    },
+    {
+      "passed": 10,
+      "failed": 0,
+      "ignored": 0,
+      "seconds": 69.02
+    },
+    {
+      "passed": 10,
+      "failed": 0,
+      "ignored": 0,
+      "seconds": 0.01
+    },
+    {
+      "passed": 4,
+      "failed": 0,
+      "ignored": 0,
+      "seconds": 35.9
+    },
+    {
+      "passed": 11,
+      "failed": 0,
+      "ignored": 0,
+      "seconds": 32.81
+    },
+    {
+      "passed": 4,
+      "failed": 0,
+      "ignored": 0,
+      "seconds": 37.58
+    },
+    {
+      "passed": 1,
+      "failed": 0,
+      "ignored": 0,
+      "seconds": 17.98
+    },
+    {
+      "passed": 6,
+      "failed": 0,
+      "ignored": 0,
+      "seconds": 19.51
+    },
+    {
+      "passed": 1,
+      "failed": 0,
+      "ignored": 0,
+      "seconds": 8.81
+    },
+    {
+      "passed": 2,
+      "failed": 0,
+      "ignored": 0,
+      "seconds": 30.67
+    },
+    {
+      "passed": 4,
+      "failed": 0,
+      "ignored": 0,
+      "seconds": 16.05
+    },
+    {
+      "passed": 1,
+      "failed": 0,
+      "ignored": 0,
+      "seconds": 4.29
+    },
+    {
+      "passed": 1,
+      "failed": 0,
+      "ignored": 0,
+      "seconds": 2.31
+    },
+    {
+      "passed": 2,
+      "failed": 0,
+      "ignored": 0,
+      "seconds": 29.35
+    },
+    {
+      "passed": 1,
+      "failed": 0,
+      "ignored": 0,
+      "seconds": 0.94
+    },
+    {
+      "passed": 2,
+      "failed": 0,
+      "ignored": 0,
+      "seconds": 4.0
+    },
+    {
+      "passed": 9,
+      "failed": 0,
+      "ignored": 0,
+      "seconds": 11.99
+    },
+    {
+      "passed": 2,
+      "failed": 0,
+      "ignored": 0,
+      "seconds": 16.76
+    },
+    {
+      "passed": 1,
+      "failed": 0,
+      "ignored": 0,
+      "seconds": 526.92
+    },
+    {
+      "passed": 7,
+      "failed": 0,
+      "ignored": 0,
+      "seconds": 1.47
+    },
+    {
+      "passed": 1,
+      "failed": 0,
+      "ignored": 0,
+      "seconds": 0.33
+    },
+    {
+      "passed": 1,
+      "failed": 0,
+      "ignored": 0,
+      "seconds": 0.46
+    },
+    {
+      "passed": 0,
+      "failed": 0,
+      "ignored": 0,
+      "seconds": 0.0
+    }
+  ],
+  "runtime_persistence_test_results": [
+    {
+      "passed": 9,
+      "failed": 0,
+      "ignored": 0,
+      "seconds": 162.12
+    }
+  ],
+  "node_explicit_exclusions": [
+    "test connectivity::privilege_tests::real_denied_low_port_falls_back_without_privileges ... ignored, run in an isolated namespace with ip_unprivileged_port_start=1024 and no NET_BIND_SERVICE",
+    "test node::routing::gc2_inbox_tests::deployed_relay_probe ... ignored, explicit live relay provisioning; requires separately authorized GC2_PROBE_BUNDLE"
+  ],
+  "earlier_full_runtime": {
+    "source": "6066ba8",
+    "results": [
+      {
+        "passed": 68,
+        "failed": 0,
+        "ignored": 3,
+        "seconds": 600.63
+      },
+      {
+        "passed": 0,
+        "failed": 0,
+        "ignored": 0,
+        "seconds": 0.0
+      }
+    ],
+    "log_sha256": "b44dde295f2c64e3af299539d50dd1874f757bc50239b48eafb340de0ace6e09"
+  },
+  "artifacts": {
+    "gcnode": {
+      "sha256": "e269f714db1d7a8f30aea20b096f9d17cfec95e26a1d320acd8fe46c6b65687c",
+      "size": 20214840
+    },
+    "gchat": {
+      "sha256": "f73300a52a03d3fc5c51c89716bfe9cb2147bc0fa5f01ebab3c03ac5d4657651",
+      "size": 42174904
+    },
+    "fleet_probe": {
+      "sha256": "8b4749b34abc1164a822b8c7b8a76cb470e73ac4a5c72702f1476cb5b44f6f37",
+      "size": 3375856
+    },
+    "turnover_daemon": {
+      "sha256": "0a99b2b71bf73a25a6a45ecee80a9a44d8aa26d14c9f4eb612a549a96c970219",
+      "size": 37802008
+    }
+  },
+  "native": {
+    "file-recovery": {
+      "passed": true,
+      "observations": {
+        "file": {
+          "id": "04c56f36d9e34520a681c3a2625b75ee",
+          "name": "interrupted.bin",
+          "sha256": "5fd49d9815da08c94fc81c7bceab2f16797d78f7c940039b7d6920808381fd2c",
+          "size": 16777216
+        },
+        "before_verified_bytes": "1835008",
+        "after_verified_bytes": "4194304",
+        "abrupt_stop": true,
+        "hash_verified_after_reopen": true
+      },
+      "report_sha256": "f2470d3016024e893001ac04907cbcff2e38fb151eeec681b996fccf0bd41369"
+    },
+    "archive-failure": {
+      "passed": true,
+      "observations": {
+        "message_id": "bd349cb28cfda2065df42897cac65855",
+        "sender_delivered_during_failure": true,
+        "visible_before_archive_commit": false,
+        "recovered_after_abrupt_stop": true,
+        "storage_notice": true,
+        "same_identity": true,
+        "original_archive_sha256": "d73403961ebf305ebc6c96a2e7f4c337c7a789c2a855124ffddda964adbc0bac"
+      },
+      "report_sha256": "e6747247e18183359bebbf66f82e88aedac274332d3ebe386c6672f220b4fd88"
+    },
+    "entry-loss": {
+      "passed": true,
+      "observations": {
+        "recovery_seconds": 0.7520519899844658,
+        "r03_10s_passed": true,
+        "same_identity": true,
+        "file": {
+          "id": "917b06594f7341e39fcc48f11822551c",
+          "name": "entry-loss.bin",
+          "sha256": "f87b3cb60556cdf9bbf82410fca04be2270bfa750e2d1a9cc2a2b60535c5a77c",
+          "size": 67108864
+        },
+        "replacements": {
+          "ended": [
+            {
+              "id": 2,
+              "role": "client",
+              "phase": "transport_ended",
+              "unix_ms": 1791657406549,
+              "elapsed_ms": 46371,
+              "authority_expires_at": 1791658800,
+              "deadline_after_start_ms": 1439822,
+              "max_lifetime_ms": 1800000
+            },
+            {
+              "id": 1,
+              "role": "client",
+              "phase": "transport_ended",
+              "unix_ms": 1791657406554,
+              "elapsed_ms": 46376,
+              "authority_expires_at": 1791658800,
+              "deadline_after_start_ms": 1439822,
+              "max_lifetime_ms": 1800000
+            }
+          ],
+          "ready": [
+            {
+              "id": 3,
+              "role": "client",
+              "phase": "class_muxes_ready",
+              "unix_ms": 1791657406594,
+              "elapsed_ms": 44,
+              "authority_expires_at": 1791658800,
+              "deadline_after_start_ms": 1393450,
+              "max_lifetime_ms": 1800000
+            },
+            {
+              "id": 4,
+              "role": "client",
+              "phase": "class_muxes_ready",
+              "unix_ms": 1791657406599,
+              "elapsed_ms": 44,
+              "authority_expires_at": 1791658800,
+              "deadline_after_start_ms": 1393445,
+              "max_lifetime_ms": 1800000
+            }
+          ]
+        },
+        "scope": "established fixture TCP reset; not credential or carrier-cap expiry"
+      },
+      "report_sha256": "b0725243bc7c957000e30fac51a2d1609e2128a4c77399979fdc56dfe7c54d90"
+    }
+  },
+  "relay_attempts": [
+    {
+      "passed": false,
+      "preflight_passed": true,
+      "aborted": false,
+      "profiles": "managed loopback ext4 pool",
+      "io_priority": "idle",
+      "cpu_max": "800000 100000",
+      "clients": 64,
+      "configured_seconds": 1800,
+      "load_report_sha256": "1775c9c6262684b699e807e555ebbf233c541e710f2737a2ca41c4aeecebd97a",
+      "worker_report_sha256": "d66666f72505901581138b0d8982068eb816108bc7edc3264f0fc42b0f0e2b90",
+      "children_stopped": true,
+      "residual_namespace_pids": [],
+      "build_tooling_and_host_links_unchanged": true,
+      "observations": {
+        "clients": 64,
+        "seconds": 1800,
+        "channels": 4,
+        "channel_members": [
+          17,
+          17,
+          17,
+          16
+        ],
+        "commands": 720,
+        "attempts": 720,
+        "recipient_p95_seconds": 17.766642178001348,
+        "application_refusals": 0,
+        "application_refusal_fraction": 0.0,
+        "relay_refusals": 0,
+        "relay_refusal_fraction": 0.0,
+        "relay_restart": true,
+        "file": {
+          "id": "59c4b7716b7d4026a7f062cf4499c1ba",
+          "name": "release-payload.bin",
+          "sha256": "3a504f60c577fcd86196f64735823a0765c81b3eb7aaaa4d72645b4f82f10c2b",
+          "size": 5235248
+        },
+        "contribution_transferred_bytes": 894784341
+      },
+      "disposition": "Complete campaign delivered all authenticated commands, verified the file and recovered from relay restart, but failed latency. Retained as a failure."
+    },
+    {
+      "passed": false,
+      "preflight_passed": true,
+      "aborted": true,
+      "profiles": "managed loopback ext4 pool",
+      "io_priority": "best-effort: prio 7",
+      "cpu_max": "800000 100000",
+      "clients": 64,
+      "configured_seconds": 1800,
+      "load_report_sha256": "fa8bbb33900de49c1fc72821f286de8a3be54dfa4570d81621cde066f1a0b270",
+      "worker_report_sha256": "66d50892560a83c693f5431d004b785d2ae1089f5b2d7f017aabd744ae7bb821",
+      "children_stopped": true,
+      "residual_namespace_pids": [],
+      "build_tooling_and_host_links_unchanged": true,
+      "abort": {
+        "progress": {
+          "joined_members": 63,
+          "completed_commands": 172,
+          "relay_restarted": false,
+          "last": [
+            {
+              "event": "operation_response",
+              "elapsed": 1053.0572425300197,
+              "client": 38
+            },
+            {
+              "event": "operation_response",
+              "elapsed": 1053.057601982,
+              "client": 34
+            },
+            {
+              "event": "operation_response",
+              "elapsed": 1053.083947984007,
+              "client": 48
+            },
+            {
+              "event": "operation_response",
+              "elapsed": 1053.2222920990025,
+              "client": 39
+            }
+          ],
+          "campaign_elapsed_seconds": 498.3,
+          "clients": 64,
+          "completed_recipient_p95_seconds": 21.19531940401066,
+          "recipients_over5s": 726,
+          "last24_commands_p95_seconds": 8.121441900992068
+        },
+        "maximum_full_recipient_observations": 11340,
+        "maximum_at_or_above_5_seconds_for_p95_pass": 567
+      },
+      "disposition": "Stopped after the number of late recipients made the unchanged p95 target impossible; not a complete 1800-second run or a pass."
+    },
+    {
+      "passed": false,
+      "preflight_passed": true,
+      "aborted": true,
+      "profiles": "declared direct-SSD ext4 output",
+      "io_priority": "best-effort: prio 7",
+      "cpu_max": "800000 100000",
+      "clients": 64,
+      "configured_seconds": 1800,
+      "load_report_sha256": "8a596c8dfb257edbc78bd9275361e1c6c6ca821f9e65ea1b5e8323c33fcee22c",
+      "worker_report_sha256": "367e7aeca5f81c8188e452c175f89fc7f98ab03f6496cc6de23f3478aff8402c",
+      "children_stopped": true,
+      "residual_namespace_pids": [],
+      "build_tooling_and_host_links_unchanged": true,
+      "abort": {
+        "progress": {
+          "joined_members": 63,
+          "completed_commands": 136,
+          "relay_restarted": false,
+          "last": [
+            {
+              "event": "transport_sample",
+              "elapsed": 851.9017419379961
+            },
+            {
+              "event": "transport_sample",
+              "elapsed": 852.1072104359919
+            },
+            {
+              "event": "transport_sample",
+              "elapsed": 852.3145076880173
+            },
+            {
+              "event": "transport_sample",
+              "elapsed": 852.5207810460124
+            }
+          ],
+          "campaign_elapsed_seconds": 336.5,
+          "clients": 64,
+          "completed_recipient_p95_seconds": 33.81704910899862,
+          "recipients_over5s": 579,
+          "last24_commands_p95_seconds": 6.606703652010765
+        },
+        "maximum_full_recipient_observations": 11340,
+        "maximum_at_or_above_5_seconds_for_p95_pass": 567
+      },
+      "disposition": "Stopped after the number of late recipients made the unchanged p95 target impossible; not a complete 1800-second run or a pass."
+    }
+  ],
+  "storage_probes": {
+    "atomic-storage-probe.json": {
+      "sha256": "8b54ed22502f0b0f6406ff34e7b34c1569dec67e259ae41efd57bc42995e99d5",
+      "disposable_files_removed": true,
+      "cases": [
+        {
+          "location": "direct",
+          "workers": 1,
+          "round": 0,
+          "seconds": 0.027589384000748396,
+          "median_save_seconds": 0.025091131014050916,
+          "p95_save_seconds": 0.025091131014050916,
+          "max_save_seconds": 0.025091131014050916
+        },
+        {
+          "location": "pool",
+          "workers": 1,
+          "round": 0,
+          "seconds": 0.05845982997561805,
+          "median_save_seconds": 0.05757931899279356,
+          "p95_save_seconds": 0.05757931899279356,
+          "max_save_seconds": 0.05757931899279356
+        },
+        {
+          "location": "pool",
+          "workers": 1,
+          "round": 1,
+          "seconds": 0.04590719999396242,
+          "median_save_seconds": 0.0450338950031437,
+          "p95_save_seconds": 0.0450338950031437,
+          "max_save_seconds": 0.0450338950031437
+        },
+        {
+          "location": "direct",
+          "workers": 1,
+          "round": 1,
+          "seconds": 0.030229072988731787,
+          "median_save_seconds": 0.02941260699299164,
+          "p95_save_seconds": 0.02941260699299164,
+          "max_save_seconds": 0.02941260699299164
+        },
+        {
+          "location": "direct",
+          "workers": 8,
+          "round": 0,
+          "seconds": 0.05286578898085281,
+          "median_save_seconds": 0.04854958401119802,
+          "p95_save_seconds": 0.04881949501577765,
+          "max_save_seconds": 0.04881949501577765
+        },
+        {
+          "location": "pool",
+          "workers": 8,
+          "round": 0,
+          "seconds": 0.06454945701989345,
+          "median_save_seconds": 0.061404158506775275,
+          "p95_save_seconds": 0.06193680499563925,
+          "max_save_seconds": 0.06193680499563925
+        },
+        {
+          "location": "pool",
+          "workers": 8,
+          "round": 1,
+          "seconds": 0.06873664900194854,
+          "median_save_seconds": 0.06546062249981333,
+          "p95_save_seconds": 0.0663465239922516,
+          "max_save_seconds": 0.0663465239922516
+        },
+        {
+          "location": "direct",
+          "workers": 8,
+          "round": 1,
+          "seconds": 0.04949772797408514,
+          "median_save_seconds": 0.047130973485764116,
+          "p95_save_seconds": 0.04767271698801778,
+          "max_save_seconds": 0.04767271698801778
+        },
+        {
+          "location": "direct",
+          "workers": 64,
+          "round": 0,
+          "seconds": 0.14972901498549618,
+          "median_save_seconds": 0.11916695650143083,
+          "p95_save_seconds": 0.12409424301586114,
+          "max_save_seconds": 0.12468621099833399
+        },
+        {
+          "location": "pool",
+          "workers": 64,
+          "round": 0,
+          "seconds": 0.17491858699941076,
+          "median_save_seconds": 0.14246143349737395,
+          "p95_save_seconds": 0.14708482098649256,
+          "max_save_seconds": 0.14854901999933645
+        },
+        {
+          "location": "pool",
+          "workers": 64,
+          "round": 1,
+          "seconds": 0.170192755991593,
+          "median_save_seconds": 0.15163748900522478,
+          "p95_save_seconds": 0.15485176202491857,
+          "max_save_seconds": 0.1560412050166633
+        },
+        {
+          "location": "direct",
+          "workers": 64,
+          "round": 1,
+          "seconds": 0.13573328699567355,
+          "median_save_seconds": 0.1189786989998538,
+          "p95_save_seconds": 0.12174368498381227,
+          "max_save_seconds": 0.12199527400662191
+        }
+      ],
+      "disposition": "Synthetic probe did not reproduce minute-scale stalls; does not establish filesystem causality or qualify protocol behavior."
+    },
+    "sustained-storage-probe.json": {
+      "sha256": "ff19114d9920913428f24b1cf9014fa09403df55ea2ae5393908c438ce32db63",
+      "disposable_files_removed": true,
+      "cases": [
+        {
+          "location": "pool",
+          "seconds": 29.552443381020566,
+          "bytes": 972029952,
+          "saves": 816,
+          "median_save_seconds": 0.21176297900092322,
+          "p95_save_seconds": 0.33937145100208,
+          "max_save_seconds": 1.3512115020130295
+        },
+        {
+          "location": "direct",
+          "seconds": 30.8188181000005,
+          "bytes": 959447040,
+          "saves": 814,
+          "median_save_seconds": 0.17449547699652612,
+          "p95_save_seconds": 0.3867333350062836,
+          "max_save_seconds": 2.3134922570025083
+        }
+      ],
+      "disposition": "Synthetic probe did not reproduce minute-scale stalls; does not establish filesystem causality or qualify protocol behavior."
+    }
+  },
+  "direct_ssd_admission_syscalls": {
+    "scope": "Read-only syscall observation of this isolated hub during admission only; detached before full traffic. No payloads traced.",
+    "duration_limit_seconds": 90,
+    "exit_code": 124,
+    "expected_timeout_detached": true,
+    "trace_sha256": "66c57641c2da59c6d886b8def18099d20f41d5ca7c8f0d27e5d76663689a576e",
+    "completed_calls": 881,
+    "slowest_calls": [
+      {
+        "seconds": 6.963793,
+        "operation": "fsync"
+      },
+      {
+        "seconds": 4.942658,
+        "operation": "fsync"
+      },
+      {
+        "seconds": 3.869264,
+        "operation": "fsync"
+      },
+      {
+        "seconds": 3.825667,
+        "operation": "fsync"
+      },
+      {
+        "seconds": 3.583548,
+        "operation": "fsync"
+      },
+      {
+        "seconds": 2.892795,
+        "operation": "fsync"
+      },
+      {
+        "seconds": 2.805639,
+        "operation": "fsync"
+      },
+      {
+        "seconds": 1.652658,
+        "operation": "rename"
+      },
+      {
+        "seconds": 1.467543,
+        "operation": "fsync"
+      },
+      {
+        "seconds": 1.466372,
+        "operation": "fsync"
+      }
+    ]
+  },
+  "storage_observations": {
+    "observed_hub_wait": "fsync -> ext4_sync_file -> jbd2_log_wait_commit",
+    "observed_disk_writer_wait": "dmcrypt_write -> blk_mq_submit_bio -> wbt_wait -> rq_qos_wait",
+    "observed_journal_wait": "jbd2_journal_commit_transaction -> __wait_on_buffer",
+    "root_cause_established": false,
+    "global_storage_or_cpu_configuration_changed": false,
+    "priority_alone_fixed_latency": false,
+    "direct_ssd_alone_fixed_latency": false,
+    "interpretation": "Kernel I/O waits are directly observed. They limit local qualification, but do not prove that all latency comes from the host or establish the underlying storage fault."
+  },
+  "main_freshness": {
+    "checked_utc": "2026-10-10T20:02:48Z",
+    "main": "de8782cc6d13cf6eca840d3681eebd77b14e5213",
+    "task_source": "c41f8b516d03623ab5b8230812e6a666c934984b",
+    "base_with_equivalent_control_reserve": "dee5005",
+    "unchanged_paths": [
+      "crates",
+      "Cargo.toml",
+      "Cargo.lock",
+      ".cargo",
+      "scripts/gchat-turnover.py",
+      "scripts/gchat_fleet.py"
+    ],
+    "runtime_build_inputs_unchanged_from_task_base": true,
+    "new_main_scope": "Android release lane, app/probe and operations; only runtime change is already included control-reserve fix3f0e8eb/dee5005",
+    "plan": "Finish frozen qualification, merge main preserving Android additions, verify runtime input equivalence and final audit before normal publication."
+  },
+  "companion_freshness": {
+    "frozen_build_gchat_commit": "452eae65c2974d0b53c215bd8bbb1c97611e346d",
+    "current_checkout_gchat_commit": "95f13e9cbea14bfc6595e8d84477b9ecd633ce67",
+    "runtime_and_relay_helpers_unchanged": true,
+    "changed_paths": [
+      "PLAN.md",
+      "README.md",
+      "TESTPLAN.md",
+      "docs/AUTOMATIC_RELEASES.md",
+      "docs/evidence/android-ten-minute-20261009/controller-recovery.json",
+      "scripts/release_controller.py",
+      "scripts/release_deployment.py",
+      "scripts/release_inputs.py",
+      "scripts/tests/release_controller_test.py",
+      "scripts/tests/release_inputs_test.py"
+    ]
+  },
+  "retained_original_failures": [
+    "First full node suite failed two ACK-copy expectations changed by6066ba8 and one idle-generation expectation. The updated tests require exact coalescing/requeue and demand-triggered recovery; these were not pre-existing failures.",
+    "The8020d70 full integration run and diagnostic reproduction failed the original cold-entry deadline; final c41f8b5 passes five repetitions.",
+    "Initial added regression had private-field compile errors; corrected to inspect the pending outbox.",
+    "Strict Clippy found an explicit-drop guard scope in the checkpoint test; fixed with lexical scope.",
+    "A300s outer driver allowance expired during cold compilation before tests ran; later runs allowed compilation without changing test deadlines.",
+    "One interim runtime filter selected zero tests and is not counted; final runtime persistence invocation runs9 tests.",
+    "Direct-SSD driver initially failed before fixture startup because the declared parent directory did not yet exist; helper corrected. No application test ran in that invocation."
+  ],
+  "codematch": "unreachable",
+  "remaining_validation": [
+    "Pass the unchanged64-client1800-second relay gate, recipient p95<5s and refusals<1%, including verified file and relay restart, on a source-bound build; strict verifier has not passed.",
+    "Resolve or isolate the observed storage stalls; an existing idle nonproduction Linux runner has been requested. Do not exercise the production hub to obtain this proof."
+  ],
+  "remaining_deployment_owner_work": [
+    "combined Android/hub managed rollout only after required qualification",
+    "full Android worker download,digest verification,in-process load and same-run resume",
+    "installed native acceptance,30-minute live observation and24-hour passive observation"
+  ],
+  "main_integration": {
+    "integration_commit": "cbb62cbc68af756034ba0f53722476ad6a60afc5",
+    "integrated_main": "de8782cc6d13cf6eca840d3681eebd77b14e5213",
+    "unchanged_runtime_inputs": [
+      "crates",
+      "Cargo.toml",
+      "Cargo.lock",
+      ".cargo",
+      "scripts/gchat-turnover.py",
+      "scripts/build-fleet-files.py"
+    ],
+    "runtime_inputs_equal": true,
+    "resolved_documents": [
+      "PLAN.md",
+      "README.md",
+      "TESTPLAN.md"
+    ],
+    "document_resolution": "Retain offline-runtime paragraph and all incoming Android documentation; other main additions preserved.",
+    "upstream_whitespace": "Incoming mobile/android/probe/README.md line41 has trailing whitespace already present on main. Preserved; diff against origin/main passes whitespace check.",
+    "tested_runtime_source": "c41f8b516d03623ab5b8230812e6a666c934984b"
+  },
+  "final_integration_checks": [
+    {
+      "name": "source-audit",
+      "command": [
+        "python3",
+        "scripts/check-source.py"
+      ],
+      "exit_code": 0,
+      "seconds": 0.31
+    },
+    {
+      "name": "diff-check",
+      "command": [
+        "git",
+        "diff",
+        "--check",
+        "origin/main"
+      ],
+      "exit_code": 0,
+      "seconds": 0.03
+    },
+    {
+      "name": "runtime-equivalence",
+      "command": [
+        "git",
+        "diff",
+        "--exit-code",
+        "c41f8b5",
+        "--",
+        "crates",
+        "Cargo.toml",
+        "Cargo.lock",
+        ".cargo",
+        "scripts/gchat-turnover.py",
+        "scripts/build-fleet-files.py"
+      ],
+      "exit_code": 0,
+      "seconds": 0.01
+    }
+  ],
+  "final_integration_source_audit": "1073 source paths checked; no prohibited artifacts/dependencies detected"
+}

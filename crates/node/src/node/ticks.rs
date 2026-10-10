@@ -74,6 +74,7 @@ pub(crate) fn spawn_contact_subscription_pump(
                 if st.owner_transition_failed {
                     break;
                 }
+                super::routing::observe_owner_expiry(&st);
                 if super::routing::recovering(&st) {
                     Vec::new()
                 } else {

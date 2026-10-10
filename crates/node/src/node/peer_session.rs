@@ -146,6 +146,20 @@ enum Receive {
     Credited(Box<flow::PreparedReceive>),
 }
 impl PreparedReceive {
+    /// Authentication already succeeded in prepare_receive. Only an unchanged
+    /// duplicate window with no ratchet transaction may reuse its durable state.
+    /// Compare the canonical private flow, never randomized sealed snapshots.
+    pub(super) fn matches_committed(&self, session: &PeerSession) -> bool {
+        match (&self.inner, session) {
+            #[cfg(feature = "experimental-gc2")]
+            (Receive::Credited(received), PeerSession::Credited(current)) => {
+                received.sealed_ratchet().is_none()
+                    && received.private_flow() == current.window().encode_private()
+            }
+            _ => false,
+        }
+    }
+
     pub fn plaintext(&self) -> &[u8] {
         match &self.inner {
             Receive::Legacy(r) => r.plaintext(),

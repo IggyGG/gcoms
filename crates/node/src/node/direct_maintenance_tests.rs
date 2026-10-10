@@ -4,6 +4,51 @@ use std::time::{Duration, Instant};
 use tokio::net::TcpListener;
 use tokio_rustls::TlsAcceptor;
 
+#[tokio::test]
+async fn failed_ack_retries_back_off_without_changing_ciphertext_or_saving() {
+    let mut node = persist::tests::state();
+    let ack = delivery(&node, 29);
+    let key = direct_attempt_key(&ack);
+    node.direct_ack_outbox.push_back(ack.clone());
+    node.durable_state_sink = Some(Arc::new(|_| Ok(())));
+    persist_current_direct_state(&node).unwrap();
+    let state = Arc::new(Mutex::new(node));
+    let scheduler = state.lock().unwrap().scheduler.clone();
+    let (events, _) = broadcast::channel(4);
+    let mut maintenance = DirectMaintenance::default();
+    for failure in 1..=10 {
+        let destination = ack.peer.primary().cloned();
+        maintenance.active.insert(key, true);
+        maintenance.completions.push(Box::pin(async move {
+            DirectAttempt {
+                key,
+                ack: true,
+                destination,
+                accepted: false,
+                route_unavailable: true,
+            }
+        }));
+        maintenance.complete_next(&state).await;
+        let retry = &maintenance.retry_backoffs[&key];
+        assert_eq!(retry.failures, failure);
+        let delay = retry.due.saturating_duration_since(Instant::now());
+        assert!(delay <= Duration::from_secs(120));
+        if failure >= 6 {
+            assert!(delay >= Duration::from_secs(71));
+        }
+        maintenance.tick(&state, &scheduler, &events);
+        assert!(
+            maintenance.is_empty(),
+            "a failed ACK must not restart every tick"
+        );
+        let node = state.lock().unwrap();
+        flush_changed_state(&node).unwrap();
+        assert_eq!(node.durability.snapshot().writes, 1);
+        assert_eq!(node.direct_ack_outbox[0].cells, ack.cells);
+    }
+    scheduler.shutdown();
+}
+
 fn delivery(st: &NodeState, tag: u8) -> DirectDelivery {
     let mut peer = st.info.clone();
     for alias in &mut peer.aliases {
@@ -25,6 +70,62 @@ fn pending(delivery: DirectDelivery, sequence: u64, now: Instant) -> PendingDire
         expires: now + Duration::from_secs(600),
         application_event: false,
     }
+}
+
+#[cfg(feature = "experimental-gc2")]
+#[test]
+fn initial_send_without_a_maintenance_receipt_wakes_once_for_its_route() {
+    let mut node = persist::tests::state();
+    let now = Instant::now();
+    let mut first = delivery(&node, 1);
+    first.peer.aliases.truncate(1);
+    let mut other = delivery(&node, 2);
+    other.peer.aliases.truncate(1);
+    other.peer.aliases[0].target.relay_service_id = [92; 32];
+    let first_target = first.peer.aliases[0].target.clone();
+    let exact = first.cells.clone();
+    for (id, work) in [(1, first), (2, other)] {
+        let mut work = pending(work, id, now);
+        work.next_attempt = now + Duration::from_secs(60);
+        node.pending_1to1.insert([id as u8; 16], work);
+    }
+    node.durable_state_sink = Some(Arc::new(|_| Ok(())));
+    persist_current_direct_state(&node).unwrap();
+    let mut owner = DirectMaintenance::default();
+    // Neither failed initial send created a DirectMaintenance receipt.
+    assert!(owner.retry_backoffs.is_empty());
+    owner.observe_ready_routes(&mut node.pending_1to1, now, 0, |_| false);
+    assert_eq!(owner.pending_without_route.len(), 2);
+    let ready_at = now + Duration::from_secs(3);
+    owner.observe_ready_routes(&mut node.pending_1to1, ready_at, 1, |target| {
+        target == &first_target
+    });
+    assert_eq!(node.pending_1to1[&[1; 16]].next_attempt, ready_at);
+    assert_eq!(node.pending_1to1[&[1; 16]].delivery.cells, exact);
+    assert_eq!(
+        node.pending_1to1[&[1; 16]].expires,
+        now + Duration::from_secs(600)
+    );
+    assert_eq!(
+        node.pending_1to1[&[2; 16]].next_attempt,
+        now + Duration::from_secs(60)
+    );
+
+    let later = ready_at + Duration::from_secs(60);
+    node.pending_1to1.get_mut(&[1; 16]).unwrap().next_attempt = later;
+    // Unrelated entry publications and ordinary ticks cannot wake it again.
+    for revision in 2..34 {
+        owner.observe_ready_routes(&mut node.pending_1to1, ready_at, revision, |target| {
+            target == &first_target
+        });
+        assert_eq!(node.pending_1to1[&[1; 16]].next_attempt, later);
+    }
+    flush_changed_state(&node).unwrap();
+    assert_eq!(node.durability.snapshot().writes, 1);
+    node.pending_1to1.remove(&[2; 16]);
+    owner.observe_ready_routes(&mut node.pending_1to1, ready_at, 34, |_| true);
+    assert!(owner.pending_without_route.is_empty());
+    node.scheduler.shutdown();
 }
 
 #[tokio::test]
@@ -88,6 +189,40 @@ async fn local_route_failure_retries_exact_work_without_shortening_unknown_outco
         drop(st);
         scheduler.shutdown();
     }
+}
+
+#[cfg(feature = "experimental-gc2")]
+#[test]
+fn initial_route_failure_retries_exact_pending_work_even_after_readiness_returns() {
+    let mut node = persist::tests::state();
+    let now = Instant::now();
+    let work = delivery(&node, 7);
+    let mut retained = pending(work.clone(), 1, now);
+    let original_due = now + Duration::from_secs(60);
+    retained.next_attempt = original_due;
+    let deadline = retained.expires;
+    node.pending_1to1.insert([7; 16], retained);
+    node.durable_state_sink = Some(Arc::new(|_| Ok(())));
+    persist_current_direct_state(&node).unwrap();
+    for outcome in [Ok(()), Err("tp1 request timed out".into())] {
+        retry_initial_unavailable_route(&mut node, &[7; 16], &work, &outcome);
+        assert_eq!(node.pending_1to1[&[7; 16]].next_attempt, original_due);
+    }
+    let unavailable = Err("no ready independent GC/2 route".into());
+    let mut stale = work.clone();
+    stale.cells[0].payload[0] ^= 1;
+    retry_initial_unavailable_route(&mut node, &[7; 16], &stale, &unavailable);
+    assert_eq!(node.pending_1to1[&[7; 16]].next_attempt, original_due);
+    let before = Instant::now();
+    retry_initial_unavailable_route(&mut node, &[7; 16], &work, &unavailable);
+    let due = node.pending_1to1[&[7; 16]].next_attempt;
+    assert!(due >= before + Duration::from_millis(3750));
+    assert!(due <= Instant::now() + Duration::from_millis(6250));
+    assert_eq!(node.pending_1to1[&[7; 16]].expires, deadline);
+    assert_eq!(node.pending_1to1[&[7; 16]].delivery.cells, work.cells);
+    flush_changed_state(&node).unwrap();
+    assert_eq!(node.durability.snapshot().writes, 1);
+    node.scheduler.shutdown();
 }
 
 fn component_record(kind: &str, body: &[u8]) -> Vec<u8> {
@@ -393,7 +528,7 @@ async fn bounds_fair_retries_and_ack_archive_survive_owner_cancellation() {
     node.next_direct_sequence = 81;
     for id in 160..180 {
         let ack = delivery(&node, id);
-        // Duplicate receives may enqueue the same cached ACK more than once.
+        // Checkpoints from older versions may contain exact cached ACK copies.
         node.direct_ack_outbox.extend([ack.clone(), ack]);
     }
     let state = Arc::new(Mutex::new(node));
@@ -428,10 +563,12 @@ async fn bounds_fair_retries_and_ack_archive_survive_owner_cancellation() {
     let st = restored.lock().unwrap();
     assert_eq!(
         st.direct_ack_outbox.len(),
-        40,
-        "in-flight ACKs remain archived"
+        20,
+        "every distinct in-flight ACK remains archived; exact copies normalize"
     );
-    assert_eq!(st.direct_ack_outbox[0].cells[0].payload, vec![160; 32]);
+    for (index, ack) in st.direct_ack_outbox.iter().enumerate() {
+        assert_eq!(ack.cells[0].payload, vec![160 + index as u8; 32]);
+    }
     assert_eq!(st.pending_1to1.len(), 80);
     st.scheduler.shutdown();
     scheduler.shutdown();
@@ -614,9 +751,13 @@ async fn stalled_retry_does_not_block_new_ack_retry_or_presence_expiry() {
     }
     // A rejected hop receipt must get a fresh maintenance opportunity while the
     // other lane is still waiting. Both attempts reuse the exact cached MSG.
-    for _ in 0..2 {
+    for attempt in 0..2 {
+        // The initial attempt still has the original five-second bound. A
+        // refused ACK now intentionally waits for the first 5s backoff (up to
+        // 6.25s with jitter) plus the compressed maintenance scheduling tick.
+        let wait = if attempt == 0 { 5 } else { 8 };
         let (wire, response) =
-            tokio::time::timeout(Duration::from_secs(5), healthy.requests.recv())
+            tokio::time::timeout(Duration::from_secs(wait), healthy.requests.recv())
                 .await
                 .unwrap()
                 .unwrap();
@@ -724,8 +865,10 @@ async fn late_acceptance_on_old_receive_queue_cannot_clear_renewed_ack() {
         .unwrap();
     // The old queue accepted this ciphertext, but it still needs delivery to
     // the authenticated replacement. The new queue verifies its new push cap.
-    for _ in 0..2 {
-        let (wire, _) = tokio::time::timeout(Duration::from_secs(5), healthy.requests.recv())
+    for attempt in 0..2 {
+        // The replacement's first refusal uses the bounded jittered ACK retry.
+        let wait = if attempt == 0 { 5 } else { 8 };
+        let (wire, _) = tokio::time::timeout(Duration::from_secs(wait), healthy.requests.recv())
             .await
             .unwrap()
             .unwrap();

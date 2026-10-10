@@ -81,6 +81,7 @@ pub(crate) fn prepare_channel_control(
             return;
         }
         expire_channel_presence(&mut st, std::time::Instant::now(), events);
+        let mut promoted = false;
         for cs in st.channels.values_mut() {
             if cs.own_route.aliases.len() != 2 {
                 continue;
@@ -88,9 +89,13 @@ pub(crate) fn prepare_channel_control(
             let authenticated_routes = cs.directory.values().cloned().collect::<Vec<_>>();
             for route in authenticated_routes {
                 for mut wire in cs.promote_unrouted_acks(&route) {
+                    promoted = true;
                     wire.fill(0);
                 }
             }
+        }
+        if promoted {
+            st.durability.changed();
         }
     }
 }
@@ -236,6 +241,7 @@ pub(crate) fn process_chan_cell(
                     })
             {
                 cs.pending_control.push_back((peer, ack_wire));
+                st.durability.changed();
             } else {
                 ack_wire.fill(0);
             }
@@ -332,6 +338,12 @@ pub(crate) fn deliver_mls(
         cs.role.receive_authenticated(wire)
     }))
     .unwrap_or_else(|_| Err(gcoms_mls::MlsError::OpenMls("panic in receive".into())));
+    if recv_result.is_ok() || matches!(&recv_result, Err(gcoms_mls::MlsError::Removed)) {
+        // Authenticated MLS receive advances durable crypto state even when
+        // the payload has no application event. A transaction below may cover
+        // it immediately; otherwise the next event/periodic flush must do so.
+        st.durability.changed();
+    }
     match recv_result {
         Err(gcoms_mls::MlsError::Removed) => {
             let owner_seed = channel_seed(st, chan);
@@ -1209,6 +1221,7 @@ pub(crate) async fn create_channel(
         return Err("channel exists".into());
     }
     st.channels.insert(channel.to_string(), cs);
+    st.durability.changed();
     metrics::log_event("channel_created", &[("channel", channel.to_string())]);
     Ok(id)
 }
@@ -1296,6 +1309,7 @@ pub(crate) async fn prepare_channel_join(
     let mut st = state.lock().unwrap_or_else(|p| p.into_inner());
     let id = st.next_prep_id;
     st.next_prep_id = st.next_prep_id.checked_add(1).ok_or("join id exhausted")?;
+    st.durability.changed();
     st.prepared.insert(
         id,
         PreparedChannelJoin {
@@ -1331,6 +1345,7 @@ pub(crate) fn join_channel(
         );
     }
     let prepared = st.prepared.remove(&req_id).ok_or("unknown req")?;
+    st.durability.changed();
     let member =
         gcoms_mls::ChannelMember::join(prepared.mls, welcome).map_err(|e| e.to_string())?;
     if member.own_pseudonym() != prepared.route.public.pseudonym {
@@ -1711,7 +1726,10 @@ pub(crate) async fn admit_channel(
         }
         match stage_admission_locked(cs, channel, &member_route, mls_key_package, member_name)? {
             StagedAdmission::Replay(welcome) => return Ok(welcome),
-            StagedAdmission::Fresh(admission, guard) => (admission, guard),
+            StagedAdmission::Fresh(admission, guard) => {
+                st.durability.changed();
+                (admission, guard)
+            }
         }
     };
     finalize_admission(
@@ -1771,6 +1789,7 @@ async fn finalize_admission(
     );
     let (full_dir, new_entry) = {
         let mut st = state.lock().unwrap_or_else(|p| p.into_inner());
+        st.durability.changed();
         let Some(cs) = st.channels.get_mut(channel) else {
             return Err("no channel".into());
         };
@@ -1782,6 +1801,7 @@ async fn finalize_admission(
     };
     let new_wire = {
         let mut st = state.lock().unwrap_or_else(|p| p.into_inner());
+        st.durability.changed();
         let Some(cs) = st.channels.get_mut(channel) else {
             return Err("no channel".into());
         };
@@ -1805,6 +1825,7 @@ async fn finalize_admission(
     for entries in bootstrap.chunks(crate::channel::CHANNEL_DIR_BATCH_LIMIT) {
         let wire = {
             let mut st = state.lock().unwrap_or_else(|p| p.into_inner());
+            st.durability.changed();
             let Some(cs) = st.channels.get_mut(channel) else {
                 return Err("no channel".into());
             };
@@ -1942,6 +1963,7 @@ pub(crate) fn create_channel_invite(
     );
     cs.invite_order.push_back(id);
     evict_invites(cs);
+    st.durability.changed();
     metrics::log_event(
         "channel_invite_created",
         &[("channel", channel.to_string())],
@@ -2066,7 +2088,10 @@ pub(crate) async fn redeem_invite(
         match stage_admission_locked(cs, channel, &member_route, mls_key_package, member_name) {
             Ok(StagedAdmission::Replay(welcome)) => {
                 if let Some(record) = cs.invites.get_mut(invite_id) {
-                    record.consumed.get_or_insert(member_route.pseudonym);
+                    if record.consumed.is_none() {
+                        record.consumed = Some(member_route.pseudonym);
+                        st.durability.changed();
+                    }
                 }
                 return Ok(welcome);
             }
@@ -2074,6 +2099,7 @@ pub(crate) async fn redeem_invite(
                 if let Some(record) = cs.invites.get_mut(invite_id) {
                     record.consumed = Some(member_route.pseudonym);
                 }
+                st.durability.changed();
                 (admission, guard)
             }
             Err(e) => return Err(e),
