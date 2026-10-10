@@ -1,5 +1,6 @@
 """Release regressions use a simulated adapter, never the production hub."""
 import json
+import fcntl
 import base64
 import hashlib
 import io
@@ -536,6 +537,41 @@ class Releases(unittest.TestCase):
 
 
 class Maintenance(unittest.TestCase):
+    def test_reference_and_release_share_one_fleet_lock_before_mutation(self):
+        with tempfile.TemporaryDirectory() as directory:
+            config = {'state': directory}
+            with patch.object(qualify, 'isolated'), patch.object(qualify, '_run_reference') as reference:
+                with (Path(directory) / 'release.lock').open('a') as owner:
+                    fcntl.flock(owner, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    with self.assertRaisesRegex(ValueError, 'owns the fleet'):
+                        qualify.run(config, 'prepared')
+                    reference.assert_not_called()
+                reference.side_effect = ValueError('original reference failure')
+                with self.assertRaisesRegex(ValueError, 'original reference failure'):
+                    qualify.run(config, 'prepared')
+                reference.side_effect = None
+                reference.return_value = {'state': 'qualified'}
+                self.assertEqual(qualify.run(config, 'prepared'), {'state': 'qualified'})
+
+    def test_collected_profile_provider_cleanup_preserves_unroot_and_real_failures(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            release.write_json(root / 'android-x64/provider.json', {'unit': 'android-release-mint-test'})
+            request = {'directory': directory, 'config': {},
+                       'manifest': {'targets': [{'id': 'android-x64', 'kind': 'android'}]}}
+            def stopped(argv, **kwargs):
+                if argv[:3] == ['systemctl', '--user', 'stop']:
+                    raise subprocess.CalledProcessError(5, argv)
+            with patch.object(host, 'command', side_effect=stopped) as command, \
+                 patch.object(host, 'output', return_value=b'not-found\n'), \
+                 patch.object(host, 'adb', return_value=['adb', 'unroot']):
+                host.cleanup(request)
+                self.assertEqual(command.call_args_list[-1].args[0], ['adb', 'unroot'])
+            for load in (b'loaded\n', b'error\n'):
+                with self.subTest(load=load), patch.object(host, 'command', side_effect=stopped), \
+                     patch.object(host, 'output', return_value=load):
+                    with self.assertRaises(subprocess.CalledProcessError): host.cleanup(request)
+
     def test_enrollment_keeps_the_active_unit_path_and_refuses_transitioning_owners(self):
         attached = ({'pid': 123}, {'instanceId': 'a' * 64}, {'bootId': 'old'})
         with patch.object(hub, 'manager', return_value='active'), \

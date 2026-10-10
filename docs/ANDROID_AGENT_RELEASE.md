@@ -13,6 +13,11 @@ and failures survive restarting the consumer; restarting cannot buy more time.
 Build-only preparation has a separate one-hour bound and never claims live
 deployment. Source manifests and original cached artifact provenance are retained.
 
+The isolated real reference takes the same fleet deployment lock before any
+mutation and refuses a concurrent owner. Temporary profile-provider cleanup
+accepts an already-collected unit only after confirming its absent load state;
+other service errors remain failures.
+
 | Deadline after push | Stage |
 | --- | --- |
 | 60 seconds | Capacity/toolchain/baseline preflight |

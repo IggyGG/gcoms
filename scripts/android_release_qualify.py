@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Real, bounded Android qualification on the explicitly isolated fleet."""
 import argparse
+import fcntl
 import hashlib
 import json
 import os
@@ -184,6 +185,20 @@ def observe_frontier(config, target, sha, pushed_at):
 
 
 def run(config, ident):
+    isolated(config)
+    root = Path(config['state'])
+    root.mkdir(parents=True, exist_ok=True, mode=0o700)
+    # Share the deployment lock: a reference must not replace profiles or
+    # owners while another reference, preparation or promotion is using them.
+    with (root / 'release.lock').open('a') as lock:
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            raise ValueError('another Android release or reference owns the fleet') from None
+        return _run_reference(config, ident)
+
+
+def _run_reference(config, ident):
     _fleet, target = isolated(config)
     prepared = prepared_release(config, ident)
     hub.eligible(config); hub.eligible_controller(config); before_vpn = vpn()

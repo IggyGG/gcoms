@@ -1,0 +1,28 @@
+{
+  "schema": 1,
+  "observed_at": 1791670774.1330907,
+  "scope": "Android release operation controls; no live qualification claim",
+  "controls": {
+    "passed": 52,
+    "log_sha256": "d0cd30b915bababb543ca3aca956ab4d3f5e68353d451d0f980968d5d482a258"
+  },
+  "l0_log_sha256": "d015a35d756091e86ec8c20bc0cd31bd79a425c704890922ddc1ce81226f399b",
+  "native_builder_identity": "aa22a4e9fad832e55c6348061463b7f08f06377e451a88f7ad9451e7c2429e09",
+  "changes": [
+    "Real reference acquires the same release.lock before any fleet mutation; concurrent owner fails immediately; failure releases lock",
+    "Collected temporary provider permits cleanup only for exit5 with LoadState=not-found; loaded/error units still fail; Android unroot continues"
+  ],
+  "original_observation": {
+    "reference_state": "failed",
+    "failure": "fresh profile mint TimeoutError followed by cleanup exit5",
+    "elapsed_seconds": 73.207427796,
+    "duplicate_reference_state": "aborted",
+    "timing_qualified": false
+  },
+  "codematch": "unreachable",
+  "remaining": [
+    "actual42MiB interrupted/resumed Android load",
+    "three actual prepared push-to-live<=600sec",
+    "actual failed-canary functional restoration<=60sec"
+  ]
+}

@@ -508,7 +508,15 @@ def cleanup(request):
         if target['kind'] == 'android':
             marker = directory / target['id'] / 'provider.json'
             if marker.exists():
-                command(['systemctl', '--user', 'stop', json.loads(marker.read_text())['unit']], timeout=10)
+                unit = json.loads(marker.read_text())['unit']
+                try:
+                    command(['systemctl', '--user', 'stop', unit], timeout=10)
+                except subprocess.CalledProcessError as error:
+                    # --collect may already have removed an exited provider.
+                    # Only that exact absent-unit outcome is harmless.
+                    if (error.returncode != 5 or output(['systemctl', '--user', 'show', unit,
+                                                       '-p', 'LoadState', '--value']).strip() != b'not-found'):
+                        raise
             command(adb(config, target, 'unroot'), timeout=10)
 
 
