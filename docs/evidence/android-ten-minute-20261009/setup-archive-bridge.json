@@ -1,0 +1,24 @@
+{
+  "schema": 1,
+  "codematch": "unreachable",
+  "scope": "Bounded authenticated GC/2 retired setup archive bridge",
+  "archive_controls": {
+    "pass": 2,
+    "exit": 0,
+    "from_scoped_runtime_run_pass": 12
+  },
+  "history_limit": 512,
+  "archive_magic": "GCNSTO",
+  "base_hash_authenticated": true,
+  "migration": "existing V21 and channel inbox accepted; new wrapper requires new reader",
+  "publication": "reader bridge precedes runtime route recovery",
+  "managed_fallback_requires_reader": true,
+  "functional_rollback_qualified": false,
+  "strict_all_feature_clippy": "pass",
+  "non_gc2_client_persist_compile": "pass",
+  "source_audit": {
+    "paths": 1086,
+    "exit": 0,
+    "scope": "combined prospective archive and recovery change"
+  }
+}

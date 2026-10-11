@@ -4,6 +4,7 @@
 
 use super::*;
 
+mod first_moves;
 mod invitations;
 #[cfg(test)]
 #[path = "persist/invitations_tests.rs"]
@@ -53,6 +54,7 @@ const MAGIC_V20: &[u8; 6] = b"GCNSTK";
 const MAGIC_V21: &[u8; 6] = b"GCNSTL";
 const MAGIC_CHANNEL_INBOX: &[u8; 6] = b"GCNSTM";
 const MAGIC_INVITATIONS: &[u8; 6] = b"GCNSTN";
+const MAGIC_FIRST_MOVES: &[u8; 6] = b"GCNSTO";
 const ROLE_OWNER: u8 = 1;
 const ROLE_MEMBER: u8 = 2;
 const MAX_ARCHIVE_BYTES: usize = 256 * 1024 * 1024;
@@ -109,6 +111,7 @@ struct Archive {
     exported_ms: u64,
     next_direct_sequence: u64,
     channel_inbox: channel_inbox::Inbox,
+    accepted_first_moves: VecDeque<[u8; 32]>,
     application_inbox: application_inbox::ApplicationInbox,
     #[cfg(feature = "experimental-gc2")]
     gc2_receipts: Option<gc2_receipts::Ledger>,
@@ -1133,6 +1136,7 @@ fn encode_state_inner(
         v.fill(0);
         return Err("node state export too large".into());
     }
+    let v = first_moves::wrap(st, v)?;
     let v = invitations::wrap(st, v)?;
     if st.channel_inbox.enabled {
         let mut wrapped = SecretBuffer(MAGIC_CHANNEL_INBOX.to_vec());
@@ -1155,6 +1159,9 @@ fn encode_state_inner(
 }
 
 fn decode_v2(buf: &[u8], identity_seed: &[u8; 32]) -> Result<Archive, String> {
+    if buf.get(..6) == Some(MAGIC_FIRST_MOVES) {
+        return first_moves::unwrap(buf, identity_seed);
+    }
     if buf.get(..6) == Some(MAGIC_INVITATIONS) {
         return invitations::unwrap(buf, identity_seed);
     }
@@ -1923,6 +1930,7 @@ fn decode_v2(buf: &[u8], identity_seed: &[u8; 32]) -> Result<Archive, String> {
         exported_ms,
         next_direct_sequence,
         channel_inbox: channel_inbox::Inbox::default(),
+        accepted_first_moves: VecDeque::new(),
         application_inbox,
         #[cfg(feature = "experimental-gc2")]
         gc2_receipts,
@@ -2311,7 +2319,7 @@ pub async fn decode_state(
             return Err("cannot replace initialized central ownership".into());
         }
     }
-    if matches!(buf.get(..6), Some(magic) if magic == MAGIC_INVITATIONS || magic == MAGIC_CHANNEL_INBOX || magic == MAGIC_V15 || magic == MAGIC_V16 || magic == MAGIC_V17 || magic == MAGIC_V18 || magic == MAGIC_V19 || magic == MAGIC_V20 || magic == MAGIC_V21)
+    if matches!(buf.get(..6), Some(magic) if magic == MAGIC_FIRST_MOVES || magic == MAGIC_INVITATIONS || magic == MAGIC_CHANNEL_INBOX || magic == MAGIC_V15 || magic == MAGIC_V16 || magic == MAGIC_V17 || magic == MAGIC_V18 || magic == MAGIC_V19 || magic == MAGIC_V20 || magic == MAGIC_V21)
     {
         return Err("owner alias archives require constructor restoration".into());
     }
@@ -2337,6 +2345,7 @@ pub(super) async fn decode_state_at_startup(
         buf
     };
     let effective = invitations::base(effective)?;
+    let effective = first_moves::base(effective)?;
     if matches!(effective.get(..6), Some(magic) if magic == MAGIC_V20 || magic == MAGIC_V21) {
         #[cfg(feature = "experimental-gc2")]
         if !state.lock().unwrap_or_else(|p| p.into_inner()).gc2_sessions {
@@ -2780,6 +2789,7 @@ pub(super) async fn decode_state_at_startup(
     st.channel_inbox = archive.channel_inbox;
     st.channel_inbox.enabled |= enabled;
     st.application_inbox = archive.application_inbox;
+    st.accepted_first_moves = archive.accepted_first_moves;
     for delivery in direct_acks {
         if let Some(destination) = delivery.peer.primary().cloned() {
             for cell in &delivery.cells {
@@ -2868,6 +2878,8 @@ pub(in crate::node) mod tests {
     include!("persist/gc2_session_tests.rs");
     #[cfg(feature = "experimental-gc2")]
     include!("persist/gc2_recovery_tests.rs");
+    #[cfg(feature = "experimental-gc2")]
+    include!("persist/first_moves_tests.rs");
     #[cfg(feature = "experimental-gc2")]
     include!("persist/gc2_volatile_tests.rs");
     #[cfg(feature = "experimental-gc2")]

@@ -1,5 +1,6 @@
 //! One sealed extension around the existing archive. The only allowed nesting
-//! is channel-inbox -> invitations -> base. Binding the exact base hash prevents
+//! is channel-inbox -> invitations -> optional retired-first-moves -> base.
+//! Binding the exact base hash prevents
 //! transplanting a ledger onto a different MLS state or rolling back its counter
 //! independently of membership. Older readers reject the new magic.
 use super::*;
