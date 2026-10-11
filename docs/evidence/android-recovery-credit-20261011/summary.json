@@ -1,0 +1,144 @@
+{
+  "schema": 1,
+  "fix": "F5 Android recovery and authenticated credit alignment",
+  "sources": {
+    "gcoms": "12f53521c9ad8594c438528c19a9d8534503696e",
+    "drone": "ebc31e88354ffddd7c6462d35a0ed2f3fca1bd77"
+  },
+  "original_sources": {
+    "drone": "7a444e3985c164b4b07a66e1284c57887334d38c",
+    "gcoms": "924bd1ceca3bd64f810b2a774b0f4bf4da9079a8",
+    "gchat": "31a9009f21b8511fbf21e9abf4e55743305aeb1e"
+  },
+  "controls": [
+    {
+      "mode": "original",
+      "exit_code": 101,
+      "elapsed_seconds": 182.23937646500417,
+      "passed": 0,
+      "failed": 1,
+      "runtime_seconds": 0.0,
+      "log_sha256": "c1fd9458563c01a00a623505d325466ed091a28bea54077c104c96d15ba2f99c"
+    },
+    {
+      "mode": "fixed",
+      "exit_code": 0,
+      "elapsed_seconds": 47.7631870059995,
+      "passed": 5,
+      "failed": 0,
+      "runtime_seconds": 1.07,
+      "log_sha256": "9eff42d40518c2bbe4a4910956075a0ba8b7680796870550d2a630489506f0ef"
+    },
+    {
+      "mode": "window-node-original",
+      "exit_code": 101,
+      "elapsed_seconds": 161.77008535098867,
+      "passed": 2,
+      "failed": 1,
+      "runtime_seconds": 5.24,
+      "log_sha256": "cca3acc54969ce1b352cd7d6e5dff4a772429d591f066b9770638210cba5426c"
+    },
+    {
+      "mode": "window-node-fixed",
+      "exit_code": 0,
+      "elapsed_seconds": 39.54946901198127,
+      "passed": 3,
+      "failed": 0,
+      "runtime_seconds": 8.28,
+      "log_sha256": "8080df468dcea0fcfea5b5af444b4fd7ad418966dcf075baae2a67f249cdea2e"
+    },
+    {
+      "mode": "window-sdk-original",
+      "exit_code": 101,
+      "elapsed_seconds": 66.41777604998788,
+      "passed": 0,
+      "failed": 1,
+      "runtime_seconds": 2.18,
+      "log_sha256": "fdadeac163b167ad9257e32324a5b5325038ceb254e6edea291c74959bc07aaf"
+    },
+    {
+      "mode": "window-sdk-fixed",
+      "exit_code": 0,
+      "elapsed_seconds": 28.43634967599064,
+      "passed": 1,
+      "failed": 0,
+      "runtime_seconds": 0.3,
+      "log_sha256": "39c086fcf3a8e10e66716f14394b77d730bdc0c8144319b5db5fccbe95e3b474"
+    },
+    {
+      "mode": "window-clippy",
+      "exit_code": 0,
+      "elapsed_seconds": 62.50361766302376,
+      "passed": null,
+      "failed": null,
+      "runtime_seconds": null,
+      "log_sha256": "3f1f3d7a6a26fff80410b6abaa3731a8f7eb6aa0b101fce84861644614340687"
+    },
+    {
+      "mode": "clippy",
+      "exit_code": 0,
+      "elapsed_seconds": 78.32719655599794,
+      "passed": null,
+      "failed": null,
+      "runtime_seconds": null,
+      "log_sha256": "5fd3be0d1d6937a69ea590dd7211cd77c3d4367f2dfe249174e1a66446ac5ba5"
+    }
+  ],
+  "exact_published_runtime_and_test_overlay": true,
+  "binding_checks": [
+    "fresh signed original-request lookup",
+    "original peer/component/workspace/profile/target/receiver",
+    "unchanged run/artifact/transfer/deadline after reopen",
+    "renewed authenticated reply contact",
+    "authenticated read-only absence",
+    "forged proofs and sidecars",
+    "revocation and expired run/profile"
+  ],
+  "bounded_pipeline": {
+    "authenticated_receiver_chunks": 32,
+    "SDK_owned_calls": 32,
+    "controller_owned_submissions": 32,
+    "credited_peer_application_records": 32,
+    "credited_peer_control_records": 8,
+    "legacy_peer_records": 8,
+    "global_volatile_records": 64,
+    "global_application_records": 56,
+    "existing_payload_session_and_scheduler_byte_budgets_unchanged": true,
+    "owned_hop_receipts_request_IDs_and_cancellation_preserved": true
+  },
+  "latest_prior_Android": {
+    "qualified": false,
+    "state": "failed after actual interruption",
+    "interruption_frontier": 8448000,
+    "size_bytes": 44040192,
+    "elapsed_seconds": 360.32194359,
+    "recovery_rejected_by_original_dispatch": true,
+    "approximate_pre_restart_bytes_per_second": 90000
+  },
+  "required_actual_gates": {
+    "signed_42MiB_interruption_resume_current_process_load_max_seconds": 360,
+    "three_original_prepared_promotion_push_to_all_live_max_seconds": 600,
+    "failed_canary_functional_rollback_max_seconds": 60
+  },
+  "actual_Android_and_promotions": "pending",
+  "cold_preparation_separate_from_prepared_promotion_clock": true,
+  "codematch": "unreachable",
+  "compatibility_compile": {
+    "exit_code": 0,
+    "elapsed_seconds": 108.45639116800157,
+    "command": [
+      "opencode-test",
+      "cargo",
+      "check",
+      "--offline",
+      "--locked",
+      "-p",
+      "gcoms-node",
+      "--lib",
+      "--no-default-features",
+      "--features",
+      "client-persist"
+    ],
+    "log_sha256": "cb29da7eb707d45b5ced8c8a88139582c8bac382136fe2a68c629bb0b5ffef3a"
+  }
+}

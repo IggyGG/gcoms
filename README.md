@@ -586,7 +586,7 @@ qualify downloaded worker readiness.
 [Android deployment measurements](docs/evidence/android-ten-minute-20261009/summary.json) retain cold preparation, actual cache reuse, signed APK installation and the original server push clocks. The full download/load gate remains failed; the shared controller baseline currently prevents main integration of the standalone operations files.
 
 
-F5 Android bulk dispatch (2026-10-11): GC/2 single-cell volatile file sends preserve
+F5 Android bulk dispatch (initial eight-record implementation, 2026-10-11): GC/2 single-cell volatile file sends preserve
 preparation and scheduler-admission order while owning independent hop completions.
 Interactive, legacy, setup and durable sends retain their existing completion order.
 The 64-record volatile outbox reserves eight global slots for control and separates
@@ -603,12 +603,14 @@ three new regressions and the corrected node passes them. The original SDK fails
 controls, strict combined node/SDK Clippy, non-GC/2 node and IPC-only builds pass.
 The 1,088-path source audit passes. Android reference validation is in progress; this does not qualify the full 42 MiB transfer or a
 production promotion. Evidence: `docs/evidence/android-bulk-dispatch-20261011/summary.json`.
+
 F5 Android credit alignment, 2026-10-11: authorized bootstrap IPC and each credited
 GC/2 peer can now carry 32 application records, matching the Android receiver's
 authenticated chunk window. Each peer retains eight control records, the node
 retains its 64-record total with at most 56 application records, and existing
 payload, session and scheduler byte budgets still apply. Legacy peers keep their
 eight-record limit. The controller continues reading ACKs while submissions wait.
-Focused held-receipt/boundary checks are in progress; full signed Android
-interruption/resume/load and real deployment/rollback timing remain required.
-
+Four focused held-receipt/boundary controls, strict scoped Clippy and the
+non-GC/2 compile pass. Full signed Android interruption/resume/load and real
+deployment/rollback timing remain required. Evidence:
+`docs/evidence/android-recovery-credit-20261011/summary.json`.

@@ -1244,3 +1244,6 @@ work on disconnect. Existing node payload/session/scheduler byte ceilings and
 legacy-peer8 remain mandatory. Source checks do not qualify actual Android
 throughput or production promotion.
 
+All four pipeline controls, strict scoped Clippy and the non-GC/2
+`client-persist` compile pass. Retained original/fixed results:
+`docs/evidence/android-recovery-credit-20261011/summary.json`.

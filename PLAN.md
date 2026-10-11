@@ -1555,7 +1555,7 @@ actual interruption at 8,448,000 bytes, but recovery was rejected by the Drone
 dispatcher. Its pre-restart transfer averaged about 90 KB/s. Align the remaining
 eight-record IPC and credited-peer bottlenecks with the authenticated 32-chunk
 receiver window. Keep global64/application56/control8, legacy-peer8, body/byte
-budgets, owned replies/cancellation and deadlines. Scoped causal controls are in
-progress. Actual full Android recovery/load, three prepared promotions <=600 s
+budgets, owned replies/cancellation and deadlines. Four scoped causal controls, strict Clippy and non-GC/2 compilation pass.
+Evidence: `docs/evidence/android-recovery-credit-20261011/summary.json`.
+Actual full Android recovery/load, three prepared promotions <=600 s
 and functional failed-canary rollback <=60 s remain pending.
-
