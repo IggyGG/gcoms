@@ -854,30 +854,33 @@ async fn gc2_collision_renews_authenticated_route_with_monotonic_setup_recovery(
 async fn gc2_collision_route_checkpoint_failure_restores_memory_and_pauses_publication() {
     let (state, peer, id, packet) = gc2_collision_with_renewed_route().await;
     let (events, _) = broadcast::channel(32);
-    let mut winner = state.lock().unwrap();
     let pk = peer.info.identity_pk.clone();
-    let old_route = winner.peer_routes[&pk].clone();
-    let old_delivery = winner.pending_1to1[&id].delivery.clone();
-    let old_tag = *winner.sessions[&pk].tag().unwrap();
     let saved = Arc::new(Mutex::new(None));
-    let sink = saved.clone();
-    winner.durable_state_sink = Some(Arc::new(move |bytes| {
-        *sink.lock().unwrap() = Some(bytes.to_vec());
-        Err("collision checkpoint failpoint after write".into())
-    }));
-    assert!(gc2_direct::incoming(&mut winner, &packet, &events)
-        .unwrap_err()
-        .contains("collision checkpoint failpoint"));
-    assert!(winner.owner_transition_failed);
-    assert_eq!(winner.sessions[&pk].tag(), Some(&old_tag));
-    assert_eq!(winner.peer_routes[&pk], old_route);
-    assert_eq!(winner.pending_1to1[&id].delivery.cells, old_delivery.cells);
-    assert_eq!(winner.pending_1to1[&id].delivery.peer, old_delivery.peer);
-    let seed = winner.identity_seed;
-    let info = winner.info.clone();
-    let secrets = winner.secrets.clone();
-    let scheduler = winner.scheduler.clone();
-    drop(winner);
+    let (seed, info, secrets, scheduler) = {
+        let mut winner = state.lock().unwrap();
+        let old_route = winner.peer_routes[&pk].clone();
+        let old_delivery = winner.pending_1to1[&id].delivery.clone();
+        let old_tag = *winner.sessions[&pk].tag().unwrap();
+        let sink = saved.clone();
+        winner.durable_state_sink = Some(Arc::new(move |bytes| {
+            *sink.lock().unwrap() = Some(bytes.to_vec());
+            Err("collision checkpoint failpoint after write".into())
+        }));
+        assert!(gc2_direct::incoming(&mut winner, &packet, &events)
+            .unwrap_err()
+            .contains("collision checkpoint failpoint"));
+        assert!(winner.owner_transition_failed);
+        assert_eq!(winner.sessions[&pk].tag(), Some(&old_tag));
+        assert_eq!(winner.peer_routes[&pk], old_route);
+        assert_eq!(winner.pending_1to1[&id].delivery.cells, old_delivery.cells);
+        assert_eq!(winner.pending_1to1[&id].delivery.peer, old_delivery.peer);
+        (
+            winner.identity_seed,
+            winner.info.clone(),
+            winner.secrets.clone(),
+            winner.scheduler.clone(),
+        )
+    };
     let mut restarted = gc2_node(seed[0]);
     restarted.info = info;
     restarted.secrets = secrets;
@@ -1148,38 +1151,41 @@ async fn gc2_lagging_recovery_unchanged_route_and_bad_signature_leave_state_unto
 async fn gc2_lagging_recovery_uncertain_checkpoint_restores_bounded_history_and_loads_candidate() {
     let (state, peer, id, packet) = gc2_lagging_route_recovery(false, true).await;
     let (events, _) = broadcast::channel(32);
-    let mut local = state.lock().unwrap();
     let pk = peer.info.identity_pk.clone();
-    for value in 0u16..512 {
-        let mut hash = [0; 32];
-        hash[..2].copy_from_slice(&value.to_be_bytes());
-        local.accepted_first_moves.push_back(hash);
-    }
-    let retired = local.accepted_first_moves.clone();
-    let tag = *local.sessions[&pk].tag().unwrap();
-    let route = local.peer_routes[&pk].clone();
-    let delivery = local.pending_1to1[&id].delivery.clone();
     let saved = Arc::new(Mutex::new(None));
-    let sink = saved.clone();
-    local.durable_state_sink = Some(Arc::new(move |bytes| {
-        *sink.lock().unwrap() = Some(bytes.to_vec());
-        Err("lagging setup checkpoint failpoint after storage".into())
-    }));
-    assert!(gc2_direct::incoming(&mut local, &packet, &events)
-        .unwrap_err()
-        .contains("lagging setup checkpoint failpoint"));
-    assert!(local.owner_transition_failed);
-    assert_eq!(gc2_generation(&local, &pk), 5);
-    assert_eq!(local.sessions[&pk].tag(), Some(&tag));
-    assert_eq!(local.peer_routes[&pk], route);
-    assert_eq!(local.pending_1to1[&id].delivery.peer, delivery.peer);
-    assert_eq!(local.pending_1to1[&id].delivery.cells, delivery.cells);
-    assert_eq!(local.accepted_first_moves, retired);
-    let seed = local.identity_seed;
-    let info = local.info.clone();
-    let secrets = local.secrets.clone();
-    let scheduler = local.scheduler.clone();
-    drop(local);
+    let (seed, info, secrets, scheduler) = {
+        let mut local = state.lock().unwrap();
+        for value in 0u16..512 {
+            let mut hash = [0; 32];
+            hash[..2].copy_from_slice(&value.to_be_bytes());
+            local.accepted_first_moves.push_back(hash);
+        }
+        let retired = local.accepted_first_moves.clone();
+        let tag = *local.sessions[&pk].tag().unwrap();
+        let route = local.peer_routes[&pk].clone();
+        let delivery = local.pending_1to1[&id].delivery.clone();
+        let sink = saved.clone();
+        local.durable_state_sink = Some(Arc::new(move |bytes| {
+            *sink.lock().unwrap() = Some(bytes.to_vec());
+            Err("lagging setup checkpoint failpoint after storage".into())
+        }));
+        assert!(gc2_direct::incoming(&mut local, &packet, &events)
+            .unwrap_err()
+            .contains("lagging setup checkpoint failpoint"));
+        assert!(local.owner_transition_failed);
+        assert_eq!(gc2_generation(&local, &pk), 5);
+        assert_eq!(local.sessions[&pk].tag(), Some(&tag));
+        assert_eq!(local.peer_routes[&pk], route);
+        assert_eq!(local.pending_1to1[&id].delivery.peer, delivery.peer);
+        assert_eq!(local.pending_1to1[&id].delivery.cells, delivery.cells);
+        assert_eq!(local.accepted_first_moves, retired);
+        (
+            local.identity_seed,
+            local.info.clone(),
+            local.secrets.clone(),
+            local.scheduler.clone(),
+        )
+    };
     let mut restored = gc2_node(seed[0]);
     restored.info = info;
     restored.secrets = secrets;

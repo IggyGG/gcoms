@@ -1,0 +1,55 @@
+{
+  "at": 1791756642.792356,
+  "state": "passed",
+  "scoped_controls_passed": 63,
+  "existing_guard_scope_controls_passed": 2,
+  "strict_node_test_clippy_passed": true,
+  "context_authentication_and_historical_archive_controls": true,
+  "private_key_cache": false,
+  "checkpoint_public_derivations": 1,
+  "original_checkpoint_public_derivations": 10,
+  "codematch": "unreachable",
+  "full_android_baseline_passed": false,
+  "cases": {
+    "original": {
+      "exit_code": 101,
+      "elapsed_seconds": 118.47985004703514,
+      "log_sha256": "26eb4b52f7f1e63a6ff21e23834c05b98d11fa48a4d1ef097fd56fd2873d8a22"
+    },
+    "fixed": {
+      "exit_code": 0,
+      "elapsed_seconds": 131.9047841610154,
+      "log_sha256": "40cd6bf72eb50f64f0c2f4b8633367d8e605fe276187db92f98776ba1520a6bf"
+    },
+    "guard-scopes": {
+      "exit_code": 0,
+      "elapsed_seconds": 33.58416422898881,
+      "log_sha256": "2c58157ab45b149b5c49eb55713265a7887a59a256a3203894632aaa60b6a178"
+    },
+    "clippy-rechecked": {
+      "exit_code": 0,
+      "elapsed_seconds": 19.874256878974847,
+      "log_sha256": "c72eed0bb0fe3f988a2e8a2a6e0d9d40e55b36acd949f565ff25e639d3d07292"
+    },
+    "legacy": {
+      "exit_code": 0,
+      "elapsed_seconds": 21.38038059300743,
+      "log_sha256": "76a0e958c57258c4b53eb9fce3fc2028b116b8040ecfecba438b458918013e09"
+    },
+    "source-audit": {
+      "exit_code": 0,
+      "elapsed_seconds": 0.29174194199731573,
+      "log_sha256": "e85c04510bc3595467c0ab582da94dbc2d1e3590e8eec25d89d7e1d56dda8abe",
+      "audited": "source-matching existing task Git worktree",
+      "previous_archive_audit": "infrastructure failure: frozen git archive has no .git directory"
+    }
+  },
+  "source_checkpoint": "b0f4527ef6f8d18f38b7bed8ff23a2db144d9f5c",
+  "change": "Reuse only public identity material within one archive encoding invocation; existing raw-seed keys and authenticated domains unchanged.",
+  "production_mutated": false,
+  "required_actual_gates": [
+    "fresh signed 42 MiB transfer with >=8 MiB force-stop and same-run resume/current-process load <=360s",
+    "three immutable original-server-push to all-declared-targets-live promotions <=600s",
+    "genuine failed canary with functional rollback <=60s"
+  ]
+}
