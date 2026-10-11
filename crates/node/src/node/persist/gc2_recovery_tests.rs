@@ -772,3 +772,169 @@ async fn gc2_contact_renewal_keeps_pq_refresh_and_logical_receipts_working() {
     scheduler.shutdown();
     bob.scheduler.shutdown();
 }
+
+async fn gc2_collision_with_renewed_route() -> (Arc<Mutex<NodeState>>, NodeState, [u8; 16], Vec<u8>)
+{
+    let one = gc2_node(101);
+    let two = gc2_node(102);
+    let (winner, mut peer) = if one.info.identity_pk < two.info.identity_pk {
+        (one, two)
+    } else {
+        (two, one)
+    };
+    let state = Arc::new(Mutex::new(winner));
+    let scheduler = state.lock().unwrap().scheduler.clone();
+    send_durable_1to1(
+        &state,
+        &scheduler,
+        &peer.info,
+        b"original logical delivery",
+        None,
+    )
+    .await
+    .unwrap();
+    let id = *state.lock().unwrap().pending_1to1.keys().next().unwrap();
+    // A restarted installer keeps its identity but receives a fresh inbox and
+    // authenticated receiver bundle. Its simultaneous initiation must not leave
+    // the winner forwarding setup to the now-abandoned inbox.
+    peer.info.aliases[0].queue_id = [193; 32];
+    let (bundle, secrets) = IdentityKeypair::from_seed(peer.identity_seed).issue_bundle();
+    peer.info.bundle = bundle.encode();
+    peer.secrets = Arc::new(secrets);
+    let packet = gcoms_protocol::gc2_session::initiate(
+        &IdentityKeypair::from_seed(peer.identity_seed),
+        &peer.info.public(),
+        &peer.secrets,
+        &state.lock().unwrap().info.public(),
+        now_unix(),
+        &mut rand::thread_rng(),
+    )
+    .unwrap()
+    .packet;
+    (state, peer, id, packet)
+}
+
+#[tokio::test]
+async fn gc2_collision_renews_authenticated_route_with_monotonic_setup_recovery() {
+    let (state, peer, id, packet) = gc2_collision_with_renewed_route().await;
+    let (events, _) = broadcast::channel(32);
+    let mut winner = state.lock().unwrap();
+    let pk = peer.info.identity_pk.clone();
+    let deadline = winner.pending_1to1[&id].expires;
+    let sequence = winner.pending_1to1[&id].sequence;
+    let record = winner.pending_1to1[&id].logical_record.clone();
+    assert_eq!(gc2_generation(&winner, &pk), 1);
+    gc2_direct::incoming(&mut winner, &packet, &events).unwrap();
+    assert_eq!(gc2_generation(&winner, &pk), 2);
+    assert_eq!(winner.peer_routes[&pk], peer.info.public());
+    assert!(winner.pending_1to1[&id].delivery.cells.is_empty());
+    assert_eq!(winner.pending_1to1[&id].delivery.peer, peer.info.public());
+    assert_eq!(winner.pending_1to1[&id].expires, deadline);
+    assert_eq!(winner.pending_1to1[&id].sequence, sequence);
+    assert_eq!(winner.pending_1to1[&id].logical_record, record);
+    let recovered = gc2_setup_packet(&winner, &pk);
+    let accepted = gcoms_protocol::gc2_session::accept(
+        &gcoms_protocol::gc2_session::Packet::decode(&recovered).unwrap(),
+        &peer.info.public(),
+        &peer.secrets,
+        now_unix(),
+    )
+    .unwrap();
+    assert!(accepted.recovery);
+    assert_eq!(accepted.session.window().generation(), 2);
+    assert!(gc2_direct::incoming(&mut winner, &packet, &events)
+        .unwrap_err()
+        .contains("retired GC/2 recovery generation"));
+    winner.scheduler.shutdown();
+    peer.scheduler.shutdown();
+}
+
+#[tokio::test]
+async fn gc2_collision_route_checkpoint_failure_restores_memory_and_pauses_publication() {
+    let (state, peer, id, packet) = gc2_collision_with_renewed_route().await;
+    let (events, _) = broadcast::channel(32);
+    let mut winner = state.lock().unwrap();
+    let pk = peer.info.identity_pk.clone();
+    let old_route = winner.peer_routes[&pk].clone();
+    let old_delivery = winner.pending_1to1[&id].delivery.clone();
+    let old_tag = *winner.sessions[&pk].tag().unwrap();
+    let saved = Arc::new(Mutex::new(None));
+    let sink = saved.clone();
+    winner.durable_state_sink = Some(Arc::new(move |bytes| {
+        *sink.lock().unwrap() = Some(bytes.to_vec());
+        Err("collision checkpoint failpoint after write".into())
+    }));
+    assert!(gc2_direct::incoming(&mut winner, &packet, &events)
+        .unwrap_err()
+        .contains("collision checkpoint failpoint"));
+    assert!(winner.owner_transition_failed);
+    assert_eq!(winner.sessions[&pk].tag(), Some(&old_tag));
+    assert_eq!(winner.peer_routes[&pk], old_route);
+    assert_eq!(winner.pending_1to1[&id].delivery.cells, old_delivery.cells);
+    assert_eq!(winner.pending_1to1[&id].delivery.peer, old_delivery.peer);
+    let seed = winner.identity_seed;
+    let info = winner.info.clone();
+    let secrets = winner.secrets.clone();
+    let scheduler = winner.scheduler.clone();
+    drop(winner);
+    let mut restarted = gc2_node(seed[0]);
+    restarted.info = info;
+    restarted.secrets = secrets;
+    let restarted_scheduler = restarted.scheduler.clone();
+    let restarted = Arc::new(Mutex::new(restarted));
+    let checkpoint = saved.lock().unwrap().take().unwrap();
+    decode_state_at_startup(&restarted, &restarted_scheduler, &checkpoint)
+        .await
+        .unwrap();
+    assert_eq!(gc2_generation(&restarted.lock().unwrap(), &pk), 2);
+    assert_eq!(
+        restarted.lock().unwrap().peer_routes[&pk],
+        peer.info.public()
+    );
+    scheduler.shutdown();
+    restarted_scheduler.shutdown();
+    peer.scheduler.shutdown();
+}
+
+#[tokio::test]
+async fn gc2_collision_route_wait_restores_metadata_without_writing_or_rotating() {
+    let (state, peer, id, packet) = gc2_collision_with_renewed_route().await;
+    let (events, _) = broadcast::channel(32);
+    let mut winner = state.lock().unwrap();
+    let pk = peer.info.identity_pk.clone();
+    let route = winner.peer_routes[&pk].clone();
+    let cells = winner.pending_1to1[&id].delivery.cells.clone();
+    let deadline = winner.pending_1to1[&id].expires;
+    let tag = *winner.sessions[&pk].tag().unwrap();
+    let runtime = routing::RoutingRuntime::new(
+        RoutingConfig::default(),
+        gcoms_routing::Directory::new(),
+        true,
+    )
+    .unwrap();
+    runtime
+        .recovering_owner
+        .store(false, std::sync::atomic::Ordering::Release);
+    winner.routing = Some(runtime);
+    let writes = winner.durability.snapshot().writes;
+    for _ in 0..16 {
+        assert!(gc2_direct::incoming(&mut winner, &packet, &events)
+            .unwrap_err()
+            .contains("setup recovery waits"));
+    }
+    assert_eq!(winner.peer_routes[&pk], route);
+    assert_eq!(winner.pending_1to1[&id].delivery.peer, route);
+    assert_eq!(winner.pending_1to1[&id].delivery.cells, cells);
+    assert_eq!(winner.pending_1to1[&id].expires, deadline);
+    assert_eq!(winner.sessions[&pk].tag(), Some(&tag));
+    assert_eq!(winner.durability.snapshot().writes, writes);
+    assert!(!winner.owner_transition_failed);
+    let inbox = winner.client_relay.aliases[0].contact.queue_id;
+    winner.subscribed_contact_aliases.insert(inbox);
+    gc2_direct::incoming(&mut winner, &packet, &events).unwrap();
+    assert_eq!(gc2_generation(&winner, &pk), 2);
+    assert_eq!(winner.peer_routes[&pk], peer.info.public());
+    assert_eq!(winner.pending_1to1[&id].expires, deadline);
+    winner.scheduler.shutdown();
+    peer.scheduler.shutdown();
+}

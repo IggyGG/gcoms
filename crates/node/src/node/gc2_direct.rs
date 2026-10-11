@@ -123,7 +123,10 @@ fn accept(
                     return Err("authenticated GC/2 recovery required".into())
                 }
                 DirectSessionState::InitiatedUnconfirmed { .. } if st.info.identity_pk < pk => {
-                    return Err("local GC/2 initiation wins collision".into())
+                    if st.peer_routes.get(&pk).is_some_and(|route| route != &peer) {
+                        return recover_collision_route(st, &peer);
+                    }
+                    return Err("local GC/2 initiation wins collision".into());
                 }
                 _ => (),
             }
@@ -201,6 +204,45 @@ fn accept(
         peer_pk: pk,
     });
     Ok(())
+}
+
+/// A renewed installer inbox/bundle is authenticated by its losing first move.
+/// The local winner keeps ownership through explicit higher-generation recovery;
+/// its retained setup must not continue targeting the abandoned peer inbox.
+fn recover_collision_route(st: &mut NodeState, peer: &NodeInfo) -> Result<(), String> {
+    let pk = &peer.identity_pk;
+    let old_route = st.peer_routes.insert(pk.clone(), peer.clone());
+    let mut previous = Vec::new();
+    for (id, pending) in &mut st.pending_1to1 {
+        if &pending.delivery.peer.identity_pk == pk {
+            previous.push((*id, pending.delivery.peer.clone()));
+            pending.delivery.peer = peer.clone();
+        }
+    }
+    match recover_peer(st, pk) {
+        Ok(true) => {
+            st.direct_maintenance_wake.notify_one();
+            Ok(())
+        }
+        result => {
+            st.peer_routes.remove(pk);
+            if let Some(route) = old_route {
+                st.peer_routes.insert(pk.clone(), route);
+            }
+            for (id, route) in previous {
+                st.pending_1to1
+                    .get_mut(&id)
+                    .expect("saved pending")
+                    .delivery
+                    .peer = route;
+            }
+            match result {
+                Err(error) => Err(error),
+                Ok(false) => Err("GC/2 setup recovery waits for route or retained capacity".into()),
+                Ok(true) => unreachable!(),
+            }
+        }
+    }
 }
 
 fn retire_outbox(st: &mut NodeState, peer: &[u8]) -> Vec<(usize, DirectDelivery)> {

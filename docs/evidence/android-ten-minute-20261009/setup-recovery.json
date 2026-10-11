@@ -1,0 +1,51 @@
+{
+  "schema": 1,
+  "codematch": "unreachable",
+  "scope": "Authenticated renewed-inbox setup and durable mobile recovery generation",
+  "source_before": {
+    "gcoms": "f1bf57113dbdc0d23dab8f6d81c3cf04ec72069e",
+    "dropship": "dfc4b208e5175235eb153599e5b3bb820cab0c06"
+  },
+  "causal_original": {
+    "runtime_exit": 101,
+    "controls_failed": 2,
+    "reason": "local winning first move ignores authenticated renewed peer inbox/bundle",
+    "first_fixture_compile_error_excluded": true
+  },
+  "fixed": {
+    "minimal_core": {
+      "pass": 70,
+      "exit": 0
+    },
+    "runtime_setup": {
+      "pass": 5,
+      "exit": 0
+    },
+    "native_mobile_generation": {
+      "exit": 0,
+      "fsync_fail_after_write": "stops in-call retries and reopens observed floor",
+      "durable_higher_floor": "pass"
+    },
+    "runtime_clippy": "pass",
+    "source_audit": {
+      "pass": true,
+      "source_paths": 1081
+    }
+  },
+  "actual_reference_before": {
+    "state": "failed",
+    "elapsed_seconds": 360.7192969090247,
+    "frontier_bytes": 0,
+    "interruption": null
+  },
+  "preserved": [
+    "authenticated expected command identity",
+    "monotonic generation and established-session refusal",
+    "logical message IDs and original absolute deadlines",
+    "storage uncertainty pauses publication",
+    "unchanged retained node and application budgets",
+    "fresh signed FileInit/Finish/CMD authorization"
+  ],
+  "actual_android_qualified": false,
+  "live_rollout_qualified": false
+}
