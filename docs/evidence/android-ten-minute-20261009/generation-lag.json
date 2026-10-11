@@ -58,5 +58,6 @@
   "android_transfer_qualified": false,
   "deployment_timings_qualified": false,
   "rollback_qualified": false,
-  "compatible_managed_fallback_source": "386f85abf9bb81ad8d1d992e47ec8ac2324bdccf"
+  "compatible_managed_fallback_source": "386f85abf9bb81ad8d1d992e47ec8ac2324bdccf",
+  "historical_archive_fixture": "unwrap authenticated request-history extension before constructing real V20 base; complete sealed archive remains mandatory for startup restore"
 }

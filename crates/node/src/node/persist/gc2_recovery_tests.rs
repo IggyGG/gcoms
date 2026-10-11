@@ -359,6 +359,7 @@ async fn gc2_recovery_v20_requires_old_ack_credit_and_v21_authenticates_receipts
     bytes[last] ^= 1;
     // v20 has the exact v21 prefix grammar, without the final sealed receipt
     // field. Construct that actual old grammar, not just a relabeled new file.
+    bytes = first_moves::base(&bytes).unwrap().to_vec();
     bytes.truncate(bytes.len() - (4 + 28 + b.gc2_receipts.encode().len()));
     bytes[..6].copy_from_slice(MAGIC_V20);
     assert!(decode_v2(&bytes, &b.identity_seed)

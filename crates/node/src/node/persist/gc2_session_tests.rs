@@ -14,7 +14,7 @@ fn gc2_node(seed: u8) -> NodeState {
 
 async fn gc2_restore(node: &NodeState, seed: u8) -> Arc<Mutex<NodeState>> {
     let bytes=encode_state(node).unwrap();
-    assert_eq!(&bytes[..6],MAGIC_V21);
+    assert_eq!(&first_moves::base(&bytes).unwrap()[..6],MAGIC_V21);
     let mut fresh=gc2_node(seed);
     // A node restart reopens the existing identity bundle and private keys.
     fresh.info=node.info.clone();
