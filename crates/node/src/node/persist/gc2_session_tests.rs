@@ -239,6 +239,11 @@ async fn gc2_duplicate_setup_reuses_committed_highest_credit_after_restart() {
         gc2_direct::incoming(&mut bob, &cells[0].payload, &events).unwrap();
     }
     assert_eq!(bob.durability.snapshot().writes, before);
+    // Keep the independent logical application ACK as well as the single
+    // cumulative counter credit when restoring the durable outbox.
+    let committed_outbox: Vec<_> = bob.direct_ack_outbox.iter().map(|d| d.cells.clone()).collect();
+    assert_eq!(committed_outbox.iter().flatten().filter(|c| c.payload.starts_with(b"GCA2")).count(), 1);
+    assert!(committed_outbox.iter().flatten().any(|c| c.payload.starts_with(b"GCM2")));
     let restored = gc2_restore(&bob, 94).await;
     let mut reopened = restored.lock().unwrap();
     // Startup marks restored state dirty independently of this retry. Settle
@@ -251,7 +256,7 @@ async fn gc2_duplicate_setup_reuses_committed_highest_credit_after_restart() {
         gc2_direct::incoming(&mut reopened, &cells[0].payload, &events).unwrap();
     }
     assert_eq!(reopened.durability.snapshot().writes, before);
-    assert_eq!(reopened.direct_ack_outbox.len(), 1);
+    assert_eq!(reopened.direct_ack_outbox.iter().map(|d| d.cells.clone()).collect::<Vec<_>>(), committed_outbox);
     assert_eq!(reopened.direct_ack_outbox[0].cells, committed_credit);
     assert_eq!(reopened.application_inbox.entries.len(), 1);
     reopened.scheduler.shutdown();
