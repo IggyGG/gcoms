@@ -42,7 +42,7 @@ impl GcClient for GateClient {
         let message = ApplicationMessage::decode(&route.application)?;
         assert_eq!(message.content_type, gcoms_core::VOLATILE_FILE_CONTENT_TYPE);
         let (done, result) = tokio::sync::oneshot::channel();
-        assert!(self.active.fetch_add(1, Ordering::SeqCst) < 8);
+        assert!(self.active.fetch_add(1, Ordering::SeqCst) < 32);
         let _active = Active(self.active.clone());
         self.observed.send((message.body[0], done)).await.unwrap();
         result.await.map_err(|_| SdkError::ConnectionClosed)?
@@ -184,7 +184,7 @@ async fn bootstrap_bulk_ipc_is_bounded_and_matches_own_reply_without_reordering_
     let identity = crate::EmbeddedClient::new(node.clone()).identity();
     let recipient = identity.contact_card.clone();
     let (events, incoming) = mpsc::channel(8);
-    let (observed, mut calls) = mpsc::channel(16);
+    let (observed, mut calls) = mpsc::channel(64);
     let active = Arc::new(AtomicUsize::new(0));
     let client = GateClient {
         identity,
@@ -261,19 +261,19 @@ async fn bootstrap_bulk_ipc_is_bounded_and_matches_own_reply_without_reordering_
     };
     assert_eq!(reply.result, Err(SdkError::PermissionDenied));
     assert_eq!(active.load(Ordering::SeqCst), 0);
-    for id in 4..=12 {
+    for id in 4..=36 {
         bulk_request(&mut peer, id, &recipient, [4; 16]).await;
     }
     let mut receipts = Vec::new();
-    for _ in 0..8 {
+    for _ in 0..32 {
         receipts.push(
             tokio::time::timeout(Duration::from_secs(2), calls.recv())
                 .await
-                .expect("eight authorized bulk requests must dispatch before the first completes")
+                .expect("32 authorized bulk requests must dispatch before the first completes")
                 .unwrap(),
         );
     }
-    assert_eq!(active.load(Ordering::SeqCst), 8);
+    assert_eq!(active.load(Ordering::SeqCst), 32);
     assert!(
         tokio::time::timeout(Duration::from_millis(100), calls.recv())
             .await
@@ -301,14 +301,14 @@ async fn bootstrap_bulk_ipc_is_bounded_and_matches_own_reply_without_reordering_
             .unwrap()
             .unwrap(),
     );
-    assert_eq!(active.load(Ordering::SeqCst), 8);
+    assert_eq!(active.load(Ordering::SeqCst), 32);
     let (_, done) = receipts.pop().unwrap();
     done.send(Ok(())).unwrap();
     assert!(matches!(
         read_frame(&mut peer).await.unwrap(),
         Frame::Response(_)
     ));
-    assert_eq!(active.load(Ordering::SeqCst), 7);
+    assert_eq!(active.load(Ordering::SeqCst), 31);
     // Disconnect cancels the still-owned network calls; none is detached.
     drop(peer);
     tokio::time::timeout(Duration::from_secs(2), server)

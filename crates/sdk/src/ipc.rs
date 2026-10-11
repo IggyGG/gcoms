@@ -2287,7 +2287,9 @@ where
 
 /// Maximum outstanding authenticated bootstrap file submissions on a connection.
 #[cfg(all(any(unix, windows), feature = "ipc"))]
-const MAX_BOOTSTRAP_BULK_SUBMISSIONS: usize = 8;
+// Match the authenticated Android file window. The application encoder still
+// bounds every owned body, and the JoinSet owns cancellation and hop replies.
+const MAX_BOOTSTRAP_BULK_SUBMISSIONS: usize = 32;
 
 /// Retain the in-progress frame read while forwarding events and owned bulk replies. `read_exact` is
 /// not cancellation safe: recreating it after an event loses a consumed prefix.

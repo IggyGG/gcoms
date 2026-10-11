@@ -603,3 +603,12 @@ three new regressions and the corrected node passes them. The original SDK fails
 controls, strict combined node/SDK Clippy, non-GC/2 node and IPC-only builds pass.
 The 1,088-path source audit passes. Android reference validation is in progress; this does not qualify the full 42 MiB transfer or a
 production promotion. Evidence: `docs/evidence/android-bulk-dispatch-20261011/summary.json`.
+F5 Android credit alignment, 2026-10-11: authorized bootstrap IPC and each credited
+GC/2 peer can now carry 32 application records, matching the Android receiver's
+authenticated chunk window. Each peer retains eight control records, the node
+retains its 64-record total with at most 56 application records, and existing
+payload, session and scheduler byte budgets still apply. Legacy peers keep their
+eight-record limit. The controller continues reading ACKs while submissions wait.
+Focused held-receipt/boundary checks are in progress; full signed Android
+interruption/resume/load and real deployment/rollback timing remain required.
+

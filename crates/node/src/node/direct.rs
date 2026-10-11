@@ -2285,8 +2285,11 @@ where
             let reserve_control = false;
             // Keep the global 64-record limit. GC/2 file data can occupy at
             // most 56 slots, leaving eight for bootstrap control. Each peer
-            // keeps an independent eight-record allowance for each kind;
-            // classification comes from the retained logical record.
+            // can fill the 32-record GC/2 application window while retaining
+            // eight control slots. Legacy peers keep their eight-record bound;
+            // classification comes from the retained logical record. Existing
+            // payload/session/scheduler byte budgets continue to apply.
+            let peer_limit = if reserve_control && !control { 32 } else { 8 };
             let is_control = |pending: &&PendingDirect| {
                 pending
                     .logical_record
@@ -2304,7 +2307,7 @@ where
                             && (!reserve_control || is_control(pending) == control)
                     })
                     .count()
-                    >= 8
+                    >= peer_limit
             {
                 return Err("volatile outbox quota exceeded".into());
             }

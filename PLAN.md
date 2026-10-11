@@ -1550,3 +1550,12 @@ three new regressions and the corrected node passes them. The original SDK fails
 controls, strict combined node/SDK Clippy, non-GC/2 node and IPC-only builds pass.
 The 1,088-path source audit passes. Android reference validation is in progress; this does not qualify the full 42 MiB transfer or a
 production promotion. Evidence: `docs/evidence/android-bulk-dispatch-20261011/summary.json`.
+F5 Android credit alignment, 2026-10-11: the signed 42 MiB reference reached an
+actual interruption at 8,448,000 bytes, but recovery was rejected by the Drone
+dispatcher. Its pre-restart transfer averaged about 90 KB/s. Align the remaining
+eight-record IPC and credited-peer bottlenecks with the authenticated 32-chunk
+receiver window. Keep global64/application56/control8, legacy-peer8, body/byte
+budgets, owned replies/cancellation and deadlines. Scoped causal controls are in
+progress. Actual full Android recovery/load, three prepared promotions <=600 s
+and functional failed-canary rollback <=60 s remain pending.
+

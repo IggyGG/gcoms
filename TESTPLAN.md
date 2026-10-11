@@ -1234,3 +1234,13 @@ production promotion. Evidence: `docs/evidence/android-bulk-dispatch-20261011/su
 Run the scoped gates with `opencode-test cargo test -p gcoms-node --all-features --lib
 gc2_bulk_dispatch_` and `opencode-test cargo test -p gcoms-sdk --all-features --lib
 bootstrap_bulk_`; retain existing bootstrap authorization and interrupted-read controls.
+F5 Android credit alignment, 2026-10-11: run focused `gc2_bulk_dispatch_` node
+controls and `bootstrap_bulk_ipc_` SDK controls, plus strict scoped Clippy. On
+the original eight-slot runtime, filling 32 authenticated chunks with held hop
+replies must fail. The fixed runtime must fill that window, reject record33
+without consuming a counter, preserve eight control records and the global64
+ceiling, match out-of-order replies to their own request IDs, and cancel owned
+work on disconnect. Existing node payload/session/scheduler byte ceilings and
+legacy-peer8 remain mandatory. Source checks do not qualify actual Android
+throughput or production promotion.
+
