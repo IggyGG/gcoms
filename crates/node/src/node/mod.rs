@@ -1765,33 +1765,83 @@ fn persist_received_direct_transaction(
     sealed: &peer_session::Snapshot,
     credit: Option<&[u8]>,
 ) -> Result<(), String> {
-    let previous_outbox_len = st.direct_ack_outbox.len();
-    if let Some(credit) = credit.filter(|credit| {
+    #[cfg(feature = "experimental-gc2")]
+    let superseded_tag = credit
+        .and_then(|bytes| gcoms_protocol::gc2_session::Packet::decode(bytes).ok())
+        .filter(|packet| {
+            packet.kind() == gcoms_protocol::gc2_session::Kind::Credit
+                && st.sessions.get(peer).and_then(PeerSession::tag) == Some(packet.tag())
+        })
+        .map(|packet| *packet.tag());
+    let queued_credit = credit.filter(|credit| {
+        #[cfg(feature = "experimental-gc2")]
+        if superseded_tag.is_some() {
+            return true;
+        }
         !st.direct_ack_outbox.iter().any(|delivery| {
             delivery.peer.identity_pk == peer
                 && delivery.cells.len() == 1
                 && delivery.cells[0].payload == *credit
         })
-    }) {
-        if previous_outbox_len >= 1024 {
-            return Err("direct credit outbox is full".into());
-        }
+    });
+    // Resolve the authenticated route before changing the bounded outbox.
+    let delivery = if let Some(credit) = queued_credit {
         let route = st
             .peer_routes
             .get(peer)
             .cloned()
             .ok_or("missing credit route")?;
-        st.direct_ack_outbox.push_back(DirectDelivery {
+        Some(DirectDelivery {
             peer: route,
             relay: st.client_relay.clone(),
             cells: vec![Cell::new(CellType::Msg, 0, 0, credit.to_vec())],
-        });
+        })
+    } else {
+        None
+    };
+    #[cfg(feature = "experimental-gc2")]
+    let mut retired = Vec::new();
+    #[cfg(feature = "experimental-gc2")]
+    if let Some(tag) = superseded_tag {
+        // A newly prepared credit carries the current cumulative receive
+        // coverage. Older credits for this peer and session add no coverage;
+        // other sessions and ratcheted application ACKs retain their bytes.
+        let mut index = 0;
+        let mut original = 0;
+        while index < st.direct_ack_outbox.len() {
+            let queued = &st.direct_ack_outbox[index];
+            let same_credit = queued.peer.identity_pk == peer
+                && queued.cells.len() == 1
+                && gcoms_protocol::gc2_session::Packet::decode(&queued.cells[0].payload).is_ok_and(
+                    |packet| {
+                        packet.kind() == gcoms_protocol::gc2_session::Kind::Credit
+                            && packet.tag() == &tag
+                    },
+                );
+            if same_credit {
+                retired.push((original, st.direct_ack_outbox.remove(index).unwrap()));
+            } else {
+                index += 1;
+            }
+            original += 1;
+        }
+    }
+    let previous_outbox_len = st.direct_ack_outbox.len();
+    if let Some(delivery) = delivery {
+        if previous_outbox_len >= 1024 {
+            #[cfg(feature = "experimental-gc2")]
+            restore_superseded_credits(st, retired);
+            return Err("direct credit outbox is full".into());
+        }
+        st.direct_ack_outbox.push_back(delivery);
     }
     let previous = st
         .session_states
         .insert(peer.to_vec(), DirectSessionState::Established);
     if let Err(error) = persist_direct_state(st, Some((peer, sealed)), true) {
         st.direct_ack_outbox.truncate(previous_outbox_len);
+        #[cfg(feature = "experimental-gc2")]
+        restore_superseded_credits(st, retired);
         match previous {
             Some(state) => {
                 st.session_states.insert(peer.to_vec(), state);
@@ -1807,6 +1857,13 @@ fn persist_received_direct_transaction(
         st.direct_maintenance_wake.notify_one();
     }
     Ok(())
+}
+
+#[cfg(feature = "experimental-gc2")]
+fn restore_superseded_credits(st: &mut NodeState, retired: Vec<(usize, DirectDelivery)>) {
+    for (index, delivery) in retired {
+        st.direct_ack_outbox.insert(index, delivery);
+    }
 }
 
 fn persist_current_direct_state(st: &NodeState) -> Result<(), String> {

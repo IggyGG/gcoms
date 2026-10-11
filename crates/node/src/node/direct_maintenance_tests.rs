@@ -728,7 +728,11 @@ async fn receipt_maintenance_fixture(selected: bool, commit: bool) {
     node.frwd_target_policy = FrwdTargetPolicy::new(true);
     let contact = node.info.primary().unwrap().clone();
     let mut hop = hop_fixture_policy(node.client_relay.hop_key, contact, false, false).await;
-    node.client_relay.aliases[0].contact.target = hop.target.clone();
+    for (index, alias) in node.client_relay.aliases.iter_mut().enumerate() {
+        let mut contact = alias.contact.clone();
+        contact.target = hop.target.clone();
+        *alias = persist::tests::valid_alias(contact, 50 + index as u8 * 10);
+    }
     for id in 1..=48 {
         node.direct_ack_outbox.push_back(delivery(&node, id));
     }

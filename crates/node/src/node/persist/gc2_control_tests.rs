@@ -64,6 +64,12 @@ async fn gc2_full_bidirectional_control_windows_accept_data_and_release_credit()
     );
     assert_eq!(bob.gc2_receipts.pending_acks(now_unix()).len(), 63);
     assert_eq!(
+        bob.direct_ack_outbox.len(),
+        1,
+        "one latest credit covers the receive burst"
+    );
+    assert_eq!(alice.lock().unwrap().direct_ack_outbox.len(), 1);
+    assert_eq!(
         alice
             .lock()
             .unwrap()
@@ -72,6 +78,24 @@ async fn gc2_full_bidirectional_control_windows_accept_data_and_release_credit()
             .len(),
         63
     );
+    // Superseding a credit is part of the same durable receive transaction.
+    // A failed duplicate checkpoint must restore the prior exact receipt.
+    let saved_counter = bob.sessions[&ai].recv_ctr();
+    let PeerSession::Credited(session) = &bob.sessions[&ai] else {
+        panic!("GC/2")
+    };
+    let saved_window = session.window().encode_private();
+    let old_credit = bob.direct_ack_outbox[0].cells.clone();
+    bob.durable_state_sink = Some(Arc::new(|_| Err("coalesced credit failpoint".into())));
+    gc2_direct::incoming(&mut bob, &outgoing_a[0], &events).unwrap();
+    assert_eq!(bob.direct_ack_outbox.len(), 1);
+    assert_eq!(bob.direct_ack_outbox[0].cells, old_credit);
+    assert_eq!(bob.sessions[&ai].recv_ctr(), saved_counter);
+    let PeerSession::Credited(session) = &bob.sessions[&ai] else {
+        panic!("GC/2")
+    };
+    assert_eq!(session.window().encode_private(), saved_window);
+    bob.durable_state_sink = Some(Arc::new(|_| Ok(())));
     let restored = gc2_restore(&bob, 82).await;
     let mut bob = restored.lock().unwrap();
     assert_eq!(bob.gc2_receipts.pending_acks(now_unix()).len(), 63);

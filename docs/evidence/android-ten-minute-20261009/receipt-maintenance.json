@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "kind": "gc2-receipt-maintenance-checkpoint",
+  "kind": "gc2-receipt-maintenance-qualification",
   "original_gcoms": "21396a27fb49b0fdd0823c68762d33d81d919068",
   "implementation": {
     "committed_receipt_wake": true,
@@ -12,10 +12,22 @@
     "notifications": "one coalesced local permit, excluded from archives"
   },
   "qualification": {
-    "state": "pending",
-    "baseline_build_exit": 125,
-    "baseline_tests_executed": false,
-    "reason": "cold compile exceeded its bounded storage reservation; incremental retry queued"
+    "state": "focused-controls-passed",
+    "original_expected_exit": 101,
+    "original_controls_passed": 2,
+    "original_controls_failed": 1,
+    "original_failure": "48 committed receipts do not drain before 2250 ms periodic maintenance floor",
+    "fixed_tests_passed": 20,
+    "fixed_tests_failed": 0,
+    "tls_h2_burst_receipts": 48,
+    "fixed_burst_deadline_ms": 1500,
+    "legacy_fixture_wire": true,
+    "scope": "maintenance scheduling, exact retries, bounded accounting, GC2 persistence and full bidirectional control window",
+    "source_audit": "1080 paths pass",
+    "full_android_reference": "pending",
+    "timed_promotions": "pending",
+    "functional_rollback": "pending",
+    "clippy": "strict scoped all-features library pass"
   },
   "latest_android_reference": {
     "schema": 1,
@@ -31,5 +43,18 @@
     "scope": "owned x86_64 emulator",
     "remaining": "runtime credit/ACK delivery; no full download/load or live deployment claim"
   },
-  "codematch": "unreachable"
+  "codematch": "unreachable",
+  "credit_coalescing": {
+    "original_failure": "63 queued credits instead of one latest cumulative credit",
+    "fixed_control": "full bidirectional 63-counter windows, failed receive checkpoint, restore and subsequent application ACK retirement pass",
+    "same_authenticated_peer_and_session_only": true,
+    "exact_old_outbox_restored_on_failed_checkpoint": true,
+    "retained_limits_unchanged": true
+  },
+  "log_sha256": {
+    "receipt-wake-proof/original-valid-lease.log": "79c95b57a91d083a04e99622dc04857a28f6509abd349a9af4f497aedf25cfde",
+    "credit-flow-proof/original-runtime.log": "ae76fa5c78788b939a5a4f498c531e402a8164811c3c1fdfed7a98e4ae853547",
+    "credit-flow-proof/runtime-fixed.log": "4536970dfe1244d7305b1798f7ff3fbfebe28218841dee8b888a623fccdcf39c",
+    "credit-flow-proof/runtime-clippy.log": "6128ac6b7c58924a6be84e03b172238d45573cb53792eab65df69203053d410a"
+  }
 }

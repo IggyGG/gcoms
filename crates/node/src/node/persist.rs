@@ -2903,7 +2903,10 @@ pub(in crate::node) mod tests {
         valid_alias(contact, byte)
     }
 
-    fn valid_alias(contact: AliasContact, byte: u8) -> crate::alias::OwnedAlias {
+    pub(in crate::node) fn valid_alias(
+        contact: AliasContact,
+        byte: u8,
+    ) -> crate::alias::OwnedAlias {
         let capabilities = Capabilities {
             push: contact.push_cap,
             sub: [byte.wrapping_add(4); 32],
