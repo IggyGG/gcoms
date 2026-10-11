@@ -537,6 +537,23 @@ class Releases(unittest.TestCase):
 
 
 class Maintenance(unittest.TestCase):
+    def test_reference_preserves_worker_prefix_and_requires_fresh_network_bytes(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); source = root / 'worker'; source.write_bytes(b'prepared-worker')
+            paths = [root / 'first', root / 'second']
+            for path, nonce in zip(paths, (b'a' * 32, b'b' * 32)):
+                with patch.object(qualify.secrets, 'token_bytes', return_value=nonce):
+                    qualify.prepare_reference(source, path)
+                self.assertEqual(path.stat().st_size, qualify.REFERENCE_BYTES)
+                self.assertEqual(path.stat().st_mode & 0o777, 0o600)
+                with path.open('rb') as stream:
+                    self.assertEqual(stream.read(source.stat().st_size), source.read_bytes())
+                    stream.seek(-32, 2); self.assertEqual(stream.read(), nonce)
+            self.assertNotEqual(release.digest(paths[0]), release.digest(paths[1]))
+            with self.assertRaises(FileExistsError): qualify.prepare_reference(source, paths[0])
+            source.write_bytes(b'')
+            with self.assertRaises(ValueError): qualify.prepare_reference(source, root / 'empty')
+
     def test_reference_and_release_share_one_fleet_lock_before_mutation(self):
         with tempfile.TemporaryDirectory() as directory:
             config = {'state': directory}

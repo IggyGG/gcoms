@@ -1,0 +1,18 @@
+{
+  "schema": 1,
+  "gate": "fresh 42MiB signed reference cannot be satisfied by a prior verified-byte cache",
+  "focused_tests": 3,
+  "exit_code": 0,
+  "log_sha256": "31e32b0fac6274db3c3dac064d052cc722898ea543f1971ab314fb5aee237f7a",
+  "checks": [
+    "prepared worker prefix unchanged",
+    "exact 42MiB private file with fresh 32-byte tail",
+    "different reference SHA256 for each run",
+    "exclusive publication and empty-source rejection",
+    "frontier binds run/hash/size/ABI/checksum",
+    "initial reference limited to owned isolated Android fleet"
+  ],
+  "codematch": "unreachable",
+  "source_audit": "1078 paths PASS before adding this evidence record",
+  "actual_android_timing": "pending"
+}

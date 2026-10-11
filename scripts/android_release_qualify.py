@@ -155,6 +155,20 @@ def worker(request, component, name):
     return path
 
 
+def prepare_reference(source, destination):
+    """Use fresh signed bytes so a verified-byte cache cannot satisfy this run."""
+    if not 0 < source.stat().st_size <= REFERENCE_BYTES - 32:
+        raise ValueError('prepared worker needs room for fresh reference padding')
+    with source.open('rb') as src, destination.open('xb') as dst:
+        os.chmod(destination, 0o600)
+        while block := src.read(1024 * 1024): dst.write(block)
+        # ELF ignores trailing data; the normal publication signs every byte.
+        dst.truncate(REFERENCE_BYTES)
+        dst.seek(REFERENCE_BYTES - 32)
+        dst.write(secrets.token_bytes(32))
+        dst.flush(); os.fsync(dst.fileno())
+
+
 def frontier(bytes_, sha):
     if (len(bytes_) != 156 or bytes_[:8] != b'DSRSUM1\0'
             or hashlib.sha256(bytes_[:124]).digest() != bytes_[124:]
@@ -205,14 +219,8 @@ def _run_reference(config, ident):
     directory = Path(config['state']) / 'qualification' / secrets.token_hex(16)
     directory.mkdir(mode=0o700, parents=True)
     source = Path(config['state']) / 'artifacts/worker' / prepared['inputs']['worker'] / target['abi'] / 'worker.so'
-    if not 0 < source.stat().st_size <= REFERENCE_BYTES:
-        raise ValueError('prepared worker does not fit the 42 MiB reference')
     padded = directory / 'reference.so'
-    with source.open('rb') as src, padded.open('xb') as dst:
-        os.chmod(padded, 0o600)
-        while block := src.read(1024 * 1024): dst.write(block)
-        # ELF loaders permit trailing padding; the normal publication signs all bytes.
-        dst.truncate(REFERENCE_BYTES); dst.flush(); os.fsync(dst.fileno())
+    prepare_reference(source, padded)
     value = {key: prepared[key] for key in ('sources', 'inputs', 'targets', 'configuration_sha256')}
     value.update(schema=1, purpose='android-runtime-qualification', prepared_id=ident,
                  pushed_at=time.time(), reference={'path': str(padded), 'sha256': digest(padded), 'bytes': REFERENCE_BYTES})
