@@ -204,6 +204,11 @@ pub struct NodeState {
     pub(super) durability: super::checkpoint::CheckpointState,
     #[cfg(feature = "experimental-gc2")]
     pub(crate) gc2_sessions: bool,
+    /// Coalesced local wake for committed GC/2 receipts and newly freed credit.
+    /// The task still owns the existing bounded attempts and retry deadlines.
+    /// This scheduling handle is never part of an archived session.
+    #[cfg(feature = "experimental-gc2")]
+    pub(super) direct_maintenance_wake: Arc<tokio::sync::Notify>,
     /// Retained GC/2 carrier readiness. The background owner future is owned by
     /// the node task set; this handle only opens circuits through it. Not
     /// archived: the startup profile selects the carrier.

@@ -1,0 +1,35 @@
+{
+  "schema": 1,
+  "kind": "gc2-receipt-maintenance-checkpoint",
+  "original_gcoms": "21396a27fb49b0fdd0823c68762d33d81d919068",
+  "implementation": {
+    "committed_receipt_wake": true,
+    "freed_counter_credit_wake": true,
+    "completion_refill": true,
+    "active_receipt_limit": 16,
+    "gc1_periodic_schedule_preserved": true,
+    "retry_deadlines_preserved": true,
+    "notifications": "one coalesced local permit, excluded from archives"
+  },
+  "qualification": {
+    "state": "pending",
+    "baseline_build_exit": 125,
+    "baseline_tests_executed": false,
+    "reason": "cold compile exceeded its bounded storage reservation; incremental retry queued"
+  },
+  "latest_android_reference": {
+    "schema": 1,
+    "kind": "android-delivery-reference-observation",
+    "result_sha256": "c0862f2685ba00376d02185ad8f16cae929ce10b6526a9b7536035b94d6c5804",
+    "prepared_id": "c9b1796eaa483b503120e8bd3e671adfd7083a2ef13008f296224562489a80e4",
+    "state": "failed",
+    "elapsed_seconds": 360.4056138760061,
+    "last_observed_frontier_bytes": 2200000,
+    "reference_bytes": 44040192,
+    "interruption": null,
+    "process_fatal_error_observed": false,
+    "scope": "owned x86_64 emulator",
+    "remaining": "runtime credit/ACK delivery; no full download/load or live deployment claim"
+  },
+  "codematch": "unreachable"
+}

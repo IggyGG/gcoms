@@ -3095,6 +3095,8 @@ pub(in crate::node) mod tests {
             #[cfg(feature = "experimental-gc2")]
             gc2_sessions: false,
             #[cfg(feature = "experimental-gc2")]
+            direct_maintenance_wake: Arc::new(tokio::sync::Notify::new()),
+            #[cfg(feature = "experimental-gc2")]
             gc2_carrier: None,
             #[cfg(feature = "experimental-gc2")]
             gc2_carrier_client: None,

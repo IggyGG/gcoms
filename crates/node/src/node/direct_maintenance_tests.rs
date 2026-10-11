@@ -645,6 +645,15 @@ impl Drop for HopFixture {
 }
 
 async fn hop_fixture(hop_key: [u8; 32], contact: AliasContact, stalled: bool) -> HopFixture {
+    hop_fixture_policy(hop_key, contact, stalled, true).await
+}
+
+async fn hop_fixture_policy(
+    hop_key: [u8; 32],
+    contact: AliasContact,
+    stalled: bool,
+    reject_first: bool,
+) -> HopFixture {
     let identity = TlsIdentity::generate().unwrap();
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let target = RelayTarget {
@@ -685,7 +694,7 @@ async fn hop_fixture(hop_key: [u8; 32], contact: AliasContact, stalled: bool) ->
                                 return;
                             }
                             tx.send((message, None)).await.unwrap();
-                            if attempts.fetch_add(1, std::sync::atomic::Ordering::SeqCst) == 0 {
+                            if reject_first && attempts.fetch_add(1, std::sync::atomic::Ordering::SeqCst) == 0 {
                                 gcoms_transport::HopReply::Overloaded
                             } else {
                                 gcoms_transport::HopReply::Accepted
@@ -702,6 +711,120 @@ async fn hop_fixture(hop_key: [u8; 32], contact: AliasContact, stalled: bool) ->
         requests,
         task,
     }
+}
+
+#[cfg(feature = "experimental-gc2")]
+async fn receipt_maintenance_fixture(selected: bool, commit: bool) {
+    // The real TLS/H2 hop observes scheduling of already authenticated receipt
+    // bytes. GC/2 cryptography and natural-carrier authorization have separate
+    // controls; this fixture deliberately keeps its fast legacy wire scheduler.
+    let scheduler = RelayScheduler::with_profile(
+        Arc::new(Tp1Client::new().unwrap()),
+        SchedulerProfile::fixture(),
+    );
+    let mut node = persist::tests::state();
+    node.scheduler = scheduler.clone();
+    node.gc2_sessions = selected;
+    node.frwd_target_policy = FrwdTargetPolicy::new(true);
+    let contact = node.info.primary().unwrap().clone();
+    let mut hop = hop_fixture_policy(node.client_relay.hop_key, contact, false, false).await;
+    node.client_relay.aliases[0].contact.target = hop.target.clone();
+    for id in 1..=48 {
+        node.direct_ack_outbox.push_back(delivery(&node, id));
+    }
+    let mut peer = node.info.clone();
+    let identity = IdentityKeypair::from_seed([231; 32]);
+    peer.identity_pk = identity.public_bytes();
+    peer.bundle = identity.issue_bundle().0.encode();
+    // A retained legacy session supplies the durable barrier without adding a
+    // GC/2 handshake retry to the receipt burst being observed at this hop.
+    node.gc2_sessions = false;
+    let (_, session) = peer_session::initiate(&node, &peer).unwrap();
+    node.gc2_sessions = selected;
+    node.sessions.insert(peer.identity_pk.clone(), session);
+    node.peer_routes
+        .insert(peer.identity_pk.clone(), peer.clone());
+    let context = direct_session_context(&node, &peer.identity_pk).unwrap();
+    let sealed = node.sessions[&peer.identity_pk]
+        .seal_state(&direct_session_wrapping_key(&node.identity_seed), &context)
+        .unwrap();
+    node.durable_state_sink = Some(Arc::new(move |_| {
+        if commit {
+            Ok(())
+        } else {
+            Err("receipt commit failpoint".into())
+        }
+    }));
+    let state = Arc::new(Mutex::new(node));
+    let (events, _) = broadcast::channel(4);
+    let task = super::super::ticks::spawn_direct_maintenance_loop(
+        state.clone(),
+        scheduler.clone(),
+        events,
+        SchedulerProfile::production(),
+        [231; 32],
+    );
+    let result = persist_received_direct_transaction(
+        &mut state.lock().unwrap(),
+        &peer.identity_pk,
+        &sealed,
+        None,
+    );
+    assert_eq!(result.is_ok(), commit);
+    if selected && commit {
+        let result = tokio::time::timeout(Duration::from_millis(1500), async {
+            for id in 1..=48 {
+                let (wire, held) = hop.requests.recv().await.expect("receipt hop stays alive");
+                assert_eq!(wire.payload, vec![id; 32]);
+                assert!(held.is_none());
+            }
+            while !state.lock().unwrap().direct_ack_outbox.is_empty() {
+                tokio::task::yield_now().await;
+            }
+        })
+        .await;
+        task.abort();
+        let _ = task.await;
+        scheduler.shutdown();
+        result.expect("three receipt batches must drain before the 2250 ms periodic tick");
+        assert!(
+            hop.requests.try_recv().is_err(),
+            "exact receipts are not duplicated"
+        );
+    } else {
+        let received = tokio::time::timeout(Duration::from_millis(150), hop.requests.recv()).await;
+        task.abort();
+        let _ = task.await;
+        scheduler.shutdown();
+        assert!(
+            received.is_err(),
+            "uncommitted receipts and GC/1 retain their periodic schedule"
+        );
+        assert_eq!(state.lock().unwrap().direct_ack_outbox.len(), 48);
+    }
+    assert_eq!(
+        Arc::strong_count(&state),
+        1,
+        "cancellation releases the owner"
+    );
+}
+
+#[cfg(feature = "experimental-gc2")]
+#[tokio::test]
+async fn gc2_receipt_maintenance_drains_three_batches_before_periodic_tick() {
+    receipt_maintenance_fixture(true, true).await;
+}
+
+#[cfg(feature = "experimental-gc2")]
+#[tokio::test]
+async fn gc2_receipt_maintenance_never_wakes_before_persistence() {
+    receipt_maintenance_fixture(true, false).await;
+}
+
+#[cfg(feature = "experimental-gc2")]
+#[tokio::test]
+async fn gc2_receipt_maintenance_preserves_legacy_periodic_schedule() {
+    receipt_maintenance_fixture(false, true).await;
 }
 
 #[tokio::test]

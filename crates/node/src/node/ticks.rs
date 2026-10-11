@@ -448,6 +448,13 @@ pub(crate) fn spawn_direct_maintenance_loop(
     seed: [u8; 32],
 ) -> tokio::task::JoinHandle<()> {
     let mut rng = scheduler_profile.maintenance_rng_labeled(seed, b"direct");
+    #[cfg(feature = "experimental-gc2")]
+    let wake = {
+        let st = state.lock().unwrap_or_else(|p| p.into_inner());
+        st.gc2_sessions.then(|| st.direct_maintenance_wake.clone())
+    };
+    #[cfg(not(feature = "experimental-gc2"))]
+    let wake: Option<Arc<tokio::sync::Notify>> = None;
     tokio::spawn(async move {
         let mut maintenance = DirectMaintenance::default();
         let clock = tokio::time::sleep(scheduler_profile.maintenance_delay(&mut rng));
@@ -459,7 +466,21 @@ pub(crate) fn spawn_direct_maintenance_loop(
                     clock.as_mut().reset(tokio::time::Instant::now()
                         + scheduler_profile.maintenance_delay(&mut rng));
                 }
-                _ = maintenance.complete_next(&state), if !maintenance.is_empty() => {}
+                _ = async {
+                    if let Some(wake) = &wake {
+                        wake.notified().await;
+                    } else {
+                        std::future::pending::<()>().await;
+                    }
+                } => maintenance.tick(&state, &scheduler, &events),
+                _ = maintenance.complete_next(&state), if !maintenance.is_empty() => {
+                    if wake.is_some() {
+                        // Refill the same sixteen receipt slots when one finishes.
+                        // Waiting for the periodic tick caps sustained credit even
+                        // while an authenticated peer and carrier are ready.
+                        maintenance.tick(&state, &scheduler, &events);
+                    }
+                }
             }
         }
     })

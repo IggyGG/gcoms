@@ -72,6 +72,7 @@ pub(super) fn incoming(
             };
             session.commit_credit(prepared).map_err(|e| e.to_string())?;
             // Credit never implies application acceptance and produces no ACK.
+            st.direct_maintenance_wake.notify_one();
         }
     }
     Ok(())

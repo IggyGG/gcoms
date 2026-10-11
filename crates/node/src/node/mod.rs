@@ -1332,6 +1332,8 @@ async fn start_role(
             #[cfg(feature = "experimental-gc2")]
             gc2_sessions: cfg.profile.gc2_sessions(),
             #[cfg(feature = "experimental-gc2")]
+            direct_maintenance_wake: Arc::new(tokio::sync::Notify::new()),
+            #[cfg(feature = "experimental-gc2")]
             gc2_carrier: None,
             #[cfg(feature = "experimental-gc2")]
             gc2_carrier_client: None,
@@ -1799,6 +1801,10 @@ fn persist_received_direct_transaction(
             }
         }
         return Err(error);
+    }
+    #[cfg(feature = "experimental-gc2")]
+    if st.gc2_sessions {
+        st.direct_maintenance_wake.notify_one();
     }
     Ok(())
 }
