@@ -2017,7 +2017,7 @@ async fn serve_connection<C, S>(
     registry: Option<Arc<crate::machine::MachineRegistry>>,
 ) -> Result<(), SdkError>
 where
-    C: GcClient,
+    C: GcClient + 'static,
     S: AsyncRead + AsyncWrite + Unpin,
 {
     serve_profile_connection(stream, client, allowed, registry, None).await
@@ -2032,9 +2032,10 @@ async fn serve_profile_connection<C, S>(
     profile: Option<Arc<ProfileAccess>>,
 ) -> Result<(), SdkError>
 where
-    C: GcClient,
+    C: GcClient + 'static,
     S: AsyncRead + AsyncWrite + Unpin,
 {
+    let client = Arc::new(client);
     let mut incoming = Zeroizing::new(
         tokio::time::timeout(std::time::Duration::from_secs(10), read_frame(&mut stream))
             .await
@@ -2164,6 +2165,7 @@ where
     let send_events = granted.contains(&Capability::EventRead);
     let mut sequence = 1u64;
     let mut bootstrap = crate::bootstrap::Session::default();
+    let mut bulk = tokio::task::JoinSet::new();
     loop {
         let frame = read_request_with_events(
             &mut reader,
@@ -2175,6 +2177,7 @@ where
             component.as_ref(),
             version,
             &mut bootstrap,
+            &mut bulk,
         )
         .await?;
         let Frame::Request(mut request) = frame else {
@@ -2223,13 +2226,33 @@ where
                             .capabilities
                             .contains(&Capability::BootstrapApplication) =>
                     {
-                        bootstrap
-                            .dispatch(
+                        if matches!(&*guarded_request, Request::SubmitBootstrap { content_type, .. }
+                            if content_type == gcoms_core::VOLATILE_FILE_CONTENT_TYPE)
+                        {
+                            match bootstrap.prepare_submission(
                                 &client,
                                 component.credentials.component_id,
                                 std::mem::replace(&mut *guarded_request, Request::Identity),
-                            )
-                            .await
+                            ) {
+                                Ok(prepared) => {
+                                    let client = client.clone();
+                                    let id = request.request_id;
+                                    bulk.spawn(async move {
+                                        (id, prepared.send(&client).await.map(|_| Response::Empty))
+                                    });
+                                    continue;
+                                }
+                                Err(error) => Err(error),
+                            }
+                        } else {
+                            bootstrap
+                                .dispatch(
+                                    &client,
+                                    component.credentials.component_id,
+                                    std::mem::replace(&mut *guarded_request, Request::Identity),
+                                )
+                                .await
+                        }
                     }
                     _ => Err(SdkError::PermissionDenied),
                 }
@@ -2262,7 +2285,11 @@ where
     }
 }
 
-/// Retain the in-progress frame read while forwarding events. `read_exact` is
+/// Maximum outstanding authenticated bootstrap file submissions on a connection.
+#[cfg(all(any(unix, windows), feature = "ipc"))]
+const MAX_BOOTSTRAP_BULK_SUBMISSIONS: usize = 8;
+
+/// Retain the in-progress frame read while forwarding events and owned bulk replies. `read_exact` is
 /// not cancellation safe: recreating it after an event loses a consumed prefix.
 #[cfg(all(any(unix, windows), feature = "ipc"))]
 #[allow(clippy::too_many_arguments)]
@@ -2276,12 +2303,17 @@ async fn read_request_with_events<R: AsyncRead + Unpin, W: AsyncWrite + Unpin>(
     component: Option<&crate::machine::ComponentRegistration>,
     version: u16,
     bootstrap: &mut crate::bootstrap::Session,
+    bulk: &mut tokio::task::JoinSet<(u64, Result<Response, SdkError>)>,
 ) -> Result<Frame, SdkError> {
     let incoming = read_frame(reader);
     tokio::pin!(incoming);
     loop {
         tokio::select! {
-            frame = &mut incoming => return frame,
+            frame = &mut incoming, if bulk.len() < MAX_BOOTSTRAP_BULK_SUBMISSIONS => return frame,
+            completed = bulk.join_next(), if !bulk.is_empty() => {
+                let (request_id, result) = completed.and_then(Result::ok).ok_or(SdkError::ConnectionClosed)?;
+                write_frame(writer, &Frame::Response(ResponseEnvelope { version, request_id, result })).await?;
+            },
             event = events.recv(), if send_events => {
                 let event = event.ok_or(SdkError::ConnectionClosed)?;
                 let event = match &component {
@@ -3446,6 +3478,61 @@ mod interrupted_read_tests {
     use super::*;
 
     #[tokio::test]
+    async fn bootstrap_bulk_completion_keeps_a_partly_read_request_intact() {
+        let (mut peer, stream) = tokio::io::duplex(1);
+        let (mut reader, mut writer) = tokio::io::split(stream);
+        let (events, mut incoming_events) = mpsc::channel(1);
+        let (release, released) = tokio::sync::oneshot::channel();
+        let mut bulk = tokio::task::JoinSet::new();
+        bulk.spawn(async move {
+            released.await.unwrap();
+            (19, Ok(Response::Empty))
+        });
+        let task = tokio::spawn(async move {
+            let _events = events;
+            read_request_with_events(
+                &mut reader,
+                &mut writer,
+                &mut incoming_events,
+                &[],
+                false,
+                &mut 1,
+                None,
+                VERSION,
+                &mut crate::bootstrap::Session::default(),
+                &mut bulk,
+            )
+            .await
+        });
+        let payload = encode(&Frame::Request(RequestEnvelope {
+            version: VERSION,
+            request_id: 42,
+            request: Request::Identity,
+        }))
+        .unwrap();
+        let length = (payload.len() as u32).to_be_bytes();
+        peer.write_all(&length[..3]).await.unwrap();
+        release.send(()).unwrap();
+        let Frame::Response(response) = read_frame(&mut peer).await.unwrap() else {
+            panic!("response")
+        };
+        assert_eq!(response.request_id, 19);
+        assert_eq!(response.result, Ok(Response::Empty));
+        peer.write_all(&length[3..]).await.unwrap();
+        peer.write_all(&payload).await.unwrap();
+        let Frame::Request(request) = tokio::time::timeout(std::time::Duration::from_secs(2), task)
+            .await
+            .unwrap()
+            .unwrap()
+            .unwrap()
+        else {
+            panic!("request")
+        };
+        assert_eq!(request.request_id, 42);
+        assert_eq!(request.request, Request::Identity);
+    }
+
+    #[tokio::test]
     async fn inbound_event_does_not_discard_a_partial_request_prefix() {
         let (mut peer, server) = tokio::io::duplex(1);
         let (mut reader, mut writer) = tokio::io::split(server);
@@ -3461,6 +3548,7 @@ mod interrupted_read_tests {
                 None,
                 VERSION,
                 &mut crate::bootstrap::Session::default(),
+                &mut tokio::task::JoinSet::new(),
             )
             .await
         });

@@ -2884,6 +2884,8 @@ pub(in crate::node) mod tests {
     include!("persist/gc2_volatile_tests.rs");
     #[cfg(feature = "experimental-gc2")]
     include!("persist/gc2_control_tests.rs");
+    #[cfg(feature = "experimental-gc2")]
+    include!("persist/gc2_bulk_dispatch_tests.rs");
     include!("persist/channel_directory_tests.rs");
     include!("persist/channel_pex_tests.rs");
     include!("persist/owner_reopen_tests.rs");

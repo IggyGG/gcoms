@@ -1,0 +1,71 @@
+{
+  "schema": 1,
+  "date": "2026-10-11",
+  "base_runtime": "93fee9b8c276d475d8050e46ddac8ef531901c15",
+  "scope": "focused runtime and SDK IPC regressions; no Android or promotion qualification",
+  "original_node": {
+    "passed": 0,
+    "failed": 3,
+    "exit_code": 101,
+    "failures": [
+      "second TLS bulk push blocked by pending prior hop reply",
+      "bootstrap control blocked behind eight file records",
+      "file data consumed reserved global control capacity"
+    ]
+  },
+  "fixed_node": {
+    "passed": 3,
+    "failed": 0,
+    "runtime_seconds": 6.02
+  },
+  "original_sdk": {
+    "passed": 0,
+    "failed": 1,
+    "exit_code": 101,
+    "node_fix_present": true,
+    "failure": "one connection serializes authorized concurrent file submissions"
+  },
+  "fixed_sdk": {
+    "passed": 15,
+    "failed": 0,
+    "runtime_seconds": 0.92,
+    "controls": [
+      "authorization and component boundary",
+      "maximum eight concurrent owned calls",
+      "own request ID and failure propagation",
+      "disconnect cancellation",
+      "partial frame preservation during reply and event writes",
+      "existing bootstrap version/grant gates"
+    ]
+  },
+  "static_checks": [
+    {
+      "gate": "clippy",
+      "exit_code": 0,
+      "elapsed_seconds": 62.55991012699087
+    },
+    {
+      "gate": "non-gc2",
+      "exit_code": 0,
+      "elapsed_seconds": 24.51499055698514
+    },
+    {
+      "gate": "ipc-only",
+      "exit_code": 0,
+      "elapsed_seconds": 19.576339764986187
+    }
+  ],
+  "source_audit_paths": 1088,
+  "bounds": {
+    "global_volatile_records": 64,
+    "credited_data_slots": 56,
+    "per_peer_each_kind": 8,
+    "ipc_file_submissions": 8,
+    "retained_payload_budget": "unchanged",
+    "authorization_and_expiry": "unchanged"
+  },
+  "codematch": "unreachable",
+  "full_android_reference": "pending",
+  "timed_live_promotions": "pending",
+  "functional_rollback": "pending"
+}

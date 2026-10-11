@@ -127,6 +127,53 @@ impl Session {
     }
 
     #[cfg(all(any(unix, windows), feature = "ipc"))]
+    pub(crate) fn prepare_submission<C: GcClient>(
+        &self,
+        client: &C,
+        local: ComponentId,
+        request: Request,
+    ) -> Result<PreparedSubmission, SdkError> {
+        let Request::SubmitBootstrap {
+            recipient,
+            destination,
+            content_type,
+            body,
+        } = request
+        else {
+            return Err(SdkError::PermissionDenied);
+        };
+        let mut body = Zeroizing::new(body);
+        if !valid_application(&content_type, &body) {
+            return Err(SdkError::PermissionDenied);
+        }
+        let identity = client.contact_identity(&recipient)?;
+        let peer = self
+            .peers
+            .get(&(identity, destination))
+            .ok_or(SdkError::PermissionDenied)?;
+        if !peer.live(unix()?, Instant::now())
+            || (content_type != gcoms_core::bootstrap::CONTENT_TYPE && peer.admitted.is_none())
+        {
+            return Err(SdkError::PermissionDenied);
+        }
+        let app = Zeroizing::new(ApplicationMessage {
+            content_type,
+            body: std::mem::take(&mut *body),
+        });
+        let route = Zeroizing::new(RoutedApplication {
+            source: local,
+            destination,
+            application: app.encode()?,
+        });
+        let encoded = Zeroizing::new(route.encode().map_err(|e| SdkError::Protocol(e.into()))?);
+        let routed = Zeroizing::new(ApplicationMessage::decode(&encoded)?);
+        Ok(PreparedSubmission {
+            recipient,
+            application: routed,
+        })
+    }
+
+    #[cfg(all(any(unix, windows), feature = "ipc"))]
     pub(crate) async fn dispatch<C: GcClient>(
         &mut self,
         client: &C,
@@ -142,46 +189,32 @@ impl Session {
                 self.admit(peer_identity, source, expires_at_unix)?;
                 Ok(Response::Empty)
             }
-            Request::SubmitBootstrap {
-                recipient,
-                destination,
-                content_type,
-                body,
-            } => {
-                let mut body = Zeroizing::new(body);
-                if !valid_application(&content_type, &body) {
-                    return Err(SdkError::PermissionDenied);
-                }
-                let identity = client.contact_identity(&recipient)?;
-                let peer = self
-                    .peers
-                    .get(&(identity, destination))
-                    .ok_or(SdkError::PermissionDenied)?;
-                if !peer.live(unix()?, Instant::now())
-                    || (content_type != gcoms_core::bootstrap::CONTENT_TYPE
-                        && peer.admitted.is_none())
-                {
-                    return Err(SdkError::PermissionDenied);
-                }
-                let app = Zeroizing::new(ApplicationMessage {
-                    content_type,
-                    body: std::mem::take(&mut *body),
-                });
-                let route = Zeroizing::new(RoutedApplication {
-                    source: local,
-                    destination,
-                    application: app.encode()?,
-                });
-                let encoded =
-                    Zeroizing::new(route.encode().map_err(|e| SdkError::Protocol(e.into()))?);
-                let routed = Zeroizing::new(ApplicationMessage::decode(&encoded)?);
-                client
-                    .submit_volatile_opaque(&recipient, &routed.content_type, &routed.body)
+            request @ Request::SubmitBootstrap { .. } => {
+                self.prepare_submission(client, local, request)?
+                    .send(client)
                     .await?;
                 Ok(Response::Empty)
             }
             _ => Err(SdkError::PermissionDenied),
         }
+    }
+}
+
+#[cfg(all(any(unix, windows), feature = "ipc"))]
+pub(crate) struct PreparedSubmission {
+    recipient: ContactCard,
+    application: Zeroizing<ApplicationMessage>,
+}
+#[cfg(all(any(unix, windows), feature = "ipc"))]
+impl PreparedSubmission {
+    pub(crate) async fn send<C: GcClient>(self, client: &C) -> Result<(), SdkError> {
+        client
+            .submit_volatile_opaque(
+                &self.recipient,
+                &self.application.content_type,
+                &self.application.body,
+            )
+            .await
     }
 }
 

@@ -2276,10 +2276,33 @@ where
                         .is_some_and(crate::proto::is_volatile_application)
                 })
                 .collect();
+            #[cfg(feature = "experimental-gc2")]
+            let reserve_control = matches!(
+                st.sessions.get(&peer.identity_pk),
+                Some(PeerSession::Credited(_))
+            );
+            #[cfg(not(feature = "experimental-gc2"))]
+            let reserve_control = false;
+            // Keep the global 64-record limit. GC/2 file data can occupy at
+            // most 56 slots, leaving eight for bootstrap control. Each peer
+            // keeps an independent eight-record allowance for each kind;
+            // classification comes from the retained logical record.
+            let is_control = |pending: &&PendingDirect| {
+                pending
+                    .logical_record
+                    .as_deref()
+                    .is_some_and(direct_control_record)
+            };
             if queued.len() >= 64
+                || (reserve_control
+                    && !control
+                    && queued.iter().filter(|pending| !is_control(pending)).count() >= 56)
                 || queued
                     .iter()
-                    .filter(|pending| pending.delivery.peer.identity_pk == peer.identity_pk)
+                    .filter(|pending| {
+                        pending.delivery.peer.identity_pk == peer.identity_pk
+                            && (!reserve_control || is_control(pending) == control)
+                    })
                     .count()
                     >= 8
             {
@@ -2547,6 +2570,21 @@ pub(crate) async fn complete_direct_record(
     scheduler: &RelayScheduler,
     prepared: PreparedDirect,
 ) -> Result<[u8; 16], String> {
+    complete_direct_record_with_admission(scheduler, prepared, || {}).await
+}
+
+/// Release a peer dispatch ticket only after this one-cell volatile GC/2 bulk
+/// request has entered the bounded scheduler. Other delivery types hold the
+/// ticket through their existing completion, including errors/cancellation.
+pub(crate) async fn complete_direct_record_with_admission<F: FnOnce() + Send>(
+    scheduler: &RelayScheduler,
+    prepared: PreparedDirect,
+    admitted: F,
+) -> Result<[u8; 16], String> {
+    #[cfg(feature = "experimental-gc2")]
+    let mut admitted = Some(admitted);
+    #[cfg(not(feature = "experimental-gc2"))]
+    let _admitted = admitted;
     #[cfg(feature = "experimental-gc2")]
     let natural = prepared.natural.clone();
     #[cfg(feature = "experimental-gc2")]
@@ -2573,7 +2611,23 @@ pub(crate) async fn complete_direct_record(
     }
     #[cfg(feature = "experimental-gc2")]
     if let Some(client) = &natural {
-        let result = super::gc2_carrier::deliver_all(client, scheduler, &delivery, traffic).await;
+        let release_on_admission = if scheduler.is_gc2()
+            && !durable
+            && traffic == gcoms_core::TrafficClass::Bulk
+            && delivery.cells.len() == 1
+        {
+            admitted.take()
+        } else {
+            None
+        };
+        let result = super::gc2_carrier::deliver_all_with_admission(
+            client,
+            scheduler,
+            &delivery,
+            traffic,
+            release_on_admission,
+        )
+        .await;
         if let Some(state) = state.upgrade().filter(|_| local_route_unavailable(&result)) {
             retry_initial_unavailable_route(
                 &mut state.lock().unwrap_or_else(|p| p.into_inner()),

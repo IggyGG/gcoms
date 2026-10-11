@@ -57,8 +57,9 @@ struct KeyedSerializer {
 }
 
 /// Per-key scheduling locks. `prepare` serializes preparation; the completion
-/// chain preserves wire/result order even though completion runs after the
-/// preparation lock is released.
+/// chain preserves dispatch order after the preparation lock is released.
+/// Single-cell GC/2 volatile bulk sends release it after scheduler admission;
+/// each command still owns and waits for its own hop completion.
 #[derive(Clone, Default)]
 struct KeyLocks {
     prepare: Arc<tokio::sync::Mutex<()>>,
@@ -406,10 +407,12 @@ pub(crate) fn spawn_command_loop(ctx: CommandLoopContext) -> tokio::task::JoinHa
                             let prepared = prepare_volatile_application(&state, &peer, &body)?;
                             let ticket = complete.register();
                             drop(prepare);
-                            let _ticket = ticket.wait().await;
-                            complete_direct_record(&scheduler, prepared)
-                                .await
-                                .map(|_| ())
+                            let ticket = ticket.wait().await;
+                            complete_direct_record_with_admission(&scheduler, prepared, move || {
+                                drop(ticket);
+                            })
+                            .await
+                            .map(|_| ())
                         }
                     );
                 }

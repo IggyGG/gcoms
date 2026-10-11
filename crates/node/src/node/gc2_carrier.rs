@@ -67,6 +67,18 @@ pub(crate) async fn deliver_all(
     delivery: &DirectDelivery,
     class: gcoms_core::TrafficClass,
 ) -> Result<(), String> {
+    deliver_all_with_admission(client, scheduler, delivery, class, None::<fn()>).await
+}
+
+/// The callback runs once, after successful local scheduler admission and
+/// before awaiting the owned receipt. It never changes refusal/retry policy.
+pub(crate) async fn deliver_all_with_admission<F: FnOnce() + Send>(
+    client: &Tp1Client,
+    scheduler: &RelayScheduler,
+    delivery: &DirectDelivery,
+    class: gcoms_core::TrafficClass,
+    mut admitted: Option<F>,
+) -> Result<(), String> {
     let contact = delivery.peer.primary().ok_or("peer has no public alias")?;
     for cell in &delivery.cells {
         if !scheduler.is_gc2() {
@@ -85,7 +97,12 @@ pub(crate) async fn deliver_all(
             let result =
                 match scheduler.push_with_class(ProducerClass::Direct, contact.clone(), msg, class)
                 {
-                    Ok(receipt) => receipt.completion().await.accepted().map(|_| ()),
+                    Ok(receipt) => {
+                        if let Some(admitted) = admitted.take() {
+                            admitted();
+                        }
+                        receipt.completion().await.accepted().map(|_| ())
+                    }
                     Err(error) => Err(error.to_string()),
                 };
             match result {

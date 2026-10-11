@@ -65,6 +65,7 @@ async fn v16_routed_event_populates_only_the_current_bootstrap_session_before_ad
     let (mut reader, mut writer) = tokio::io::split(stream);
     let mut sequence = 1;
     let mut session = crate::bootstrap::Session::default();
+    let mut bulk = tokio::task::JoinSet::new();
     let reading = read_request_with_events(
         &mut reader,
         &mut writer,
@@ -75,6 +76,7 @@ async fn v16_routed_event_populates_only_the_current_bootstrap_session_before_ad
         Some(&registration),
         16,
         &mut session,
+        &mut bulk,
     );
     let receiving = async {
         let Frame::Event(event) = read_frame(&mut peer).await.unwrap() else {
@@ -493,3 +495,6 @@ async fn new_bootstrap_sdk_rejects_old_welcome_without_sending_a_request() {
         .unwrap()
         .unwrap();
 }
+
+#[path = "bootstrap_bulk_tests.rs"]
+mod bulk_tests;

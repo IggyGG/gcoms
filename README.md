@@ -584,3 +584,22 @@ starts at the original Forgejo push. Successful installation alone does not
 qualify downloaded worker readiness.
 
 [Android deployment measurements](docs/evidence/android-ten-minute-20261009/summary.json) retain cold preparation, actual cache reuse, signed APK installation and the original server push clocks. The full download/load gate remains failed; the shared controller baseline currently prevents main integration of the standalone operations files.
+
+
+F5 Android bulk dispatch (2026-10-11): GC/2 single-cell volatile file sends preserve
+preparation and scheduler-admission order while owning independent hop completions.
+Interactive, legacy, setup and durable sends retain their existing completion order.
+The 64-record volatile outbox reserves eight global slots for control and separates
+the existing eight-record peer allowance by authenticated record kind for credited
+sessions. No retained byte budget, expiry or authenticated file credit increases.
+Registered bootstrap IPC connections admit at most eight authorized file submissions
+concurrently. Admission state remains on the connection owner; replies keep their
+request IDs, partial request reads survive completion/event writes, and disconnect
+or host shutdown cancels the owned calls. Other request types keep their dispatch.
+Focused causal controls cover held TLS replies, retained queue boundaries and failed
+checkpoint restoration, IPC admission/component separation, bounded inflight work,
+reply matching/cancellation and partial frame reads. The original node fails all
+three new regressions and the corrected node passes them. The original SDK fails its concurrent-dispatch regression; all 15 focused SDK
+controls, strict combined node/SDK Clippy, non-GC/2 node and IPC-only builds pass.
+The 1,088-path source audit passes. Android reference validation is in progress; this does not qualify the full 42 MiB transfer or a
+production promotion. Evidence: `docs/evidence/android-bulk-dispatch-20261011/summary.json`.
