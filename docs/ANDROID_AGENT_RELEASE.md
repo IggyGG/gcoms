@@ -43,6 +43,9 @@ declared to the manager. Signed artifacts and private receipts live on SSD outsi
 disposable scratch. An additive Forgejo hook writes small push notifications on
 the existing mounted SSD; it neither changes ownership hooks nor blocks pushes.
 Source notifications coalesce before preparation. Promotion tags are processed individually with their original server push times. A pre-receive guard refuses tag rewriting/deletion and annotated or malformed tags. Failed requests and artifacts remain.
+The hook recognizes current `agent/` task branches without hardcoding session
+IDs. It accepts only safe ASCII ref names; the consumer still selects the exact
+source refs in the private configuration before requesting preparation.
 
 Prepare the owned workstation (no private configuration is committed):
 

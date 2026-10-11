@@ -6,6 +6,7 @@ import hashlib
 import io
 import os
 from pathlib import Path
+import shlex
 import subprocess
 import socket
 import struct
@@ -26,6 +27,47 @@ import android_release_host as host
 import android_release_hub as hub
 import android_release_qualify as qualify
 import android_release_network as network
+
+
+class SourcePushHook(unittest.TestCase):
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.root = Path(temporary.name)
+        self.repo = self.root / 'gcoms.git'
+        self.repo.mkdir()
+        self.mailbox = self.root / 'events'
+        self.mailbox.mkdir()
+        source = Path(__file__).resolve().parents[1] / 'android_release_push_hook.sh'
+        text = source.read_text()
+        self.assertEqual(text.count('mailbox=/var/lib/gitea/android-release/events'), 1)
+        self.hook = self.root / 'hook.sh'
+        self.hook.write_text(text.replace('mailbox=/var/lib/gitea/android-release/events',
+                                         'mailbox=' + shlex.quote(str(self.mailbox))))
+
+    def push(self, refs):
+        rows = ''.join('0' * 40 + ' ' + '1' * 40 + ' ' + ref + '\n' for ref in refs)
+        subprocess.run(['/bin/sh', str(self.hook)], cwd=self.repo, input=rows,
+                       text=True, check=True, timeout=5)
+        return [json.loads(path.read_text()) for path in self.mailbox.glob('*.json')]
+
+    def test_current_task_branch_notifies_only_its_configured_consumer(self):
+        ref = 'refs/heads/agent/android-ten-minute-current'
+        rows = self.push([ref, 'refs/heads/agent/unconfigured-task'])
+        self.assertEqual({row['ref'] for row in rows},
+                         {ref, 'refs/heads/agent/unconfigured-task'})
+        config = {'event_directory': str(self.mailbox), 'state': str(self.root / 'state'),
+                  'sources': {'gcoms': {'project': 'gcoms', 'ref': ref}}}
+        selected = queue.events(config)
+        self.assertEqual(len(selected), 1)
+        self.assertEqual(selected[0][1]['ref'], ref)
+        self.assertEqual(selected[0][1]['commit'], '1' * 40)
+        self.assertGreater(selected[0][1]['pushed_at'], 0)
+
+    def test_unsafe_json_refs_never_emit_events(self):
+        self.assertEqual(self.push(['refs/heads/agent/quote"injection',
+                                    'refs/heads/agent/back\\slash',
+                                    'refs/heads/agent/unicode-\u00e9']), [])
 
 
 class RoutingHorizon(unittest.TestCase):

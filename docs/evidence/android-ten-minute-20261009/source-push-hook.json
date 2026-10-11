@@ -1,0 +1,12 @@
+{
+  "schema": 1,
+  "state": "passed",
+  "observed_at": 1791739191.9769926,
+  "focused_release_tests": 55,
+  "elapsed_seconds": 13.76,
+  "original_collision_control": "one failed, one passed: current branch event overwritten by second ref at same commit",
+  "behavior": "current agent task branches emit safe ASCII source events; dispatcher still selects only exact configured refs; each accepted ref gets a distinct event filename",
+  "native_input_changes": false,
+  "codematch": "unreachable",
+  "full_android_and_live_timing_gates": "pending"
+}

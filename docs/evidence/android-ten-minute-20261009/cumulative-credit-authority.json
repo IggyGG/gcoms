@@ -60,5 +60,16 @@
     "exit_code": 0,
     "elapsed_seconds": 0.26903067401144654,
     "log_sha256": "6c74cef2ff15172e52f85c372c446f11c0b1f4cdfe4a7e4f2d896d1883e2e344"
+  },
+  "runtime_controls": {
+    "state": "passed",
+    "source_commit": "5d27637614eefefa567ef5f8ca548627ff902578",
+    "cases": 41,
+    "test_elapsed_seconds": 184.83,
+    "sdk_input_sha256": "2a8a6292fc7e920bc7a90f450e81ecc677103b50858f4aaf5a66d5c33a73622e",
+    "sdk_receipt_sha256": "54da55760e951fdccd7652fcc2d57b0af083b3e712abcfcac86590b04204c50e",
+    "test_log_sha256": "c0dbb12f03ca68e8e1ee8b5ca754b56fa788802bab716a770ceb56fbba1a542d",
+    "duplicate_setup_control": "new coverage crosses durable barrier; restored startup checkpoint is settled once; sixteen retries preserve exact cumulative credit, application ACK and single inbox effect without extra writes",
+    "prior_fixture_failures_retained": true
   }
 }
