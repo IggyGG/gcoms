@@ -241,6 +241,11 @@ async fn gc2_duplicate_setup_reuses_committed_highest_credit_after_restart() {
     assert_eq!(bob.durability.snapshot().writes, before);
     let restored = gc2_restore(&bob, 94).await;
     let mut reopened = restored.lock().unwrap();
+    // Startup marks restored state dirty independently of this retry. Settle
+    // that checkpoint before measuring whether duplicate credit adds writes.
+    let restored_writes = reopened.durability.snapshot().writes;
+    flush_changed_state(&reopened).unwrap();
+    assert_eq!(reopened.durability.snapshot().writes, restored_writes + 1);
     let before = reopened.durability.snapshot().writes;
     for _ in 0..16 {
         gc2_direct::incoming(&mut reopened, &cells[0].payload, &events).unwrap();
