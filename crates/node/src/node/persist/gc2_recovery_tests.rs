@@ -844,7 +844,7 @@ async fn gc2_collision_renews_authenticated_route_with_monotonic_setup_recovery(
     assert_eq!(accepted.session.window().generation(), 2);
     assert!(gc2_direct::incoming(&mut winner, &packet, &events)
         .unwrap_err()
-        .contains("retired GC/2 recovery generation"));
+        .contains("retired GC/2"));
     winner.scheduler.shutdown();
     peer.scheduler.shutdown();
 }
@@ -936,5 +936,266 @@ async fn gc2_collision_route_wait_restores_metadata_without_writing_or_rotating(
     assert_eq!(winner.peer_routes[&pk], peer.info.public());
     assert_eq!(winner.pending_1to1[&id].expires, deadline);
     winner.scheduler.shutdown();
+    peer.scheduler.shutdown();
+}
+
+async fn gc2_lagging_route_recovery(
+    established: bool,
+    renewed_route: bool,
+) -> (Arc<Mutex<NodeState>>, NodeState, [u8; 16], Vec<u8>) {
+    let state = Arc::new(Mutex::new(gc2_node(103)));
+    let mut peer = gc2_node(104);
+    let scheduler = state.lock().unwrap().scheduler.clone();
+    send_durable_1to1(
+        &state,
+        &scheduler,
+        &peer.info,
+        b"retained logical delivery",
+        None,
+    )
+    .await
+    .unwrap();
+    let pk = peer.info.identity_pk.clone();
+    let (events, _) = broadcast::channel(32);
+    let id = {
+        let mut local = state.lock().unwrap();
+        for _ in 0..4 {
+            assert!(gc2_direct::recover_peer(&mut local, &pk).unwrap());
+        }
+        assert_eq!(gc2_generation(&local, &pk), 5);
+        if established {
+            let first = gc2_setup_packet(&local, &pk);
+            gc2_direct::incoming(&mut peer, &first, &events).unwrap();
+            let credit = peer.direct_ack_outbox.back().unwrap().cells[0]
+                .payload
+                .clone();
+            gc2_direct::incoming(&mut local, &credit, &events).unwrap();
+            local
+                .session_states
+                .insert(pk.clone(), DirectSessionState::Established);
+        }
+        *local.pending_1to1.keys().next().unwrap()
+    };
+    if renewed_route {
+        peer.info.aliases[0].queue_id = [195; 32];
+        let (bundle, secrets) = IdentityKeypair::from_seed(peer.identity_seed).issue_bundle();
+        peer.info.bundle = bundle.encode();
+        peer.secrets = Arc::new(secrets);
+    }
+    let packet = gcoms_protocol::gc2_session::initiate_recovery(
+        &IdentityKeypair::from_seed(peer.identity_seed),
+        &peer.info.public(),
+        &peer.secrets,
+        &state.lock().unwrap().info.public(),
+        2,
+        now_unix(),
+        &mut rand::thread_rng(),
+    )
+    .unwrap()
+    .packet;
+    (state, peer, id, packet)
+}
+
+#[tokio::test]
+async fn gc2_lagging_recovery_renews_only_unconfirmed_route_without_lowering_floor() {
+    let (state, mut peer, id, packet) = gc2_lagging_route_recovery(false, true).await;
+    let (events, _) = broadcast::channel(32);
+    let mut local = state.lock().unwrap();
+    let pk = peer.info.identity_pk.clone();
+    let old_record = local.pending_1to1[&id].logical_record.clone();
+    let old_sequence = local.pending_1to1[&id].sequence;
+    let old_expiry = local.pending_1to1[&id].expires;
+    gc2_direct::incoming(&mut local, &packet, &events).unwrap();
+    assert_eq!(gc2_generation(&local, &pk), 6);
+    assert_eq!(local.peer_routes[&pk], peer.info.public());
+    assert_eq!(local.pending_1to1[&id].logical_record, old_record);
+    assert_eq!(local.pending_1to1[&id].sequence, old_sequence);
+    assert_eq!(local.pending_1to1[&id].expires, old_expiry);
+    let first = gc2_setup_packet(&local, &pk);
+    let accepted = gcoms_protocol::gc2_session::accept(
+        &gcoms_protocol::gc2_session::Packet::decode(&first).unwrap(),
+        &peer.info.public(),
+        &peer.secrets,
+        now_unix(),
+    )
+    .unwrap();
+    assert!(accepted.recovery);
+    assert_eq!(accepted.session.window().generation(), 6);
+    // A later legitimate route renewal must not make the captured first route
+    // eligible again. Retire its authenticated request with the durable recovery.
+    peer.info.aliases[0].queue_id = [196; 32];
+    let (bundle, secrets) = IdentityKeypair::from_seed(peer.identity_seed).issue_bundle();
+    peer.info.bundle = bundle.encode();
+    peer.secrets = Arc::new(secrets);
+    let next = gcoms_protocol::gc2_session::initiate_recovery(
+        &IdentityKeypair::from_seed(peer.identity_seed),
+        &peer.info.public(),
+        &peer.secrets,
+        &local.info.public(),
+        3,
+        now_unix(),
+        &mut rand::thread_rng(),
+    )
+    .unwrap();
+    gc2_direct::incoming(&mut local, &next.packet, &events).unwrap();
+    assert_eq!(gc2_generation(&local, &pk), 7);
+    let writes = local.durability.snapshot().writes;
+    let route = local.peer_routes[&pk].clone();
+    assert!(gc2_direct::incoming(&mut local, &packet, &events)
+        .unwrap_err()
+        .contains("retired GC/2 first move"));
+    assert_eq!(local.peer_routes[&pk], route);
+    assert_eq!(gc2_generation(&local, &pk), 7);
+    assert_eq!(local.durability.snapshot().writes, writes);
+    local.scheduler.shutdown();
+    peer.scheduler.shutdown();
+}
+
+#[tokio::test]
+async fn gc2_lagging_recovery_cannot_replace_established_session() {
+    let (state, peer, id, packet) = gc2_lagging_route_recovery(true, true).await;
+    let (events, _) = broadcast::channel(32);
+    let mut local = state.lock().unwrap();
+    let pk = peer.info.identity_pk.clone();
+    let tag = *local.sessions[&pk].tag().unwrap();
+    let route = local.peer_routes[&pk].clone();
+    let delivery = local.pending_1to1[&id].delivery.clone();
+    let writes = local.durability.snapshot().writes;
+    assert!(gc2_direct::incoming(&mut local, &packet, &events)
+        .unwrap_err()
+        .contains("retired GC/2 recovery generation"));
+    assert_eq!(local.sessions[&pk].tag(), Some(&tag));
+    assert_eq!(gc2_generation(&local, &pk), 5);
+    assert_eq!(local.peer_routes[&pk], route);
+    assert_eq!(local.pending_1to1[&id].delivery.cells, delivery.cells);
+    assert_eq!(local.pending_1to1[&id].delivery.peer, delivery.peer);
+    assert_eq!(local.durability.snapshot().writes, writes);
+    assert_eq!(local.session_states[&pk], DirectSessionState::Established);
+    local.scheduler.shutdown();
+    peer.scheduler.shutdown();
+}
+
+#[tokio::test]
+async fn gc2_lagging_recovery_wait_preserves_route_floor_and_retirement_history() {
+    let (state, peer, id, packet) = gc2_lagging_route_recovery(false, true).await;
+    let (events, _) = broadcast::channel(32);
+    let mut local = state.lock().unwrap();
+    let pk = peer.info.identity_pk.clone();
+    let route = local.peer_routes[&pk].clone();
+    let delivery = local.pending_1to1[&id].delivery.clone();
+    let retired = local.accepted_first_moves.clone();
+    let runtime = routing::RoutingRuntime::new(
+        RoutingConfig::default(),
+        gcoms_routing::Directory::new(),
+        true,
+    )
+    .unwrap();
+    runtime
+        .recovering_owner
+        .store(false, std::sync::atomic::Ordering::Release);
+    local.routing = Some(runtime);
+    let writes = local.durability.snapshot().writes;
+    for _ in 0..16 {
+        assert!(gc2_direct::incoming(&mut local, &packet, &events)
+            .unwrap_err()
+            .contains("setup recovery waits"));
+    }
+    assert_eq!(gc2_generation(&local, &pk), 5);
+    assert_eq!(local.peer_routes[&pk], route);
+    assert_eq!(local.pending_1to1[&id].delivery.peer, delivery.peer);
+    assert_eq!(local.pending_1to1[&id].delivery.cells, delivery.cells);
+    assert_eq!(local.accepted_first_moves, retired);
+    assert_eq!(local.durability.snapshot().writes, writes);
+    let inbox = local.client_relay.aliases[0].contact.queue_id;
+    local.subscribed_contact_aliases.insert(inbox);
+    gc2_direct::incoming(&mut local, &packet, &events).unwrap();
+    assert_eq!(gc2_generation(&local, &pk), 6);
+    local.scheduler.shutdown();
+    peer.scheduler.shutdown();
+}
+
+#[tokio::test]
+async fn gc2_lagging_recovery_unchanged_route_and_bad_signature_leave_state_untouched() {
+    let (state, peer, id, packet) = gc2_lagging_route_recovery(false, false).await;
+    let (events, _) = broadcast::channel(32);
+    let mut local = state.lock().unwrap();
+    let pk = peer.info.identity_pk.clone();
+    let tag = *local.sessions[&pk].tag().unwrap();
+    let route = local.peer_routes[&pk].clone();
+    let delivery = local.pending_1to1[&id].delivery.clone();
+    let retired = local.accepted_first_moves.clone();
+    let writes = local.durability.snapshot().writes;
+    assert!(gc2_direct::incoming(&mut local, &packet, &events)
+        .unwrap_err()
+        .contains("retired GC/2 recovery generation"));
+    let mut corrupted = packet;
+    let last = corrupted.len() - 1;
+    corrupted[last] ^= 1;
+    assert!(gc2_direct::incoming(&mut local, &corrupted, &events).is_err());
+    assert_eq!(gc2_generation(&local, &pk), 5);
+    assert_eq!(local.sessions[&pk].tag(), Some(&tag));
+    assert_eq!(local.peer_routes[&pk], route);
+    assert_eq!(local.pending_1to1[&id].delivery.peer, delivery.peer);
+    assert_eq!(local.pending_1to1[&id].delivery.cells, delivery.cells);
+    assert_eq!(local.accepted_first_moves, retired);
+    assert_eq!(local.durability.snapshot().writes, writes);
+    local.scheduler.shutdown();
+    peer.scheduler.shutdown();
+}
+
+#[tokio::test]
+async fn gc2_lagging_recovery_uncertain_checkpoint_restores_bounded_history_and_loads_candidate() {
+    let (state, peer, id, packet) = gc2_lagging_route_recovery(false, true).await;
+    let (events, _) = broadcast::channel(32);
+    let mut local = state.lock().unwrap();
+    let pk = peer.info.identity_pk.clone();
+    for value in 0u16..512 {
+        let mut hash = [0; 32];
+        hash[..2].copy_from_slice(&value.to_be_bytes());
+        local.accepted_first_moves.push_back(hash);
+    }
+    let retired = local.accepted_first_moves.clone();
+    let tag = *local.sessions[&pk].tag().unwrap();
+    let route = local.peer_routes[&pk].clone();
+    let delivery = local.pending_1to1[&id].delivery.clone();
+    let saved = Arc::new(Mutex::new(None));
+    let sink = saved.clone();
+    local.durable_state_sink = Some(Arc::new(move |bytes| {
+        *sink.lock().unwrap() = Some(bytes.to_vec());
+        Err("lagging setup checkpoint failpoint after storage".into())
+    }));
+    assert!(gc2_direct::incoming(&mut local, &packet, &events)
+        .unwrap_err()
+        .contains("lagging setup checkpoint failpoint"));
+    assert!(local.owner_transition_failed);
+    assert_eq!(gc2_generation(&local, &pk), 5);
+    assert_eq!(local.sessions[&pk].tag(), Some(&tag));
+    assert_eq!(local.peer_routes[&pk], route);
+    assert_eq!(local.pending_1to1[&id].delivery.peer, delivery.peer);
+    assert_eq!(local.pending_1to1[&id].delivery.cells, delivery.cells);
+    assert_eq!(local.accepted_first_moves, retired);
+    let seed = local.identity_seed;
+    let info = local.info.clone();
+    let secrets = local.secrets.clone();
+    let scheduler = local.scheduler.clone();
+    drop(local);
+    let mut restored = gc2_node(seed[0]);
+    restored.info = info;
+    restored.secrets = secrets;
+    let restored_scheduler = restored.scheduler.clone();
+    let restored = Arc::new(Mutex::new(restored));
+    let checkpoint = saved.lock().unwrap().take().unwrap();
+    decode_state_at_startup(&restored, &restored_scheduler, &checkpoint)
+        .await
+        .unwrap();
+    let mut restored = restored.lock().unwrap();
+    assert_eq!(gc2_generation(&restored, &pk), 6);
+    assert_eq!(restored.peer_routes[&pk], peer.info.public());
+    assert_eq!(restored.accepted_first_moves.len(), 512);
+    assert!(gc2_direct::incoming(&mut restored, &packet, &events)
+        .unwrap_err()
+        .contains("retired GC/2 first move"));
+    scheduler.shutdown();
+    restored_scheduler.shutdown();
     peer.scheduler.shutdown();
 }

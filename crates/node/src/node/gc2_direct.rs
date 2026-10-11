@@ -110,7 +110,20 @@ fn accept(
         let incoming_generation = accepted.session.window().generation();
         let current_generation = current.window().generation();
         if incoming_generation < current_generation {
-            return Err("retired GC/2 recovery generation".into());
+            let unconfirmed = matches!(
+                st.session_states.get(&pk),
+                Some(DirectSessionState::InitiatedUnconfirmed { .. })
+            );
+            let renewed_route = st.peer_routes.get(&pk).is_some_and(|route| route != &peer);
+            // A restarted peer can lag behind setup generations that it never
+            // received. Keep our retained floor and recover above it, using only
+            // an authenticated recovery and renewed route while unconfirmed.
+            if accepted.recovery && unconfirmed && renewed_route {
+                return recover_collision_route(st, &peer, hash);
+            }
+            return Err(format!(
+                "retired GC/2 recovery generation (incoming={incoming_generation}, retained={current_generation}, unconfirmed={unconfirmed}, renewed_route={renewed_route})"
+            ));
         }
         if incoming_generation == current_generation {
             match st
@@ -124,7 +137,7 @@ fn accept(
                 }
                 DirectSessionState::InitiatedUnconfirmed { .. } if st.info.identity_pk < pk => {
                     if st.peer_routes.get(&pk).is_some_and(|route| route != &peer) {
-                        return recover_collision_route(st, &peer);
+                        return recover_collision_route(st, &peer, hash);
                     }
                     return Err("local GC/2 initiation wins collision".into());
                 }
@@ -209,8 +222,19 @@ fn accept(
 /// A renewed installer inbox/bundle is authenticated by its losing first move.
 /// The local winner keeps ownership through explicit higher-generation recovery;
 /// its retained setup must not continue targeting the abandoned peer inbox.
-fn recover_collision_route(st: &mut NodeState, peer: &NodeInfo) -> Result<(), String> {
+fn recover_collision_route(
+    st: &mut NodeState,
+    peer: &NodeInfo,
+    first_hash: [u8; 32],
+) -> Result<(), String> {
     let pk = &peer.identity_pk;
+    // Retire the authenticated request in the same checkpoint as recovery.
+    // A captured old route must not redirect a later unconfirmed recovery.
+    let old_first_moves = st.accepted_first_moves.clone();
+    st.accepted_first_moves.push_back(first_hash);
+    while st.accepted_first_moves.len() > 512 {
+        st.accepted_first_moves.pop_front();
+    }
     let old_route = st.peer_routes.insert(pk.clone(), peer.clone());
     let mut previous = Vec::new();
     for (id, pending) in &mut st.pending_1to1 {
@@ -225,6 +249,7 @@ fn recover_collision_route(st: &mut NodeState, peer: &NodeInfo) -> Result<(), St
             Ok(())
         }
         result => {
+            st.accepted_first_moves = old_first_moves;
             st.peer_routes.remove(pk);
             if let Some(route) = old_route {
                 st.peer_routes.insert(pk.clone(), route);

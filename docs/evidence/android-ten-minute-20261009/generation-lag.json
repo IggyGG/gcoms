@@ -1,0 +1,62 @@
+{
+  "schema": 1,
+  "codematch": "unreachable",
+  "source_before": "2966fd22facaf828744e5c0cf7522b047670015d",
+  "scope": "Lagging authenticated recovery with a renewed route during unconfirmed GC/2 setup",
+  "causal_original": {
+    "exit": 101,
+    "pass": 1,
+    "fail": 2,
+    "failure": "retained generation 5 rejects real recovery generation 2 instead of recovering above its retained floor"
+  },
+  "retained_isolated_hub": {
+    "at": 1791692086.4604568,
+    "profile_modified_at": 1791691890.1778488,
+    "read_only": true,
+    "authenticated_snapshot": true,
+    "sessions": [
+      {
+        "peer_sha256": "e14e0fa569c1addde06210a3b7fcee29e75c5099f19c3b38f6530eb40cc35164",
+        "state": "unconfirmed",
+        "saved_remaining_ms": 599999
+      }
+    ],
+    "secret_material_retained": false
+  },
+  "fixed": {
+    "runtime_controls": 12,
+    "exit": 0,
+    "elapsed_seconds": 45.805783145013265,
+    "clippy": "pass",
+    "non_gc2_compile": "pass",
+    "source_audit": {
+      "exit": 0,
+      "paths": 1086
+    }
+  },
+  "prior_real_android_reference": {
+    "prepared_id": "209adedd41d560408ce2892d2b36a569831c90069c02fbd26b817f8bf5d4fe2d",
+    "elapsed_seconds": 360.37842963199364,
+    "frontier_bytes": 0,
+    "state": "failed"
+  },
+  "safety": {
+    "accept_lower_generation": false,
+    "established_sessions_replaceable": false,
+    "requires_authenticated_recovery": true,
+    "requires_renewed_route": true,
+    "generation_transition": "retained floor + 1",
+    "pending_ids_and_absolute_deadlines": "preserved",
+    "storage_uncertainty": "publication paused; exact in-memory rollback; saved candidate restores",
+    "replay_history": "last 512 request hashes sealed to exact base checkpoint; restored at startup"
+  },
+  "archive_compatibility": {
+    "existing_snapshots": "read and migrated by new runtime",
+    "new_snapshots": "older runtimes fail closed on GCNSTO; no silent replay-guard loss",
+    "wire_format_changed": false
+  },
+  "android_transfer_qualified": false,
+  "deployment_timings_qualified": false,
+  "rollback_qualified": false,
+  "compatible_managed_fallback_source": "386f85abf9bb81ad8d1d992e47ec8ac2324bdccf"
+}
