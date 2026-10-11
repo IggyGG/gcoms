@@ -4,9 +4,9 @@ use super::*;
 
 const LIMIT: usize = 512;
 
-fn context(seed: &[u8; 32], base: &[u8]) -> Result<SessionContext, String> {
+fn context(seed: &impl ArchiveIdentitySource, base: &[u8]) -> Result<SessionContext, String> {
     SessionContext::new(
-        Sha256::digest(IdentityKeypair::from_seed(*seed).public_bytes()),
+        seed.identity_hash(),
         b"retired-first-moves",
         Sha256::digest(base),
         b"gcoms/retired-first-moves/v1",
@@ -14,7 +14,11 @@ fn context(seed: &[u8; 32], base: &[u8]) -> Result<SessionContext, String> {
     .map_err(|error| error.to_string())
 }
 
-pub(super) fn wrap(st: &NodeState, base: SecretBuffer) -> Result<SecretBuffer, String> {
+pub(super) fn wrap(
+    st: &NodeState,
+    base: SecretBuffer,
+    identity: &impl ArchiveIdentitySource,
+) -> Result<SecretBuffer, String> {
     if base.get(..6) != Some(MAGIC_V21) || st.accepted_first_moves.is_empty() {
         return Ok(base);
     }
@@ -35,7 +39,7 @@ pub(super) fn wrap(st: &NodeState, base: SecretBuffer) -> Result<SecretBuffer, S
         &mut wrapped,
         seal_bytes(
             &channel_archive_key(&st.identity_seed),
-            &context(&st.identity_seed, &base)?,
+            &context(identity, &base)?,
             &plain,
         )?,
     )?;

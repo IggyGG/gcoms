@@ -6,9 +6,9 @@
 use super::*;
 use crate::channel_invite::policy::{InvitationLedger, PROFILE_BYTE_LIMIT};
 
-fn context(seed: &[u8; 32], base: &[u8]) -> Result<SessionContext, String> {
+fn context(seed: &impl ArchiveIdentitySource, base: &[u8]) -> Result<SessionContext, String> {
     SessionContext::new(
-        Sha256::digest(IdentityKeypair::from_seed(*seed).public_bytes()),
+        seed.identity_hash(),
         b"channel-enrollment",
         Sha256::digest(base),
         b"gcoms/channel-enrollment/v1",
@@ -16,7 +16,11 @@ fn context(seed: &[u8; 32], base: &[u8]) -> Result<SessionContext, String> {
     .map_err(|error| error.to_string())
 }
 
-pub(super) fn wrap(st: &NodeState, base: SecretBuffer) -> Result<SecretBuffer, String> {
+pub(super) fn wrap(
+    st: &NodeState,
+    base: SecretBuffer,
+    identity: &impl ArchiveIdentitySource,
+) -> Result<SecretBuffer, String> {
     let mut channels = st
         .channels
         .iter()
@@ -90,7 +94,7 @@ pub(super) fn wrap(st: &NodeState, base: SecretBuffer) -> Result<SecretBuffer, S
         &mut wrapped,
         seal_bytes(
             &channel_archive_key(&st.identity_seed),
-            &context(&st.identity_seed, &base)?,
+            &context(identity, &base)?,
             &plain,
         )?,
     )?;

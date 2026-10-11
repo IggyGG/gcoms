@@ -1563,3 +1563,5 @@ budgets, owned replies/cancellation and deadlines. Four scoped causal controls, 
 Evidence: `docs/evidence/android-recovery-credit-20261011/summary.json`.
 Actual full Android recovery/load, three prepared promotions <=600 s
 and functional failed-canary rollback <=60 s remain pending.
+
+F5 checkpoint identity reuse (2026-10-11, Codex): implement per-encoding public identity/hash reuse after the actual ACK-repaired run missed 360 seconds despite verified >=8 MiB same-run restart. Scoped validation and actual Android/promotion/rollback receipts remain pending. Existing active state, limits, authentication and archive bytes/domains are preserved.

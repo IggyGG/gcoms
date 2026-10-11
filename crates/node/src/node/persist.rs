@@ -14,6 +14,70 @@ use crate::channel::{
     CachedAdmission, ChannelMessageOutbox, ChannelRole, ChannelState, MembershipOutbox,
 };
 
+// Public checkpoint context material only; wrapping keys still use the raw seed.
+// The cache is local to one encoding call and never retains a private keypair.
+pub(super) trait ArchiveIdentitySource {
+    fn identity_seed(&self) -> &[u8; 32];
+    fn identity_public_bytes(&self) -> Vec<u8>;
+
+    fn identity_hash(&self) -> [u8; 32] {
+        Sha256::digest(self.identity_public_bytes()).into()
+    }
+}
+
+fn archive_identity_public_bytes(seed: &[u8; 32]) -> Vec<u8> {
+    #[cfg(test)]
+    ARCHIVE_IDENTITY_DERIVATIONS.with(|count| count.set(count.get() + 1));
+    IdentityKeypair::from_seed(*seed).public_bytes()
+}
+
+#[cfg(test)]
+thread_local! {
+    static ARCHIVE_IDENTITY_DERIVATIONS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+impl ArchiveIdentitySource for [u8; 32] {
+    fn identity_seed(&self) -> &[u8; 32] {
+        self
+    }
+
+    fn identity_public_bytes(&self) -> Vec<u8> {
+        archive_identity_public_bytes(self)
+    }
+}
+
+struct CachedArchiveIdentity<'a> {
+    seed: &'a [u8; 32],
+    public_bytes: Vec<u8>,
+    hash: [u8; 32],
+}
+
+impl<'a> CachedArchiveIdentity<'a> {
+    fn new(seed: &'a [u8; 32]) -> Self {
+        let public_bytes = archive_identity_public_bytes(seed);
+        let hash = Sha256::digest(&public_bytes).into();
+        Self {
+            seed,
+            public_bytes,
+            hash,
+        }
+    }
+}
+
+impl ArchiveIdentitySource for CachedArchiveIdentity<'_> {
+    fn identity_seed(&self) -> &[u8; 32] {
+        self.seed
+    }
+
+    fn identity_public_bytes(&self) -> Vec<u8> {
+        self.public_bytes.clone()
+    }
+
+    fn identity_hash(&self) -> [u8; 32] {
+        self.hash
+    }
+}
+
 const MAGIC_V1: &[u8; 6] = b"GCNST1";
 const MAGIC_V2: &[u8; 6] = b"GCNST2";
 const MAGIC_V3: &[u8; 6] = b"GCNST3";
@@ -281,9 +345,9 @@ fn decode_route(buf: &[u8], position: &mut usize) -> Result<crate::channel::Chan
     crate::channel::ChannelRoute::decode(take32(buf, position)?).ok_or_else(malformed)
 }
 
-fn prepared_route_context(seed: &[u8; 32], pseudonym: &[u8; 32]) -> Result<SessionContext, String> {
+fn prepared_route_context(seed: &impl ArchiveIdentitySource, pseudonym: &[u8; 32]) -> Result<SessionContext, String> {
     SessionContext::new(
-        Sha256::digest(IdentityKeypair::from_seed(*seed).public_bytes()),
+        seed.identity_hash(),
         b"pending-join",
         pseudonym,
         b"gc1/prepared-route/v1",
@@ -292,11 +356,11 @@ fn prepared_route_context(seed: &[u8; 32], pseudonym: &[u8; 32]) -> Result<Sessi
 }
 fn seal_prepared_route(
     route: &crate::channel::OwnedChannelRoute,
-    seed: &[u8; 32],
+    seed: &impl ArchiveIdentitySource,
 ) -> Result<Vec<u8>, String> {
     let plain = encode_owned_route(route)?;
     seal_bytes(
-        &channel_archive_key(seed),
+        &channel_archive_key(seed.identity_seed()),
         &prepared_route_context(seed, &route.public.pseudonym)?,
         &plain,
     )
@@ -388,11 +452,11 @@ fn decode_owned_route(
 }
 
 fn established_route_context(
-    seed: &[u8; 32],
+    seed: &impl ArchiveIdentitySource,
     role: &ChannelRole,
 ) -> Result<SessionContext, String> {
     SessionContext::new(
-        Sha256::digest(IdentityKeypair::from_seed(*seed).public_bytes()),
+        seed.identity_hash(),
         b"gc1/established-channel-route/v1",
         role.own_pseudonym(),
         role.channel_id().0,
@@ -400,9 +464,9 @@ fn established_route_context(
     .map_err(|error| error.to_string())
 }
 
-fn previous_route_context(seed: &[u8; 32], role: &ChannelRole) -> Result<SessionContext, String> {
+fn previous_route_context(seed: &impl ArchiveIdentitySource, role: &ChannelRole) -> Result<SessionContext, String> {
     SessionContext::new(
-        Sha256::digest(IdentityKeypair::from_seed(*seed).public_bytes()),
+        seed.identity_hash(),
         b"gc1/previous-channel-route/v1",
         role.own_pseudonym(),
         role.channel_id().0,
@@ -575,19 +639,19 @@ fn validate_unified_route(
 
 fn seal_unified_route(
     route: &crate::channel::OwnedChannelRoute,
-    seed: &[u8; 32],
+    seed: &impl ArchiveIdentitySource,
     name: &str,
     role: &ChannelRole,
     previous: bool,
 ) -> Result<Vec<u8>, String> {
-    validate_unified_route(route, seed, name, role)?;
+    validate_unified_route(route, seed.identity_seed(), name, role)?;
     let context = if previous {
         previous_route_context(seed, role)?
     } else {
         established_route_context(seed, role)?
     };
     seal_bytes(
-        &channel_archive_key(seed),
+        &channel_archive_key(seed.identity_seed()),
         &context,
         &encode_owned_route(route)?,
     )
@@ -742,6 +806,7 @@ fn encode_state_inner(
     if st.owner_transition_failed {
         return Err("owner lifecycle persistence outcome is unconfirmed".into());
     }
+    let archive_identity = CachedArchiveIdentity::new(&st.identity_seed);
     let mut v = SecretBuffer(Vec::with_capacity(8192));
     let credited = st.sessions.values().any(|s| s.tag().is_some())
         || session_override.is_some_and(|(_, s)| s.tag().is_some());
@@ -1033,7 +1098,7 @@ fn encode_state_inner(
     }
     put_sensitive(
         &mut v,
-        seal_application_inbox(&st.application_inbox, &st.identity_seed)?,
+        seal_application_inbox(&st.application_inbox, &archive_identity)?,
     )?;
     v.extend_from_slice(&st.next_prep_id.to_be_bytes());
     put_count(&mut v, st.prepared.len())?;
@@ -1049,22 +1114,22 @@ fn encode_state_inner(
         )?;
         put_sensitive(
             &mut v,
-            seal_prepared_route(&prepared.route, &st.identity_seed)?,
+            seal_prepared_route(&prepared.route, &archive_identity)?,
         )?;
     }
     put32(&mut v, &st.sealed_tls_identity)?;
     put_sensitive(
         &mut v,
-        seal_central_ownership(&st.application_inbox.central_ownership, &st.identity_seed)?,
+        seal_central_ownership(&st.application_inbox.central_ownership, &archive_identity)?,
     )?;
     put_sensitive(
         &mut v,
-        seal_machine_ownership(st.application_inbox.machine_owned, &st.identity_seed)?,
+        seal_machine_ownership(st.application_inbox.machine_owned, &archive_identity)?,
     )?;
     if st.routing.is_some() && st.client_relay.aliases.is_empty() {
         put32(&mut v, &[])?;
     } else {
-        put_sensitive(&mut v, owner_aliases::seal_current(st)?)?;
+        put_sensitive(&mut v, owner_aliases::seal_current_with_identity(st, &archive_identity)?)?;
     }
     if let Some(runtime) = &st.routing {
         let plain = SecretBuffer(
@@ -1078,7 +1143,7 @@ fn encode_state_inner(
             &mut v,
             seal_bytes(
                 &channel_archive_key(&st.identity_seed),
-                &routing_context(&st.identity_seed)?,
+                &routing_context(&archive_identity)?,
                 &plain,
             )?,
         )?;
@@ -1109,7 +1174,7 @@ fn encode_state_inner(
                         &mut v,
                         seal_unified_route(
                             route,
-                            &st.identity_seed,
+                            &archive_identity,
                             name,
                             &channel.role,
                             previous,
@@ -1127,7 +1192,7 @@ fn encode_state_inner(
             &mut v,
             seal_bytes(
                 &channel_archive_key(&st.identity_seed),
-                &gc2_receipts_context(&st.identity_seed)?,
+                &gc2_receipts_context(&archive_identity)?,
                 &plain,
             )?,
         )?;
@@ -1136,8 +1201,8 @@ fn encode_state_inner(
         v.fill(0);
         return Err("node state export too large".into());
     }
-    let v = first_moves::wrap(st, v)?;
-    let v = invitations::wrap(st, v)?;
+    let v = first_moves::wrap(st, v, &archive_identity)?;
+    let v = invitations::wrap(st, v, &archive_identity)?;
     if st.channel_inbox.enabled {
         let mut wrapped = SecretBuffer(MAGIC_CHANNEL_INBOX.to_vec());
         put32(&mut wrapped, &v)?;
@@ -1146,7 +1211,7 @@ fn encode_state_inner(
             &mut wrapped,
             seal_bytes(
                 &channel_archive_key(&st.identity_seed),
-                &channel_inbox_context(&st.identity_seed, &v)?,
+                &channel_inbox_context(&archive_identity, &v)?,
                 &plain,
             )?,
         )?;
@@ -1970,9 +2035,9 @@ fn open_routing_directory(
     gcoms_routing::Directory::restore_private(&plain).map_err(|e| e.to_string())
 }
 
-fn routing_context(seed: &[u8; 32]) -> Result<SessionContext, String> {
+fn routing_context(seed: &impl ArchiveIdentitySource) -> Result<SessionContext, String> {
     SessionContext::new(
-        Sha256::digest(IdentityKeypair::from_seed(*seed).public_bytes()),
+        seed.identity_hash(),
         b"network",
         b"relay-view",
         b"gc1/routing/v1",
@@ -2013,9 +2078,9 @@ pub(super) fn restore_owner_aliases(
     Ok(record)
 }
 
-fn tls_identity_context(seed: &[u8; 32]) -> Result<SessionContext, String> {
+fn tls_identity_context(seed: &impl ArchiveIdentitySource) -> Result<SessionContext, String> {
     SessionContext::new(
-        Sha256::digest(IdentityKeypair::from_seed(*seed).public_bytes()),
+        seed.identity_hash(),
         b"relay-tls",
         b"identity",
         b"gc1/relay-tls/v1",
@@ -2045,18 +2110,18 @@ pub(super) fn restore_tls_identity(
     Ok(decode_v2(buf, seed)?.tls_identity)
 }
 
-fn machine_ownership_context(seed: &[u8; 32]) -> Result<SessionContext, String> {
+fn machine_ownership_context(seed: &impl ArchiveIdentitySource) -> Result<SessionContext, String> {
     SessionContext::new(
-        Sha256::digest(IdentityKeypair::from_seed(*seed).public_bytes()),
+        seed.identity_hash(),
         b"machine-ownership",
         b"scope",
         b"gc1/machine-ownership/v1",
     )
     .map_err(|e| e.to_string())
 }
-fn seal_machine_ownership(value: bool, seed: &[u8; 32]) -> Result<Vec<u8>, String> {
+fn seal_machine_ownership(value: bool, seed: &impl ArchiveIdentitySource) -> Result<Vec<u8>, String> {
     seal_bytes(
-        &channel_archive_key(seed),
+        &channel_archive_key(seed.identity_seed()),
         &machine_ownership_context(seed)?,
         &[u8::from(value)],
     )
@@ -2077,9 +2142,9 @@ fn open_machine_ownership(bytes: &[u8], seed: &[u8; 32]) -> Result<bool, String>
     }
 }
 
-fn central_ownership_context(seed: &[u8; 32]) -> Result<SessionContext, String> {
+fn central_ownership_context(seed: &impl ArchiveIdentitySource) -> Result<SessionContext, String> {
     SessionContext::new(
-        Sha256::digest(IdentityKeypair::from_seed(*seed).public_bytes()),
+        seed.identity_hash(),
         b"central-ownership",
         b"partition",
         b"gc1/central-ownership/v1",
@@ -2088,7 +2153,7 @@ fn central_ownership_context(seed: &[u8; 32]) -> Result<SessionContext, String> 
 }
 fn seal_central_ownership(
     value: &Option<application_inbox::CentralOwnership>,
-    seed: &[u8; 32],
+    seed: &impl ArchiveIdentitySource,
 ) -> Result<Vec<u8>, String> {
     let mut plain = SecretBuffer(vec![u8::from(value.is_some())]);
     if let Some(value) = value {
@@ -2102,7 +2167,7 @@ fn seal_central_ownership(
         plain.extend_from_slice(&value.policy_hash);
     }
     seal_bytes(
-        &channel_archive_key(seed),
+        &channel_archive_key(seed.identity_seed()),
         &central_ownership_context(seed)?,
         &plain,
     )
@@ -2146,9 +2211,9 @@ fn open_central_ownership(
 }
 
 #[cfg(feature = "experimental-gc2")]
-fn gc2_receipts_context(seed: &[u8; 32]) -> Result<SessionContext, String> {
+fn gc2_receipts_context(seed: &impl ArchiveIdentitySource) -> Result<SessionContext, String> {
     SessionContext::new(
-        Sha256::digest(IdentityKeypair::from_seed(*seed).public_bytes()),
+        seed.identity_hash(),
         b"gc2-logical-receipts",
         b"scope",
         b"gc2/logical-receipts/v1",
@@ -2156,9 +2221,9 @@ fn gc2_receipts_context(seed: &[u8; 32]) -> Result<SessionContext, String> {
     .map_err(|e| e.to_string())
 }
 
-fn channel_inbox_context(seed: &[u8; 32], base: &[u8]) -> Result<SessionContext, String> {
+fn channel_inbox_context(seed: &impl ArchiveIdentitySource, base: &[u8]) -> Result<SessionContext, String> {
     SessionContext::new(
-        Sha256::digest(IdentityKeypair::from_seed(*seed).public_bytes()),
+        seed.identity_hash(),
         b"channel-inbox",
         Sha256::digest(base),
         b"gcoms/channel-inbox/v1",
@@ -2166,9 +2231,9 @@ fn channel_inbox_context(seed: &[u8; 32], base: &[u8]) -> Result<SessionContext,
     .map_err(|e| e.to_string())
 }
 
-fn application_inbox_context(seed: &[u8; 32]) -> Result<SessionContext, String> {
+fn application_inbox_context(seed: &impl ArchiveIdentitySource) -> Result<SessionContext, String> {
     SessionContext::new(
-        Sha256::digest(IdentityKeypair::from_seed(*seed).public_bytes()),
+        seed.identity_hash(),
         b"application-inbox",
         b"pending",
         b"gc1/application-inbox/v1",
@@ -2178,7 +2243,7 @@ fn application_inbox_context(seed: &[u8; 32]) -> Result<SessionContext, String> 
 
 fn seal_application_inbox(
     inbox: &application_inbox::ApplicationInbox,
-    seed: &[u8; 32],
+    seed: &impl ArchiveIdentitySource,
 ) -> Result<Vec<u8>, String> {
     let mut plain = SecretBuffer(Vec::new());
     plain.extend_from_slice(&inbox.next_sequence.to_be_bytes());
@@ -2190,7 +2255,7 @@ fn seal_application_inbox(
         plain.extend_from_slice(&entry.received_at_unix.to_be_bytes());
         put32(&mut plain, &entry.body)?;
     }
-    let mut key = direct_session_wrapping_key(seed);
+    let mut key = direct_session_wrapping_key(seed.identity_seed());
     let result = seal_bytes(&key, &application_inbox_context(seed)?, &plain);
     key.fill(0);
     result
@@ -2871,6 +2936,8 @@ fn replace_v18_owned_route(
 #[cfg(test)]
 pub(in crate::node) mod tests {
     use super::*;
+    include!("persist/archive_identity_causal_tests.rs");
+    include!("persist/archive_identity_context_tests.rs");
     include!("persist/tracked_send_tests.rs");
     include!("persist/machine_scope_tests.rs");
     include!("persist/archive_compat_tests.rs");

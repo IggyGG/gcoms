@@ -275,9 +275,9 @@ impl Record {
     }
 }
 
-fn context(seed: &[u8; 32]) -> Result<SessionContext, String> {
+fn context(seed: &impl ArchiveIdentitySource) -> Result<SessionContext, String> {
     SessionContext::new(
-        Sha256::digest(IdentityKeypair::from_seed(*seed).public_bytes()),
+        seed.identity_hash(),
         b"owner-aliases",
         b"lifecycle",
         b"gc1/owner-aliases/v1",
@@ -288,10 +288,10 @@ fn context(seed: &[u8; 32]) -> Result<SessionContext, String> {
 pub(in crate::node) fn seal(
     record: &Record,
     target: &RelayTarget,
-    seed: &[u8; 32],
+    seed: &impl ArchiveIdentitySource,
 ) -> Result<Vec<u8>, String> {
     record.validate(target)?;
-    let identity = IdentityKeypair::from_seed(*seed).public_bytes();
+    let identity = seed.identity_public_bytes();
     let mut plain = SecretBuffer(vec![1]);
     plain.extend_from_slice(&record.captured_ms.to_be_bytes());
     plain.extend_from_slice(&record.activated_ms.to_be_bytes());
@@ -343,7 +343,7 @@ pub(in crate::node) fn seal(
     if plain.len() > MAX_RECORD_BYTES {
         return Err("owner alias record too large".into());
     }
-    seal_bytes(&channel_archive_key(seed), &context(seed)?, &plain)
+    seal_bytes(&channel_archive_key(seed.identity_seed()), &context(seed)?, &plain)
 }
 
 pub(in crate::node) fn open_unbound(bytes: &[u8], seed: &[u8; 32]) -> Result<Record, String> {
@@ -480,6 +480,13 @@ fn absolute(deadline: Instant, now: Instant, effective_ms: u64) -> Result<u64, S
 }
 
 pub(in crate::node) fn seal_current(st: &NodeState) -> Result<Vec<u8>, String> {
+    seal_current_with_identity(st, &st.identity_seed)
+}
+
+pub(in crate::node) fn seal_current_with_identity(
+    st: &NodeState,
+    identity: &impl ArchiveIdentitySource,
+) -> Result<Vec<u8>, String> {
     let now = Instant::now();
     let captured_ms = st
         .owner_clock
@@ -595,7 +602,7 @@ pub(in crate::node) fn seal_current(st: &NodeState) -> Result<Vec<u8>, String> {
     if st.routing.is_none() {
         record.validate_live(captured_ms)?;
     }
-    seal(&record, record.active_target()?, &st.identity_seed)
+    seal(&record, record.active_target()?, identity)
 }
 
 impl Record {
