@@ -34,5 +34,31 @@
     "interruption_frontier": 8514000
   },
   "three_live_promotions_passed": false,
-  "functional_rollback_passed": false
+  "functional_rollback_passed": false,
+  "consumer_checks": {
+    "at": 1791735352.7883518,
+    "cases": {
+      "protocol-consumers": {
+        "exit_code": 0,
+        "log_sha256": "da19aa7a77f162a5399fe911075848a880a895be3f4e4541245bb0d77003be55"
+      },
+      "minimal-consumer": {
+        "exit_code": 0,
+        "log_sha256": "1966ace6e541a83cc34311bfe149808fe222b8471b42fa952c6c59928aedaf97"
+      },
+      "source-audit": {
+        "exit_code": 0,
+        "elapsed_seconds": 0.26903067401144654,
+        "log_sha256": "6c74cef2ff15172e52f85c372c446f11c0b1f4cdfe4a7e4f2d896d1883e2e344"
+      }
+    },
+    "state": "passed",
+    "codematch": "unreachable",
+    "archived_source_audit_refused_missing_git_metadata": true
+  },
+  "source_audit": {
+    "exit_code": 0,
+    "elapsed_seconds": 0.26903067401144654,
+    "log_sha256": "6c74cef2ff15172e52f85c372c446f11c0b1f4cdfe4a7e4f2d896d1883e2e344"
+  }
 }
