@@ -1,0 +1,40 @@
+{
+  "schema": 1,
+  "state": "focused_checks_passed",
+  "measured_completed_compiler_bytes": {
+    "sdk": 1924079534,
+    "installer": 1040050914,
+    "hub": 1078969813,
+    "worker": 1045604438,
+    "controller": 1883044911
+  },
+  "reservations_gib": {
+    "sdk": 3,
+    "installer": 2,
+    "apk": 2,
+    "hub": 2,
+    "worker": 2,
+    "controller": 3
+  },
+  "workstation_reserve_gib": 150,
+  "cpu_cap_cores": 8,
+  "cold_preparation_excluded_from_prepared_promotion_clock": true,
+  "codematch": "unreachable",
+  "actual_android_gates": "pending",
+  "validation": {
+    "release_controls": 53,
+    "source_audit_paths": 1082,
+    "results": [
+      {
+        "gate": "release-controls",
+        "exit_code": 0,
+        "elapsed_seconds": 14.013455137988785
+      },
+      {
+        "gate": "source-audit",
+        "exit_code": 0,
+        "elapsed_seconds": 0.12707481501274742
+      }
+    ]
+  }
+}
