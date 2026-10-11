@@ -437,8 +437,10 @@ impl Window {
         Ok(())
     }
 
-    /// Produce a non-ACK-eliciting credit receipt for an exact authenticated
-    /// packet (new or duplicate). Persist the resulting window before sending.
+    /// Validate an exact authenticated packet (new or duplicate), then produce
+    /// non-ACK-eliciting cumulative credit under the highest received counter's
+    /// authority. A delayed duplicate cannot replace usable coverage with a
+    /// receipt key the sender has already retired. Persist before sending.
     /// Credit says only that ratchet state was committed, never that an
     /// application accepted or completed a message.
     pub fn credit_for_duplicate(
@@ -449,10 +451,14 @@ impl Window {
         if packet.len() > MAX_MESSAGE {
             return Err(Error::Length);
         }
-        let entry = self.rx.get_mut(&counter).ok_or(Error::UnknownReceipt)?;
+        let entry = self.rx.get(&counter).ok_or(Error::UnknownReceipt)?;
         if entry.authority.packet_hash != <[u8; 32]>::from(Sha256::digest(packet)) {
             return Err(Error::Authentication);
         }
+        // The highest authenticated counter's authority remains at the sender
+        // until all coverage through that counter has been credited. Reusing
+        // its cached snapshot also avoids resealing the same key/nonce pair.
+        let entry = self.rx.last_entry().ok_or(Error::State)?.into_mut();
         // Coverage count strictly increases on every new authenticated packet.
         // Atomic persistence before emission prevents reuse after a crash. ACKs
         // for duplicate packets replay the cached bytes without another AEAD call.

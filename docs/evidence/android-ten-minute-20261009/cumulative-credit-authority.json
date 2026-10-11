@@ -1,0 +1,38 @@
+{
+  "at": 1791734859.7175283,
+  "state": "passed",
+  "cases": {
+    "original": {
+      "exit_code": 101,
+      "elapsed_seconds": 20.531698825012427,
+      "log_sha256": "f8dcd27e374f4ddaf4136ea7f897484160fc0c5c5c83cfacb54883657c0111fc"
+    },
+    "fixed": {
+      "exit_code": 0,
+      "elapsed_seconds": 13.154620373999933,
+      "log_sha256": "cf7b99b76801e99dd9f3ef9435626e826dae6276bc18820a80017d494c9ce630"
+    },
+    "clippy": {
+      "exit_code": 0,
+      "elapsed_seconds": 11.18451197099057,
+      "log_sha256": "ba9054e8f35dc82784927d9ea9dbb7f6fd179f40c2961082d3d9d9f4b75b70bb"
+    }
+  },
+  "codematch": "unreachable",
+  "full_android_baseline_passed": false,
+  "causal_original_source": "fe2f27be47f100db64a3c9c3c2c8aee2cbf67567",
+  "flow_controls_passed": 16,
+  "protocol_controls_passed": 58,
+  "minimal_consumer_controls_passed": 75,
+  "strict_protocol_clippy_passed": true,
+  "wire_format_changed": false,
+  "counter_queue_bounds_changed": false,
+  "authentication_relaxed": false,
+  "previous_actual_reference": {
+    "state": "failed",
+    "elapsed_seconds": 360.30255727199255,
+    "interruption_frontier": 8514000
+  },
+  "three_live_promotions_passed": false,
+  "functional_rollback_passed": false
+}

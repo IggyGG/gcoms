@@ -64,6 +64,14 @@ cached receipt bytes; a changed snapshot uses a new nonce. A receipt with a wron
 session, unknown reference, invalid tag, noncanonical bitmap, inconsistent nonce,
 or coverage beyond the sender's committed counter is rejected without mutation.
 
+After validating the exact packet for a new receive or duplicate, the receiver
+uses the highest authenticated received counter’s authority for cumulative
+credit. A sender retains that authority until its contiguous floor covers the
+counter. A delayed duplicate of a lower, retired counter therefore cannot replace
+a usable pending snapshot with an unknown reference. The highest authority’s
+cached receipt is reused while coverage is unchanged, including after restore.
+Tampered or unknown duplicate packets still fail before any credit is issued.
+
 The non-acknowledging credit pattern is analogous to the treatment of ACK-only
 traffic in [RFC 9002, sections 2 and 7](https://www.rfc-editor.org/rfc/rfc9002.html).
 The unique-per-key nonce requirement and parseable associated data follow

@@ -377,6 +377,55 @@ fn reordered_receipts_never_renege_on_selective_coverage() {
 }
 
 #[test]
+fn delayed_duplicate_preserves_usable_cumulative_credit_after_old_authority_retirement() {
+    let (mut sender, mut receiver) = pair();
+    let old = sender.send(Purpose::Control, b"old receipt").unwrap();
+    let old_credit = receiver.receive(&old);
+    assert!(sender.flow.accept_credit(&old_credit).unwrap());
+    assert_eq!(sender.flow.credited_floor(), old.ctr);
+
+    let newer = sender.send(Purpose::Interactive, b"new data").unwrap();
+    let pending = receiver.receive(&newer);
+    let before = receiver.flow.encode_private();
+    let mut tampered = old.encode();
+    tampered[0] ^= 1;
+    assert_eq!(
+        receiver.flow.credit_for_duplicate(old.ctr, &tampered),
+        Err(Error::Authentication)
+    );
+    assert_eq!(receiver.flow.encode_private(), before);
+
+    // Both carriers retain the latest cumulative snapshot. A delayed duplicate
+    // must not replace usable coverage with an already retired receipt key.
+    let latest = receiver
+        .flow
+        .credit_for_duplicate(old.ctr, &old.encode())
+        .unwrap();
+    assert_eq!(
+        latest, pending,
+        "duplicate must replay the newest usable authority"
+    );
+    receiver.reload();
+    assert_eq!(
+        receiver
+            .flow
+            .credit_for_duplicate(old.ctr, &old.encode())
+            .unwrap(),
+        latest
+    );
+    assert!(sender.flow.accept_credit(&latest).unwrap());
+    assert_eq!(sender.flow.credited_floor(), newer.ctr);
+    assert_eq!(sender.flow.retries().count(), 0);
+    // An actual old wire receipt is still rejected without changing state.
+    let before = sender.flow.encode_private();
+    assert_eq!(
+        sender.flow.accept_credit(&old_credit),
+        Err(Error::UnknownReceipt)
+    );
+    assert_eq!(sender.flow.encode_private(), before);
+}
+
+#[test]
 fn a_receipt_is_bound_to_session_packet_secret_and_snapshot() {
     let (mut a, mut b) = pair();
     let frame = a.send(Purpose::Interactive, b"secret").unwrap();
