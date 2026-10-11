@@ -213,7 +213,7 @@ async fn gc2_duplicate_setup_retains_one_credit_across_restart() {
 }
 
 #[tokio::test]
-async fn gc2_duplicate_setup_with_new_credit_coverage_still_requires_a_checkpoint() {
+async fn gc2_duplicate_setup_reuses_committed_highest_credit_after_restart() {
     let alice = Arc::new(Mutex::new(gc2_node(93)));
     let mut bob = gc2_node(94);
     let scheduler = alice.lock().unwrap().scheduler.clone();
@@ -222,17 +222,34 @@ async fn gc2_duplicate_setup_with_new_credit_coverage_still_requires_a_checkpoin
     assert_eq!(cells.len(), 2);
     let (events, _) = broadcast::channel(32);
     gc2_direct::incoming(&mut bob, &cells[0].payload, &events).unwrap();
+    let setup_credit = bob.direct_ack_outbox[0].cells.clone();
+    let setup_writes = bob.durability.snapshot().writes;
     gc2_direct::incoming(&mut bob, &cells[1].payload, &events).unwrap();
     assert_eq!(bob.application_inbox.entries.len(), 1);
     let before = bob.durability.snapshot().writes;
-    // The old first-move credit covered only counter 1. A replay after receiving
-    // counter 2 creates different authenticated coverage and must persist it.
+    assert!(before > setup_writes, "new coverage must cross the durable barrier");
+    let committed_credit = bob.direct_ack_outbox[0].cells.clone();
+    assert_ne!(committed_credit, setup_credit);
+    // Counter 2 already committed both its coverage and newest authority. A
+    // duplicate setup reuses that exact saved credit, including after restart.
     gc2_direct::incoming(&mut bob, &cells[0].payload, &events).unwrap();
-    assert_eq!(bob.durability.snapshot().writes, before + 1);
+    assert_eq!(bob.durability.snapshot().writes, before);
+    assert_eq!(bob.direct_ack_outbox[0].cells, committed_credit);
     for _ in 0..16 {
         gc2_direct::incoming(&mut bob, &cells[0].payload, &events).unwrap();
     }
-    assert_eq!(bob.durability.snapshot().writes, before + 1);
+    assert_eq!(bob.durability.snapshot().writes, before);
+    let restored = gc2_restore(&bob, 94).await;
+    let mut reopened = restored.lock().unwrap();
+    let before = reopened.durability.snapshot().writes;
+    for _ in 0..16 {
+        gc2_direct::incoming(&mut reopened, &cells[0].payload, &events).unwrap();
+    }
+    assert_eq!(reopened.durability.snapshot().writes, before);
+    assert_eq!(reopened.direct_ack_outbox.len(), 1);
+    assert_eq!(reopened.direct_ack_outbox[0].cells, committed_credit);
+    assert_eq!(reopened.application_inbox.entries.len(), 1);
+    reopened.scheduler.shutdown();
     scheduler.shutdown();
     bob.scheduler.shutdown();
 }
