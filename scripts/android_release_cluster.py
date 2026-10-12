@@ -198,6 +198,9 @@ def job(config, request, request_path):
     volumes = [{'name': 'state', 'persistentVolumeClaim': {'claimName': name(cluster['state_claim'])}},
                {'name': 'config', 'configMap': {'name': name(cluster['config_map'])}},
                {'name': 'archive', 'secret': {'secretName': name(cluster['archive_secret']), 'defaultMode': 0o440}}]
+    if cluster.get('runtime_config_map'):
+        volumes.append({'name': 'runtime', 'configMap': {'name': name(cluster['runtime_config_map'])}})
+        mounts.append({'name': 'runtime', 'mountPath': '/opt/gcoms/scripts', 'readOnly': True})
     return {'apiVersion': 'batch/v1', 'kind': 'Job',
         'metadata': {'name': job_name(request['request_id'], request['operation']),
                      'namespace': config['kubernetes']['namespace'], 'labels': labels},
@@ -265,23 +268,26 @@ def original_job(config, kube, lease, request, request_path, value, already_subm
 def submit(config, kube, lease, request, marker, catalogue):
     root = Path(config['state'])
     request_path = root / 'cluster-requests' / (request['request_id'] + '.json')
-    if request_path.exists() and json.loads(request_path.read_text()) != request:
-        raise ValueError('original cluster request changed')
-    lease.fence()
-    write_json(request_path, request)
+    if request_path.exists():
+        if json.loads(request_path.read_text()) != request:
+            raise ValueError('original cluster request changed')
+    else:
+        lease.fence()
+        write_json(request_path, request)
     previous = json.loads(marker.read_text()) if marker.exists() else None
     if previous and previous['request'] != request:
         raise ValueError('original cluster effect changed')
     if previous and previous['state'] in ('complete', 'failed', 'submission_unknown'):
         return previous
-    value = previous or {'schema': 1, 'request': request, 'state': 'submitting'}
+    value = dict(previous) if previous else {'schema': 1, 'request': request, 'state': 'submitting'}
     already_submitted = bool(value.get('submission_started'))
     if not already_submitted:
         if request['manifest'].get('configuration_sha256') != hashlib.sha256(canonical(config)).hexdigest():
             raise ValueError('new Android request configuration changed')
         value['job_definition'] = job(config, request, request_path)
     value['submission_started'] = True
-    write_json(marker, value)  # Journal before the external effect.
+    if value != previous:
+        write_json(marker, value)  # Journal before the external effect.
     if not already_submitted:
         # The recovery checkpoint precedes submission too: loss of the working
         # PVC cannot generate a new request ID or clock for an accepted Job.
@@ -306,7 +312,8 @@ def submit(config, kube, lease, request, marker, catalogue):
         value['result'] = result
         if result['state'] not in ('prepared', 'live', 'qualified'):
             value['state'] = 'failed'
-    write_json(marker, value)
+    if value != previous:
+        write_json(marker, value)
     return value
 
 

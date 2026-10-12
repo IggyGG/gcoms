@@ -212,6 +212,15 @@ class ClusterRecovery(unittest.TestCase):
         self.assertEqual(self.submit(), value)
         self.assertEqual(self.api.created, created)
 
+    def test_unchanged_job_observation_never_rewrites_durable_request_or_effect(self):
+        first = self.submit()
+        with patch.object(cluster, 'write_json', side_effect=AssertionError('unchanged journal write')):
+            self.assertEqual(self.submit(), first)
+        self.api.objects['job', first['job_name']]['status'] = {'conditions': [{'type': 'Failed', 'status': 'True'}]}
+        failed = self.submit()
+        with patch.object(cluster, 'write_json', side_effect=AssertionError('terminal journal write')):
+            self.assertEqual(self.submit(), failed)
+
     def test_configuration_upgrade_observes_original_job_and_clock(self):
         original = self.submit()
         self.config['cluster']['runner_image'] = 'registry.example/runner@sha256:' + 'e' * 64
@@ -334,6 +343,24 @@ class ClusterRecovery(unittest.TestCase):
         self.assertEqual(coordinator['spec']['replicas'], 1)
         with self.assertRaisesRegex(ValueError, 'digest-pinned'):
             cluster.workloads(self.config, 'registry.example/coordinator:latest', 'source-reader')
+
+    def test_updated_operations_are_mounted_for_execution_and_persistent_coordination(self):
+        # The image can retain its tools/compiler while a separately pinned
+        # operation revision changes. Omitting this mount ran stale image code
+        # and failed the real adapter hash gate before preparation began.
+        self.config['cluster']['runtime_config_map'] = 'android-runtime-new'
+        self.config['forgejo']['token_file'] = '/credentials/source/token'
+        value = cluster.job(self.config, self.request, self.root / 'request.json')
+        warmer, coordinator = cluster.workloads(self.config,
+            'registry.example/coordinator@sha256:' + 'a' * 64, 'source-reader')['items']
+        for resource in (value, coordinator):
+            pod = resource['spec']['template']['spec']
+            self.assertIn({'name': 'runtime', 'configMap': {'name': 'android-runtime-new'}}, pod['volumes'])
+            self.assertIn({'name': 'runtime', 'mountPath': '/opt/gcoms/scripts', 'readOnly': True},
+                          pod['containers'][0]['volumeMounts'])
+        self.assertNotIn('volumes', warmer['spec']['template']['spec'])
+        self.assertEqual(value['spec']['template']['spec']['containers'][0]['image'],
+                         self.config['cluster']['runner_image'])
 
     def test_source_mirrors_refuse_workstation_paths_and_wrong_origin(self):
         self.config['sources']['gcoms']['repository'] = '/workstation/old.git'
