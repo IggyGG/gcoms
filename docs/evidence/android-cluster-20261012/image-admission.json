@@ -1,0 +1,151 @@
+{
+  "schema": 1,
+  "release_controls": {
+    "job": "android-release-controls-60c3d2d589",
+    "namespace": "ghost",
+    "job_uid": "ac1e92e4-826f-40c6-9ed6-b63ef38cf215",
+    "status": {
+      "completionTime": "2026-10-12T13:41:36Z",
+      "conditions": [
+        {
+          "lastProbeTime": "2026-10-12T13:41:36Z",
+          "lastTransitionTime": "2026-10-12T13:41:36Z",
+          "message": "Reached expected number of succeeded pods",
+          "reason": "CompletionsReached",
+          "status": "True",
+          "type": "SuccessCriteriaMet"
+        },
+        {
+          "lastProbeTime": "2026-10-12T13:41:36Z",
+          "lastTransitionTime": "2026-10-12T13:41:36Z",
+          "message": "Reached expected number of succeeded pods",
+          "reason": "CompletionsReached",
+          "status": "True",
+          "type": "Complete"
+        }
+      ],
+      "ready": 0,
+      "startTime": "2026-10-12T13:41:18Z",
+      "succeeded": 1,
+      "terminating": 0,
+      "uncountedTerminatedPods": {}
+    },
+    "pods": [
+      {
+        "name": "android-release-controls-60c3d2d589-nsqxb",
+        "uid": "4b6ba2c3-4b54-46b9-bc9b-e6d1a5242193",
+        "phase": "Succeeded"
+      }
+    ]
+  },
+  "control_count": 128,
+  "seconds": 13.959,
+  "gateway": {
+    "schema": 1,
+    "endpoint": "https://android-images.triform.cloud",
+    "images": {
+      "builder": "127.0.0.1:30444/ghost/android-builder@sha256:3e74982a26a65bc8cd1059bd827bc7756fa8374520c21f1bf5f81e2acc51d809",
+      "coordinator": "127.0.0.1:30444/ghost/android-coordinator@sha256:0c48900c652568a134f6098893d6880cac4999292f21cd11cb1a962b6fa27d76"
+    },
+    "checks": [
+      {
+        "path": "/v2/",
+        "method": "GET",
+        "authenticated": false,
+        "status": 401
+      },
+      {
+        "path": "/v2/",
+        "method": "GET",
+        "authenticated": true,
+        "status": 200
+      },
+      {
+        "path": "/v2/ghost/android-builder/manifests/sha256:3e74982a26a65bc8cd1059bd827bc7756fa8374520c21f1bf5f81e2acc51d809",
+        "method": "GET",
+        "authenticated": true,
+        "status": 200
+      },
+      {
+        "path": "/v2/ghost/android-builder/manifests/sha256:3e74982a26a65bc8cd1059bd827bc7756fa8374520c21f1bf5f81e2acc51d809",
+        "method": "HEAD",
+        "authenticated": true,
+        "status": 200
+      },
+      {
+        "path": "/v2/ghost/android-coordinator/manifests/sha256:0c48900c652568a134f6098893d6880cac4999292f21cd11cb1a962b6fa27d76",
+        "method": "GET",
+        "authenticated": true,
+        "status": 200
+      },
+      {
+        "path": "/v2/ghost/android-coordinator/manifests/sha256:0c48900c652568a134f6098893d6880cac4999292f21cd11cb1a962b6fa27d76",
+        "method": "HEAD",
+        "authenticated": true,
+        "status": 200
+      },
+      {
+        "path": "/v2/ghost/android-builder/manifests/sha256:0000000000000000000000000000000000000000000000000000000000000000",
+        "method": "DELETE",
+        "authenticated": true,
+        "status": 403
+      },
+      {
+        "path": "/v2/ghost/unrelated/manifests/sha256:0000000000000000000000000000000000000000000000000000000000000000",
+        "method": "GET",
+        "authenticated": true,
+        "status": 404
+      },
+      {
+        "path": "/v2/ghost/android-builder/tags/list",
+        "method": "GET",
+        "authenticated": true,
+        "status": 404
+      }
+    ],
+    "archive_region": "fsn1",
+    "registry_storage": "existing FSN registry; no new storage or HEL archive copy"
+  },
+  "real_kubelet_pull": {
+    "job": "android-tls-pull-4d30b4d706",
+    "namespace": "ghost-com",
+    "job_uid": "e69ce29c-de6d-4efb-a495-d80a1e1821a2",
+    "status": {
+      "completionTime": "2026-10-12T13:43:22Z",
+      "conditions": [
+        {
+          "lastProbeTime": "2026-10-12T13:43:22Z",
+          "lastTransitionTime": "2026-10-12T13:43:22Z",
+          "message": "Reached expected number of succeeded pods",
+          "reason": "CompletionsReached",
+          "status": "True",
+          "type": "SuccessCriteriaMet"
+        },
+        {
+          "lastProbeTime": "2026-10-12T13:43:22Z",
+          "lastTransitionTime": "2026-10-12T13:43:22Z",
+          "message": "Reached expected number of succeeded pods",
+          "reason": "CompletionsReached",
+          "status": "True",
+          "type": "Complete"
+        }
+      ],
+      "ready": 0,
+      "startTime": "2026-10-12T13:43:18Z",
+      "succeeded": 1,
+      "terminating": 0,
+      "uncountedTerminatedPods": {}
+    },
+    "pods": [
+      {
+        "name": "android-tls-pull-4d30b4d706-bvntt",
+        "uid": "418e7c16-38cd-4819-aa81-1ea53889d25e",
+        "phase": "Succeeded"
+      }
+    ]
+  },
+  "original_node_failure": "triform-4 had containerd registry config_path empty; HTTPS attempted against old HTTP NodePort and repeatedly failed",
+  "original_volume_delay": "Kubelet reported VolumePermissionChangeInProgress while walking compiler cache",
+  "codematch": "unreachable",
+  "scope": "source controls and real TLS image admission, not Android transfer/load or live release clocks"
+}

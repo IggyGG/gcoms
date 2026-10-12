@@ -191,6 +191,8 @@ def build(request):
                 if package['name'] == 'gcoms' or package['name'].startswith('gcoms-'):
                     if not Path(package['manifest_path']).resolve().is_relative_to(sources['gcoms'].resolve()):
                         raise ValueError('headless hub resolved an unselected registry SDK')
+            run(['cargo', 'test', '--offline', '--release', '--locked', '-p', 'gchat-core',
+                 '--lib', '--features', 'gc2-carrier', 'network::tests::', '--', '--test-threads=1'], sources['gchat'])
             run(['cargo', 'build', '--offline', '--release', '--locked', '-p', 'gchat-tui',
                  '--bin', 'gchat', '--features', 'gc2-carrier'], sources['gchat'])
         finally:

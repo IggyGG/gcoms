@@ -612,7 +612,7 @@ class Releases(unittest.TestCase):
              patch.dict(os.environ, {'ANDROID_CLUSTER_BUILD': '1'}):
             host.build({'config': self.config, 'manifest': manifest, 'component': 'hub',
                         'output': str(self.root / 'artifact')})
-        self.assertEqual([a[1] for a in commands], ['fetch', 'update', 'fetch', 'build'])
+        self.assertEqual([a[1] for a in commands], ['fetch', 'update', 'fetch', 'test', 'build'])
         self.assertIn('--locked', commands[2])
         self.assertIn('--offline', commands[3])
         self.assertEqual((self.root / 'gchat/Cargo.lock').read_bytes(), original)

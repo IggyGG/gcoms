@@ -35,7 +35,10 @@ def native_job(request, path):
             'template': {'metadata': {'labels': labels}, 'spec': {
                 'restartPolicy': 'Never', 'automountServiceAccountToken': False,
                 'nodeSelector': {'topology.kubernetes.io/zone': 'fsn1'},
-                'securityContext': {'runAsNonRoot': True, 'runAsUser': 10001, 'runAsGroup': 10001, 'fsGroup': 10001},
+                'imagePullSecrets': ([{'name': name(cluster['image_pull_secret'])}]
+                                     if cluster.get('image_pull_secret') else []),
+                'securityContext': {'runAsNonRoot': True, 'runAsUser': 10001, 'runAsGroup': 10001,
+                                    'fsGroup': 10001, 'fsGroupChangePolicy': 'OnRootMismatch'},
                 'containers': [{'name': 'build', 'image': image,
                     'command': ['python3', '/opt/gcoms/scripts/android_release_build_job.py', 'execute', str(path), checksum],
                     'env': [{'name': 'PYTHONDONTWRITEBYTECODE', 'value': '1'},

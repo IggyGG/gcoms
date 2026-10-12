@@ -1,0 +1,303 @@
+{
+  "apiVersion": "v1",
+  "kind": "List",
+  "items": [
+    {
+      "apiVersion": "v1",
+      "kind": "ConfigMap",
+      "metadata": {
+        "name": "android-image-pull",
+        "namespace": "ghost-com",
+        "labels": {
+          "app": "android-image-pull",
+          "app.kubernetes.io/part-of": "android-cluster-release"
+        }
+      },
+      "data": {
+        "nginx.conf": "worker_processes 1;\npid /scratch/nginx.pid;\nerror_log /dev/stderr warn;\nevents { worker_connections 256; }\nhttp {\n access_log off;\n client_body_temp_path /scratch/client;\n proxy_temp_path /scratch/proxy;\n fastcgi_temp_path /scratch/fastcgi;\n server {\n  listen 8080;\n  auth_basic \"Android release images\";\n  auth_basic_user_file /auth/htpasswd;\n  client_max_body_size 1k;\n  location = /healthz { auth_basic off; return 200 \"ok\\n\"; }\n  location = /v2/ {\n   limit_except GET { deny all; }\n   proxy_set_header Authorization \"\";\n   proxy_pass http://10.108.61.127:5000;\n  }\n  location ~ \"^/v2/ghost/(android-builder|android-coordinator|gchat-release)/(manifests|blobs)/sha256:[0-9a-f]{64}$\" {\n   limit_except GET { deny all; }\n   proxy_set_header Authorization \"\";\n   proxy_buffering off;\n   proxy_max_temp_file_size 0;\n   proxy_read_timeout 60s;\n   proxy_pass http://10.108.61.127:5000;\n  }\n  location / { return 404; }\n }\n}\n"
+      }
+    },
+    {
+      "apiVersion": "apps/v1",
+      "kind": "Deployment",
+      "metadata": {
+        "name": "android-image-pull",
+        "namespace": "ghost-com",
+        "labels": {
+          "app": "android-image-pull",
+          "app.kubernetes.io/part-of": "android-cluster-release"
+        }
+      },
+      "spec": {
+        "replicas": 1,
+        "selector": {
+          "matchLabels": {
+            "app": "android-image-pull"
+          }
+        },
+        "template": {
+          "metadata": {
+            "labels": {
+              "app": "android-image-pull",
+              "app.kubernetes.io/part-of": "android-cluster-release"
+            },
+            "annotations": {
+              "ghost.io/config-sha256": "72e6414a78c1785c57b1e2c3741fa5bfc4d6b3aae89c707485c326520206d47e"
+            }
+          },
+          "spec": {
+            "automountServiceAccountToken": false,
+            "nodeSelector": {
+              "topology.kubernetes.io/zone": "fsn1"
+            },
+            "securityContext": {
+              "runAsNonRoot": true,
+              "runAsUser": 101,
+              "runAsGroup": 101,
+              "fsGroup": 101
+            },
+            "containers": [
+              {
+                "name": "registry",
+                "image": "registry.k8s.io/ingress-nginx/controller:v1.14.1@sha256:f95a79b85fb93ac3de752c71a5c27d5ceae10a18b61904dec224c1c6a4581e47",
+                "command": [
+                  "/usr/local/nginx/sbin/nginx",
+                  "-c",
+                  "/config/nginx.conf",
+                  "-g",
+                  "daemon off;"
+                ],
+                "ports": [
+                  {
+                    "name": "http",
+                    "containerPort": 8080
+                  }
+                ],
+                "resources": {
+                  "requests": {
+                    "cpu": "50m",
+                    "memory": "64Mi",
+                    "ephemeral-storage": "16Mi"
+                  },
+                  "limits": {
+                    "cpu": "1",
+                    "memory": "256Mi",
+                    "ephemeral-storage": "128Mi"
+                  }
+                },
+                "securityContext": {
+                  "allowPrivilegeEscalation": false,
+                  "readOnlyRootFilesystem": true,
+                  "capabilities": {
+                    "drop": [
+                      "ALL"
+                    ],
+                    "add": [
+                      "NET_BIND_SERVICE"
+                    ]
+                  }
+                },
+                "readinessProbe": {
+                  "httpGet": {
+                    "path": "/healthz",
+                    "port": "http"
+                  },
+                  "periodSeconds": 5
+                },
+                "volumeMounts": [
+                  {
+                    "name": "config",
+                    "mountPath": "/config",
+                    "readOnly": true
+                  },
+                  {
+                    "name": "auth",
+                    "mountPath": "/auth",
+                    "readOnly": true
+                  },
+                  {
+                    "name": "scratch",
+                    "mountPath": "/scratch"
+                  }
+                ]
+              }
+            ],
+            "volumes": [
+              {
+                "name": "config",
+                "configMap": {
+                  "name": "android-image-pull"
+                }
+              },
+              {
+                "name": "auth",
+                "secret": {
+                  "secretName": "android-image-pull-auth",
+                  "defaultMode": 292
+                }
+              },
+              {
+                "name": "scratch",
+                "emptyDir": {
+                  "sizeLimit": "32Mi"
+                }
+              }
+            ],
+            "affinity": {
+              "nodeAffinity": {
+                "requiredDuringSchedulingIgnoredDuringExecution": {
+                  "nodeSelectorTerms": [
+                    {
+                      "matchExpressions": [
+                        {
+                          "key": "kubernetes.io/hostname",
+                          "operator": "NotIn",
+                          "values": [
+                            "triform-1"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Service",
+      "metadata": {
+        "name": "android-image-pull",
+        "namespace": "ghost-com",
+        "labels": {
+          "app": "android-image-pull",
+          "app.kubernetes.io/part-of": "android-cluster-release"
+        }
+      },
+      "spec": {
+        "selector": {
+          "app": "android-image-pull"
+        },
+        "ports": [
+          {
+            "name": "http",
+            "port": 8080,
+            "targetPort": "http"
+          }
+        ]
+      }
+    },
+    {
+      "apiVersion": "networking.k8s.io/v1",
+      "kind": "Ingress",
+      "metadata": {
+        "name": "android-image-pull",
+        "namespace": "ghost-com",
+        "labels": {
+          "app": "android-image-pull",
+          "app.kubernetes.io/part-of": "android-cluster-release"
+        },
+        "annotations": {
+          "cert-manager.io/cluster-issuer": "letsencrypt-prod",
+          "nginx.ingress.kubernetes.io/proxy-buffering": "off"
+        }
+      },
+      "spec": {
+        "ingressClassName": "nginx",
+        "tls": [
+          {
+            "hosts": [
+              "android-images.triform.cloud"
+            ],
+            "secretName": "android-image-pull-tls"
+          }
+        ],
+        "rules": [
+          {
+            "host": "android-images.triform.cloud",
+            "http": {
+              "paths": [
+                {
+                  "path": "/",
+                  "pathType": "Prefix",
+                  "backend": {
+                    "service": {
+                      "name": "android-image-pull",
+                      "port": {
+                        "number": 8080
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "apiVersion": "networking.k8s.io/v1",
+      "kind": "NetworkPolicy",
+      "metadata": {
+        "name": "android-image-pull",
+        "namespace": "ghost-com",
+        "labels": {
+          "app": "android-image-pull",
+          "app.kubernetes.io/part-of": "android-cluster-release"
+        }
+      },
+      "spec": {
+        "podSelector": {
+          "matchLabels": {
+            "app": "android-image-pull"
+          }
+        },
+        "policyTypes": [
+          "Ingress",
+          "Egress"
+        ],
+        "ingress": [
+          {
+            "from": [
+              {
+                "namespaceSelector": {
+                  "matchLabels": {
+                    "kubernetes.io/metadata.name": "ingress-nginx"
+                  }
+                }
+              }
+            ],
+            "ports": [
+              {
+                "protocol": "TCP",
+                "port": 8080
+              }
+            ]
+          }
+        ],
+        "egress": [
+          {
+            "to": [
+              {
+                "podSelector": {
+                  "matchLabels": {
+                    "app": "registry"
+                  }
+                }
+              }
+            ],
+            "ports": [
+              {
+                "protocol": "TCP",
+                "port": 5000
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}
