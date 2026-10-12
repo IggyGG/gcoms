@@ -400,6 +400,22 @@ class Releases(unittest.TestCase):
             with self.assertRaises(ValueError):
                 release.checked_targets(manifest, {'release_id': 'r', 'targets': rows})
 
+    def test_secret_audit_metadata_changes_preserve_native_inputs(self):
+        first = release.freeze(self.config, time.time())
+        repo = Path(self.config['sources']['gcoms']['repository'])
+        audit = repo / '.gitleaksignore'
+        for contents in ('reviewed exact fingerprint\n', 'another reviewed exact fingerprint\n'):
+            audit.write_text(contents)
+            self.git(repo, 'add', str(audit))
+            self.git(repo, 'commit', '-qm', 'source publication audit metadata')
+            self.assertEqual(first['inputs'], release.freeze(self.config, time.time())['inputs'])
+        unknown = repo / '.unreviewed-build-config'
+        unknown.write_text('may affect compilation')
+        self.git(repo, 'add', str(unknown))
+        self.git(repo, 'commit', '-qm', 'unreviewed configuration')
+        changed = release.freeze(self.config, time.time())
+        self.assertTrue(all(first['inputs'][c] != changed['inputs'][c] for c in release.COMPONENTS))
+
     def test_qualified_gchat_operations_do_not_recompile_native_artifacts(self):
         first = release.freeze(self.config, time.time())
         repo = Path(self.config['sources']['gchat']['repository'])

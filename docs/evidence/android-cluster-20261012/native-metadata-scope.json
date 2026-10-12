@@ -1,0 +1,14 @@
+{
+  "schema": 1,
+  "scope": "exclude exact source-publication metadata from Android native inputs",
+  "cause": "A .gitleaksignore-only non-operation delta caused native artifact cache misses during the automatic preparation of source 01d54be",
+  "change": "Only GComs .gitleaksignore is added to the reviewed operation exclusions; unknown dotfiles and compiler helpers remain inputs",
+  "controls": {
+    "job": "android-release-controls-2f2f51ba7d",
+    "passed": 68,
+    "seconds": 15.087
+  },
+  "publication_security": "The source mirror still runs its full-history gitleaks gate with the reviewed fingerprints",
+  "transition": "The corrected input definition establishes new keys once; future metadata edits reuse those keys. Existing original native Jobs and receipts are preserved.",
+  "codematch": "unreachable"
+}

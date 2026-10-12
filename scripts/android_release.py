@@ -20,6 +20,9 @@ STAGE_SECONDS = {'preflight': 60, 'building': 60, 'verifying': 60,
 DEPENDENCIES = {'sdk': (), 'installer': (), 'hub': (), 'worker': (), 'controller': (),
                 'apk': ('sdk', 'installer')}
 OPERATION_FILES = frozenset({
+    # Exact source-publication audit metadata; consumed by gitleaks, never by
+    # native builds. Its updates still go through the source publication gate.
+    '.gitleaksignore',
     'scripts/android_release.py', 'scripts/android_release_host.py',
     'scripts/android_release_queue.py', 'scripts/android_release_push_hook.sh',
     'scripts/android_release_pre_receive.sh', 'scripts/android_release_setup.py',

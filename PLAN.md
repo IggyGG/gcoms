@@ -1,3 +1,5 @@
+F5 cluster metadata scope and replacement, 2026-10-12: corrected unnecessary native invalidation from `.gitleaksignore`; the new input definition needs one new set of keys, then audit-metadata edits reuse artifacts. All 68 focused controls pass. Live coordinator replacement reconciled the original preparation and controller Job identities in 36.523 seconds; runtime scripts and helper permissions match their pins. [Evidence](docs/evidence/android-cluster-20261012/coordinator-polling.json).
+
 F5 cluster runtime follow-up, 2026-10-12: corrected mode 0644 on mounted Git helpers to 0555, retained bounded private failed-transport evidence, and added cooperative SIGTERM ownership cleanup. All 26 focused coordinator controls pass in Kubernetes (1.806 seconds). Live rollout, full Android loading and release/recovery acceptance remain open. [Evidence](docs/evidence/android-cluster-20261012/coordinator-polling.json).
 
 Source-mirror audit, 2026-10-12 (OC): two exact historical false positives are

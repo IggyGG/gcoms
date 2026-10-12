@@ -23,7 +23,15 @@
     18.089,
     18.879
   ],
-  "live_after": "pending configuration rollout",
+  "live_after": {
+    "poll_seconds": [
+      16.372,
+      16.123,
+      16.158
+    ],
+    "state": "observing original preparation Job",
+    "note": "Modest reduction from the 18-second baseline; source fetch and one-time receipt caching remained outside these steady intervals."
+  },
   "codematch": "unreachable",
   "packaging_followup": {
     "controls": {
@@ -36,6 +44,51 @@
       "Retain bounded private source transport failure evidence before removing its temporary output",
       "Handle SIGTERM by unwinding ownership contexts instead of waiting for a 120-second Lease expiry"
     ],
-    "live_verification": "pending rollout"
+    "live_verification": {
+      "helper_mode": "0555",
+      "helper_executed": true,
+      "runtime_hash_differences": [],
+      "coordinator_replacement": {
+        "schema": 1,
+        "started_at": 1791840341.2321684,
+        "original_pods": [
+          {
+            "name": "android-release-coordinator-6c4d98b5d5-gbl8n",
+            "uid": "640dc0b3-5d3e-43f2-b4cd-aeb1d78229f4"
+          }
+        ],
+        "original_jobs": {
+          "android-prepare-d6ca9b22418cb1c3f1e0e35e": "753b054a-3d26-4ba6-866d-09c7b9699aec",
+          "android-controller-7fe742fa6f27ab4ec6f4ea0a": "ea1b61d8-8852-484a-82fe-1ec4a580a340"
+        },
+        "lease_before": {
+          "acquireTime": "2026-10-12T21:25:38.867624Z",
+          "holderIdentity": "9cf3e0d3-6532-4af5-9d4f-e51b852637ba",
+          "leaseDurationSeconds": 120,
+          "renewTime": "2026-10-12T21:25:38.867644Z"
+        },
+        "state": "reconciled",
+        "new_pod": {
+          "name": "android-release-coordinator-548c95d6b7-2gkr7",
+          "uid": "4b1fbb6e-7263-46ee-9ea7-537180da72b4"
+        },
+        "seconds": 36.523,
+        "first_observation": {
+          "schema": 1,
+          "observed_at": 1791840374.5893862,
+          "execution": "kubernetes",
+          "state": "active",
+          "active": [
+            {
+              "request_id": "d6ca9b22418cb1c3f1e0e35e47bebd7141654d17d336c6f9b41c763684980354",
+              "operation": "prepare",
+              "state": "running",
+              "job_uid": "753b054a-3d26-4ba6-866d-09c7b9699aec"
+            }
+          ]
+        },
+        "original_job_uids_preserved": true
+      }
+    }
   }
 }
