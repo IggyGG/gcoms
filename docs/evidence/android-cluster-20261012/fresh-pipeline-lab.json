@@ -1,0 +1,68 @@
+{
+  "schema": 1,
+  "scope": "actual fresh reserved lab, normal TLS/relay bootstrap and Android DNS/socket proof; full transfer/load and release clocks remain pending",
+  "proofs": {
+    "network": {
+      "job": "android-provision-network-cec22f4239",
+      "job_uid": "d7374bb7-60bc-44d3-a8e7-913f4aaf5f12",
+      "schema": 1,
+      "action": "network",
+      "cluster_lab": {
+        "schema": 1,
+        "vm_uuid": "4eb258ef-7048-4a1a-83bb-402bcfe447da",
+        "android_pod_uid": "b375f37a-3a99-476e-8a7f-d26bc9a122a3",
+        "android_pod_ip": "10.244.42.192",
+        "boundary_sha256": "379d2a01709857319145c7409c63c9f3f63401d4b4b7341c2e3df3d983484a5e"
+      },
+      "result": {
+        "schema": 1,
+        "state": "network-ready",
+        "native_input": "9525cb0c22ed7180464d5434e65ceb4a810d29a528bdec0bc8578415a176f565",
+        "tls_verified": true,
+        "relays": 5,
+        "fixture": false,
+        "provider": "android-lab.triform.cloud"
+      },
+      "archive": {
+        "key": "android-release/records/109f10cda80d91dd7cc2e5f2bc37a548cf776bba69f44d71cc37429886728fdf.json",
+        "version": "M4IrHxQ4SIYjWq9ats0GtBLLmFBpmH7",
+        "sha256": "109f10cda80d91dd7cc2e5f2bc37a548cf776bba69f44d71cc37429886728fdf",
+        "bytes": 496
+      }
+    },
+    "connect": {
+      "job": "android-provision-connect-6292c05898",
+      "job_uid": "34789869-b618-42c7-93d3-853660a659d6",
+      "schema": 1,
+      "action": "connect",
+      "cluster_lab": {
+        "schema": 1,
+        "vm_uuid": "4eb258ef-7048-4a1a-83bb-402bcfe447da",
+        "android_pod_uid": "b375f37a-3a99-476e-8a7f-d26bc9a122a3",
+        "android_pod_ip": "10.244.42.192",
+        "boundary_sha256": "379d2a01709857319145c7409c63c9f3f63401d4b4b7341c2e3df3d983484a5e"
+      },
+      "result": {
+        "schema": 1,
+        "state": "network-connected",
+        "dns_verified": true,
+        "relay_sockets": 5,
+        "service_ip": "10.96.137.59"
+      },
+      "archive": {
+        "key": "android-release/records/e5175975b1528dba4320d2f5ebe11796c87ee200b5a6687ef895e58ffe5b0a1b.json",
+        "version": "TrYBRuX.BRsxzaBf6vxhpj2sSIEOmWd",
+        "sha256": "e5175975b1528dba4320d2f5ebe11796c87ee200b5a6687ef895e58ffe5b0a1b",
+        "bytes": 398
+      }
+    }
+  },
+  "controls": {
+    "passed": 166,
+    "seconds": 25.745,
+    "job": "android-release-controls-3c4cb4511d"
+  },
+  "old_instances": "preserved discarded; new instances were independently created under stable pipeline reservations",
+  "native_rebuilds": 0,
+  "codematch": "unreachable"
+}

@@ -211,6 +211,8 @@ def connect(lab, plan, selected, state, settings, ssh):
 def fleet(lab, plan, selected, state, settings, ssh):
     config = json.loads(Path(settings['release_config']).read_text())
     prepared = prepared_release(config, settings['prepared_id'])
+    import android_release_host as host
+    host.verify({'config': config, 'manifest': prepared})
     files = { 'scripts/' + p.name: p for p in Path(__file__).resolve().parent.glob('android_release*.py')}
     script = 'android_release_lab_fleet_bootstrap.py'
     files[script] = Path(__file__).with_name(script)
@@ -225,10 +227,23 @@ def fleet(lab, plan, selected, state, settings, ssh):
     return execute_once(ssh, ROOT, script, binding, Path(settings['state']))
 
 
+def android(lab, plan, selected, state, settings, ssh):
+    config = json.loads(Path(settings['release_config']).read_text())
+    prepared = prepared_release(config, settings['prepared_id'])
+    import android_release_host as host
+    host.verify({'config': config, 'manifest': prepared})
+    script = 'android_release_lab_android_bootstrap.py'
+    source = Path(__file__).with_name(script)
+    binding = hashlib.sha256(canonical({'context': selected, 'prepared_id': prepared['prepared_id'], 'script': digest(source)})).hexdigest()
+    send(ssh, ROOT, {script: source}, {})
+    lab.kube.fence_operations()
+    return execute_once(ssh, ROOT, script, binding, Path(settings['state']))
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--config', type=Path, required=True)
-    parser.add_argument('action', choices=('network', 'connect', 'fleet', 'inspect'))
+    parser.add_argument('action', choices=('network', 'connect', 'fleet', 'android', 'inspect'))
     args = parser.parse_args()
     settings = json.loads(args.config.read_text()); plan = validate(settings['plan'])
     from ghost_lab.cluster_operator import configure

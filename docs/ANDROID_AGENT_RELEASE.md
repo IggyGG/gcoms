@@ -49,7 +49,7 @@ source refs in the private configuration before requesting preparation.
 
 ## Isolated cluster runtime
 
-`android_release_lab_provision.py --config /config/provision.json network|connect|fleet|inspect`
+`android_release_lab_provision.py --config /config/provision.json network|connect|fleet|android|inspect`
 prepares a declared pair of reserved Lab guests. The plan provides distinct
 instance names, images, a stable owner UUID and private Service name. The trusted
 Job receives projected cluster credentials, the existing archive Secret and the
