@@ -193,6 +193,34 @@ class Provisioning(unittest.TestCase):
                 self.assertEqual(json.loads((root / 'host-config.json').read_text()), config)
                 self.assertFalse((root / 'recovery').exists())
 
+    def test_capture_after_preemption_requires_original_pvc_and_owner_mapping(self):
+        with tempfile.TemporaryDirectory() as temp:
+            before, after, _ = self.recovery_fixture(Path(temp))
+        pin = {'context': before, 'disk_uid': 'original-pvc', 'volume': 'original-volume'}
+        state = {'resource': 'gl-pipeline-android', 'disk': 'disk', 'disk_uid': pin['disk_uid'],
+                 'recovery': {'disk_uid': pin['disk_uid'], 'volume': pin['volume']}}
+        lab = Mock(); lab.owned_state.return_value = state
+        disk = {'metadata': {'uid': pin['disk_uid'], 'labels': {'ghost.io/instance': state['resource']}},
+                'spec': {'volumeName': pin['volume']}}
+        lab.kube.get.return_value = disk
+        settings = {'retained_recovery': pin}
+        with patch.object(recovery, 'guests', return_value={}), \
+                patch.object(recovery, 'device_identity', return_value={'identity_sha256': 'a' * 64}) as device, \
+                patch.object(recovery, 'mapping_request', return_value={'context': before}) as mapping:
+            result = recovery.capture(lab, self.plan, after, {}, settings, [])
+            self.assertEqual(result['context'], before)
+            self.assertEqual(result['observed_context'], after)
+            device.assert_called_once_with(lab, self.plan, after)
+            mapping.assert_called_once_with([], before, settings)
+            mapping.reset_mock(); device.reset_mock()
+            disk['metadata']['uid'] = 'recreated-pvc'
+            with self.assertRaisesRegex(ValueError, 'original PVC'):
+                recovery.capture(lab, self.plan, after, {}, settings, [])
+            disk['metadata']['uid'] = pin['disk_uid']
+            with self.assertRaisesRegex(ValueError, 'ownership'):
+                recovery.capture(lab, self.plan, dict(after, boundary_sha256='b' * 64), {}, settings, [])
+            mapping.assert_not_called(); device.assert_not_called()
+
     def test_different_restored_disk_or_android_identity_cannot_change_routing(self):
         lab = Mock()
         context = {'vm_uuid': 'original', 'boundary_sha256': 'a' * 64}

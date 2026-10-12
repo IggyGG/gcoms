@@ -1,0 +1,16 @@
+{
+  "schema": 1,
+  "status": "scoped controls pass; actual guest checkpoint and restore pending",
+  "controls": {
+    "job": "android-release-controls-de86a0fd67",
+    "passed": 12,
+    "elapsed_seconds": 1.097,
+    "log_sha256": "ac4de7f0964af9121957ca13eaf6b5f51feb6424ca4f4e6a707b368c68d4d4b3"
+  },
+  "behavior": [
+    "After emulator preemption, require original PVC UID, volume and owned Lab recovery record before capturing the old owner mapping",
+    "Measure the recovered device on its current real Pod; preserve both observed and original contexts",
+    "Use the existing sealed S3 checkpoint pair and verified device identity before rebinding guest routes"
+  ],
+  "codematch": "unreachable"
+}

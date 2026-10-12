@@ -104,10 +104,29 @@ def mapping_request(ssh, selected, settings, after=None, expected=None):
 
 
 def capture(lab, plan, selected, state, settings, ssh):
-    return {'schema': 1, 'kind': 'android-lab-recovery', 'state': 'captured',
+    previous = selected
+    retained = settings.get('retained_recovery')
+    if retained is not None:
+        previous = identity(retained['context'])
+        if any(previous[k] != selected[k] for k in ('vm_uuid', 'boundary_sha256')):
+            raise ValueError('retained capture cannot change VM or isolation ownership')
+        android = lab.owned_state(plan['guests']['android']['name'], plan['owner'])
+        disk = lab.kube.get('pvc', android['disk'], ns=lab.settings.namespace)
+        if (not disk or disk['metadata'].get('deletionTimestamp')
+                or disk['metadata'].get('uid') != retained['disk_uid']
+                or disk['spec'].get('volumeName') != retained['volume']
+                or disk['metadata'].get('labels', {}).get('ghost.io/instance') != android['resource']
+                or android.get('disk_uid') != retained['disk_uid']
+                or android.get('recovery', {}).get('disk_uid') != retained['disk_uid']
+                or android.get('recovery', {}).get('volume') != retained['volume']):
+            raise ValueError('retained capture requires the exact recovered original PVC')
+    result = {'schema': 1, 'kind': 'android-lab-recovery', 'state': 'captured',
             'plan_sha256': hashlib.sha256(canonical(plan)).hexdigest(), 'guests': guests(lab, plan),
-            'context': selected, 'android': device_identity(lab, plan, selected),
-            'mapping': mapping_request(ssh, selected, settings)}
+            'context': previous, 'android': device_identity(lab, plan, selected),
+            'mapping': mapping_request(ssh, previous, settings)}
+    if retained is not None:
+        result.update(retained_recovery=retained, observed_context=selected)
+    return result
 
 
 def saved_binding(lab, plan, settings, phase):
