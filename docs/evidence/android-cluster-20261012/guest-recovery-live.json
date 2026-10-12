@@ -1,0 +1,151 @@
+{
+  "schema": 1,
+  "scope": "actual isolated Android/network guest disk recovery from FSN1 S3",
+  "state": "passed",
+  "sealed_archive": {
+    "key": "android-release/records/071d73319b2df31eba9621cd5999758377a4eb4acbc2171705dee0984d224831.json",
+    "version": "5lIYHXEhqsN1e1OSdVca34bjr5huoAb",
+    "sha256": "071d73319b2df31eba9621cd5999758377a4eb4acbc2171705dee0984d224831",
+    "bytes": 2410
+  },
+  "checkpoints": {
+    "android": {
+      "key": "checkpoints/android-pipeline-fe38-x64/cp-9d1bce11d47d44b3aacb32754de11d61/manifest.json",
+      "manifest_sha256": "41929eaa734d7bc84b6b221e6b767c409b9b6aa86d915ca2b82cc7686304a990"
+    },
+    "network": {
+      "key": "checkpoints/android-pipeline-fe38-network/cp-17bc1c5959fe40f5abaad6ebe950f10f/manifest.json",
+      "manifest_sha256": "1f973b0f00fe8a441e986a0d2c58f99d1dcf725a45892a16587f26c94d675227"
+    }
+  },
+  "old_disks_absent_before_restore": true,
+  "guests": {
+    "android": {
+      "restore_job": "android-pipeline-restore-6a8c589983",
+      "job_uid": "8f19db91-905d-41a8-af21-6e51a70e4b1b",
+      "job_seconds": 261.0,
+      "new_pvc_uid": "1fd0d0dd-5d78-4891-a20a-59aa193bd509",
+      "machine_uuid": "5bc625d8-1ef6-4bbc-8af5-d3c973eabf7a",
+      "new_pod_uid": "72bfcf8e-0333-4290-abc3-47632554405f",
+      "ready": true
+    },
+    "network": {
+      "restore_job": "android-pipeline-restore-80d72b4c75",
+      "job_uid": "4673975d-277f-4715-9bd7-6d2cceb7c9b3",
+      "job_seconds": 155.0,
+      "new_pvc_uid": "3fe4bec6-babc-44bd-bdce-13a121b514a2",
+      "machine_uuid": "4eb258ef-7048-4a1a-83bb-402bcfe447da",
+      "original_vm_uid": "3ac27dc5-cc53-4615-85cf-228b0fa075f2",
+      "new_vmi_uid": "b6e4809a-3feb-44f0-81e5-ccdb64e1f255",
+      "all_nine_services_active": true
+    }
+  },
+  "rebound_proof": {
+    "schema": 1,
+    "job_name": "android-provision-recovery-rebind-4a2bcf1874",
+    "job_uid": "15b69167-374c-4b63-9883-664b4dc5b67e",
+    "record": {
+      "schema": 1,
+      "action": "recovery-rebind",
+      "cluster_lab": {
+        "schema": 1,
+        "vm_uuid": "4eb258ef-7048-4a1a-83bb-402bcfe447da",
+        "android_pod_uid": "72bfcf8e-0333-4290-abc3-47632554405f",
+        "android_pod_ip": "10.244.42.176",
+        "boundary_sha256": "379d2a01709857319145c7409c63c9f3f63401d4b4b7341c2e3df3d983484a5e"
+      },
+      "result": {
+        "android": {
+          "apk_sha256": "b50e1948035381abc49645b10a6640e22283ebaf30e0fc3ece227227aee95681",
+          "identity_sha256": "03d16a1467450203f45f223edb6fb44cc81d6a48049562e7c0ac13c025958a82"
+        },
+        "checkpoints": {
+          "android": {
+            "key": "checkpoints/android-pipeline-fe38-x64/cp-9d1bce11d47d44b3aacb32754de11d61/manifest.json",
+            "manifest_sha256": "41929eaa734d7bc84b6b221e6b767c409b9b6aa86d915ca2b82cc7686304a990"
+          },
+          "network": {
+            "key": "checkpoints/android-pipeline-fe38-network/cp-17bc1c5959fe40f5abaad6ebe950f10f/manifest.json",
+            "manifest_sha256": "1f973b0f00fe8a441e986a0d2c58f99d1dcf725a45892a16587f26c94d675227"
+          }
+        },
+        "context": {
+          "schema": 1,
+          "vm_uuid": "4eb258ef-7048-4a1a-83bb-402bcfe447da",
+          "android_pod_uid": "72bfcf8e-0333-4290-abc3-47632554405f",
+          "android_pod_ip": "10.244.42.176",
+          "boundary_sha256": "379d2a01709857319145c7409c63c9f3f63401d4b4b7341c2e3df3d983484a5e"
+        },
+        "guests": {
+          "android": {
+            "image": "android16-offline-20260909",
+            "machine_uuid": "5bc625d8-1ef6-4bbc-8af5-d3c973eabf7a",
+            "name": "android-pipeline-fe38-x64",
+            "vm_uid": null
+          },
+          "network": {
+            "image": "ubuntu-noble-20260908",
+            "machine_uuid": "4eb258ef-7048-4a1a-83bb-402bcfe447da",
+            "name": "android-pipeline-fe38-network",
+            "vm_uid": "3ac27dc5-cc53-4615-85cf-228b0fa075f2"
+          }
+        },
+        "kind": "android-lab-recovery",
+        "mapping": {
+          "context": {
+            "android_pod_ip": "10.244.42.192",
+            "android_pod_uid": "b375f37a-3a99-476e-8a7f-d26bc9a122a3",
+            "boundary_sha256": "379d2a01709857319145c7409c63c9f3f63401d4b4b7341c2e3df3d983484a5e",
+            "schema": 1,
+            "vm_uuid": "4eb258ef-7048-4a1a-83bb-402bcfe447da"
+          },
+          "host_config_sha256": "dee8933b20e8e2b536fb838791c1467658cef09626e3e560a38850219cb43e69"
+        },
+        "observed_context": {
+          "android_pod_ip": "10.244.42.200",
+          "android_pod_uid": "6c0fb1a8-7830-4077-bc27-5e86d4a49bf0",
+          "boundary_sha256": "379d2a01709857319145c7409c63c9f3f63401d4b4b7341c2e3df3d983484a5e",
+          "schema": 1,
+          "vm_uuid": "4eb258ef-7048-4a1a-83bb-402bcfe447da"
+        },
+        "plan_sha256": "3ab23bc1fe3e5245521c6ec770e2e0f266e51c15547e8a7366f57baf3f4e65ba",
+        "retained_recovery": {
+          "context": {
+            "android_pod_ip": "10.244.42.192",
+            "android_pod_uid": "b375f37a-3a99-476e-8a7f-d26bc9a122a3",
+            "boundary_sha256": "379d2a01709857319145c7409c63c9f3f63401d4b4b7341c2e3df3d983484a5e",
+            "schema": 1,
+            "vm_uuid": "4eb258ef-7048-4a1a-83bb-402bcfe447da"
+          },
+          "disk_uid": "c3e4d70f-0d6a-4955-af86-f10e2037e939",
+          "volume": "pvc-c3e4d70f-0d6a-4955-af86-f10e2037e939"
+        },
+        "schema": 1,
+        "state": "rebound",
+        "previous_context": {
+          "android_pod_ip": "10.244.42.192",
+          "android_pod_uid": "b375f37a-3a99-476e-8a7f-d26bc9a122a3",
+          "boundary_sha256": "379d2a01709857319145c7409c63c9f3f63401d4b4b7341c2e3df3d983484a5e",
+          "schema": 1,
+          "vm_uuid": "4eb258ef-7048-4a1a-83bb-402bcfe447da"
+        },
+        "routing": {
+          "schema": 1,
+          "state": "network-connected",
+          "dns_verified": true,
+          "relay_sockets": 5,
+          "service_ip": "10.96.137.59"
+        }
+      },
+      "attempt_id": "3ce864d0-92f3-4c29-ba72-dd07ea5d060c",
+      "archive": {
+        "key": "android-release/records/093ce25a8102f50dfba97fee36aed023de4949d5817ce0eb0804468d56579721.json",
+        "version": "eZk1cQz9Xia5lhfcG2UZ-pN7.Gt06N.",
+        "sha256": "093ce25a8102f50dfba97fee36aed023de4949d5817ce0eb0804468d56579721",
+        "bytes": 3018
+      }
+    }
+  },
+  "original_failed_rebind_job": "android-provision-recovery-rebind-249ca15771",
+  "full_transfer_and_release_timing_qualified": false
+}
