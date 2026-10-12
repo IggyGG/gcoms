@@ -27,6 +27,8 @@ OPERATION_FILES = frozenset({
     'scripts/android_release_qualify.py', 'scripts/tests/android_release_test.py',
     'scripts/android_release_store.py', 'scripts/tests/android_release_store_test.py',
     'scripts/android_release_source.py', 'scripts/tests/android_release_source_test.py',
+    'scripts/android_release_outbox.py', 'scripts/android_release_outbox_hook.sh',
+    'scripts/tests/android_release_outbox_test.py',
     'scripts/android_release_kubernetes.py', 'scripts/tests/android_release_kubernetes_test.py',
     'scripts/android_release_catalogue.py', 'scripts/tests/android_release_catalogue_test.py',
     'scripts/android_release_cluster.py', 'scripts/android_release_git_askpass.py',
@@ -37,6 +39,8 @@ OPERATION_FILES = frozenset({
     'release/android-cluster/Dockerfile', 'release/android-cluster/Dockerfile.toolchain',
     'release/android-cluster/android-packages.json', 'release/android-cluster/android-toolchain.py',
     'release/android-cluster/requirements.lock', 'release/android-cluster/resources.json',
+    'release/android-cluster/Dockerfile.toolchain-extend',
+    'release/android-cluster/image-pull.json', 'release/android-cluster/server-outbox.json',
     # Dispatch-only hosted relay diagnostics never enter these native builds.
     '.github/workflows/relay-recovery.yml', 'scripts/qualify-relay-recovery.py',
     'scripts/tests/relay_recovery_test.py',

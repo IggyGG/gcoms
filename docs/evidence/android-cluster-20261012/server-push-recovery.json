@@ -1,0 +1,56 @@
+{
+  "schema": 1,
+  "kind": "real-server-push-recovery",
+  "source_commit": "38891d0ce4f9024801af5bb8377e34e1292c6c1f",
+  "restored_events": 2,
+  "original_bytes_preserved": true,
+  "receipts": [
+    {
+      "event": {
+        "schema": 1,
+        "project": "gcoms",
+        "repository": "ghost-local/gcoms",
+        "ref": "refs/heads/agent/android-ten-minute-70b7b9b6",
+        "commit": "38891d0ce4f9024801af5bb8377e34e1292c6c1f",
+        "pushed_at": 1791814530,
+        "nonce": "96ca8ef3-b763-4fe1-b60e-e11f96cd0387",
+        "server_event_id": "915531acbe239f17b9100531dcbbc65a42caed63a06480f30f919dab55a67ba1"
+      },
+      "archive": {
+        "key": "android-release/server-pushes/records/2a0302f0cb498e7c7bad5eeab64f35eab7068c2b4b323271b6f10357dce7605a.json",
+        "version": "q.30V.HwX-H9A4NOYuWXNg65x3P63Ev",
+        "sha256": "2a0302f0cb498e7c7bad5eeab64f35eab7068c2b4b323271b6f10357dce7605a",
+        "bytes": 461
+      },
+      "archived_at": "2026-10-12T14:15:31+00:00",
+      "server_to_archive_seconds": 1.0
+    },
+    {
+      "event": {
+        "schema": 1,
+        "project": "gcoms",
+        "repository": "ghost-local/gcoms",
+        "ref": "refs/heads/main",
+        "commit": "38891d0ce4f9024801af5bb8377e34e1292c6c1f",
+        "pushed_at": 1791814531,
+        "nonce": "a2ee4853-fd9c-49bb-9fca-a97516748dc6",
+        "server_event_id": "e9bddaee668917af78799d548eb09e6290ad4265c2d857fa5819f8f387ac88f6"
+      },
+      "archive": {
+        "key": "android-release/server-pushes/records/92204bcdb39e3bde97b78366e029b93edbde721dd449701c28775e85ba06b2a8.json",
+        "version": ".8Alj20n22Pd3DQB-leL8qPCwmvLz73",
+        "sha256": "92204bcdb39e3bde97b78366e029b93edbde721dd449701c28775e85ba06b2a8",
+        "bytes": 421
+      },
+      "archived_at": "2026-10-12T14:15:32+00:00",
+      "server_to_archive_seconds": 1.0
+    }
+  ],
+  "scope": "server clock and empty event-cache recovery; not deployment timing",
+  "job": "android-push-recovery-e15bd22673",
+  "controls": {
+    "job": "android-release-controls-ea6ff64f5b",
+    "passed": 135,
+    "seconds": 14.378
+  }
+}

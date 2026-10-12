@@ -623,8 +623,12 @@ class Releases(unittest.TestCase):
         self.config['toolchain']['builder_image'] = image
         first = release.freeze(self.config, time.time())
         repo = Path(self.config['sources']['gcoms']['repository'])
-        for name in ('resources.json', 'Dockerfile'):
-            path = repo / 'release/android-cluster' / name
+        for name in ('release/android-cluster/resources.json', 'release/android-cluster/Dockerfile',
+                     'release/android-cluster/Dockerfile.toolchain-extend',
+                     'release/android-cluster/image-pull.json', 'release/android-cluster/server-outbox.json',
+                     'scripts/android_release_outbox.py', 'scripts/android_release_outbox_hook.sh',
+                     'scripts/tests/android_release_outbox_test.py'):
+            path = repo / name
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text('independently qualified cluster placement and image recipe')
         self.git(repo, 'add', '.')
