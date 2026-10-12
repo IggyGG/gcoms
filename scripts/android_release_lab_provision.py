@@ -173,7 +173,7 @@ def network(lab, plan, selected, state, settings, ssh):
     return execute_once(ssh, NETWORK, script, binding, Path(settings['state']))
 
 
-def connect(lab, plan, selected, state, settings, ssh):
+def connect(lab, plan, selected, state, settings, ssh, previous=None):
     address = service(lab, plan)
     pod = 'gl-' + plan['guests']['android']['name']
     def adb(*args, **kwargs):
@@ -182,6 +182,10 @@ def connect(lab, plan, selected, state, settings, ssh):
         return lab.kube.run('exec', '-i', pod, '-n', lab.settings.namespace, '--', 'adb', '-s', 'emulator-5556', *args, **kwargs)
     def shell(*args, **kwargs): return adb('shell', *args, **kwargs)
     config = dict(selected, service_ip=address, relay_ips=RELAYS)
+    if previous is not None:
+        identity(previous)
+        if any(previous[k] != selected[k] for k in ('vm_uuid', 'boundary_sha256')):
+            raise ValueError('routing recovery must retain VM and isolation ownership')
     chain = 'GHOST_ANDROID_RELEASE'; marker = '/data/local/tmp/android-cluster-network.json'
     adb('root'); adb('wait-for-device')
     try:
@@ -189,7 +193,9 @@ def connect(lab, plan, selected, state, settings, ssh):
         old = shell('cat', marker, check=False)
         exists = shell('iptables', '-t', 'nat', '-S', chain, check=False).returncode == 0
         if old.returncode == 0:
-            if json.loads(old.stdout) != config: raise ValueError('preserve different Android routing ownership')
+            allowed = [config]
+            if previous is not None: allowed.append(dict(previous, service_ip=address, relay_ips=RELAYS))
+            if json.loads(old.stdout) not in allowed: raise ValueError('preserve different Android routing ownership')
         elif exists: raise ValueError('preserve existing unowned Android routing chain')
         lab.kube.fence_operations()
         shell('umask 077; cat > ' + marker, data=config)
@@ -322,7 +328,11 @@ def provision(settings, action):
     with ExitStack() as stack:
         for name in sorted(g['name'] for g in plan['guests'].values()):
             stack.enter_context(lab.operation(name, plan['owner']))
-        if action in ('archive-access', 'restore-access'):
+        if action == 'recovery-seal':
+            from android_release_lab_recovery import seal
+            selected = None
+            result = seal(lab, plan, settings)
+        elif action in ('archive-access', 'restore-access'):
             state = lab.owned_state(plan['guests']['network']['name'], plan['owner'])
             selected = None
             result = globals()[action.replace('-', '_')](lab, plan, settings, state)
@@ -332,7 +342,11 @@ def provision(settings, action):
             else:
                 with tunnel(lab, state, 22) as port:
                     ssh = ssh_command(lab, state, port)
-                    result = globals()[action](lab, plan, selected, state, settings, ssh)
+                    if action in ('recovery-capture', 'recovery-rebind'):
+                        from android_release_lab_recovery import capture, rebind
+                        result = (capture if action == 'recovery-capture' else rebind)(lab, plan, selected, state, settings, ssh)
+                    else:
+                        result = globals()[action](lab, plan, selected, state, settings, ssh)
         lab.kube.fence_operations()
         record = {'schema': 1, 'action': action, 'cluster_lab': selected, 'result': result}
         write_json(Path(settings['state']) / (action + '-result.json'), record)
@@ -342,7 +356,8 @@ def provision(settings, action):
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--config', type=Path, required=True)
-    parser.add_argument('action', choices=('network', 'connect', 'fleet', 'android', 'inspect', 'archive-access', 'restore-access'))
+    parser.add_argument('action', choices=('network', 'connect', 'fleet', 'android', 'inspect', 'archive-access', 'restore-access',
+                                         'recovery-capture', 'recovery-seal', 'recovery-rebind'))
     args = parser.parse_args(argv)
     settings = json.loads(args.config.read_text())
     # Kubernetes can collect terminated Pods before their logs are read. Keep

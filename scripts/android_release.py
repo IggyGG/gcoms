@@ -33,6 +33,7 @@ OPERATION_FILES = frozenset({
     'scripts/android_release_lab_network_bootstrap.py', 'scripts/android_release_lab_services.py',
     'scripts/android_release_lab_fleet_bootstrap.py', 'scripts/android_release_lab_provision.py',
     'scripts/android_release_lab_android_bootstrap.py',
+    'scripts/android_release_lab_recovery.py',
     'scripts/tests/android_release_lab_provision_test.py',
     'scripts/tests/android_release_lab_test.py',
     'scripts/android_release_store.py', 'scripts/tests/android_release_store_test.py',

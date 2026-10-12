@@ -1,0 +1,26 @@
+{
+  "schema": 1,
+  "status": "implemented and scoped controls passed; actual guest disk checkpoint/restore pending",
+  "controls": [
+    {
+      "job": "android-release-controls-cb03136890",
+      "passed": 11,
+      "elapsed_seconds": 1.001,
+      "log_sha256": "6d583b14347c50187709166e47ed8fbe37c44915735d67ceb71179d5409b9775"
+    },
+    {
+      "job": "android-release-controls-ff19f0706c",
+      "passed": 68,
+      "elapsed_seconds": 19.495,
+      "log_sha256": "c64236385d36c9dd7b2096a1aabf030aa7619f0892ea819b51f456ecdd1b8dc4"
+    }
+  ],
+  "behavior": [
+    "capture the exact owned pair, installed APK, retained Android seed hash and private owner mapping",
+    "seal both completed version-pinned S3 guest checkpoints",
+    "verify the restored pair and original device/configuration before updating only the Android Pod address and UID",
+    "retain original owner mappings and execute guest rebind only once; partial or foreign state remains refused"
+  ],
+  "codematch": "unreachable",
+  "acceptance": "Full live guest disk recovery and Android release acceptance remain pending"
+}

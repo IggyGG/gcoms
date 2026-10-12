@@ -12,6 +12,7 @@ from unittest.mock import Mock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import android_release_lab_provision as provision
+import android_release_lab_recovery as recovery
 import android_release_store as store
 from android_release_store_test import S3
 
@@ -154,6 +155,59 @@ class Provisioning(unittest.TestCase):
                 self.assertIn('private-sentinel', (directory / 'failure-private.json').read_text())
                 self.assertEqual((directory / 'failure-private.json').stat().st_mode & 0o777, 0o600)
                 self.assertEqual(json.loads((directory / 'result.json').read_text())['result']['state'], 'failed')
+
+    def recovery_fixture(self, root):
+        before = {'schema': 1, 'vm_uuid': '4eb258ef-7048-4a1a-83bb-402bcfe447da',
+                  'android_pod_uid': self.plan['owner'], 'android_pod_ip': '10.244.1.2', 'boundary_sha256': 'a' * 64}
+        after = dict(before, android_pod_uid='b375f37a-3a99-476e-8a7f-d26bc9a122a3', android_pod_ip='10.244.2.3')
+        config = {'state': 'preserved', 'targets': [{'id': 'hub', 'kind': 'hub'},
+                  {'id': 'android-x64', 'kind': 'android', 'serial': before['android_pod_ip'] + ':5555'}]}
+        (root / 'release').mkdir()
+        provision.write_json(root / 'context.json', before)
+        provision.write_json(root / 'host-config.json', config)
+        return before, after, config
+
+    def test_restored_mapping_preserves_owner_state_and_backs_up_before_rebinding(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp); before, after, config = self.recovery_fixture(root)
+            observed = recovery.guest_mapping(before, root=root)
+            recovery.guest_mapping(before, after, observed['host_config_sha256'], root=root)
+            changed = json.loads((root / 'host-config.json').read_text())
+            expected = copy.deepcopy(config); expected['targets'][1]['serial'] = '10.244.2.3:5555'
+            self.assertEqual(changed, expected)
+            self.assertEqual(json.loads((root / 'context.json').read_text()), after)
+            backups = list((root / 'recovery').glob('*/before-host-config.json'))
+            self.assertEqual(len(backups), 1)
+            self.assertEqual(json.loads(backups[0].read_text()), config)
+            with self.assertRaisesRegex(ValueError, 'different guest context'):
+                recovery.guest_mapping(before, after, observed['host_config_sha256'], root=root)
+            self.assertEqual(json.loads((root / 'context.json').read_text()), after)
+
+    def test_changed_owner_or_boundary_refuses_rebind_before_any_mapping_write(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp); before, after, config = self.recovery_fixture(root)
+            for changed, checksum in [(dict(after, vm_uuid=self.plan['owner']), None),
+                                      (dict(after, boundary_sha256='b' * 64), None), (after, 'f' * 64)]:
+                with self.assertRaises(ValueError): recovery.guest_mapping(before, changed, checksum, root=root)
+                self.assertEqual(json.loads((root / 'context.json').read_text()), before)
+                self.assertEqual(json.loads((root / 'host-config.json').read_text()), config)
+                self.assertFalse((root / 'recovery').exists())
+
+    def test_different_restored_disk_or_android_identity_cannot_change_routing(self):
+        lab = Mock()
+        context = {'vm_uuid': 'original', 'boundary_sha256': 'a' * 64}
+        value = {'context': context, 'checkpoints': {'android': 'original'},
+                 'android': {'identity_sha256': 'a' * 64, 'apk_sha256': 'b' * 64}}
+        with patch.object(recovery, 'saved_binding', return_value=value), \
+                patch.object(recovery, 'checkpoints', return_value={'android': 'different'}) as disks, \
+                patch.object(recovery, 'device_identity', return_value={'identity_sha256': 'changed'}), \
+                patch.object(recovery, 'mapping_request') as mapping, patch.object(provision, 'connect') as routing:
+            with self.assertRaisesRegex(ValueError, 'checkpoint differs'):
+                recovery.rebind(lab, self.plan, context, {}, {}, [])
+            disks.return_value = value['checkpoints']
+            with self.assertRaisesRegex(ValueError, 'identity or installed APK changed'):
+                recovery.rebind(lab, self.plan, context, {}, {}, [])
+            mapping.assert_not_called(); routing.assert_not_called(); lab.kube.fence_operations.assert_not_called()
 
 
 if __name__ == '__main__': unittest.main()
