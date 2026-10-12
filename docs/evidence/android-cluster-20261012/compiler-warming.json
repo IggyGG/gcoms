@@ -1,0 +1,12 @@
+{
+  "schema": 1,
+  "status": "scoped controls passed; cluster warming rollout follows",
+  "reason": "Real cold native preparation waited roughly 3 to 7 minutes for the pinned compiler image; existing warming covered only slim operation images",
+  "job": "android-release-controls-9d9791061f",
+  "passed": 26,
+  "elapsed_seconds": 1.948,
+  "log_sha256": "a00d39d54924b387b60b9b2cb81a15ee82423e8b1c53f35bb99b54d8a412f328",
+  "behavior": "Warm the distinct digest-pinned native compiler on the same eligible FSN nodes, with no mounted credentials or API token",
+  "codematch": "unreachable",
+  "acceptance": "Full Android reference, promotion clocks, rollback and disconnected recovery remain pending"
+}

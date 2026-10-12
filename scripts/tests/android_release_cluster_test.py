@@ -334,15 +334,22 @@ class ClusterRecovery(unittest.TestCase):
 
     def test_image_warming_cannot_read_source_archive_or_cluster_credentials(self):
         self.config['forgejo']['token_file'] = '/credentials/source/token'
+        self.config['cluster']['builder_image'] = 'registry.example/compiler@sha256:' + 'b' * 64
         rendered = cluster.workloads(self.config, 'registry.example/coordinator@sha256:' + 'a' * 64, 'source-reader')
         warmer, coordinator = rendered['items']
         pod = warmer['spec']['template']['spec']
         self.assertFalse(pod['automountServiceAccountToken'])
         self.assertNotIn('volumes', pod)
         self.assertTrue(all('volumeMounts' not in c for c in pod['containers']))
+        self.assertEqual({c['image'] for c in pod['containers']}, {
+            'registry.example/coordinator@sha256:' + 'a' * 64,
+            self.config['cluster']['runner_image'], self.config['cluster']['builder_image']})
         self.assertEqual(coordinator['spec']['replicas'], 1)
         with self.assertRaisesRegex(ValueError, 'digest-pinned'):
             cluster.workloads(self.config, 'registry.example/coordinator:latest', 'source-reader')
+        self.config['cluster']['builder_image'] = 'registry.example/compiler:latest'
+        with self.assertRaisesRegex(ValueError, 'digest-pinned'):
+            cluster.workloads(self.config, 'registry.example/coordinator@sha256:' + 'a' * 64, 'source-reader')
 
     def test_updated_operations_are_mounted_for_execution_and_persistent_coordination(self):
         # The image can retain its tools/compiler while a separately pinned

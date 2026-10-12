@@ -478,13 +478,22 @@ def workloads(config, coordinator_image, source_secret):
         'spec': {'replicas': 1, 'strategy': {'type': 'Recreate'}, 'selector': {'matchLabels': labels},
                  'template': {'metadata': {'labels': labels}, 'spec': pod}}}
     warm_labels = {'app.kubernetes.io/part-of': OWNER, 'app.kubernetes.io/name': 'android-release-images'}
+    images = [('coordinator', coordinator_image), ('runner', config['cluster']['runner_image'])]
+    builder = config['cluster'].get('builder_image')
+    if builder is not None:
+        if not re.fullmatch(r'[^\s@]+@sha256:[0-9a-f]{64}', builder):
+            raise ValueError('native Android builder must be digest-pinned')
+        # Keep the compiler ready on every eligible node too. A distinct slim
+        # runner otherwise leaves cold native Jobs waiting minutes for a pull.
+        if builder not in {image for _, image in images}:
+            images.append(('builder', builder))
     warm_pod = {k: pod[k] for k in ('nodeSelector', 'affinity', 'imagePullSecrets', 'securityContext')}
     warm_pod.update(automountServiceAccountToken=False, terminationGracePeriodSeconds=1,
         containers=[{'name': component, 'image': image,
             'command': ['python3', '-c', 'import signal; signal.pause()'],
             'resources': {'requests': {'cpu': '1m', 'memory': '16Mi'}, 'limits': {'cpu': '50m', 'memory': '64Mi'}},
             'securityContext': {'allowPrivilegeEscalation': False, 'capabilities': {'drop': ['ALL']}}}
-            for component, image in [('coordinator', coordinator_image), ('runner', config['cluster']['runner_image'])]])
+            for component, image in images])
     warmer = {'apiVersion': 'apps/v1', 'kind': 'DaemonSet',
         'metadata': {'name': 'android-release-images', 'namespace': namespace, 'labels': warm_labels},
         'spec': {'selector': {'matchLabels': warm_labels},
