@@ -86,3 +86,9 @@ ed492e687cc5eb7addb8277bf8ca9b5d8e6df6f3:docs/evidence/recipient-route-readiness
 9a1f31b00483933c8bc7de9ce6b424422dcb301e:docs/evidence/irc-hosted-client-20260929/summary.json:generic-api-key:8
 9a1f31b00483933c8bc7de9ce6b424422dcb301e:docs/evidence/irc-hosted-client-20260929/summary.json:generic-api-key:11
 9a1f31b00483933c8bc7de9ce6b424422dcb301e:docs/evidence/irc-hosted-client-20260929/summary.json:generic-api-key:14
+
+# Reviewed 2026-10-12: a verified public Drone Git object reference and
+# benchmark prose in historical release evidence. Exact fingerprints only;
+# no credential values or blanket path/rule exemptions are admitted.
+661a1f4d0299a58600086abf2dbb9acb9d4fa5f8:docs/evidence/android-profile-cancellation-20261012/summary.json:generic-api-key:12
+788aded068467b626fe0899ed2408f39f9c1e928:README.md:generic-api-key:11

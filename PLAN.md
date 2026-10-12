@@ -1,5 +1,11 @@
 F5 cluster runtime follow-up, 2026-10-12: corrected mode 0644 on mounted Git helpers to 0555, retained bounded private failed-transport evidence, and added cooperative SIGTERM ownership cleanup. All 26 focused coordinator controls pass in Kubernetes (1.806 seconds). Live rollout, full Android loading and release/recovery acceptance remain open. [Evidence](docs/evidence/android-cluster-20261012/coordinator-polling.json).
 
+Source-mirror audit, 2026-10-12 (OC): two exact historical false positives are
+reviewed and tracked. The original 611-commit scan found a public Drone Git object
+reference and benchmark prose; the unchanged full-history scan with those two
+exact fingerprints now passes with zero findings. The source audit passes 1,158
+paths. New findings remain publication failures. [Evidence](docs/evidence/source-audit-20261012/summary.json).
+
 F5 cluster operation binding and idle I/O, 2026-10-12: release Jobs and the persistent coordinator now mount their configured operation scripts. The original preparation had correctly refused stale image bytes before compilation. Unchanged polls preserve immutable request files and effect journals, and reuse checksum-verified original push receipts without repeated S3 HEAD/GET. All 173 focused controls pass (25.214 seconds); live rollout and timing comparison follow. [Evidence](docs/evidence/android-cluster-20261012/coordinator-polling.json).
 
 F5 cluster lab recovery, 2026-10-12: archive only the exact private SSH key pair and pinned VM host key to versioned FSN1 S3. A fresh cluster Job restored them into empty scratch and authenticated the original VM with strict host-key checking. Existing access, foreign VM bindings, extra files and public modes are refused. Provisioning now retains each original attempt and private failure trace before Pod logs can disappear, including archive outages. All 169 release controls and the final eight provisioning controls pass. Guest disk recovery and full Android release acceptance remain pending. [Evidence](docs/evidence/android-cluster-20261012/access-recovery.json).
