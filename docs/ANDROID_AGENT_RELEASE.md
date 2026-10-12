@@ -58,6 +58,14 @@ network binaries hydrate from an exact versioned S3 receipt. Initial owner setup
 uses the verified prepared release and authenticates the VM firmware UUID and
 fresh Android Pod identity. Retrying a completed bootstrap recovers its original
 proof; a failed or uncertain bootstrap requires inspection before further work.
+The `archive-access` action saves only the network guest SSH key pair and its
+pinned host key. Retain its versioned descriptor as `access_archive` for
+`restore-access`; the selected operator directory must be empty. Restore refuses
+a different owner/VM, extra files or public modes, and never generates a new key
+or copies API/S3 credentials. Each provision attempt retains its own private
+failure trace and public result on the cluster volume; public results are also
+archived. An archive outage preserves the original local evidence.
+
 Use the Lab cluster operator's reserved `save` and `restore` operations for
 checkpoints. A restored Android Pod has a new Pod UID and must be explicitly
 rebound before a new preparation/qualification receipt; old live proof is never

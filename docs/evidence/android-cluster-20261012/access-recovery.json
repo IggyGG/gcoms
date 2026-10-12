@@ -1,0 +1,77 @@
+{
+  "schema": 1,
+  "date": "2026-10-12",
+  "scope": "cluster lab operator SSH recovery and durable provisioning failure evidence",
+  "controls": {
+    "release": {
+      "job": "android-release-controls-7a42a27d70",
+      "passed": 169,
+      "seconds": 21.214
+    },
+    "provisioning": {
+      "job": "android-release-controls-b29ddd1f3f",
+      "passed": 8,
+      "seconds": 0.953
+    }
+  },
+  "access_backup": {
+    "schema": 1,
+    "action": "archive-access",
+    "cluster_lab": null,
+    "result": {
+      "schema": 1,
+      "state": "access_archived",
+      "input_sha256": "922a142b6ecaf2ec1d7fb33205a04f4654c5902f97dc2b2e0c7246da5a1ad5b9",
+      "archive": {
+        "key": "android-release/records/6a2988258b69f1ea52690c63694c94f63431bedfff336995eaa7b48ccdccafdf.json",
+        "version": "tHup46BUGe1I8E2BZaoQYsnN32lhT54",
+        "sha256": "6a2988258b69f1ea52690c63694c94f63431bedfff336995eaa7b48ccdccafdf",
+        "bytes": 1174
+      },
+      "files": 3
+    },
+    "attempt_id": "2e59b8a2-1735-45cb-80af-8f352844a3ca",
+    "archive": {
+      "key": "android-release/records/48e264a4943f72301f80f1fe238a20c2278d8a53afe376c9427e7233918df682.json",
+      "version": "ownUJ0VJL0Ko6Z05oTZdsK6mBUzlxV7",
+      "sha256": "48e264a4943f72301f80f1fe238a20c2278d8a53afe376c9427e7233918df682",
+      "bytes": 496
+    }
+  },
+  "empty_cache_access": {
+    "schema": 1,
+    "state": "access_restored",
+    "input_sha256": "922a142b6ecaf2ec1d7fb33205a04f4654c5902f97dc2b2e0c7246da5a1ad5b9",
+    "files": 3,
+    "kind": "cluster-empty-access-cache-proof",
+    "vm_uuid": "4eb258ef-7048-4a1a-83bb-402bcfe447da",
+    "original_host_key_verified": true,
+    "scope": "operator credentials only; guest disk and full release recovery remain pending",
+    "archive": {
+      "key": "android-release/records/42f9b1c462e54bf4a138c222bb0ba02b983576fc49be7dc928853e6578fefe00.json",
+      "version": "JVcfaLW9rRf6CbxCoiyx.AE2wP.zuu3",
+      "sha256": "42f9b1c462e54bf4a138c222bb0ba02b983576fc49be7dc928853e6578fefe00",
+      "bytes": 344
+    }
+  },
+  "initial_android_attempt": {
+    "job": "android-provision-android-ca87fc4b31",
+    "pod_uid": "fae6e1e9-2cdf-4a23-bd07-30cc6fd1236f",
+    "state": "failed before guest mutation",
+    "cause": "original runner error unavailable after terminated Pod collection; not attributed",
+    "guest_started_marker": false
+  },
+  "verification": {
+    "job": "android-bootstrap-verify-de12fab1be",
+    "prepared_seconds": 44.164,
+    "prepared_and_apk_seconds": 59.401
+  },
+  "codematch": "unreachable",
+  "remaining": [
+    "guest disk checkpoints and identity rebind",
+    "actual full 42MiB transfer/resume/load",
+    "three original promotion clocks",
+    "functional rollback",
+    "complete disconnected and empty-cache recovery"
+  ]
+}

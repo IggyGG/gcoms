@@ -9,8 +9,12 @@ import os
 from pathlib import Path
 import re
 import shlex
+import shutil
+import stat
 import subprocess
 import tarfile
+import tempfile
+import traceback
 import uuid
 
 from android_release import canonical, digest, prepared_release, write_json
@@ -240,12 +244,76 @@ def android(lab, plan, selected, state, settings, ssh):
     return execute_once(ssh, ROOT, script, binding, Path(settings['state']))
 
 
-def main():
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--config', type=Path, required=True)
-    parser.add_argument('action', choices=('network', 'connect', 'fleet', 'android', 'inspect'))
-    args = parser.parse_args()
-    settings = json.loads(args.config.read_text()); plan = validate(settings['plan'])
+ACCESS_FILES = ('id_ed25519', 'id_ed25519.pub', 'known_hosts')
+
+
+def access_binding(plan, state):
+    if (state['name'] != plan['guests']['network']['name']
+            or state.get('reservation_owner') != plan['owner']):
+        raise ValueError('access archive requires the owned network guest')
+    return hashlib.sha256(canonical({'schema': 1, 'owner': plan['owner'],
+        'name': state['name'], 'machine_uuid': state['machine_uuid']})).hexdigest()
+
+
+def verify_access(directory, state):
+    """Bound the private key inventory and verify both SSH identities locally."""
+    directory = Path(directory)
+    if (directory.is_symlink() or not directory.is_dir() or directory.stat().st_uid != os.getuid()
+            or directory.stat().st_mode & 0o077):
+        raise ValueError('SSH access requires a private owned directory')
+    for name in ACCESS_FILES:
+        path = regular_file(directory, name)
+        info = path.stat()
+        if (info.st_uid != os.getuid() or info.st_nlink != 1 or not 0 < info.st_size <= 65536
+                or (name == 'id_ed25519' and stat.S_IMODE(info.st_mode) & 0o077)):
+            raise ValueError('SSH access file ownership, mode or size changed')
+    public = subprocess.run(['ssh-keygen', '-y', '-f', str(directory / 'id_ed25519')],
+        capture_output=True, timeout=5, check=True).stdout.split()[:2]
+    if public != (directory / 'id_ed25519.pub').read_bytes().split()[:2]:
+        raise ValueError('SSH public/private key binding changed')
+    host = subprocess.run(['ssh-keygen', '-F', state['machine_uuid'], '-f', str(directory / 'known_hosts')],
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=5)
+    if host.returncode:
+        raise ValueError('the original VM host key must already be pinned')
+
+
+def archive_access(lab, plan, settings, state):
+    binding = access_binding(plan, state)
+    source = Path(lab.settings.state_dir) / state['name']
+    verify_access(source, state)
+    root = Path(settings['state']); root.mkdir(parents=True, exist_ok=True, mode=0o700)
+    with tempfile.TemporaryDirectory(prefix='.access-archive-', dir=root) as temporary:
+        stage = Path(temporary)
+        for name in ACCESS_FILES:
+            shutil.copyfile(source / name, stage / name)
+            (stage / name).chmod(0o600)
+        verify_access(stage, state)
+        write_json(stage / 'receipt.json', {'component': 'lab-access', 'input_sha256': binding,
+            'files': {name: digest(stage / name) for name in ACCESS_FILES}})
+        descriptor = Archive(settings['archive']).publish_directory(stage, 'lab-access', binding)
+    return {'schema': 1, 'state': 'access_archived', 'input_sha256': binding,
+            'archive': descriptor, 'files': len(ACCESS_FILES)}
+
+
+def restore_access(lab, plan, settings, state):
+    binding = access_binding(plan, state)
+    destination = Path(lab.settings.state_dir) / state['name']
+    if destination.exists() or destination.is_symlink():
+        raise ValueError('preserve the existing operator access directory')
+    # No API token, archive credential, or generated replacement key is restored.
+    archive = Archive(settings['archive'])
+    record = archive.read_record(settings['access_archive'])
+    if (set(record.get('files', {})) != {*ACCESS_FILES, 'receipt.json'}
+            or any(item.get('mode') != 0o600 or not 0 < item.get('bytes', 0) <= 65536
+                   for item in record['files'].values())):
+        raise ValueError('restore requires the exact bounded private SSH inventory')
+    archive.restore_directory(settings['access_archive'], destination, 'lab-access', binding)
+    verify_access(destination, state)
+    return {'schema': 1, 'state': 'access_restored', 'input_sha256': binding, 'files': len(ACCESS_FILES)}
+
+
+def provision(settings, action):
+    plan = validate(settings['plan'])
     from ghost_lab.cluster_operator import configure
     from ghost_lab.lifecycle import Lab
     from ghost_lab.access import tunnel, ssh_command
@@ -254,18 +322,53 @@ def main():
     with ExitStack() as stack:
         for name in sorted(g['name'] for g in plan['guests'].values()):
             stack.enter_context(lab.operation(name, plan['owner']))
-        selected, state, pod = context(lab, plan)
-        if args.action == 'inspect': result = {'state': 'ready', 'cluster_lab': selected}
+        if action in ('archive-access', 'restore-access'):
+            state = lab.owned_state(plan['guests']['network']['name'], plan['owner'])
+            selected = None
+            result = globals()[action.replace('-', '_')](lab, plan, settings, state)
         else:
-            with tunnel(lab, state, 22) as port:
-                ssh = ssh_command(lab, state, port)
-                result = globals()[args.action](lab, plan, selected, state, settings, ssh)
+            selected, state, pod = context(lab, plan)
+            if action == 'inspect': result = {'state': 'ready', 'cluster_lab': selected}
+            else:
+                with tunnel(lab, state, 22) as port:
+                    ssh = ssh_command(lab, state, port)
+                    result = globals()[action](lab, plan, selected, state, settings, ssh)
         lab.kube.fence_operations()
-        record = {'schema': 1, 'action': args.action, 'cluster_lab': selected, 'result': result}
-        write_json(Path(settings['state']) / (args.action + '-result.json'), record)
-        archive = Archive(settings['archive'])
-        descriptor = archive.publish_record(record)
-        print(json.dumps(dict(record, archive=descriptor)), flush=True)
+        record = {'schema': 1, 'action': action, 'cluster_lab': selected, 'result': result}
+        write_json(Path(settings['state']) / (action + '-result.json'), record)
+        return record
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--config', type=Path, required=True)
+    parser.add_argument('action', choices=('network', 'connect', 'fleet', 'android', 'inspect', 'archive-access', 'restore-access'))
+    args = parser.parse_args(argv)
+    settings = json.loads(args.config.read_text())
+    # Kubernetes can collect terminated Pods before their logs are read. Keep
+    # every attempt on the state volume, including failures before guest staging.
+    attempt = str(uuid.uuid4())
+    directory = Path(settings['state']) / 'attempts' / attempt
+    write_json(directory / 'started.json', {'schema': 1, 'action': args.action,
+        'settings_sha256': hashlib.sha256(canonical(settings)).hexdigest()})
+    failed = False
+    try:
+        record = provision(settings, args.action)
+    except Exception as error:
+        failed = True
+        write_json(directory / 'failure-private.json', {'traceback': traceback.format_exc()})
+        record = {'schema': 1, 'action': args.action, 'result': {'state': 'failed', 'failure_type': type(error).__name__}}
+    record['attempt_id'] = attempt
+    write_json(directory / 'result.json', record)
+    try:
+        record['archive'] = Archive(settings['archive']).publish_record(record)
+    except Exception as error:
+        write_json(directory / 'archive-failure-private.json', {'traceback': traceback.format_exc()})
+        record['archive_failure_type'] = type(error).__name__
+        failed = True
+    print(json.dumps(record), flush=True)
+    if failed:
+        raise SystemExit(1)
 
 
 if __name__ == '__main__': main()
