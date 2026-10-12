@@ -1,0 +1,62 @@
+{
+  "schema": 1,
+  "updated_at": "2026-10-12T17:34:58.447493+00:00",
+  "code": {
+    "gcoms": "9a5a9cc3c900d2853e7c9053cb95136931a4900a",
+    "lab": "8bffc42b279a7be06871c6111e5110f0fb47fc9d"
+  },
+  "images": {
+    "schema": 1,
+    "gchat_revision": "7da2a3b292246639f8c5181000e6e5fe89d3b3ad",
+    "source_sha256": "99e7c24d314636596b7e0f52a545f7581205df1eef1f5ae852c8e8f23ee7653d",
+    "builder_pod_uid": "3e923fb7-bd3a-419c-b2ba-7991dedf32d8",
+    "images": {
+      "lab-runner": "android-images.triform.cloud/ghost/android-builder@sha256:756450f263d03b763efaa4f1be6c1d75a4a5a281fd06503029fbc02519f51fb2",
+      "coordinator": "android-images.triform.cloud/ghost/android-coordinator@sha256:5c3b53d98d0d375c289fd944cc86bbc98827be3e581d8645bda0aee7d55e0ff8"
+    },
+    "elapsed_seconds": 14.867052588611841,
+    "job": "android-lab-images-99e7c24d3146"
+  },
+  "archive": {
+    "schema": 1,
+    "source_sha256": "f854e66706db78cd61eb638371ae41b34349d1c1e50c0e759177fa9f746c5555",
+    "job_uid": "d3169fb8-4688-4e80-8810-dfc631b72874",
+    "complete": true,
+    "elapsed_seconds": 18.30586500093341,
+    "receipts": [
+      {
+        "repository": "ghost/android-builder",
+        "digest": "sha256:756450f263d03b763efaa4f1be6c1d75a4a5a281fd06503029fbc02519f51fb2",
+        "key": "runtime/android-builder/756450f263d03b763efaa4f1be6c1d75a4a5a281fd06503029fbc02519f51fb2.json",
+        "version": "q2beEyO5qtByfDRTwiZe8GqrKehFiyB",
+        "sha256": "f94a17583d8a798d1205f64656ecc1452561fe93f584f80ad067d9ccae810d5f",
+        "bytes": 515599000,
+        "objects": 28
+      },
+      {
+        "repository": "ghost/android-coordinator",
+        "digest": "sha256:5c3b53d98d0d375c289fd944cc86bbc98827be3e581d8645bda0aee7d55e0ff8",
+        "key": "runtime/android-coordinator/5c3b53d98d0d375c289fd944cc86bbc98827be3e581d8645bda0aee7d55e0ff8.json",
+        "version": "naNFyRchGrVhSl-MUYG.ql5lT34s25F",
+        "sha256": "f594e989110212b7ebf74a5741543050ba5b8150a9ee06bd240701663f1df8cc",
+        "bytes": 480917700,
+        "objects": 21
+      }
+    ],
+    "evidence": {
+      "key": "runtime/android-cluster/f854e66706db78cd61eb638371ae41b34349d1c1e50c0e759177fa9f746c5555.json",
+      "version": "dpwMiv4sBy8-SYJYiyvcVbxGnxrYMdk"
+    },
+    "job": "android-image-archive-f854e66706",
+    "temporary_secret_deleted": true
+  },
+  "prewarm": {
+    "name": "android-release-images",
+    "uid": "549eb758-ec28-4805-bbc0-609574074e9f",
+    "generation": 3,
+    "ready": 4
+  },
+  "scope": "reservation code packaged and archived; no recreated guest or live acceptance claim",
+  "coordinator_enabled": false,
+  "guest_rebuild_pending_owner_clarification": true
+}
