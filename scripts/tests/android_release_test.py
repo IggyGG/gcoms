@@ -689,6 +689,14 @@ class Releases(unittest.TestCase):
 
 
 class Maintenance(unittest.TestCase):
+    def test_mint_uses_the_selected_network_owner_for_activation_and_rollback(self):
+        self.assertEqual(host.mint_network({}), [])
+        self.assertEqual(host.mint_network({'network_invitation': '/private/lab/invitation'}),
+                         ['--network-invitation', '/private/lab/invitation'])
+        for path in ('relative/invitation', '/private/../production/invitation'):
+            with self.assertRaisesRegex(ValueError, 'absolute owner path'):
+                host.mint_network({'network_invitation': path})
+
     def test_cancellation_uses_only_the_minted_profile_bound_to_this_release(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory); folder = root / 'android-x64'

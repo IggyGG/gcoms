@@ -1,0 +1,37 @@
+{
+  "schema": 1,
+  "date": "2026-10-12",
+  "scope": "cluster lifecycle adapter and compiler/operation separation; real Android acceptance pending",
+  "controls": {
+    "job": "android-release-controls-832daa1786",
+    "passed": 150,
+    "elapsed_seconds": 25.812
+  },
+  "images": {
+    "schema": 1,
+    "gchat_revision": "7da2a3b292246639f8c5181000e6e5fe89d3b3ad",
+    "source_sha256": "06b83f8bf25476b38b51600fefcb2e3cf19906b9bba25c96bf4f87583d30486c",
+    "builder_pod_uid": "3e923fb7-bd3a-419c-b2ba-7991dedf32d8",
+    "images": {
+      "lab-runner": "android-images.triform.cloud/ghost/android-builder@sha256:bb5411764bc621bc95305e629ceaee45847905ca8ba90d05afd3ebc60dc6845f",
+      "coordinator": "android-images.triform.cloud/ghost/android-coordinator@sha256:4cb8e44109bb59337f6fd479ef95f613978a1f220487989a4d406b7154f664e4"
+    },
+    "elapsed_seconds": 9.205784080550075,
+    "job": "android-lab-images-06b83f8bf254"
+  },
+  "boundaries": [
+    "fresh lab network proof and exact VM/Android identities",
+    "private checksum-bound SSH envelope and immutable staged artifacts",
+    "APK signature and embedded native verification in trusted cluster runner",
+    "guest execution journal before mutation; uncertain activation never replayed",
+    "real 42 MiB interrupted reference remains required",
+    "native compiler image unchanged; digest-bound operation overlay"
+  ],
+  "codematch": "unreachable",
+  "acceptance": {
+    "reference_360_seconds": "pending",
+    "three_pushes_600_seconds": "pending",
+    "functional_rollback_60_seconds": "pending",
+    "disconnected_workstation": "pending"
+  }
+}

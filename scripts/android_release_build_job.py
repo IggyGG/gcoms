@@ -7,7 +7,7 @@ import re
 import sys
 import time
 
-from android_release import COMPONENTS, cached_artifact, canonical, inputs, write_json
+from android_release import COMPONENTS, cached_artifact, canonical, digest, inputs, write_json
 from android_release_kubernetes import Kubernetes, Lease, OWNER, ensure_job, job_name, job_state, name
 
 
@@ -24,6 +24,10 @@ def native_job(request, path):
     mounts = [{'name': 'state', 'mountPath': config['state']}, {'name': 'cache', 'mountPath': '/build'}]
     volumes = [{'name': 'state', 'persistentVolumeClaim': {'claimName': name(cluster['state_claim'])}},
                {'name': 'cache', 'persistentVolumeClaim': {'claimName': name(cluster['cache_claims'][component])}}]
+    if cluster.get('runtime_config_map'):
+        mounts.append({'name': 'runtime', 'mountPath': '/opt/gcoms/scripts', 'readOnly': True})
+        volumes.append({'name': 'runtime', 'configMap': {'name': name(cluster['runtime_config_map']),
+                                                        'defaultMode': 0o555}})
     if component == 'apk':
         mounts.append({'name': 'signing', 'mountPath': '/home/release/.android/debug.keystore',
                        'subPath': 'debug.keystore', 'readOnly': True})
@@ -36,6 +40,9 @@ def native_job(request, path):
             'template': {'metadata': {'labels': labels}, 'spec': {
                 'restartPolicy': 'Never', 'automountServiceAccountToken': False,
                 'nodeSelector': {'topology.kubernetes.io/zone': 'fsn1'},
+                'affinity': {'nodeAffinity': {'requiredDuringSchedulingIgnoredDuringExecution': {
+                    'nodeSelectorTerms': [{'matchExpressions': [{'key': 'kubernetes.io/hostname',
+                        'operator': 'NotIn', 'values': ['triform-1']}]}]}}},
                 'imagePullSecrets': ([{'name': name(cluster['image_pull_secret'])}]
                                      if cluster.get('image_pull_secret') else []),
                 'securityContext': {'runAsNonRoot': True, 'runAsUser': 10001, 'runAsGroup': 10001,
@@ -124,6 +131,8 @@ def remote(path, kube=None):
 def execute(path, checksum):
     request = json.loads(Path(path).read_text())
     config, manifest = request['config'], request['manifest']
+    if any(digest(path) != sha for path, sha in config.get('runtime_sha256', {}).items()):
+        raise ValueError('native cluster execution code changed after preparation')
     if (hashlib.sha256(canonical(request)).hexdigest() != checksum
             or manifest['configuration_sha256'] != hashlib.sha256(canonical(config)).hexdigest()
             or manifest['inputs'] != inputs(config, manifest['sources'])):

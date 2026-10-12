@@ -47,7 +47,15 @@ The hook recognizes current `agent/` task branches without hardcoding session
 IDs. It accepts only safe ASCII ref names; the consumer still selects the exact
 source refs in the private configuration before requesting preparation.
 
-Prepare the owned workstation (no private configuration is committed):
+## Isolated cluster runtime
+
+The trusted runner uses `android_release_lab.py` for preflight, activation, readiness and rollback. Configure `lab.settings`, `lab.network_guest`, `lab.android_pod`, and the exact public `cluster_lab` identity. Android uses its pinned Pod address on port 5555. The adapter requires fresh Lab boundary validation and private pinned SSH access, verifies the signed APK and prepared artifacts, and maps runtime state only into the dedicated lab guest. Guest commands retain their original execution journal; an uncertain activation is not replayed. Detailed guest failures remain private.
+
+Build `release/android-cluster/Dockerfile.lab-runtime` to package operations separately from the compiler. Keep `cluster.builder_image` and `toolchain.builder_image` pinned to the verified compiler. Set `cluster.runner_image` to the lab runner and `cluster.runtime_config_map` to an immutable ConfigMap containing the matching operation scripts; `runtime_sha256` binds those bytes before native execution. Operation edits therefore reuse verified native cache entries. The guest holds neither Kubernetes nor S3 credentials. Compiler scratch and active guest disks stay bounded cluster volumes, while immutable artifacts and release evidence use the FSN1 archive.
+
+Cluster qualification records the actual lab identity and boundary, runs the same normally signed 42 MiB interrupted transfer with the 360-second limit, and requires the current process to load the worker. It does not claim the workstation VPN proof. The adapter controls and image build alone do not qualify transfer, deployment, rollback or disconnection.
+
+Prepare the retained workstation adapter (no private configuration is committed):
 
 ```sh
 python3 scripts/android_release_setup.py --state /absolute/SSD/android-release

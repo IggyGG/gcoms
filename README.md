@@ -1,3 +1,5 @@
+F5 isolated cluster lifecycle adapter, 2026-10-12: release Jobs now verify APK signing and all prepared bytes before staging a private, checksum-bound command to the exact lab VM and Android Pod. The guest validates its private mapping, journals mutations, reconnects ADB, preserves uncertain attempts, and runs the existing full interruption/resume/load checks. Operation images and immutable script overlays retain the pinned compiler image and native cache keys. All 150 scoped controls pass in Kubernetes (25.812 seconds); runtime images built in 9.206 seconds. Real Android reference, three promotion clocks, rollback and workstation disconnection remain pending. [Evidence](docs/evidence/android-cluster-20261012/lab-adapter.json).
+
 F5 real server push recovery, 2026-10-12: both actual Forgejo ref updates for 38891d0 reached verified FSN1 S3 one second after their original server clocks. A separate cluster Job restored their exact original bytes into empty storage, deduplicated a second intake, deleted only its scratch cache, and recovered them again. Reviewed outbox, image admission and placement files preserve native input hashes; the exact compiler image remains mandatory. All 135 focused release controls pass in Kubernetes (14.378 seconds). Automatic live promotion remains gated on the cluster Android runtime adapter and actual 360/600/60-second acceptance. [Evidence](docs/evidence/android-cluster-20261012/server-push-recovery.json).
 
 F5 cluster promotion priority, 2026-10-12: cold preparation uses a separate lock and cannot delay an already prepared promotion. The coordinator preserves one preparation and one live operation, fetches only the exact promotion tag, and retains the original server push clock. All 139 scoped release controls pass in 17.138 seconds; the 1,133-path source audit passes. Actual Android transfer, promotion and rollback timing remain unqualified. [Evidence](docs/evidence/android-cluster-20261012/prepared-priority.json).
@@ -612,7 +614,7 @@ contact-lifetime bound required by the newer Drone companion; relay-admission
 proofs retain their five-minute bound. See [bootstrap validation and paired-worker
 checks](docs/GC2_NETWORK_BOOTSTRAP.md#bootstrap-fixture-and-companion-validation-2026-10-06).
 
-The opt-in Android agent uses a bounded workstation release lane; see
+The opt-in Android agent supports a bounded Kubernetes release lane with an isolated lab runtime, alongside the retained workstation adapter; see
 [Android agent releases](docs/ANDROID_AGENT_RELEASE.md). Its 600-second deadline
 starts at the original Forgejo push. Successful installation alone does not
 qualify downloaded worker readiness.

@@ -58,6 +58,21 @@ class NativeJobs(unittest.TestCase):
         self.request['component'] = 'sdk';self.config['cluster']['builder_image'] = 'image:latest'
         with self.assertRaisesRegex(ValueError, 'digest-pinned'):build.native_job(self.request, self.path)
 
+    def test_runtime_overlay_keeps_compiler_pin_and_refuses_changed_execution_code(self):
+        image = self.config['cluster']['builder_image']
+        self.config['cluster']['runtime_config_map'] = 'android-runtime-source-pinned'
+        pod = build.native_job(self.request, self.path)['spec']['template']['spec']
+        self.assertEqual(pod['containers'][0]['image'], image)
+        self.assertIn({'name': 'runtime', 'mountPath': '/opt/gcoms/scripts', 'readOnly': True},
+                      pod['containers'][0]['volumeMounts'])
+        runtime = self.root / 'runtime.py'; runtime.write_text('original')
+        self.config['runtime_sha256'] = {str(runtime): release.digest(runtime)}
+        release.write_json(self.path, self.request)
+        runtime.write_text('changed after the immutable request was prepared')
+        with patch.object(build, 'inputs') as inputs, self.assertRaisesRegex(ValueError, 'execution code changed'):
+            build.execute(self.path, hashlib.sha256(release.canonical(self.request)).hexdigest())
+        inputs.assert_not_called()
+
     def test_cache_writer_intent_is_durable_before_job_admission(self):
         create = self.api.create
         def observed(kind, value):

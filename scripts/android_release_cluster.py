@@ -166,6 +166,9 @@ def job(config, request, request_path):
             'template': {'metadata': {'labels': labels}, 'spec': {
                 'restartPolicy': 'Never', 'serviceAccountName': name(cluster['service_account']),
                 'nodeSelector': {'topology.kubernetes.io/zone': 'fsn1'},
+                'affinity': {'nodeAffinity': {'requiredDuringSchedulingIgnoredDuringExecution': {
+                    'nodeSelectorTerms': [{'matchExpressions': [{'key': 'kubernetes.io/hostname',
+                        'operator': 'NotIn', 'values': ['triform-1']}]}]}}},
                 'imagePullSecrets': ([{'name': name(cluster['image_pull_secret'])}]
                                      if cluster.get('image_pull_secret') else []),
                 'securityContext': {'runAsNonRoot': True, 'runAsUser': 10001, 'runAsGroup': 10001,
@@ -309,6 +312,10 @@ def execute(config, request_path, checksum):
         state = 'prepared'
     elif request['operation'] == 'promote':
         value = deploy(config, request['manifest'])
+        state = value['state']
+    elif request['operation'] == 'qualify':
+        from android_release_lab import qualify
+        value = qualify(config, request['manifest']['prepared_id'])
         state = value['state']
     else:
         raise ValueError('cluster execution operation is not installed')

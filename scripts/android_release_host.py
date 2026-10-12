@@ -388,6 +388,17 @@ def publish_worker(request, target, file, restoring=False, deadline=None):
         time.sleep(.5)
 
 
+def mint_network(config):
+    """Use the selected owner network for both activation and restoration."""
+    invitation = config.get('network_invitation')
+    if invitation is None:
+        return []
+    path = Path(invitation)
+    if not path.is_absolute() or '..' in path.parts:
+        raise ValueError('network invitation requires an absolute owner path')
+    return ['--network-invitation', str(path)]
+
+
 def activate(request):
     config, manifest = request['config'], request['manifest']
     directory = Path(request['directory'])
@@ -458,7 +469,7 @@ def activate(request):
                  '--property=StandardOutput=append:' + str(folder / 'mint.log'),
                  '--property=StandardError=append:' + str(folder / 'mint.log'),
                  config['fleet_binary'], 'mint-ds', '--config', config['fleet_config'],
-                 '--channel', target['channel'], '--output', profile, '--keep-alive', '600'])
+                 '--channel', target['channel'], '--output', profile, '--keep-alive', '600', *mint_network(config)])
         until = min(time.time() + 45, manifest['pushed_at'] + 175)
         while not profile.exists():
             if time.time() >= until:
@@ -635,7 +646,7 @@ def rollback(request):
                 '--property=StandardOutput=append:' + str(folder / 'rollback-mint.log'),
                 '--property=StandardError=append:' + str(folder / 'rollback-mint.log'),
                 config['fleet_binary'], 'mint-ds', '--config', config['fleet_config'], '--channel', target['channel'],
-                '--output', profile, '--keep-alive', '120'], 5)
+                '--output', profile, '--keep-alive', '120', *mint_network(config)], 5)
             while not profile.exists():
                 if time.monotonic() >= until: raise TimeoutError('restored Android profile was not minted')
                 time.sleep(.25)

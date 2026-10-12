@@ -27,6 +27,9 @@ INTERRUPT_BYTES = 8 * 1024 * 1024
 
 def isolated(config):
     """Initial baseline qualification cannot bypass the production gate."""
+    if config.get('qualification_scope') == 'cluster-isolated':
+        from android_release_lab_context import isolated as cluster_isolated
+        return cluster_isolated(config)
     root = Path.home() / '.local/state/gchat-mobile-iso'
     home = Path.home() / '.local/share/gchat-mobile-iso'
     if (config.get('qualification_scope') != 'isolated'
@@ -215,11 +218,19 @@ def run(config, ident):
         return _run_reference(config, ident)
 
 
-def _run_reference(config, ident):
+def _run_reference(config, ident, verified_prepared=None, directory=None):
     _fleet, target = isolated(config)
-    prepared = prepared_release(config, ident)
-    hub.eligible(config); hub.eligible_controller(config); before_vpn = vpn()
-    directory = Path(config['state']) / 'qualification' / secrets.token_hex(16)
+    if verified_prepared is not None and config.get('qualification_scope') != 'cluster-isolated':
+        raise ValueError('mapped prepared inputs require the isolated cluster guest')
+    prepared = verified_prepared if verified_prepared is not None else prepared_release(config, ident)
+    cluster = config.get('cluster_lab') if config.get('qualification_scope') == 'cluster-isolated' else None
+    hub.eligible(config); hub.eligible_controller(config)
+    before_vpn = vpn() if cluster is None else None
+    directory = (Path(config['state']) / 'qualification' / secrets.token_hex(16)
+                 if directory is None else Path(directory))
+    if (directory.parent != Path(config['state']) / 'qualification' or directory.exists()
+            or not re.fullmatch('[0-9a-f]{32,64}', directory.name)):
+        raise ValueError('preserve the original qualification directory')
     directory.mkdir(mode=0o700, parents=True)
     source = Path(config['state']) / 'artifacts/worker' / prepared['inputs']['worker'] / target['abi'] / 'worker.so'
     padded = directory / 'reference.so'
@@ -231,12 +242,16 @@ def _run_reference(config, ident):
     request = {'config': config, 'manifest': value, 'directory': str(directory), 'warm': False}
     write_json(directory / 'request.json', request)
     result = {'schema': 1, 'kind': 'android-runtime-qualification', 'inputs': prepared['inputs'],
-              'sources': prepared['sources'], 'prepared_id': ident, 'scope': 'isolated emulator-5554',
-              'state': 'running', 'vpn': before_vpn, 'observed_at': time.time()}
+              'sources': prepared['sources'], 'prepared_id': ident,
+              'scope': 'isolated emulator-5554' if cluster is None else 'cluster-isolated',
+              'state': 'running', 'observed_at': time.time()}
+    result.update({'vpn': before_vpn} if cluster is None else {'cluster_lab': cluster})
     write_json(directory / 'result.json', result)
     started = time.monotonic(); interrupted = None
     try:
-        host.verify(request); host.activate(request)
+        if verified_prepared is None:
+            host.verify(request)
+        host.activate(request)
         expected = json.loads((directory / target['id'] / 'deployment-request.json').read_text())
         while True:
             if time.monotonic() - started >= 360:
@@ -274,14 +289,18 @@ def _run_reference(config, ident):
             installed = host.output(host.adb(config, target, 'shell', 'pm', 'path', host.PACKAGE)).decode().strip().removeprefix('package:')
             if host.output(host.adb(config, target, 'shell', 'sha256sum', installed)).decode().split()[0] != expected['apk_sha256']:
                 raise ValueError('reference process runs a different APK')
-            result.update(state='qualified', observed_at=time.time(), vpn=vpn(),
+            result.update(state='qualified', observed_at=time.time(),
                 android={key: True for key in ('full_download_verified', 'loaded_worker_ready', 'identity_preserved', 'resume_verified')},
                 reference_transfer={'bytes': REFERENCE_BYTES, 'sha256': expected['worker_sha256'],
                     'elapsed_seconds': time.monotonic() - started, 'sha256_verified': True, 'current_process_verified': True},
                 process_id=int(pid), run_id=payload['runId'], interruption=interrupted,
                 evidence={'request_sha256': digest(directory / 'request.json'),
                           'payload_receipt_sha256': hashlib.sha256(canonical(payload)).hexdigest()})
-            reference(result, prepared['inputs'])
+            if cluster is None:
+                result['vpn'] = vpn()
+            else:
+                isolated(config)
+            reference(result, prepared['inputs'], cluster_context=cluster)
             write_json(directory / 'result.json', result)
             write_json(config['baseline_receipt'], result)
             return result

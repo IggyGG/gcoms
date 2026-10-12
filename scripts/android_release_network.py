@@ -119,13 +119,20 @@ def vpn():
     return {'state': value['state'], 'relay': value.get('details', {}).get('location', {}).get('hostname')}
 
 
-def reference(receipt, inputs, now=None):
+def reference(receipt, inputs, now=None, cluster_context=None):
     now = time.time() if now is None else now
     observed = receipt.get('observed_at', 0)
+    if cluster_context is None:
+        environment_matches = receipt.get('vpn', {}).get('state') == 'connected'
+    else:
+        from android_release_lab_context import identity
+        identity(cluster_context)
+        environment_matches = (receipt.get('scope') == 'cluster-isolated'
+                               and receipt.get('cluster_lab') == cluster_context and 'vpn' not in receipt)
     if (receipt.get('schema') != 1 or receipt.get('kind') != 'android-runtime-qualification'
             or receipt.get('inputs') != inputs or type(observed) not in (int, float)
             or not 0 <= now - observed <= 86400
-            or receipt.get('vpn', {}).get('state') != 'connected'):
+            or not environment_matches):
         raise ValueError('Android runtime qualification is stale or belongs to other inputs')
     android = receipt.get('android', {})
     if any(android.get(key) is not True for key in ('full_download_verified', 'loaded_worker_ready',
