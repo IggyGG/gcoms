@@ -4,21 +4,22 @@
   "image_update": {
     "schema": 1,
     "gchat_revision": "d91a32879d92d943c0a731e6ffa40b85fe0aeb01",
-    "source_sha256": "70a0f9df990225998027e3dc3e78dd550461386a1ccdabe4f2e1e9a84fd47278",
+    "source_sha256": "d5bab39bf2207ec3bbb12e1fca56c45c780609662543c649902e1357cd06ddd4",
     "builder_pod_uid": "3e923fb7-bd3a-419c-b2ba-7991dedf32d8",
     "images": {
-      "builder": "127.0.0.1:30444/ghost/android-builder@sha256:eff5f141062741b81c64887d6265da7a5164f3fd4a24216098a7cab3604fbedc",
-      "coordinator": "127.0.0.1:30444/ghost/android-coordinator@sha256:1b7ba0f1a9b64941acaa08e9ddf24a7ce77f11f09eaa12781d8c3e4ae7eda0ec"
+      "builder": "127.0.0.1:30444/ghost/android-builder@sha256:c1d82b80d16c34710f40cb0a68a4abdae24d9544558a3e8dc37e14ed93adafba",
+      "coordinator": "127.0.0.1:30444/ghost/android-coordinator@sha256:77e39dcde5b9eb3f1b13b261c5c009c5516ee18a1b961f36ec3ae5cfa4969428"
     },
-    "elapsed_seconds": 7.59375655092299,
-    "job": "android-images-70a0f9df9902",
-    "job_uid": "964eeabd-153a-4ad1-8e8f-377604466df6"
+    "elapsed_seconds": 7.677492605522275,
+    "job": "android-images-d5bab39bf220",
+    "job_uid": "efba20d0-72aa-4668-b883-f851413dd8c9"
   },
   "release_controls": {
-    "job": "android-release-controls-f45e3d8831",
-    "source_sha256": "f45e3d8831a34f125b24beea011d2e2ee20a51b7f1d4677f01aaee51238e8a2c",
-    "passed": 124,
-    "seconds": 12.845
+    "job": "android-release-controls-3c361c955c",
+    "pod_uid": "5bdf26bc-1f44-49aa-a884-24df91a639b7",
+    "source_sha256": "3c361c955cb05f91f0c327d8d388eac59a9507a8870f4517beb58059d8a4773c",
+    "passed": 125,
+    "seconds": 14.408
   },
   "oci_archive": {
     "schema": 1,
@@ -78,12 +79,12 @@
     "compiler_caches": 6,
     "cache_gib_each": 8,
     "server_dry_run_passed": true,
-    "applied": false
+    "applied": true
   },
   "toolchain_probe": {
     "schema": 1,
     "toolchain": {
-      "builder_image": "127.0.0.1:30444/ghost/android-builder@sha256:eff5f141062741b81c64887d6265da7a5164f3fd4a24216098a7cab3604fbedc",
+      "builder_image": "127.0.0.1:30444/ghost/android-builder@sha256:c1d82b80d16c34710f40cb0a68a4abdae24d9544558a3e8dc37e14ed93adafba",
       "builder_sha256": "6cf45dc392f0d2c77d4ae8215acfa2f1ff8a705a8323166043c360c9127b9e3d",
       "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)\nbinary: rustc\ncommit-hash: 48a229ceaefd4985c50990b14116b6d856af0985\ncommit-date: 2026-09-01\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.1\nLLVM version: 22.1.8\n",
       "java": "openjdk version \"21.0.12.1\" 2026-08-18\nOpenJDK Runtime Environment (build 21.0.12.1+1-1-24.04.4-Ubuntu)\nOpenJDK 64-Bit Server VM (build 21.0.12.1+1-1-24.04.4-Ubuntu, mixed mode, sharing)\n",
@@ -100,7 +101,7 @@
       "android_release_qualify.py": "de844615a039964a2dbeb177bc4e9017f9971d200e083fd64f6d822984bbcba9",
       "android_release_queue.py": "572db68972c5972f4ee2fade72bbd28c1009d59b500097dfc876f1699de26141",
       "android_release_setup.py": "ca6deb013451550bb408eefa908a0b2fe24d1e6bf02d84993713365d8b59ba3b",
-      "android_release_cluster.py": "d741ce90056a4d298efb22bf228bfcc32d63dffd23578f9c5edd3f1cc046b54b",
+      "android_release_cluster.py": "3dccd9d64a939990bc6f66f297a40dd99bc28d4ee0f97251283ee139255cc34f",
       "android_release_git_askpass.py": "ee11c78df5f24bd301fdc992f8ff185d2ad829d3c47b26155adfb0f55a3264a5",
       "android_release_store.py": "4493d08075a3afc20e7e7343d0a2d1d9aa4212398b6f88da8b62c1d0237d9844",
       "android_release_kubernetes.py": "890c838c48fb643704666b1b22ee4360f6245fd4be021931e6637ffe7e49450e",
@@ -112,13 +113,19 @@
       "android_release_build_job.py": "c16ce16d58af4f510200930486aa2a79f9638afaa8d1575b7daf0c95d4d2bf7f"
     },
     "uid": 10001,
-    "pod_uid": "900ed0fd-7e42-40ed-8cd0-cfaa0512a5f0",
-    "job": "android-toolchain-probe-f62bdd5698"
+    "pod_uid": "f197b073-99a2-4bbf-bc6f-66b5685a8899",
+    "job": "android-toolchain-probe-7005a4f804"
   },
   "mirror_pr": {
     "url": "https://forgejo.triform.dev/triform/tf-infra/pulls/39",
     "state": "open; required check blocked by existing expired Plane read-fallback migration"
   },
   "end_to_end_qualified": false,
-  "codematch": "unreachable"
+  "codematch": "unreachable",
+  "source_intake": {
+    "first_job": "android-source-initialize-7b736789b2",
+    "state": "failed_before_git",
+    "repair": "create private source-log directory before first invocation",
+    "retry": "pending on repaired image"
+  }
 }

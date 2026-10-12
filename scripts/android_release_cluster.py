@@ -45,6 +45,7 @@ def source_sync(config):
         seen[destination] = repository
         url = origin + '/' + repository + '.git'
         log = Path(config['state']) / 'source-logs' / (repository.split('/')[1] + '.log')
+        log.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         if not destination.exists():
             destination.parent.mkdir(parents=True, exist_ok=True)
             command(['git', '--shallow-file', '/dev/null', 'init', '--bare', destination], env=environment, log=log)

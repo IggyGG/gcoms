@@ -48,6 +48,20 @@ class ClusterRecovery(unittest.TestCase):
         with Lease(self.api, 'android-release-coordinator') as lease:
             return cluster.submit(self.config, self.api, lease, self.request, self.marker, self.catalogue)
 
+    def test_first_source_sync_creates_private_logs_before_invoking_git(self):
+        logs = []
+        def executed(argv, **kwargs):
+            # Exercise the real logging sink on an empty state volume. Git's
+            # transport is replaced so the control uses no remote credentials.
+            release.command(['/bin/true'], log=kwargs['log'])
+            logs.append(kwargs['log'])
+        with patch.object(cluster, 'command', side_effect=executed), \
+             patch.object(cluster, 'git', return_value=b'https://forgejo.example/ghost-local/gcoms.git\n'):
+            cluster.source_sync(self.config)
+        self.assertEqual(len(logs), 3)
+        self.assertTrue(all(path.is_file() for path in logs))
+        self.assertEqual((self.root / 'source-logs').stat().st_mode & 0o777, 0o700)
+
     def test_remote_checkpoint_precedes_job_submission_and_retains_original_clocks(self):
         create = self.api.create
         seen = []
