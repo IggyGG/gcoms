@@ -113,13 +113,16 @@ def send(ssh, destination, files, values):
 def execute_once(ssh, destination, script, binding, directory):
     # Journal on the guest before mutation. An interrupted attempt requires
     # inspection; neither a new Job nor a lost client reply may replay it.
+    if (not isinstance(script, str) or script.startswith('/') or '\\' in script
+            or any(part in ('', '.', '..') for part in script.split('/'))):
+        raise ValueError('guest action requires a relative staged script path')
     runner = '''import hashlib,json,os,pathlib,subprocess,sys
 root=pathlib.Path(sys.argv[1]);script=sys.argv[2];binding=sys.argv[3]
 marker=root/(script+'.started.json');result=root/(script+'.result.json')
 def save(path,value):
  with path.open('x') as stream:
   os.chmod(path,0o600);json.dump(value,stream);stream.flush();os.fsync(stream.fileno())
- fd=os.open(root,os.O_DIRECTORY|os.O_RDONLY)
+ fd=os.open(path.parent,os.O_DIRECTORY|os.O_RDONLY)
  try:os.fsync(fd)
  finally:os.close(fd)
 if marker.exists():
@@ -138,6 +141,7 @@ print(json.dumps(value),flush=True)
 '''
     directory.mkdir(parents=True, exist_ok=True, mode=0o700)
     error = directory / (script + '.error.log')
+    error.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     with error.open('wb') as log:
         os.chmod(error, 0o600)
         result = subprocess.run(ssh + ['python3 -c ' + shlex.quote(runner) + ' ' + ' '.join(map(shlex.quote, [str(destination), script, binding]))],

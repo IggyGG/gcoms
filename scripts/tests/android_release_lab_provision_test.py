@@ -89,6 +89,22 @@ class Provisioning(unittest.TestCase):
             'bucket': 'private-android-artifacts'}, S3())
         return state, directory, lab, settings, archive
 
+    def test_nested_recovery_command_executes_once_with_private_retained_diagnostics(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp); relative = 'recovery-commands/original/rebind.py'
+            script = root / relative; script.parent.mkdir(parents=True)
+            script.write_text("from pathlib import Path\np=Path(__file__).with_name('count');p.write_text(p.read_text()+'x' if p.exists() else 'x')\nprint('{\"state\":\"rebound\"}')\n")
+            evidence = root / 'evidence'
+            for _ in range(2):
+                self.assertEqual(provision.execute_once(['/bin/sh', '-c'], root, relative, 'original', evidence),
+                                 {'state': 'rebound'})
+            self.assertEqual(script.with_name('count').read_text(), 'x')
+            self.assertEqual((evidence / (relative + '.error.log')).stat().st_mode & 0o777, 0o600)
+            self.assertTrue((root / (relative + '.started.json')).exists())
+            for invalid in ('/absolute.py', '../escape.py', 'a/../escape.py', 'a//b.py', 'a\\b.py'):
+                with self.assertRaisesRegex(ValueError, 'relative staged'):
+                    provision.execute_once(['/bin/sh', '-c'], root, invalid, 'original', evidence)
+
     def test_access_restores_original_keys_into_empty_cache_and_preserves_existing(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp); state, original, lab, settings, archive = self.access_fixture(root)

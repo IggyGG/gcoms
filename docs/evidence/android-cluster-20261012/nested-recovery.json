@@ -1,0 +1,19 @@
+{
+  "schema": 1,
+  "scope": "nested cluster recovery command journal and private diagnostics",
+  "original_failed_job": "android-provision-recovery-rebind-249ca15771",
+  "failure": "private error-log parent absent before remote owner mapping execution",
+  "disk_restore_completed": {
+    "android_job": "android-pipeline-restore-6a8c589983",
+    "network_job": "android-pipeline-restore-80d72b4c75"
+  },
+  "original_mapping_unchanged_verified": true,
+  "remote_mapping_journal_absent_verified": true,
+  "controls": {
+    "job": "android-release-controls-c723226325",
+    "passed": 13,
+    "seconds": 1.471
+  },
+  "codematch": "unreachable",
+  "full_android_acceptance": "pending"
+}
