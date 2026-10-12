@@ -1,0 +1,82 @@
+{
+  "schema": 1,
+  "status": "waiting_for_lab_cleanup_owner",
+  "observed_at": "2026-10-12T17:10:14.558663+00:00",
+  "published_commits": {
+    "coordinator": "23e8b87db0ec807fd61658420561a5b51f1677ff",
+    "slim_runner": "ea151750f7558a4425061c3cfaac377cca3add52",
+    "lab_service": "24a15e81e4c9c5946bf318f2f68837267bdf67fc"
+  },
+  "focused_controls": {
+    "passed": 158,
+    "seconds": 20.438
+  },
+  "runner_archive_bytes": 515596487,
+  "slim_images_ready_nodes": 4,
+  "recovery_metadata": {
+    "schema": 1,
+    "state": "metadata_archived",
+    "archive": {
+      "key": "android-release/records/99df2ca1fc11d1fe4281f90365f7fd3e51f26073728cc78e47d508a0109a36f3.json",
+      "version": "q4ab1phwKMomCCKfLh7BgaTFFz3budU",
+      "sha256": "99df2ca1fc11d1fe4281f90365f7fd3e51f26073728cc78e47d508a0109a36f3",
+      "bytes": 24075
+    },
+    "guest_disks_recoverable": false,
+    "scope": "metadata, artifact pointers, original failures and runtime images; discarded guest disks had no checkpoint",
+    "job": "android-recovery-metadata-3d42792459",
+    "pod_uid": "d6ce0dde-aa1b-4f5a-9145-dd23a7c35087"
+  },
+  "lab_conflict": {
+    "schema": 1,
+    "observed_at": "2026-10-12T17:00:33.689517+00:00",
+    "scope": "external lab discard conflicts with active Android migration; actor not yet attributed",
+    "instances": [
+      {
+        "name": "android-release-x64",
+        "phase": "discarded",
+        "machine_uuid": "b2b36c55-dc25-42ef-b64c-df437f3ae3fd",
+        "vm_uid": null,
+        "disk": "gl-android-release-x64-os",
+        "checkpoint": null,
+        "scratch_released": true,
+        "managers": [
+          {
+            "manager": "ghost-lab-cli",
+            "operation": "Apply",
+            "time": "2026-10-12T16:29:00Z"
+          }
+        ]
+      },
+      {
+        "name": "android-release-network",
+        "phase": "discarded",
+        "machine_uuid": "79db4460-2ee6-43a2-8f58-2fbb12c28185",
+        "vm_uid": "a81f2863-79c4-4746-8997-a4e28138dc12",
+        "disk": "gl-android-release-network-os",
+        "checkpoint": null,
+        "scratch_released": true,
+        "managers": [
+          {
+            "manager": "ghost-lab-cli",
+            "operation": "Apply",
+            "time": "2026-10-12T16:47:28Z"
+          }
+        ]
+      }
+    ]
+  },
+  "live_acceptance": {
+    "reference_360_seconds": false,
+    "three_promotions_600_seconds": false,
+    "rollback_60_seconds": false,
+    "workstation_disconnected": false
+  },
+  "required_before_guest_rebuild": "Resolve the explicit concurrent lab discard; user clarification pending. Do not recreate or restore discarded guests while this remains unresolved.",
+  "next_after_resolution": [
+    "protect active lab use with the existing lifecycle leases",
+    "rebuild or restore under an explicit new identity when no checkpoint exists",
+    "create verified S3 recovery checkpoints before the full reference",
+    "run original 42MiB interruption/resume/load, actual promotions, rollback and workstation disconnection"
+  ]
+}
