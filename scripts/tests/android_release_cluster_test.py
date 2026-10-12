@@ -278,9 +278,13 @@ class ClusterRecovery(unittest.TestCase):
         release.write_json(path, self.request)
         checksum = hashlib.sha256(release.canonical(self.request)).hexdigest()
         with patch.object(cluster, 'Catalogue', return_value=self.catalogue), \
-             patch.object(cluster, 'prepare_release', side_effect=RuntimeError('failed action')) as action:
+             patch.object(cluster, 'prepare_release', side_effect=RuntimeError('private failed action')) as action:
             result = cluster.execute(self.config, path, checksum)
             self.assertEqual(result['state'], 'failed')
+            diagnostic = self.root / 'cluster-failures' / (self.request['request_id'] + '.json')
+            self.assertEqual(diagnostic.stat().st_mode & 0o777, 0o600)
+            self.assertIn('private failed action', json.loads(diagnostic.read_text())['traceback'])
+            self.assertNotIn('private failed action', json.dumps(result))
             (self.root / 'cluster-results' / (self.request['request_id'] + '.json')).unlink()
             self.assertEqual(cluster.execute(self.config, path, checksum), result)
         action.assert_called_once()

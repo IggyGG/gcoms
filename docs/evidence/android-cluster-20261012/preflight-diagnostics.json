@@ -1,0 +1,21 @@
+{
+  "schema": 1,
+  "status": "scoped private failure diagnostics verified; live runtime rollout pending",
+  "job": "android-release-controls-06410f8802",
+  "passed": 26,
+  "elapsed_seconds": 1.623,
+  "log_sha256": "81c1ba54a8155e2f668cf37ce6300c42f26a4a018037bb74dc2d5434a2d5cbfd",
+  "behavior": [
+    "Store exact exception traces in private mode-0600 cluster state files",
+    "Keep public failure receipts bounded and free of private exception contents",
+    "Recover original terminal failure from S3 without repeating its action"
+  ],
+  "observed_failure": {
+    "job": "android-qualify-5e8d666514875da2ab959754",
+    "phase": "preflight",
+    "cause": "Android Pod preempted by ordinary cache maintenance at node pod-count limit",
+    "android_mutated": false,
+    "disk_retained": true
+  },
+  "codematch": "unreachable"
+}

@@ -15,6 +15,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import traceback
 
 from android_release import (canonical, command, digest, freeze, git, prepare_release,
                              promotion_manifest, deploy, write_json)
@@ -449,6 +450,12 @@ def execute(config, request_path, checksum):
         # Preserve an execution failure remotely as well as in the original
         # Job logs. Restoring an empty cache must never rerun a failed action.
         value = {'state': 'failed', 'failure_type': type(error).__name__}
+        try:
+            write_json(Path(config['state']) / 'cluster-failures' / (request['request_id'] + '.json'),
+                       {'request_id': request['request_id'], 'request_sha256': checksum,
+                        'traceback': traceback.format_exc()})
+        except OSError as diagnostic_error:
+            value['diagnostics_failure_type'] = type(diagnostic_error).__name__
         state = 'failed'
     result = {'schema': 1, 'request_id': request['request_id'], 'request_sha256': checksum,
               'state': state, 'result': value}
