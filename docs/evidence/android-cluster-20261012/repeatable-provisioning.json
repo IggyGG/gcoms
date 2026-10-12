@@ -1,0 +1,19 @@
+{
+  "schema": 1,
+  "scope": "repeatable cluster lab provisioning; actual normal guest bootstrap and Android timing remain pending",
+  "job": "android-release-controls-6432ee4ef0",
+  "job_uid": "ee397e11-ca2b-449e-ab44-677202ef0a6f",
+  "passed": 166,
+  "seconds": 23.596,
+  "source_audit_paths": 1153,
+  "codematch": "unreachable",
+  "changes": [
+    "remove hardcoded VM/Android identities from bootstrap",
+    "bind each guest to pipeline owner and live boundary",
+    "restore exact native relay receipt from version-pinned FSN1 S3",
+    "use a private pipeline-owned ClusterIP Service",
+    "retain bounded immutable staging and original bootstrap journal",
+    "preserve provider rate limits with distinct normal relay source addresses"
+  ],
+  "native_inputs": "unchanged; reviewed operation files excluded from native recipes"
+}

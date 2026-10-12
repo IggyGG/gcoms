@@ -49,6 +49,21 @@ source refs in the private configuration before requesting preparation.
 
 ## Isolated cluster runtime
 
+`android_release_lab_provision.py --config /config/provision.json network|connect|fleet|inspect`
+prepares a declared pair of reserved Lab guests. The plan provides distinct
+instance names, images, a stable owner UUID and private Service name. The trusted
+Job receives projected cluster credentials, the existing archive Secret and the
+provider TLS Secret; neither API nor S3 credentials enter either guest. The
+network binaries hydrate from an exact versioned S3 receipt. Initial owner setup
+uses the verified prepared release and authenticates the VM firmware UUID and
+fresh Android Pod identity. Retrying a completed bootstrap recovers its original
+proof; a failed or uncertain bootstrap requires inspection before further work.
+Use the Lab cluster operator's reserved `save` and `restore` operations for
+checkpoints. A restored Android Pod has a new Pod UID and must be explicitly
+rebound before a new preparation/qualification receipt; old live proof is never
+carried across that identity change.
+
+
 The trusted runner uses `android_release_lab.py` for preflight, activation, readiness and rollback. Configure `lab.settings`, `lab.network_guest`, `lab.android_pod`, `lab.reservation_id`, and the exact public `cluster_lab` identity. Android uses its pinned Pod address on port 5555. The adapter requires fresh Lab boundary validation and private pinned SSH access, verifies the signed APK and prepared artifacts, and maps runtime state only into the dedicated lab guest. Guest commands retain their original execution journal; an uncertain activation is not replayed. Detailed guest failures remain private.
 
 Generate one nonzero UUID for `lab.reservation_id` and retain it across coordinator
