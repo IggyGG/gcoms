@@ -1,0 +1,19 @@
+{
+  "schema": 1,
+  "scope": "Two exact historical source-mirror secret-scan false positives",
+  "source_base": "a623cfef8e5dcfcf48ed0dc2ebcc8a181ae4f309",
+  "reviewed_findings": [
+    {
+      "fingerprint": "661a1f4d0299a58600086abf2dbb9acb9d4fa5f8:docs/evidence/android-profile-cancellation-20261012/summary.json:generic-api-key:12",
+      "classification": "public_git_object_reference",
+      "verification": "The evidence field resolves to an existing Drone commit for exact abandoned Android run/profile cancellation. It is an immutable source identifier."
+    },
+    {
+      "fingerprint": "788aded068467b626fe0899ed2408f39f9c1e928:README.md:generic-api-key:11",
+      "classification": "benchmark_prose",
+      "verification": "The matched span describes authenticated commands and a measured seconds value in the published relay-campaign summary."
+    }
+  ],
+  "scope_of_exception": "Exact existing fingerprints only; new findings still fail the full-history scan.",
+  "credentials_exempted": false
+}
