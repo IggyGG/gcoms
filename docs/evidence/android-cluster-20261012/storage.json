@@ -9,13 +9,15 @@
       "pod_uid": "4ef7630f-1b31-4bd0-b4b1-39dbdfe9811a"
     },
     "all_android_release": {
-      "passed": 71,
-      "seconds": 12.52,
-      "pod_uid": "c79558a2-aadf-4495-95b6-4db55fbeb293"
+      "passed": 94,
+      "seconds": 14.107,
+      "pod_uid": "bc5f0c01-0af5-42c9-95c5-692972062ec2",
+      "job": "android-release-controls-1cb9776b31",
+      "source_sha256": "1cb9776b310d0d991827b05bb78d9879b66c899ea490c015651bd826d62eb438"
     }
   },
   "source_audit": {
-    "paths": 1101,
+    "paths": 1106,
     "passed": true
   },
   "artifact_import": {
@@ -31,7 +33,81 @@
     "version_pinned": true,
     "source_files_preserved": true
   },
-  "cold_cluster_restore": "pending",
+  "cold_cluster_restore": {
+    "passed": true,
+    "components": 6,
+    "artifact_bytes": 153003457,
+    "seconds": 4.765492677688599,
+    "job_uid": "d8ff59dd-63e9-4cfb-8aa3-58028ae97e97",
+    "pod_uid": "78c881b1-bc8f-4709-a692-6a67069a893d",
+    "original_result": {
+      "result": {
+        "schema": 1,
+        "kind": "android-cluster-cold-artifact-restore",
+        "started_at": 1791800797.6587067,
+        "pod_uid": "78c881b1-bc8f-4709-a692-6a67069a893d",
+        "source_prepared_id": "196123c363c36ccd98c3636629154beeb5eec0198ce4f6623c9f058fd8d0448e",
+        "workstation_dependencies": [],
+        "components": {
+          "apk": {
+            "receipt_sha256": "5af077c646fc77969a7c4ac7197aa4ff135ff7ac85ed9474097f930f4b31ad8d",
+            "files": 1,
+            "bytes": 20834715,
+            "mode_and_hash_verified": true
+          },
+          "controller": {
+            "receipt_sha256": "275ac49975ef949e2150f45f00166b59a17865dad3fac4a46c2600df0d76ec28",
+            "files": 1,
+            "bytes": 14195744,
+            "mode_and_hash_verified": true
+          },
+          "hub": {
+            "receipt_sha256": "dd47b0857d5f5e75a39ca07b7ec2c30613cfa3c357f18c3cd204c6995b8cad95",
+            "files": 2,
+            "bytes": 42392311,
+            "mode_and_hash_verified": true
+          },
+          "installer": {
+            "receipt_sha256": "fbf136f4b22f1b10037b2d1e4fe7fedc65e6aa593ef36efc3b134c2522236660",
+            "files": 2,
+            "bytes": 13013716,
+            "mode_and_hash_verified": true
+          },
+          "sdk": {
+            "receipt_sha256": "f34eefd3c97e1efbe6720d0993f8802ad89591c8f96fb7ff337ae8835f6d2cd8",
+            "files": 6,
+            "bytes": 36517323,
+            "mode_and_hash_verified": true
+          },
+          "worker": {
+            "receipt_sha256": "3719bfadb28b0b9a2a62c147d2fb036d5f12eec72d82f1519d46c56638fa071b",
+            "files": 1,
+            "bytes": 26049648,
+            "mode_and_hash_verified": true
+          }
+        },
+        "state": "passed",
+        "finished_at": 1791800802.4241993,
+        "all_six_verified": true
+      },
+      "evidence_object": {
+        "key": "android-release/records/59dde316dc8f0ef6afebc2ac4f0ac116b16b986d38e6b420a7b8384fec8f7c6b.json",
+        "version": "3U7QY1liMcnRHHnMjOkuNHlzKDiCu7I",
+        "sha256": "59dde316dc8f0ef6afebc2ac4f0ac116b16b986d38e6b420a7b8384fec8f7c6b",
+        "bytes": 1257
+      }
+    }
+  },
   "migration_qualified": false,
-  "codematch": "unreachable"
+  "codematch": "unreachable",
+  "cluster_source": {
+    "repositories": 5,
+    "all_original_heads_and_tags_verified": true,
+    "source_reader": "restricted account; read:repository; exact five repositories; no push/admin",
+    "clock": "original Forgejo repository activity creation timestamp; never polling time"
+  },
+  "cluster_ownership": {
+    "lease": "resourceVersion CAS, holder/UID verification and renewal fencing",
+    "jobs": "request digest and UID reconciliation; missing or failed submitted jobs never resubmitted blindly"
+  }
 }

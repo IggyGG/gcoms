@@ -26,6 +26,8 @@ OPERATION_FILES = frozenset({
     'scripts/android_release_hub.py', 'scripts/android_release_network.py',
     'scripts/android_release_qualify.py', 'scripts/tests/android_release_test.py',
     'scripts/android_release_store.py', 'scripts/tests/android_release_store_test.py',
+    'scripts/android_release_source.py', 'scripts/tests/android_release_source_test.py',
+    'scripts/android_release_kubernetes.py', 'scripts/tests/android_release_kubernetes_test.py',
     # Dispatch-only hosted relay diagnostics never enter these native builds.
     '.github/workflows/relay-recovery.yml', 'scripts/qualify-relay-recovery.py',
     'scripts/tests/relay_recovery_test.py',
