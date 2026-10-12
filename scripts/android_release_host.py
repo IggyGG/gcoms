@@ -446,6 +446,10 @@ def activate(request):
         nonce = {'release_id': manifest['release_id'], 'apk_sha256': digest(artifact(request, 'apk', 'agent.apk')),
                  'worker_sha256': digest(artifact(request, 'worker', target['abi'] + '/worker.so'))}
         write_json(folder / 'deployment-request.json', nonce)
+        write_json(folder / 'profile-owner.json', {
+            'release_id': manifest['release_id'], 'target': target['id'],
+            'profile_id': value['profileId'], 'profile_sha256': digest(profile),
+            'deployment_request_sha256': digest(folder / 'deployment-request.json')})
         for source, name in ((profile, 'dropship-config.json'), (folder / 'deployment-request.json', 'deployment-request.json')):
             destination = '/data/user/0/' + PACKAGE + '/files/' + name
             command(adb(config, target, 'push', source, destination))
@@ -502,6 +506,30 @@ def ready(proof, expected, pid):
         raise ValueError('current Android worker is not verified and ready')
 
 
+def cancel_profiles(request):
+    """Cancel only mint profiles pinned by this activation's ownership receipt."""
+    directory, config = Path(request['directory']), request['config']
+    for target in request['manifest']['targets']:
+        if target['kind'] != 'android':
+            continue
+        folder = directory / target['id']
+        marker = folder / 'profile-owner.json'
+        if not marker.exists():
+            continue  # Activation did not reach the owned profile handoff.
+        owner = json.loads(marker.read_text())
+        profile = folder / 'profile.json'
+        value = json.loads(profile.read_text())
+        expected = {'release_id': request['manifest']['release_id'], 'target': target['id'],
+                    'profile_id': value['profileId'], 'profile_sha256': digest(profile),
+                    'deployment_request_sha256': digest(folder / 'deployment-request.json')}
+        if (owner != expected or value.get('target') != target['channel']
+                or not re.fullmatch(r'[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}', owner['profile_id'])):
+            raise ValueError('profile cancellation ownership differs from this activation')
+        command([config['fleet_binary'], 'revoke-profile', '--config', config['fleet_config'],
+                 '--profile', owner['profile_id']], timeout=10)
+        write_json(folder / 'profile-cancelled.json', dict(owner, cancelled_at=time.time()))
+
+
 def cleanup(request):
     directory, config = Path(request['directory']), request['config']
     for target in request['manifest']['targets']:
@@ -525,6 +553,7 @@ def rollback(request):
     # APK bytes and hub maintenance proceed independently. All commands and
     # current-process readiness share one restoration deadline.
     until = min(time.monotonic() + 55, time.monotonic() + max(0, request['manifest']['pushed_at'] + 600 - time.time()))
+    cancel_profiles(request)
     def bounded(argv, limit=15):
         remaining = until - time.monotonic()
         if remaining <= 0: raise TimeoutError('functional Android restoration deadline expired')

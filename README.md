@@ -620,3 +620,9 @@ Four focused held-receipt/boundary controls, strict scoped Clippy and the
 non-GC/2 compile pass. Full signed Android interruption/resume/load and real
 deployment/rollback timing remain required. Evidence:
 `docs/evidence/android-recovery-credit-20261011/summary.json`.
+
+Android activation now pins ownership of its fresh minted profile and cancels
+that profile through the normal controller API on failed qualification or
+rollback. It retains original failed clocks and reports cancellation errors.
+All 58 focused release controls pass; live transfer and deployment timing
+remain separate acceptance gates. See `docs/evidence/android-profile-cancellation-20261012/summary.json`.

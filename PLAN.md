@@ -1565,3 +1565,14 @@ Actual full Android recovery/load, three prepared promotions <=600 s
 and functional failed-canary rollback <=60 s remain pending.
 
 F5 checkpoint identity reuse (2026-10-11, Codex): implement per-encoding public identity/hash reuse after the actual ACK-repaired run missed 360 seconds despite verified >=8 MiB same-run restart. The original causal checkpoint expands the public identity 10 times and fails the one-derivation control; the fixed checkpoint derives it once. All 63 scoped archive/recovery controls, two existing lock-scope controls, strict node/test Clippy, legacy compilation and the source audit pass. [Evidence](docs/evidence/android-ten-minute-20261009/archive-identity-reuse.json). Actual Android/promotion/rollback receipts remain pending. Existing active state, limits, authentication and archive bytes/domains are preserved.
+
+## F5 Android failed-profile lifecycle, 2026-10-12
+
+Implemented activation-bound profile cancellation through the normal Drone
+API on failed qualification and rollback. Five failed isolated references
+had retained unexpired admissions; durable claimed markers alone did not
+prove active sender tasks. All 58 release controls pass, including ownership
+mismatch rejection and preservation of the original failure/clock. Evidence:
+`docs/evidence/android-profile-cancellation-20261012/summary.json`.
+The 42 MiB restart/resume/load, three timed promotions and functional rollback
+are still required; this cleanup is not throughput qualification.

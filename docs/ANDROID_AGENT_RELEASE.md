@@ -151,3 +151,13 @@ This source implementation is not live qualification. Three real promotion
 pushes and a real failed-canary functional rollback remain required before
 claiming the ten-minute end-to-end objective. ARM64 compilation is not physical
 ARM64 device acceptance.
+
+Failed qualification and rollback cancel only the fresh minted profiles
+belonging to that activation through the normal controller `revoke-profile`
+API. An ownership receipt pins the release, target, exact profile bytes and
+deployment nonce; changed ownership cannot issue cancellation. The saved run,
+original deadline and failed timing receipt remain retained. Cancellation
+failures stay visible alongside the original failure. Temporary-provider
+cleanup still restores unprivileged adbd. This removes stale admission routes
+without editing another component's state; retained transport data drains
+under its existing bounds and does not become timing qualification.

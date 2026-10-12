@@ -1253,3 +1253,11 @@ throughput or production promotion.
 All four pipeline controls, strict scoped Clippy and the non-GC/2
 `client-persist` compile pass. Retained original/fixed results:
 `docs/evidence/android-recovery-credit-20261011/summary.json`.
+
+F5 activation profile cancellation, 2026-10-12: run `opencode-test python3
+-m unittest discover -s scripts/tests -p android_release_test.py`. All 58
+release controls pass. Cleanup must use the exact activation-owned minted
+profile, reject changed release/target/profile/nonce/profile bytes before
+invoking the controller, skip an incomplete mint handoff, and retain the
+original failed qualification clock when cancellation fails. Do not convert
+component controls into live 360/600/60-second receipts.

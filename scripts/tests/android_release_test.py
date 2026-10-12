@@ -579,6 +579,75 @@ class Releases(unittest.TestCase):
 
 
 class Maintenance(unittest.TestCase):
+    def test_cancellation_uses_only_the_minted_profile_bound_to_this_release(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); folder = root / 'android-x64'
+            profile = {'profileId': '11111111-2222-3333-4444-555555555555',
+                       'target': 'android-x64', 'profileSeed': 'private-fixture'}
+            release.write_json(folder / 'profile.json', profile)
+            release.write_json(folder / 'deployment-request.json', {'worker_sha256': 'a' * 64})
+            owner = {'release_id': 'release', 'target': 'android-x64',
+                     'profile_id': profile['profileId'], 'profile_sha256': release.digest(folder / 'profile.json'),
+                     'deployment_request_sha256': release.digest(folder / 'deployment-request.json')}
+            release.write_json(folder / 'profile-owner.json', owner)
+            request = {'directory': directory, 'config': {'fleet_binary': 'controller', 'fleet_config': 'config'},
+                       'manifest': {'release_id': 'release', 'targets': [
+                           {'id': 'hub', 'kind': 'hub'},
+                           {'id': 'android-x64', 'kind': 'android', 'channel': 'android-x64'}]}}
+            with patch.object(host, 'command') as command:
+                host.cancel_profiles(request)
+                command.assert_called_once_with(['controller', 'revoke-profile', '--config', 'config',
+                                                '--profile', profile['profileId']], timeout=10)
+            self.assertEqual(json.loads((folder / 'profile.json').read_text()), profile)
+            self.assertEqual(json.loads((folder / 'profile-owner.json').read_text()), owner)
+            self.assertEqual(json.loads((folder / 'profile-cancelled.json').read_text())['profile_id'], profile['profileId'])
+            for key, value in [('release_id', 'other-release'), ('target', 'other-target'),
+                               ('profile_id', 'other-profile'), ('profile_sha256', 'b' * 64),
+                               ('deployment_request_sha256', 'c' * 64)]:
+                with self.subTest(key=key):
+                    release.write_json(folder / 'profile-owner.json', dict(owner, **{key: value}))
+                    with patch.object(host, 'command') as command:
+                        with self.assertRaisesRegex(ValueError, 'ownership differs'):
+                            host.cancel_profiles(request)
+                        command.assert_not_called()
+            release.write_json(folder / 'profile-owner.json', owner)
+            with patch.object(host, 'command', side_effect=subprocess.CalledProcessError(1, ['controller'])):
+                with self.assertRaises(subprocess.CalledProcessError): host.cancel_profiles(request)
+
+    def test_cancellation_skips_targets_without_an_activation_ownership_receipt(self):
+        with tempfile.TemporaryDirectory() as directory:
+            request = {'directory': directory, 'config': {}, 'manifest': {'targets': [
+                {'id': 'hub', 'kind': 'hub'}, {'id': 'android-x64', 'kind': 'android'}]}}
+            with patch.object(host, 'command') as command:
+                host.cancel_profiles(request)
+                command.assert_not_called()
+
+    def test_reference_cancellation_failure_keeps_the_original_failure_and_clock(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            worker = root / 'artifacts/worker/key/x86_64/worker.so'
+            worker.parent.mkdir(parents=True); worker.write_bytes(b'prepared-worker')
+            target = {'id': 'android-x64', 'kind': 'android', 'abi': 'x86_64'}
+            prepared = {'inputs': {'worker': 'key'}, 'sources': {}, 'targets': [target],
+                        'configuration_sha256': 'c' * 64}
+            with patch.object(qualify, 'isolated', return_value=({}, target)), \
+                 patch.object(qualify, 'prepared_release', return_value=prepared), \
+                 patch.object(qualify.hub, 'eligible'), patch.object(qualify.hub, 'eligible_controller'), \
+                 patch.object(qualify, 'vpn', return_value={}), \
+                 patch.object(qualify.host, 'verify', side_effect=ValueError('original activation failure')), \
+                 patch.object(qualify.host, 'cancel_profiles', side_effect=OSError('cancellation failure')) as cancel, \
+                 patch.object(qualify.host, 'cleanup') as cleanup:
+                with self.assertRaisesRegex(ValueError, 'original activation failure'):
+                    qualify._run_reference({'state': directory}, 'prepared')
+                cancel.assert_called_once(); cleanup.assert_called_once()
+            results = list((root / 'qualification').glob('*/result.json'))
+            self.assertEqual(len(results), 1)
+            result = json.loads(results[0].read_text())
+            self.assertEqual(result['state'], 'failed')
+            self.assertEqual(result['failure_type'], 'ValueError')
+            self.assertEqual(result['profile_cancellation_failure_type'], 'OSError')
+            self.assertGreaterEqual(result['elapsed_seconds'], 0)
+
     def test_reference_preserves_worker_prefix_and_requires_fresh_network_bytes(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory); source = root / 'worker'; source.write_bytes(b'prepared-worker')

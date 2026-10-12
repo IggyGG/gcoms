@@ -1,0 +1,24 @@
+{
+  "schema": 1,
+  "observed_at": 1791763543.402848,
+  "source_base": "46c9f04346e96aac555668ae861e23491183a6ac",
+  "source_files": {
+    "scripts/android_release_host.py": "344580739c8397294724b9b3684c3023e99420c9c9a8d38034fc97f8b9e74715",
+    "scripts/android_release_qualify.py": "a5859fc99dd62c072bc0f832fd921f30abfc238f94e5de3f9e2b7a7c5b4e23b1",
+    "scripts/tests/android_release_test.py": "25f6eddb43d22589bfd5424671226a45816e7db25d953097d67d35433396bf28"
+  },
+  "release_controls": 58,
+  "release_control_log_sha256": "2d8e327383b9cef3d456b4c9b2e0a4a923ff1b5f5f883d7af55d72f4088da412",
+  "controller_api_commit": "2fc903d08b704ed618b878d9e76a6d19e2ad0716",
+  "checks": [
+    "activation ownership pins profile bytes and deployment nonce",
+    "changed release, target, profile, nonce or profile bytes cannot issue cancellation",
+    "targets without completed mint handoff are skipped",
+    "cancellation failures retain the original qualification failure and clock",
+    "provider cleanup still unroots the emulator"
+  ],
+  "normal_compiler_adapter_identity_unchanged": true,
+  "live_throughput_qualified": false,
+  "production_mutated": false,
+  "codematch": "unreachable"
+}

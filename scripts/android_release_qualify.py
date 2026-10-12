@@ -285,6 +285,12 @@ def _run_reference(config, ident):
     except BaseException as error:
         result.update(state='failed', observed_at=time.time(), failure_type=type(error).__name__,
                       elapsed_seconds=time.monotonic() - started, interruption=interrupted)
+        try:
+            host.cancel_profiles(request)
+        except Exception as cancellation:
+            # Keep the original failed clock and failure, and retain a failed
+            # cancellation as evidence rather than qualifying another attempt.
+            result['profile_cancellation_failure_type'] = type(cancellation).__name__
         write_json(directory / 'result.json', result)
         raise
     finally:
