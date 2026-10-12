@@ -1,4 +1,5 @@
 """Install only the pinned Android build packages inside the cluster image."""
+import argparse
 import hashlib
 import json
 from pathlib import Path
@@ -9,9 +10,14 @@ from urllib.request import urlopen
 import zipfile
 
 
-def install():
+def install(only=None):
     packages = json.loads(Path('/opt/gcoms/android-packages.json').read_text())
-    receipts = []
+    receipt_path = Path('/opt/android/packages.lock.json')
+    receipts = json.loads(receipt_path.read_text()) if only else []
+    if only:
+        packages = [p for p in packages if p['package'] == only]
+        if len(packages) != 1 or any(p['package'] == only for p in receipts):
+            raise ValueError('toolchain extension requires one new pinned package')
     for package in packages:
         destination = Path('/opt/android').joinpath(*package['package'].split(';'))
         if destination.exists():
@@ -50,8 +56,10 @@ def install():
             # Gradle and our toolchain probe run as the unprivileged builder.
             (destination / 'source.properties').chmod(0o644)
             receipts.append(dict(package, sha256=sha))
-    Path('/opt/android/packages.lock.json').write_text(json.dumps(receipts, indent=2) + '\n')
+    receipt_path.write_text(json.dumps(receipts, indent=2) + '\n')
 
 
 if __name__ == '__main__':
-    install()
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--only', help='Append one missing package to the pinned base receipt')
+    install(parser.parse_args().only)

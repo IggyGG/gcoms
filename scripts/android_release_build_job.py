@@ -25,7 +25,8 @@ def native_job(request, path):
     volumes = [{'name': 'state', 'persistentVolumeClaim': {'claimName': name(cluster['state_claim'])}},
                {'name': 'cache', 'persistentVolumeClaim': {'claimName': name(cluster['cache_claims'][component])}}]
     if component == 'apk':
-        mounts.append({'name': 'signing', 'mountPath': '/home/release/.android', 'readOnly': True})
+        mounts.append({'name': 'signing', 'mountPath': '/home/release/.android/debug.keystore',
+                       'subPath': 'debug.keystore', 'readOnly': True})
         volumes.append({'name': 'signing', 'secret': {'secretName': name(cluster['signing_secret']), 'defaultMode': 0o440}})
     checksum = hashlib.sha256(canonical(request)).hexdigest()
     return {'apiVersion': 'batch/v1', 'kind': 'Job',

@@ -1,0 +1,52 @@
+{
+  "schema": 1,
+  "original_failed_preparation": "android-prepare-41c1ae69d1f4aa40aea09279",
+  "native_components": "SDK, installer, hub, controller and worker succeeded",
+  "apk_failure": "AGP requires Build Tools35.0.0; the full .android Secret mount also prevented SDK cache writes",
+  "fix": "pin Build Tools35.0.0 and mount only debug.keystore read-only with subPath",
+  "toolchain_extension": {
+    "schema": 1,
+    "image": "127.0.0.1:30444/ghost/android-builder@sha256:bdf6bb333cac6b730b3b70b2e0f91d37370822a4be304fc20c19c6fcb44386df",
+    "source_sha256": "4c17ddd080749bfa0257a130d52a14eccb8acb9ac006052b184a7addb3f54045",
+    "original_job": "android-toolchain-extend-4c17ddd080",
+    "status": "toolchain_extended",
+    "elapsed_seconds": 20.74975217320025
+  },
+  "image_build": {
+    "schema": 1,
+    "gchat_revision": "7da2a3b292246639f8c5181000e6e5fe89d3b3ad",
+    "source_sha256": "687decb926e4ea820fa5da6a7f2efcc9d773c1a5d0a9e9a3013df50470927fef",
+    "builder_pod_uid": "3e923fb7-bd3a-419c-b2ba-7991dedf32d8",
+    "images": {
+      "builder": "android-images.triform.cloud/ghost/android-builder@sha256:85e9883b426e9cde99136668d90c16a77d729193bc0e992cbdd4788642435ddc",
+      "coordinator": "android-images.triform.cloud/ghost/android-coordinator@sha256:20daf23cba57d40240c0a2f374b4ac89fda71880a676af2767157189799b8ee4"
+    },
+    "elapsed_seconds": 7.114037996158004,
+    "job": "android-images-687decb926e4",
+    "job_uid": "260df5df-2b5b-4674-9a29-2ffbeef2e185",
+    "registry_images": {
+      "builder": "127.0.0.1:30444/ghost/android-builder@sha256:85e9883b426e9cde99136668d90c16a77d729193bc0e992cbdd4788642435ddc",
+      "coordinator": "127.0.0.1:30444/ghost/android-coordinator@sha256:20daf23cba57d40240c0a2f374b4ac89fda71880a676af2767157189799b8ee4"
+    }
+  },
+  "probe": {
+    "job": "android-toolchain-probe-0e1808f03a",
+    "uid": 10001,
+    "apksigner": "0.9",
+    "package": {
+      "package": "build-tools;35.0.0",
+      "url": "https://dl.google.com/android/repository/build-tools_r35_linux.zip",
+      "sha1": "2cfaa0bbb2336e9ec18ed3ecea84fa2e2af607bc",
+      "size": 61958799,
+      "host": "linux",
+      "sha256": "bd3a4966912eb8b30ed0d00b0cda6b6543b949d5ffe00bea54c04c81e1561d88"
+    }
+  },
+  "controls": {
+    "job": "android-release-controls-7ac3782e08",
+    "passed": 128,
+    "seconds": 15.515
+  },
+  "scope": "Toolchain and source controls only; APK and live Android acceptance remain pending",
+  "codematch": "unreachable"
+}

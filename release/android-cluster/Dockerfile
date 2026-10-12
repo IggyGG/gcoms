@@ -1,7 +1,7 @@
 # Compile only in the cluster. Both base images and the Android vendor archives
 # are pinned; the resulting OCI digest is part of the native input identity.
 ARG RELEASE_BASE=127.0.0.1:30444/ghost/gchat-release@sha256:d1eab766f3826103c7c7734f58f44ca60f07abe1e1422f9cf49a14b9f1361c8a
-ARG ANDROID_TOOLCHAIN_BASE=127.0.0.1:30444/ghost/android-builder@sha256:364f386a26a8308f7f8bf1ba9997d294abbbfc764e1eee1a10be5cbe0f97b941
+ARG ANDROID_TOOLCHAIN_BASE=127.0.0.1:30444/ghost/android-builder@sha256:bdf6bb333cac6b730b3b70b2e0f91d37370822a4be304fc20c19c6fcb44386df
 FROM ${RELEASE_BASE} AS runner
 USER root
 COPY release/android-cluster/requirements.lock /opt/gcoms/requirements.lock

@@ -1,0 +1,8 @@
+# Append the Gradle-required package without reinstalling the pinned toolchain.
+ARG ANDROID_TOOLCHAIN_BASE=127.0.0.1:30444/ghost/android-builder@sha256:364f386a26a8308f7f8bf1ba9997d294abbbfc764e1eee1a10be5cbe0f97b941
+FROM ${ANDROID_TOOLCHAIN_BASE}
+USER root
+COPY release/android-cluster/android-toolchain.py /opt/gcoms/android-toolchain.py
+COPY release/android-cluster/android-packages.json /opt/gcoms/android-packages.json
+RUN python3 /opt/gcoms/android-toolchain.py --only 'build-tools;35.0.0'
+USER 10001
