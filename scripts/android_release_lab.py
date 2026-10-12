@@ -1,4 +1,5 @@
 """Trusted Kubernetes adapter for normal owners in the isolated Android lab."""
+from contextlib import ExitStack, contextmanager
 import hashlib
 import io
 import json
@@ -59,23 +60,54 @@ with tarfile.open(fileobj=sys.stdin.buffer,mode='r|') as archive:
 '''
 
 
-def qualified_lab(config):
+def create_lab(config):
     from ghost_lab.cluster_operator import configure
     from ghost_lab.lifecycle import Lab
+    settings, _ = configure(config['lab']['settings'])
+    return Lab(settings, store=object())
+
+
+@contextmanager
+def reserved_lab(config):
+    """Coordinator and Jobs renew the same bounded lifecycle reservations."""
+    selected = config['lab']
+    android = selected['android_pod']
+    if not isinstance(android, str) or not android.startswith('gl-'):
+        raise ValueError('Android reservation requires its normal lab instance name')
+    names = [selected['network_guest'], android[3:]]
+    if (any(not isinstance(n, str) or not re.fullmatch('[a-z][a-z0-9-]{0,39}', n) for n in names) or len(set(names)) != 2):
+        raise ValueError('Two distinct normal lab instances are required')
+    owner = selected['reservation_id']
+    lab = create_lab(config)
+    with ExitStack() as stack:
+        fences = [stack.enter_context(lab.kube.reservation(n, owner)) for n in sorted(names)]
+        def fence():
+            for check in fences:
+                check()
+        fence()
+        yield lab, fence
+        fence()
+
+
+def qualified_lab(config, lab=None):
     from ghost_lab.qualification import require
     selected = config['lab']
     expected = identity(config['cluster_lab'])
-    settings, _ = configure(selected['settings'])
-    lab = Lab(settings, store=object())
+    lab = lab or create_lab(config)
+    settings = lab.settings
     proof = require(lab)
     if proof['network_sha256'] != expected['boundary_sha256']:
         raise ValueError('live cluster lab isolation boundary changed')
     state = lab.state(selected['network_guest'])
-    if state['machine_uuid'] != expected['vm_uuid']:
+    if (state.get('phase') in ('discarded', 'stopped', 'stopping', 'saving', 'restoring')
+            or state.get('scratch_released')):
+        raise ValueError('lab network guest is unavailable; preserve its original lifecycle state')
+    if state['machine_uuid'] != expected['vm_uuid'] or state['resource'] != 'gl-' + selected['network_guest']:
         raise ValueError('lab network VM identity changed')
     vmi = lab.kube.get('vmi', state['resource'], ns=settings.namespace)
     pod = lab.kube.get('pod', selected['android_pod'], ns=settings.namespace)
-    if (vmi['status'].get('phase') != 'Running' or pod['metadata']['uid'] != expected['android_pod_uid']
+    if (not vmi or not pod or vmi['metadata'].get('deletionTimestamp') or pod['metadata'].get('deletionTimestamp')
+            or vmi.get('status', {}).get('phase') != 'Running' or pod['metadata']['uid'] != expected['android_pod_uid']
             or pod['status'].get('phase') != 'Running' or pod['status'].get('podIP') != expected['android_pod_ip']
             or not any(c.get('type') == 'Ready' and c.get('status') == 'True' for c in pod['status'].get('conditions', []))):
         raise ValueError('declared Android cluster guest changed or is not ready')
@@ -127,20 +159,28 @@ def stage(ssh, envelope):
 
 
 def remote(request, operation, prepared=None):
-    from ghost_lab.access import tunnel, ssh_command
     config = request['config']
     prepared = prepared or prepared_release(config, request['manifest']['prepared_id'])
+    with reserved_lab(config) as (lab, fence):
+        return remote_reserved(request, operation, prepared, lab, fence)
+
+
+def remote_reserved(request, operation, prepared, lab, fence):
+    from ghost_lab.access import tunnel, ssh_command
+    config = request['config']
     # Verification precedes guest mutation; only the trusted runner can supply
     # the attestation, through the VM's private pinned SSH identity.
     verification = verified(request, prepared)
-    lab, state = qualified_lab(config)
+    lab, state = qualified_lab(config, lab)
     envelope = {'schema': 1, 'operation': operation, 'request': request,
                 'prepared': prepared, 'verification': verification}
     timeout = 395 if operation == 'qualify' else max(1, min(540, request['manifest']['pushed_at'] + 600 - time.time()))
     directory = Path(request['directory']); directory.mkdir(parents=True, exist_ok=True, mode=0o700)
     with tunnel(lab, state, 22) as port:
         ssh = ssh_command(lab, state, port)
+        fence()
         program, command_path, checksum = stage(ssh, envelope)
+        fence()
         # stdout is a bounded public proof; detailed guest logs stay private.
         output = directory / (operation + '-guest.json')
         errors = directory / (operation + '-guest-error.log')
@@ -149,6 +189,7 @@ def remote(request, operation, prepared=None):
             result = subprocess.run(ssh + ['python3 ' + shlex.quote(str(program)) + ' '
                 + shlex.quote(str(command_path)) + ' ' + checksum], stdout=stream, stderr=log, timeout=timeout)
         if result.returncode: raise ValueError('cluster guest operation failed; original private evidence retained')
+    fence()
     if output.stat().st_size > 1024 * 1024: raise ValueError('guest evidence exceeds its bound')
     value = json.loads(output.read_text())
     if value.get('envelope_sha256') != checksum or value.get('operation') != operation:

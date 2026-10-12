@@ -49,7 +49,24 @@ source refs in the private configuration before requesting preparation.
 
 ## Isolated cluster runtime
 
-The trusted runner uses `android_release_lab.py` for preflight, activation, readiness and rollback. Configure `lab.settings`, `lab.network_guest`, `lab.android_pod`, and the exact public `cluster_lab` identity. Android uses its pinned Pod address on port 5555. The adapter requires fresh Lab boundary validation and private pinned SSH access, verifies the signed APK and prepared artifacts, and maps runtime state only into the dedicated lab guest. Guest commands retain their original execution journal; an uncertain activation is not replayed. Detailed guest failures remain private.
+The trusted runner uses `android_release_lab.py` for preflight, activation, readiness and rollback. Configure `lab.settings`, `lab.network_guest`, `lab.android_pod`, `lab.reservation_id`, and the exact public `cluster_lab` identity. Android uses its pinned Pod address on port 5555. The adapter requires fresh Lab boundary validation and private pinned SSH access, verifies the signed APK and prepared artifacts, and maps runtime state only into the dedicated lab guest. Guest commands retain their original execution journal; an uncertain activation is not replayed. Detailed guest failures remain private.
+
+Generate one nonzero UUID for `lab.reservation_id` and retain it across coordinator
+and runner updates. Both images need the shared-reservation Lab implementation.
+The coordinator renews both instance Leases throughout preparation and idle time;
+each guest operation independently renews the same reservations. Ordinary Lab
+stop, discard, reset and restore commands, including older CLI versions, then
+refuse concurrent lifecycle access. A finishing Job does not release another
+participant's reservation. UID and acquisition-epoch checks reject expired or
+replaced ownership before further staging or accepting a completion. The normal
+release locks still serialize this pipeline's own mutations.
+
+For deliberate lab maintenance, stop coordinator intake, let original guest Jobs
+finish, and wait 120 seconds after the last renewal before using the normal Lab
+checkpoint lifecycle. This is cooperative exclusion, not an admission policy
+against direct administrator deletion. A coordinator and Job outage eventually
+releases the reservation. Verified S3 checkpoints remain mandatory before relying
+on disk recovery; the reservation itself cannot recover discarded state.
 
 Build `release/android-cluster/Dockerfile.lab-runtime` to package operations separately from the compiler. Keep `cluster.builder_image` and `toolchain.builder_image` pinned to the verified compiler. Set `cluster.runner_image` to the lab runner and `cluster.runtime_config_map` to an immutable ConfigMap containing the matching operation scripts; `runtime_sha256` binds those bytes before native execution. Operation edits therefore reuse verified native cache entries. The guest holds neither Kubernetes nor S3 credentials. Compiler scratch and active guest disks stay bounded cluster volumes, while immutable artifacts and release evidence use the FSN1 archive.
 

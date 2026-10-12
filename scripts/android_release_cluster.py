@@ -476,7 +476,21 @@ def workloads(config, coordinator_image, source_secret):
 
 
 def serve(config):
+    if config.get('qualification_scope') == 'cluster-isolated':
+        from android_release_lab import reserved_lab
+        # Keep the lab reserved during cold preparation, idle periods and
+        # coordinator replacement. Active Jobs also renew this same owner.
+        with reserved_lab(config) as (_, fence):
+            supervise(config, fence)
+    else:
+        supervise(config, lambda: None)
+
+
+def supervise(config, fence):
     while True:
+        # A lost reservation terminates this supervisor; it must not continue
+        # admitting work under a successor's lab lifecycle ownership.
+        fence()
         started = time.monotonic()
         try:
             print(json.dumps(tick(config)), flush=True)

@@ -1,0 +1,46 @@
+{
+  "schema": 1,
+  "date": "2026-10-12",
+  "scope": "shared lab lifecycle reservations; no Android transfer or release timing qualification",
+  "controls": {
+    "lab": {
+      "job": "android-lab-reservation-controls-e3cee05776",
+      "job_uid": "b2e91522-25e2-4719-ac87-8391cf1a1018",
+      "passed": 85,
+      "skipped": 0,
+      "seconds": 2.418
+    },
+    "release": {
+      "job": "android-release-controls-a88ee3ebb5",
+      "job_uid": "ff7d5b48-ae2e-4c90-9fb9-71a8cae4fc32",
+      "passed": 162,
+      "skipped": 0,
+      "seconds": 23.812
+    }
+  },
+  "live": {
+    "job": "android-lab-script-a2979282e7",
+    "job_uid": "3804fc16-b7e9-482d-a3d6-2f36be64d922",
+    "schema": 1,
+    "kind": "live-lab-reservation-control",
+    "instance": "android-reservation-6722458505",
+    "scope": "real Kubernetes Lease and ordinary lifecycle exclusion only; no guest or release timing claim",
+    "lease_uid": "cecb9754-9c52-4070-9162-beec18d5c471",
+    "background_renewal_verified": true,
+    "ordinary_lifecycle_admitted_after_expiry": true,
+    "state": "passed",
+    "ordinary_discard_refused": true,
+    "job_exit_preserved_reservation": true,
+    "lease_deleted": true,
+    "elapsed_seconds": 148.46085180155933
+  },
+  "codematch": "unreachable",
+  "production_reservations_enabled": false,
+  "limitations": [
+    "cooperative normal Lab lifecycle exclusion; direct administrator deletion remains possible",
+    "reservations expire 120 seconds after the last participant renewal",
+    "pipeline must still serialize its own guest mutations",
+    "actual Android guests remain discarded without checkpoints; rebuild awaits cleanup ownership clarification",
+    "full 42 MiB transfer/load, three original promotion clocks, functional rollback and disconnected recovery remain unqualified"
+  ]
+}

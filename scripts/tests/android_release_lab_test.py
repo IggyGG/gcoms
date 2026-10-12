@@ -1,5 +1,6 @@
 """Cluster staging and guest mutation preserve exact original execution ownership."""
 import copy
+from contextlib import contextmanager
 import hashlib
 import io
 import json
@@ -9,13 +10,15 @@ import sys
 import tarfile
 import tempfile
 import unittest
-from unittest.mock import patch
+from types import SimpleNamespace
+from unittest.mock import Mock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import android_release as release
 import android_release_lab as adapter
 import android_release_lab_runtime as runtime
 import android_release_lab_context_test as context_tests
+import android_release_cluster as cluster
 
 
 class GuestExecution(unittest.TestCase):
@@ -127,6 +130,84 @@ class QualificationIdentity(unittest.TestCase):
         self.assertEqual(remote.call_args_list[0], remote.call_args_list[1])
         self.assertEqual(remote.call_args.args[0]['manifest']['pushed_at'], 100)
         bind.assert_called_with(config, 'a' * 64, 100)
+
+
+class LabReservation(unittest.TestCase):
+    def setUp(self):
+        self.config = {'qualification_scope': 'cluster-isolated', 'lab': {
+            'settings': '/config/lab.json', 'network_guest': 'network', 'android_pod': 'gl-android',
+            'reservation_id': '51e38b01-6edc-4b62-8cd8-b36cdb2f36a2'}}
+        self.active = []
+        self.checked = []
+        @contextmanager
+        def reserve(name, owner):
+            self.assertEqual(owner, self.config['lab']['reservation_id'])
+            self.active.append(name)
+            def fence():
+                self.assertIn(name, self.active)
+                self.checked.append(name)
+            try: yield fence
+            finally: self.active.remove(name)
+        self.lab = SimpleNamespace(kube=SimpleNamespace(reservation=reserve))
+        patcher = patch.object(adapter, 'create_lab', return_value=self.lab)
+        self.create = patcher.start(); self.addCleanup(patcher.stop)
+
+    def test_both_reservations_cover_the_entire_remote_operation(self):
+        request = {'config': self.config, 'manifest': {'prepared_id': 'a' * 64}}
+        def execute(original, operation, prepared, lab, fence):
+            self.assertIs(original, request)
+            self.assertEqual(self.active, ['android', 'network'])
+            self.assertIs(lab, self.lab)
+            fence()
+            return {'state': 'complete'}
+        with patch.object(adapter, 'remote_reserved', side_effect=execute):
+            result = adapter.remote(request, 'activate', {'prepared_id': 'a' * 64})
+        self.assertEqual(result['state'], 'complete')
+        self.assertEqual(self.active, [])
+        self.assertEqual(set(self.checked), {'android', 'network'})
+
+    def test_supervisor_holds_lab_across_idle_ticks_and_stops_when_fenced(self):
+        class End(Exception): pass
+        def tick(config):
+            self.assertEqual(self.active, ['android', 'network'])
+            return {'state': 'idle'}
+        with patch.object(cluster, 'tick', side_effect=tick) as observe, \
+             patch.object(cluster.time, 'sleep', side_effect=End):
+            with self.assertRaises(End): cluster.serve(self.config)
+            observe.assert_called_once()
+        self.assertEqual(self.active, [])
+        with patch.object(cluster, 'tick') as observe:
+            with self.assertRaisesRegex(ValueError, 'lost'):
+                cluster.supervise(self.config, Mock(side_effect=ValueError('lost')))
+            observe.assert_not_called()
+
+    def test_invalid_or_unreserved_configuration_cannot_contact_the_guest(self):
+        for key, value in [('android_pod', 'outside'), ('android_pod', 'gl-network'),
+                           ('network_guest', '../network'), ('network_guest', {})]:
+            config = copy.deepcopy(self.config); config['lab'][key] = value
+            with self.assertRaises(ValueError):
+                with adapter.reserved_lab(config): pass
+        self.create.assert_not_called()
+        config = copy.deepcopy(self.config); del config['lab']['reservation_id']
+        with self.assertRaises(KeyError):
+            with adapter.reserved_lab(config): pass
+        self.create.assert_not_called()
+
+    def test_discarded_or_missing_guest_has_explicit_failure_before_staging(self):
+        config = dict(self.config, cluster_lab={'unused': True})
+        expected = {'vm_uuid': 'original', 'boundary_sha256': 'boundary'}
+        lab = Mock(); lab.settings.namespace = 'ghost-lab'
+        state = {'machine_uuid': 'original', 'phase': 'discarded', 'resource': 'gl-network'}
+        lab.state.return_value = state
+        qualification = SimpleNamespace(require=Mock(return_value={'network_sha256': 'boundary'}))
+        with patch.dict(sys.modules, {'ghost_lab.qualification': qualification}), \
+             patch.object(adapter, 'identity', return_value=expected):
+            with self.assertRaisesRegex(ValueError, 'unavailable'):
+                adapter.qualified_lab(config, lab)
+            lab.kube.get.assert_not_called()
+            state['phase'] = 'booting'; lab.kube.get.return_value = None
+            with self.assertRaisesRegex(ValueError, 'not ready'):
+                adapter.qualified_lab(config, lab)
 
 
 if __name__ == '__main__': unittest.main()
