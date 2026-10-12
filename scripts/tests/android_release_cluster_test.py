@@ -355,12 +355,47 @@ class ClusterRecovery(unittest.TestCase):
             'registry.example/coordinator@sha256:' + 'a' * 64, 'source-reader')['items']
         for resource in (value, coordinator):
             pod = resource['spec']['template']['spec']
-            self.assertIn({'name': 'runtime', 'configMap': {'name': 'android-runtime-new'}}, pod['volumes'])
+            self.assertIn({'name': 'runtime', 'configMap': {'name': 'android-runtime-new', 'defaultMode': 0o555}}, pod['volumes'])
             self.assertIn({'name': 'runtime', 'mountPath': '/opt/gcoms/scripts', 'readOnly': True},
                           pod['containers'][0]['volumeMounts'])
         self.assertNotIn('volumes', warmer['spec']['template']['spec'])
         self.assertEqual(value['spec']['template']['spec']['containers'][0]['image'],
                          self.config['cluster']['runner_image'])
+
+    def test_mounted_askpass_is_executable_and_failed_advertisement_is_retained(self):
+        self.config['cluster']['runtime_config_map'] = 'android-runtime-new'
+        pod = cluster.job(self.config, self.request, self.root / 'request.json')['spec']['template']['spec']
+        mode = next(v for v in pod['volumes'] if v['name'] == 'runtime')['configMap'].get('defaultMode', 0o644)
+        helper = self.root / 'askpass.py'
+        helper.write_bytes(Path(cluster.__file__).with_name('android_release_git_askpass.py').read_bytes())
+        helper.chmod(mode)
+        reply = subprocess.check_output([str(helper), 'Username for test'], timeout=5)
+        self.assertTrue(reply.strip())
+        log = self.root / 'transport.log'
+        def fail(_argv, **kwargs):
+            Path(kwargs['log']).write_text('transport failure evidence\n')
+            raise RuntimeError('git failed')
+        with patch.object(cluster, 'command', side_effect=fail), self.assertRaises(RuntimeError):
+            cluster.advertised_refs(self.root, ['refs/heads/main'], {}, log)
+        self.assertIn('transport failure evidence', log.read_text())
+        self.assertEqual(log.stat().st_mode & 0o777, 0o600)
+
+    def test_sigterm_unwinds_active_coordinator_ownership(self):
+        marker = self.root / 'released'
+        code = '''import os,signal,sys
+from pathlib import Path
+sys.path.insert(0,sys.argv[1])
+import android_release_cluster as cluster
+def work(config,fence):
+ try:os.kill(os.getpid(),signal.SIGTERM)
+ finally:Path(sys.argv[2]).write_text('released')
+cluster.supervise=work
+cluster.serve({})
+'''
+        result = subprocess.run([sys.executable, '-c', code, str(Path(cluster.__file__).parent), str(marker)],
+                                capture_output=True, timeout=5)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(marker.read_text(), 'released')
 
     def test_source_mirrors_refuse_workstation_paths_and_wrong_origin(self):
         self.config['sources']['gcoms']['repository'] = '/workstation/old.git'

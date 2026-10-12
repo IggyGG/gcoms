@@ -10,6 +10,7 @@ import json
 import os
 from pathlib import Path
 import re
+import signal
 import subprocess
 import sys
 import tempfile
@@ -29,9 +30,17 @@ def advertised_refs(destination, references, environment, log):
     # Avoid traversing every object on the shared source volume when a remote
     # branch has not moved. Authentication and redirect policy match fetch.
     with tempfile.NamedTemporaryFile(dir=log.parent, prefix='advertised-') as stream:
-        command(['git', '--shallow-file', '/dev/null', '-C', destination,
-                 'ls-remote', '--refs', 'origin', *references], env=environment,
-                timeout=30, log=stream.name)
+        try:
+            command(['git', '--shallow-file', '/dev/null', '-C', destination,
+                     'ls-remote', '--refs', 'origin', *references], env=environment,
+                    timeout=30, log=stream.name)
+        except Exception:
+            # Preserve transport failures when the temporary response is removed.
+            with Path(log).open('ab') as failure:
+                os.chmod(log, 0o600)
+                failure.write(stream.read(128 * 1024))
+                failure.flush(); os.fsync(failure.fileno())
+            raise
         raw = stream.read(128 * 1024 + 1)
     if len(raw) > 128 * 1024:
         raise ValueError('advertised Android source references exceed their bound')
@@ -199,7 +208,8 @@ def job(config, request, request_path):
                {'name': 'config', 'configMap': {'name': name(cluster['config_map'])}},
                {'name': 'archive', 'secret': {'secretName': name(cluster['archive_secret']), 'defaultMode': 0o440}}]
     if cluster.get('runtime_config_map'):
-        volumes.append({'name': 'runtime', 'configMap': {'name': name(cluster['runtime_config_map'])}})
+        volumes.append({'name': 'runtime', 'configMap': {'name': name(cluster['runtime_config_map']),
+                                                        'defaultMode': 0o555}})
         mounts.append({'name': 'runtime', 'mountPath': '/opt/gcoms/scripts', 'readOnly': True})
     return {'apiVersion': 'batch/v1', 'kind': 'Job',
         'metadata': {'name': job_name(request['request_id'], request['operation']),
@@ -483,14 +493,21 @@ def workloads(config, coordinator_image, source_secret):
 
 
 def serve(config):
-    if config.get('qualification_scope') == 'cluster-isolated':
-        from android_release_lab import reserved_lab
-        # Keep the lab reserved during cold preparation, idle periods and
-        # coordinator replacement. Active Jobs also renew this same owner.
-        with reserved_lab(config) as (_, fence):
-            supervise(config, fence)
-    else:
-        supervise(config, lambda: None)
+    # Python's default SIGTERM skips context-manager cleanup. Kubernetes
+    # replacement then waited for the full 120-second coordinator Lease expiry.
+    def terminate(_signum, _frame):
+        raise SystemExit(0)
+    previous = signal.signal(signal.SIGTERM, terminate)
+    try:
+        if config.get('qualification_scope') == 'cluster-isolated':
+            from android_release_lab import reserved_lab
+            # Active Jobs independently retain the shared lab reservation.
+            with reserved_lab(config) as (_, fence):
+                supervise(config, fence)
+        else:
+            supervise(config, lambda: None)
+    finally:
+        signal.signal(signal.SIGTERM, previous)
 
 
 def supervise(config, fence):

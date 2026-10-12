@@ -24,5 +24,18 @@
     18.879
   ],
   "live_after": "pending configuration rollout",
-  "codematch": "unreachable"
+  "codematch": "unreachable",
+  "packaging_followup": {
+    "controls": {
+      "job": "android-release-controls-c6cb7460d4",
+      "passed": 26,
+      "seconds": 1.806
+    },
+    "fixes": [
+      "Mount operation files with executable mode 0555 so the configured Git credential helper can execute",
+      "Retain bounded private source transport failure evidence before removing its temporary output",
+      "Handle SIGTERM by unwinding ownership contexts instead of waiting for a 120-second Lease expiry"
+    ],
+    "live_verification": "pending rollout"
+  }
 }
