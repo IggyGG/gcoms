@@ -11,9 +11,20 @@
   "receiver": "boo.gcoms.agent.BootReceiver",
   "platform_documentation": "https://developer.android.com/about/versions/15/behavior-changes-15",
   "source_sha256": "3923ca96c8d006051859af3a8895a644a2cdb0a5411bb70450ec4734a810de33",
-  "normal_apk_lint_assembly": "pending",
-  "full_reference": "pending",
+  "normal_apk_lint_assembly": "passed",
+  "full_reference": "failed unchanged original 360-second deadline",
   "three_live_promotions": "pending",
   "functional_rollback": "pending",
-  "codematch": "unreachable"
+  "codematch": "unreachable",
+  "normal_apk_build_seconds": 43.78549242019653,
+  "apk_sha256": "10086011e47dc74846ac409e707b6398f6984695e7475874973e8837ed9d29e4",
+  "full_reference_id": "8c9da225b10850c6a97b839156f351ae",
+  "full_reference_elapsed_seconds": 360.74641956196865,
+  "actual_restart_frontier_bytes": 8547000,
+  "restarted_process_id": 16597,
+  "authenticated_same_original_run_resume": true,
+  "resumed_original_run_id": "c502d7ef-a167-4cf8-acb2-e6dd3de60eca",
+  "resumed_frontier_bytes": 8558000,
+  "cleanup_frontier_bytes": 42636000,
+  "failed_reference_cleaned": true
 }
