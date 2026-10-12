@@ -14,7 +14,7 @@ import re
 import stat
 import time
 
-from android_release import write_json
+from android_release import canonical, write_json
 from android_release_source import PROMOTION
 from android_release_store import Archive
 
@@ -113,6 +113,7 @@ def drain(directory, archive, limit=128):
 def ingest(config, archive=None):
     archive = archive or archive_for(config)
     prefix = archive.prefix + '/records/'
+    cache_root = Path(config['event_directory']).parent / 'server-receipts'
     token, accepted = None, []
     for _ in range(32):
         arguments = {'Bucket': archive.bucket, 'Prefix': prefix, 'MaxKeys': 200}
@@ -124,14 +125,28 @@ def ingest(config, archive=None):
             checksum = key.removeprefix(prefix).removesuffix('.json')
             if key != prefix + checksum + '.json' or not re.fullmatch('[0-9a-f]{64}', checksum):
                 raise ValueError('unexpected server receipt object path')
-            head = archive.client.head_object(Bucket=archive.bucket, Key=key)
-            if not 0 < head['ContentLength'] <= 4096:
-                raise ValueError('server receipt exceeds its bound')
-            descriptor = archive.descriptor(key, head.get('VersionId'), checksum, head['ContentLength'], True)
-            event = restore(archive.read_record(descriptor))
+            cached = cache_root / (checksum + '.json')
+            if cached.exists() or cached.is_symlink():
+                if (cache_root.is_symlink() or cached.is_symlink() or not cached.is_file()
+                        or not 0 < cached.stat().st_size <= 4096):
+                    raise ValueError('unsafe cached server receipt')
+                value = json.loads(cached.read_text())
+            else:
+                head = archive.client.head_object(Bucket=archive.bucket, Key=key)
+                if not 0 < head['ContentLength'] <= 4096:
+                    raise ValueError('server receipt exceeds its bound')
+                descriptor = archive.descriptor(key, head.get('VersionId'), checksum, head['ContentLength'], True)
+                value = archive.read_record(descriptor)
+            # Reuse the exact previously verified original bytes. Content-
+            # addressed S3 names cannot silently change this event or its clock.
+            if hashlib.sha256(canonical(value)).hexdigest() != checksum:
+                raise ValueError('cached server receipt SHA-256 changed')
+            event = restore(value)
             configured = {r['project']: r['cluster_repository'] for r in config['sources'].values()}
             if configured.get(event['project']) != event['repository']:
                 raise ValueError('archived push belongs to an unconfigured repository')
+            if not cached.exists():
+                write_json(cached, value)
             destination = Path(config['event_directory']) / ('server-' + event['server_event_id'] + '.json')
             if destination.exists():
                 if json.loads(destination.read_text()) != event:

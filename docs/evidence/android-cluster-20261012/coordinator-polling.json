@@ -1,0 +1,28 @@
+{
+  "schema": 1,
+  "date": "2026-10-12",
+  "scope": "pinned cluster operation overlay and unchanged coordination I/O",
+  "controls": {
+    "job": "android-release-controls-ebf597abaf",
+    "passed": 173,
+    "seconds": 25.214
+  },
+  "actual_failure": {
+    "job": "android-prepare-6fff4c6e024472098233bf4e",
+    "cause": "central Job renderer omitted configured runtime ConfigMap; image provision script checksum differed",
+    "refused_before_compilation": true
+  },
+  "changes": [
+    "mount the operation ConfigMap for release Jobs and persistent supervisor",
+    "preserve existing immutable requests and unchanged effect journals without rewriting",
+    "reuse checksum-verified original server receipts without repeated S3 HEAD/GET; original clocks and empty-cache integrity remain checked"
+  ],
+  "before_idle_poll_seconds": [
+    18.413,
+    18.253,
+    18.089,
+    18.879
+  ],
+  "live_after": "pending configuration rollout",
+  "codematch": "unreachable"
+}

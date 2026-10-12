@@ -111,8 +111,27 @@ class ServerOutbox(unittest.TestCase):
             outbox.ingest(self.config, self.archive)
         cached.unlink()
         self.client.corrupt = next(iter(self.client.objects))
+        # The retained original receipt remains valid even if its remote object
+        # is later damaged. A truly empty receipt cache must detect that damage.
+        self.assertEqual(len(outbox.ingest(self.config, self.archive)), 1)
+        cached.unlink()
+        for receipt in (self.root / 'server-receipts').iterdir(): receipt.unlink()
         with self.assertRaisesRegex(ValueError, 'SHA-256'):
             outbox.ingest(self.config, self.archive)
+
+    def test_unchanged_poll_reuses_verified_receipts_without_archive_reads_or_writes(self):
+        self.put(); outbox.drain(self.directory, self.archive)
+        first = outbox.ingest(self.config, self.archive)
+        with patch.object(self.client, 'head_object', side_effect=AssertionError('repeated HEAD')), \
+                patch.object(self.client, 'get_object', side_effect=AssertionError('repeated GET')), \
+                patch.object(outbox, 'write_json', side_effect=AssertionError('unchanged write')):
+            self.assertEqual(outbox.ingest(self.config, self.archive), [])
+        cached = next((self.root / 'server-receipts').iterdir())
+        value = json.loads(cached.read_text()); value['original_b64'] = base64.b64encode(event(pushed_at=1788256801)).decode()
+        cached.write_text(json.dumps(value))
+        with self.assertRaisesRegex(ValueError, 'SHA-256'):
+            outbox.ingest(self.config, self.archive)
+        self.assertEqual(first[0]['pushed_at'], 1788256800)
 
     def test_real_server_hook_persists_once_without_network_credentials(self):
         repositories = self.root / 'repos'

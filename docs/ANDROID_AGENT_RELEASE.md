@@ -74,6 +74,13 @@ carried across that identity change.
 
 The trusted runner uses `android_release_lab.py` for preflight, activation, readiness and rollback. Configure `lab.settings`, `lab.network_guest`, `lab.android_pod`, `lab.reservation_id`, and the exact public `cluster_lab` identity. Android uses its pinned Pod address on port 5555. The adapter requires fresh Lab boundary validation and private pinned SSH access, verifies the signed APK and prepared artifacts, and maps runtime state only into the dedicated lab guest. Guest commands retain their original execution journal; an uncertain activation is not replayed. Detailed guest failures remain private.
 
+Release Jobs and the persistent supervisor both mount the immutable operation
+ConfigMap at `/opt/gcoms/scripts`; the configured hashes must match those bytes.
+Idle observation does not rewrite immutable requests or unchanged Job journals.
+The cluster keeps a bounded cache of verified original server receipts; receipt
+checksums and original event clocks are checked on reuse. This cache is derived
+from S3 and is unnecessary for recovery from empty storage.
+
 Generate one nonzero UUID for `lab.reservation_id` and retain it across coordinator
 and runner updates. Both images need the shared-reservation Lab implementation.
 The coordinator renews both instance Leases throughout preparation and idle time;
