@@ -343,7 +343,11 @@ pub(in crate::node) fn seal(
     if plain.len() > MAX_RECORD_BYTES {
         return Err("owner alias record too large".into());
     }
-    seal_bytes(&channel_archive_key(seed.identity_seed()), &context(seed)?, &plain)
+    seal_bytes(
+        &channel_archive_key(seed.identity_seed()),
+        &context(seed)?,
+        &plain,
+    )
 }
 
 pub(in crate::node) fn open_unbound(bytes: &[u8], seed: &[u8; 32]) -> Result<Record, String> {

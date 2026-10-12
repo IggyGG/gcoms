@@ -345,7 +345,10 @@ fn decode_route(buf: &[u8], position: &mut usize) -> Result<crate::channel::Chan
     crate::channel::ChannelRoute::decode(take32(buf, position)?).ok_or_else(malformed)
 }
 
-fn prepared_route_context(seed: &impl ArchiveIdentitySource, pseudonym: &[u8; 32]) -> Result<SessionContext, String> {
+fn prepared_route_context(
+    seed: &impl ArchiveIdentitySource,
+    pseudonym: &[u8; 32],
+) -> Result<SessionContext, String> {
     SessionContext::new(
         seed.identity_hash(),
         b"pending-join",
@@ -464,7 +467,10 @@ fn established_route_context(
     .map_err(|error| error.to_string())
 }
 
-fn previous_route_context(seed: &impl ArchiveIdentitySource, role: &ChannelRole) -> Result<SessionContext, String> {
+fn previous_route_context(
+    seed: &impl ArchiveIdentitySource,
+    role: &ChannelRole,
+) -> Result<SessionContext, String> {
     SessionContext::new(
         seed.identity_hash(),
         b"gc1/previous-channel-route/v1",
@@ -1129,7 +1135,10 @@ fn encode_state_inner(
     if st.routing.is_some() && st.client_relay.aliases.is_empty() {
         put32(&mut v, &[])?;
     } else {
-        put_sensitive(&mut v, owner_aliases::seal_current_with_identity(st, &archive_identity)?)?;
+        put_sensitive(
+            &mut v,
+            owner_aliases::seal_current_with_identity(st, &archive_identity)?,
+        )?;
     }
     if let Some(runtime) = &st.routing {
         let plain = SecretBuffer(
@@ -2119,7 +2128,10 @@ fn machine_ownership_context(seed: &impl ArchiveIdentitySource) -> Result<Sessio
     )
     .map_err(|e| e.to_string())
 }
-fn seal_machine_ownership(value: bool, seed: &impl ArchiveIdentitySource) -> Result<Vec<u8>, String> {
+fn seal_machine_ownership(
+    value: bool,
+    seed: &impl ArchiveIdentitySource,
+) -> Result<Vec<u8>, String> {
     seal_bytes(
         &channel_archive_key(seed.identity_seed()),
         &machine_ownership_context(seed)?,
@@ -2221,7 +2233,10 @@ fn gc2_receipts_context(seed: &impl ArchiveIdentitySource) -> Result<SessionCont
     .map_err(|e| e.to_string())
 }
 
-fn channel_inbox_context(seed: &impl ArchiveIdentitySource, base: &[u8]) -> Result<SessionContext, String> {
+fn channel_inbox_context(
+    seed: &impl ArchiveIdentitySource,
+    base: &[u8],
+) -> Result<SessionContext, String> {
     SessionContext::new(
         seed.identity_hash(),
         b"channel-inbox",
