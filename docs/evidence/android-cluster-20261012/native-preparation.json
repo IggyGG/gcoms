@@ -1,0 +1,81 @@
+{
+  "job": "android-release-controls-d893d87054",
+  "namespace": "ghost",
+  "job_uid": "25272adb-4e48-4a29-9bb0-682149b300a3",
+  "status": {
+    "completionTime": "2026-10-12T13:18:43Z",
+    "conditions": [
+      {
+        "lastProbeTime": "2026-10-12T13:18:43Z",
+        "lastTransitionTime": "2026-10-12T13:18:43Z",
+        "message": "Reached expected number of succeeded pods",
+        "reason": "CompletionsReached",
+        "status": "True",
+        "type": "SuccessCriteriaMet"
+      },
+      {
+        "lastProbeTime": "2026-10-12T13:18:43Z",
+        "lastTransitionTime": "2026-10-12T13:18:43Z",
+        "message": "Reached expected number of succeeded pods",
+        "reason": "CompletionsReached",
+        "status": "True",
+        "type": "Complete"
+      }
+    ],
+    "ready": 0,
+    "startTime": "2026-10-12T13:18:22Z",
+    "succeeded": 1,
+    "terminating": 0,
+    "uncountedTerminatedPods": {}
+  },
+  "pods": [
+    {
+      "name": "android-release-controls-d893d87054-zvlhx",
+      "uid": "5dfb681f-3de2-4ed6-af46-be8989e05df6",
+      "phase": "Succeeded"
+    }
+  ],
+  "tests": 128,
+  "passed": true,
+  "seconds": 15.905,
+  "codematch": "unreachable",
+  "installer_causal": {
+    "job": "android-installer-scratch-diagnosis",
+    "namespace": "ghost-com",
+    "job_uid": "23bfd500-d584-422e-a064-52a2c3df8eec",
+    "status": {
+      "completionTime": "2026-10-12T13:12:07Z",
+      "conditions": [
+        {
+          "lastProbeTime": "2026-10-12T13:12:07Z",
+          "lastTransitionTime": "2026-10-12T13:12:07Z",
+          "message": "Reached expected number of succeeded pods",
+          "reason": "CompletionsReached",
+          "status": "True",
+          "type": "SuccessCriteriaMet"
+        },
+        {
+          "lastProbeTime": "2026-10-12T13:12:07Z",
+          "lastTransitionTime": "2026-10-12T13:12:07Z",
+          "message": "Reached expected number of succeeded pods",
+          "reason": "CompletionsReached",
+          "status": "True",
+          "type": "Complete"
+        }
+      ],
+      "ready": 0,
+      "startTime": "2026-10-12T13:11:27Z",
+      "succeeded": 1,
+      "terminating": 0,
+      "uncountedTerminatedPods": {}
+    },
+    "pods": [
+      {
+        "name": "android-installer-scratch-diagnosis-8tsqs",
+        "uid": "267e9ba2-c90b-4054-bc59-fd57a0615e77",
+        "phase": "Succeeded"
+      }
+    ]
+  },
+  "installer_causal_stdout": "scratch_before 0o42775\nchild_before 0o42700\nchild_after 0o40700\nAndroid verified-byte reuse: fresh run, durable copy, hash/size/target and handoff controls PASS\nAndroid TCP: immediate writes, private/nonblocking descriptor and original connect expiry PASS\nAES-GCM: 50 independent vectors, 800 forged tags per mode, changed AAD/ciphertext and in-place decrypt; 4 supported modes PASS\n"
+}

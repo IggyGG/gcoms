@@ -128,6 +128,10 @@ def execute(path, checksum):
         raise ValueError('native cluster builder requires its bounded cache paths')
     for name_ in ('tmp', 'cargo', 'gradle'):
         Path('/build', name_).mkdir(exist_ok=True)
+    # fsGroup gives the PVC directories an inherited setgid flag. Private
+    # installer state correctly rejects that flag; its disposable test roots
+    # must originate from a private scratch parent, as on Android itself.
+    Path('/build/tmp').chmod(0o700)
     from android_release_host import build
     build(request)
 

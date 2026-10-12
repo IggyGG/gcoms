@@ -133,7 +133,7 @@ def build(request):
         # fetching every companion workspace pulls unrelated host/UI graphs.
         selected = {'sdk': [('gcoms', 'Cargo.toml')],
                     'installer': [('dropship', 'minimal/Cargo.toml')],
-                    'hub': [('gchat', 'Cargo.toml'), ('gcoms', 'Cargo.toml')],
+                    'hub': [('gcoms', 'Cargo.toml')],
                     'worker': [('drone', 'Cargo.toml')],
                     'controller': [('drone', 'Cargo.toml')]}
         for name_, relative in selected[component]:
@@ -174,9 +174,16 @@ def build(request):
         names = sorted(p['name'] for p in tomllib.loads(original.decode())['package']
                        if p['name'] == 'gcoms' or p['name'].startswith('gcoms-'))
         try:
-            run(['cargo', 'update', '--offline', *[arg for name in names for arg in ('-p', name)]], sources['gchat'])
+            # The committed consumer lock names the published SDK. Apply the
+            # frozen local companion before resolving/fetching that graph.
+            # A cold cluster cache may populate its index, but no compilation
+            # uses a registry version absent from the two committed locks.
+            offline = [] if config.get('build_execution') == 'kubernetes' else ['--offline']
+            run(['cargo', 'update', *offline, *[arg for name in names for arg in ('-p', name)]], sources['gchat'])
             pinned_resolution(original, (sources['gcoms'] / 'Cargo.lock').read_bytes(), lock.read_bytes())
             shutil.copy2(lock, artifact / 'resolved-Cargo.lock')
+            if config.get('build_execution') == 'kubernetes':
+                run(['cargo', 'fetch', '--locked', '--manifest-path', sources['gchat'] / 'Cargo.toml'], sources['gchat'])
             metadata = json.loads(output(['cargo', 'metadata', '--offline', '--locked', '--format-version', '1',
                                           '--manifest-path', sources['gchat'] / 'Cargo.toml'], timeout=45,
                                          cwd=sources['gchat'], env=environment))

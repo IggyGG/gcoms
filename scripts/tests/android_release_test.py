@@ -576,6 +576,47 @@ class Releases(unittest.TestCase):
             self.assertIn('--locked', argv)
             if argv[1] in ('test', 'build'): self.assertIn('--offline', argv)
 
+    def test_cold_hub_fetch_uses_patched_verified_resolution_before_compiling(self):
+        self.config.update(build_directory=str(self.root / 'build'),
+                           compiler_directory=str(self.root / 'compiler'), build_execution='kubernetes')
+        self.config['cluster'] = {'builder_image': 'registry/builder@sha256:' + 'a' * 64}
+        self.config['toolchain']['builder_image'] = self.config['cluster']['builder_image']
+        self.config['toolchain']['builder_sha256'] = host.build_identity()
+        self.config['builds']['hub']['sources'] = ['gcoms', 'gchat']
+        manifest = release.freeze(self.config, time.time())
+        original = b'[[package]]\nname="gcoms"\nversion="0.1.0"\nsource="registry+example"\n'
+        for name in ('gcoms', 'gchat'):
+            source = self.root / name
+            source.mkdir(exist_ok=True)
+            (source / 'Cargo.lock').write_bytes(original)
+            manifest['sources'][name] = 'a' * 40
+        crate = self.root / 'gcoms/crates/application'
+        crate.mkdir(parents=True)
+        (crate / 'Cargo.toml').write_text('[package]\nname="gcoms"\nversion="0.1.0"\n')
+        binary = self.root / 'compiler/hub/release/gchat'
+        binary.parent.mkdir(parents=True); binary.write_bytes(b'hub')
+        commands = []
+        def run(argv, **kwargs):
+            commands.append(argv)
+            if kwargs['cwd'] == self.root / 'gchat':
+                self.assertTrue((self.root / 'gchat/.cargo/config.toml').is_file())
+                if argv[1] == 'update':
+                    (self.root / 'gchat/Cargo.lock').write_bytes(b'[[package]]\nname="gcoms"\nversion="0.1.0"\n')
+                else:
+                    self.assertTrue((self.root / 'artifact/resolved-Cargo.lock').is_file())
+        metadata = {'packages': [{'name': 'gcoms', 'manifest_path': str(crate / 'Cargo.toml')}]}
+        with patch.object(host, 'build_identity', return_value=self.config['toolchain']['builder_sha256']), \
+             patch.object(host, 'checkout', side_effect=lambda config, name, commit, parent: self.root / name), \
+             patch.object(host, 'command', side_effect=run), \
+             patch.object(host, 'output', return_value=json.dumps(metadata).encode()), \
+             patch.dict(os.environ, {'ANDROID_CLUSTER_BUILD': '1'}):
+            host.build({'config': self.config, 'manifest': manifest, 'component': 'hub',
+                        'output': str(self.root / 'artifact')})
+        self.assertEqual([a[1] for a in commands], ['fetch', 'update', 'fetch', 'build'])
+        self.assertIn('--locked', commands[2])
+        self.assertIn('--offline', commands[3])
+        self.assertEqual((self.root / 'gchat/Cargo.lock').read_bytes(), original)
+
     def test_cluster_placement_reuses_native_cache_but_image_change_invalidates_it(self):
         image = 'registry/builder@sha256:' + 'a' * 64
         self.config.update(build_execution='kubernetes', cluster={'builder_image': image})
