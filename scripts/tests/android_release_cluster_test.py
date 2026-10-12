@@ -3,6 +3,7 @@ import hashlib
 import json
 from pathlib import Path
 import shutil
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -61,6 +62,37 @@ class ClusterRecovery(unittest.TestCase):
         self.assertEqual(len(logs), 3)
         self.assertTrue(all(path.is_file() for path in logs))
         self.assertEqual((self.root / 'source-logs').stat().st_mode & 0o777, 0o700)
+
+    def test_source_sync_fetches_both_selected_branches_without_unrelated_refs(self):
+        origin = self.root / 'fixture-origin'
+        origin.mkdir()
+        def git(*args):
+            return subprocess.check_output(['git', '--shallow-file', '/dev/null', '-C', str(origin), *args],
+                                           stderr=subprocess.DEVNULL)
+        git('init', '-b', 'main')
+        git('-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid',
+            'commit', '--allow-empty', '-m', 'fixture')
+        git('branch', 'agent/android'); git('branch', 'unrelated')
+        git('tag', 'unrelated-tag'); git('tag', 'android-release/' + 'a' * 64)
+        self.config['sources']['agent'] = dict(self.config['sources']['gcoms'], ref='refs/heads/agent/android')
+        original = cluster.command
+        def transport(argv, **kwargs):
+            argv = list(argv)
+            if 'fetch' in argv:
+                argv[argv.index('origin')] = str(origin)
+            return original(argv, **kwargs)
+        with patch.object(cluster, 'command', side_effect=transport):
+            cluster.source_sync(self.config)
+        mirror = self.config['sources']['gcoms']['repository']
+        refs = release.git(mirror, 'for-each-ref', '--format=%(refname)').decode().splitlines()
+        self.assertEqual(set(refs), {'refs/heads/main', 'refs/heads/agent/android',
+                                   'refs/tags/android-release/' + 'a' * 64})
+
+    def test_source_sync_rejects_wildcard_before_git(self):
+        self.config['sources']['gcoms']['ref'] = 'refs/heads/*'
+        with patch.object(cluster, 'command') as command, self.assertRaisesRegex(ValueError, 'exact branch'):
+            cluster.source_sync(self.config)
+        command.assert_not_called()
 
     def test_remote_checkpoint_precedes_job_submission_and_retains_original_clocks(self):
         create = self.api.create

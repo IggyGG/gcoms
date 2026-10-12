@@ -1,0 +1,57 @@
+{
+  "schema": 1,
+  "scope": "cluster source synchronization",
+  "original_failed_job": "android-source-initialize-15ab9c62fb",
+  "original_failure": "Dropship fetch of all branches/tags exceeded unchanged 120-second limit",
+  "repair": "Group selected refs per repository; fetch only selected branches plus immutable Android promotion tags; disable tag autofollow",
+  "controls": {
+    "job": "android-release-controls-feedd54ebc",
+    "job_uid": "0e0c9110-b278-41f7-bf07-9ae679b7ba63",
+    "pod_uid": "63511f81-8fd3-42e5-9774-ff93729cad89",
+    "source_sha256": "feedd54ebc60acbc8a5bff53be9f083e2b361a7df31e246931888d03be429ddf",
+    "status": {
+      "completionTime": "2026-10-12T12:45:04Z",
+      "conditions": [
+        {
+          "lastProbeTime": "2026-10-12T12:45:04Z",
+          "lastTransitionTime": "2026-10-12T12:45:04Z",
+          "message": "Reached expected number of succeeded pods",
+          "reason": "CompletionsReached",
+          "status": "True",
+          "type": "SuccessCriteriaMet"
+        },
+        {
+          "lastProbeTime": "2026-10-12T12:45:05Z",
+          "lastTransitionTime": "2026-10-12T12:45:05Z",
+          "message": "Reached expected number of succeeded pods",
+          "reason": "CompletionsReached",
+          "status": "True",
+          "type": "Complete"
+        }
+      ],
+      "ready": 0,
+      "startTime": "2026-10-12T12:44:43Z",
+      "succeeded": 1,
+      "terminating": 0,
+      "uncountedTerminatedPods": {}
+    },
+    "passed": 127,
+    "seconds": 16.784
+  },
+  "image_build": {
+    "schema": 1,
+    "gchat_revision": "d91a32879d92d943c0a731e6ffa40b85fe0aeb01",
+    "source_sha256": "bb4811e71e3169c035a57b42e2c00790f6ed201563db6915879ea8b3426a1283",
+    "builder_pod_uid": "3e923fb7-bd3a-419c-b2ba-7991dedf32d8",
+    "images": {
+      "builder": "127.0.0.1:30444/ghost/android-builder@sha256:eb719c0cfaabafef55c3ceb498418e1c84221f68bcc75db48abfd57664e4788f",
+      "coordinator": "127.0.0.1:30444/ghost/android-coordinator@sha256:ff1e1a54eeeb6fc3acccf24fe5039f16ad7585a36049e819abecf0bc88c06333"
+    },
+    "elapsed_seconds": 11.374355873093009,
+    "job": "android-images-bb4811e71e31",
+    "job_uid": "a7da1ff8-7676-4cbd-a8e0-c3d87fdd7188"
+  },
+  "source_audit_paths": 1121,
+  "end_to_end_qualified": false,
+  "codematch": "unreachable"
+}

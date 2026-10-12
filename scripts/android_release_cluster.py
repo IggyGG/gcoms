@@ -32,17 +32,20 @@ def source_sync(config):
         ANDROID_FORGEJO_TOKEN_FILE=config['forgejo']['token_file'],
         GIT_CONFIG_COUNT='2', GIT_CONFIG_KEY_0='credential.helper', GIT_CONFIG_VALUE_0='',
         GIT_CONFIG_KEY_1='http.followRedirects', GIT_CONFIG_VALUE_1='false')
-    seen = {}
+    selected = {}
     for row in config['sources'].values():
         repository = repository_name(row['cluster_repository'])
         destination = Path(row['repository']).resolve()
         if destination != source_root / (repository.split('/')[1] + '.git'):
             raise ValueError('cluster source mirrors must stay in their owned source directory')
-        if destination in seen:
-            if seen[destination] != repository:
-                raise ValueError('two repositories share a source mirror')
-            continue
-        seen[destination] = repository
+        if not re.fullmatch(r'refs/heads/[A-Za-z0-9_./-]+', row['ref']) or '..' in row['ref']:
+            raise ValueError('source synchronization requires an exact branch reference')
+        entry = selected.setdefault(destination, {'repository': repository, 'refs': set()})
+        if entry['repository'] != repository:
+            raise ValueError('two repositories share a source mirror')
+        entry['refs'].add(row['ref'])
+    for destination, entry in selected.items():
+        repository = entry['repository']
         url = origin + '/' + repository + '.git'
         log = Path(config['state']) / 'source-logs' / (repository.split('/')[1] + '.log')
         log.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -53,9 +56,15 @@ def source_sync(config):
                      'remote', 'add', 'origin', url], env=environment, log=log)
         if git(destination, 'remote', 'get-url', 'origin').decode().strip() != url:
             raise ValueError('existing cluster source mirror changed origin')
+        # Fetch every selected branch for a shared repository (the SDK and APK
+        # use different GComs branches). Unrelated refs and auto-followed tags
+        # must not make cold Android intake traverse another release's history.
         # Branches may advance/rebase. Promotion tags may never be rewritten.
+        references = ['+' + ref + ':' + ref for ref in sorted(entry['refs'])]
+        if repository.endswith('/gcoms'):
+            references.append(PROMOTION + '*:' + PROMOTION + '*')
         command(['git', '--shallow-file', '/dev/null', '-C', destination, 'fetch', '--no-write-fetch-head',
-                 'origin', '+refs/heads/*:refs/heads/*', 'refs/tags/*:refs/tags/*'],
+                 '--no-tags', 'origin', *references],
                 env=environment, timeout=120, log=log)
 
 
