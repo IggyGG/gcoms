@@ -1,0 +1,225 @@
+{
+  "apiVersion": "v1",
+  "kind": "List",
+  "items": [
+    {
+      "apiVersion": "apps/v1",
+      "kind": "Deployment",
+      "metadata": {
+        "name": "android-push-outbox",
+        "namespace": "forgejo",
+        "labels": {
+          "app.kubernetes.io/name": "android-push-outbox",
+          "app.kubernetes.io/part-of": "android-cluster-release"
+        }
+      },
+      "spec": {
+        "replicas": 1,
+        "strategy": {
+          "type": "Recreate"
+        },
+        "selector": {
+          "matchLabels": {
+            "app.kubernetes.io/name": "android-push-outbox",
+            "app.kubernetes.io/part-of": "android-cluster-release"
+          }
+        },
+        "template": {
+          "metadata": {
+            "labels": {
+              "app.kubernetes.io/name": "android-push-outbox",
+              "app.kubernetes.io/part-of": "android-cluster-release"
+            },
+            "annotations": {
+              "ghost.io/source-sha256": "ab2e100576ffe3f99e036abebcea57794aa6f59b20e943a1ec132cf61f93f376"
+            }
+          },
+          "spec": {
+            "automountServiceAccountToken": false,
+            "imagePullSecrets": [
+              {
+                "name": "android-release-registry"
+              }
+            ],
+            "securityContext": {
+              "runAsNonRoot": true,
+              "runAsUser": 1000,
+              "runAsGroup": 1000
+            },
+            "affinity": {
+              "podAffinity": {
+                "requiredDuringSchedulingIgnoredDuringExecution": [
+                  {
+                    "labelSelector": {
+                      "matchLabels": {
+                        "app": "forgejo"
+                      }
+                    },
+                    "topologyKey": "kubernetes.io/hostname"
+                  }
+                ]
+              }
+            },
+            "containers": [
+              {
+                "name": "forward",
+                "image": "android-images.triform.cloud/ghost/android-coordinator@sha256:20daf23cba57d40240c0a2f374b4ac89fda71880a676af2767157189799b8ee4",
+                "command": [
+                  "python3",
+                  "/source/android_release_outbox.py",
+                  "--config",
+                  "/source/outbox.json",
+                  "--outbox",
+                  "/outbox"
+                ],
+                "env": [
+                  {
+                    "name": "PYTHONPATH",
+                    "value": "/source:/opt/gcoms/scripts"
+                  },
+                  {
+                    "name": "PYTHONDONTWRITEBYTECODE",
+                    "value": "1"
+                  }
+                ],
+                "resources": {
+                  "requests": {
+                    "cpu": "25m",
+                    "memory": "64Mi",
+                    "ephemeral-storage": "8Mi"
+                  },
+                  "limits": {
+                    "cpu": "250m",
+                    "memory": "256Mi",
+                    "ephemeral-storage": "32Mi"
+                  }
+                },
+                "securityContext": {
+                  "readOnlyRootFilesystem": true,
+                  "allowPrivilegeEscalation": false,
+                  "capabilities": {
+                    "drop": [
+                      "ALL"
+                    ]
+                  }
+                },
+                "volumeMounts": [
+                  {
+                    "name": "outbox",
+                    "mountPath": "/outbox",
+                    "subPath": "android-release/outbox"
+                  },
+                  {
+                    "name": "source",
+                    "mountPath": "/source",
+                    "readOnly": true
+                  },
+                  {
+                    "name": "archive",
+                    "mountPath": "/credentials/archive",
+                    "readOnly": true
+                  }
+                ]
+              }
+            ],
+            "volumes": [
+              {
+                "name": "outbox",
+                "persistentVolumeClaim": {
+                  "claimName": "forgejo-green-shared-storage"
+                }
+              },
+              {
+                "name": "source",
+                "configMap": {
+                  "name": "android-push-outbox"
+                }
+              },
+              {
+                "name": "archive",
+                "secret": {
+                  "secretName": "android-push-archive",
+                  "defaultMode": 292
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "apiVersion": "networking.k8s.io/v1",
+      "kind": "NetworkPolicy",
+      "metadata": {
+        "name": "android-push-outbox",
+        "namespace": "forgejo",
+        "labels": {
+          "app.kubernetes.io/name": "android-push-outbox",
+          "app.kubernetes.io/part-of": "android-cluster-release"
+        }
+      },
+      "spec": {
+        "podSelector": {
+          "matchLabels": {
+            "app.kubernetes.io/name": "android-push-outbox",
+            "app.kubernetes.io/part-of": "android-cluster-release"
+          }
+        },
+        "policyTypes": [
+          "Ingress",
+          "Egress"
+        ],
+        "ingress": [],
+        "egress": [
+          {
+            "to": [
+              {
+                "ipBlock": {
+                  "cidr": "0.0.0.0/0",
+                  "except": [
+                    "10.0.0.0/8",
+                    "172.16.0.0/12",
+                    "192.168.0.0/16",
+                    "169.254.0.0/16"
+                  ]
+                }
+              }
+            ],
+            "ports": [
+              {
+                "protocol": "TCP",
+                "port": 443
+              }
+            ]
+          },
+          {
+            "to": [
+              {
+                "namespaceSelector": {
+                  "matchLabels": {
+                    "kubernetes.io/metadata.name": "kube-system"
+                  }
+                },
+                "podSelector": {
+                  "matchLabels": {
+                    "k8s-app": "kube-dns"
+                  }
+                }
+              }
+            ],
+            "ports": [
+              {
+                "protocol": "TCP",
+                "port": 53
+              },
+              {
+                "protocol": "UDP",
+                "port": 53
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

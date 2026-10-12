@@ -124,6 +124,9 @@ class Forgejo:
 
 
 def ingest(config, client=None):
+    if config.get('source_event_transport') == 'server-outbox':
+        from android_release_outbox import ingest as server_ingest
+        return server_ingest(config)
     client = client or Forgejo(config['forgejo'])
     state = Path(config['state'])
     cursors_path = state / 'source-cursors.json'

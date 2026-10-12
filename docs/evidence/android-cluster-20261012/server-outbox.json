@@ -1,0 +1,29 @@
+{
+  "schema": 1,
+  "controls": {
+    "job": "android-release-controls-2fc37bd1e4",
+    "passed": 135,
+    "seconds": 14.417
+  },
+  "installed": {
+    "schema": 1,
+    "version": "fe6639e81ab8271c0881b28db6187cda75083891c7d1cf39d332fc3b1ab32b7a",
+    "files": {
+      "post-receive.sh": "2f0454ab659a25bacb73e0c59d30f8c62fd2ebf1f47067e0f2ab482162f68f48",
+      "pre-receive.sh": "3918e3eafdb49a6780d086e1d628fbfa093e3c00956db7e042bb9e5da4371fe1"
+    },
+    "forgejo_pod_uid": "b511232d-c555-4400-9461-7c1f185c38d6",
+    "worker_pod_uid": "a796e57f-2f43-4747-89df-b8bd2814f032",
+    "repositories": [
+      "gcoms",
+      "dropship",
+      "gchat",
+      "drone"
+    ],
+    "outbox": "/data/android-release/outbox",
+    "promotion_guard": "gcoms immutable direct-commit Android tags"
+  },
+  "transport": "Forgejo PVC outbox to verified immutable FSN1 S3 receipts; coordinator restores original bytes",
+  "scope": "Control tests and installed worker; actual server push delivery evidence follows publication",
+  "codematch": "unreachable"
+}

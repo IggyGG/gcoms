@@ -248,7 +248,8 @@ def tick(config, kube=None, catalogue=None):
                 value = json.loads(path.read_text())
                 if (value['project'], value['ref']) in selected or value['ref'].startswith(PROMOTION):
                     events.append((path.name, value))
-            events.sort(key=lambda row: (row[1]['pushed_at'], row[1]['forgejo_activity_id']))
+            events.sort(key=lambda row: (row[1]['pushed_at'],
+                str(row[1].get('server_event_id', row[1].get('forgejo_activity_id', '')))))
             promotions = [r for r in events if r[1]['ref'].startswith(PROMOTION)]
             chosen = promotions[:1] or events
             if chosen:
