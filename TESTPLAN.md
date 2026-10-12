@@ -1261,3 +1261,14 @@ profile, reject changed release/target/profile/nonce/profile bytes before
 invoking the controller, skip an incomplete mint handoff, and retain the
 original failed qualification clock when cancellation fails. Do not convert
 component controls into live 360/600/60-second receipts.
+
+F5 selective gap repair, 2026-10-12: run `opencode-test cargo test --offline
+--locked -p gcoms-node --all-features --lib node::direct::maintenance_tests
+-- --test-threads=1` and the corresponding `gcoms-protocol` `flow::tests`
+controls, strict node/protocol Clippy and legacy node `client-persist` compile.
+Drop counter two from a full bulk window; only authenticated later coverage
+may request prompt repair after the existing jittered short backoff. Check
+forged receipts, unknown/credited counters, exact retry bytes, complete window
+closure after receipt of the missing counter, restart retention and unchanged
+unknown-delivery fallback/deadlines. The original repair predicate must fail
+the prompt-gap assertion. Unit checks do not qualify live bulk throughput.

@@ -1576,3 +1576,15 @@ mismatch rejection and preservation of the original failure/clock. Evidence:
 `docs/evidence/android-profile-cancellation-20261012/summary.json`.
 The 42 MiB restart/resume/load, three timed promotions and functional rollback
 are still required; this cleanup is not throughput qualification.
+
+## F5 Android selective counter repair, 2026-10-12
+
+Cancelling five failed profiles did not qualify throughput: the next normal
+42 MiB restart/resume run still failed at360.206 seconds and reached34.54 MB
+after its deadline. The runtime repair predicate ignored authenticated
+selective evidence of a missing owned counter until its sixty-second
+fallback. Add a short, bounded gap retry using the existing backoff and exact
+cached ciphertext. The old predicate fails the same gap regression; fixed
+maintenance/flow controls, strict Clippy and legacy client-persist compilation
+pass. Evidence: `docs/evidence/android-selective-gap-repair-20261012/summary.json`.
+Normal native preparation and fresh 360/600/60-second live gates remain open.

@@ -626,3 +626,12 @@ that profile through the normal controller API on failed qualification or
 rollback. It retains original failed clocks and reports cancellation errors.
 All 58 focused release controls pass; live transfer and deployment timing
 remain separate acceptance gates. See `docs/evidence/android-profile-cancellation-20261012/summary.json`.
+
+GC/2 direct maintenance can repair an exact retained counter after the
+existing jittered five-second backoff when authenticated receipt coverage
+proves that a later counter arrived while it remains missing. Unknown delivery
+outcomes retain the original sixty-second fallback. This changes retry
+selection without granting counter credit, re-encrypting bytes, changing
+traffic class or extending original deadlines. Focused maintenance/flow
+controls and strict Clippy pass; live Android throughput remains separate.
+Evidence: `docs/evidence/android-selective-gap-repair-20261012/summary.json`.

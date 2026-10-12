@@ -221,6 +221,8 @@ pub(crate) struct DirectMaintenance {
     #[cfg(feature = "experimental-gc2")]
     repair_due: HashMap<[u8; 32], std::time::Instant>,
     #[cfg(feature = "experimental-gc2")]
+    repair_gap_due: HashMap<[u8; 32], std::time::Instant>,
+    #[cfg(feature = "experimental-gc2")]
     recovery_due: HashMap<Vec<u8>, std::time::Instant>,
     #[cfg(feature = "experimental-gc2")]
     last_ack_peer: Option<[u8; 32]>,
@@ -230,6 +232,12 @@ pub(crate) struct DirectMaintenance {
 }
 
 impl DirectMaintenance {
+    #[cfg(feature = "experimental-gc2")]
+    fn repair_is_due(&self, key: &[u8; 32], now: std::time::Instant, credit_gap: bool) -> bool {
+        self.repair_due.get(key).is_none_or(|due| *due <= now)
+            || (credit_gap && self.repair_gap_due.get(key).is_some_and(|due| *due <= now))
+    }
+
     #[cfg(feature = "experimental-gc2")]
     fn observe_ready_routes(
         &mut self,
@@ -279,6 +287,7 @@ impl DirectMaintenance {
                     retry.unavailable = false;
                     retry.due = now;
                     self.repair_due.remove(&key);
+                    self.repair_gap_due.remove(&key);
                 }
             }
         }
@@ -487,6 +496,8 @@ impl DirectMaintenance {
         #[cfg(feature = "experimental-gc2")]
         {
             self.repair_due.retain(|_, deadline| *deadline > now);
+            self.repair_gap_due
+                .retain(|key, _| self.repair_due.contains_key(key));
             let available = (MAX_DIRECT_RETRY_ATTEMPTS
                 - self.active.values().filter(|&&ack| !ack).count())
             .min(24);
@@ -501,7 +512,7 @@ impl DirectMaintenance {
                 let Some(route) = st.peer_routes.get(peer) else {
                     continue;
                 };
-                for (_, purpose, packet) in session.window().retries() {
+                for (counter, purpose, packet) in session.window().retries() {
                     if repairs.len() >= available {
                         break 'sessions;
                     }
@@ -512,7 +523,7 @@ impl DirectMaintenance {
                     };
                     let key = direct_attempt_key(&delivery);
                     if !self.active.contains_key(&key)
-                        && !self.repair_due.contains_key(&key)
+                        && self.repair_is_due(&key, now, session.window().is_credit_gap(counter))
                         && self
                             .retry_backoffs
                             .get(&key)
@@ -526,6 +537,8 @@ impl DirectMaintenance {
                 if self.start(&mut st, scheduler, delivery, traffic, false) {
                     self.repair_due
                         .insert(key, now + jittered(std::time::Duration::from_secs(60)));
+                    self.repair_gap_due
+                        .insert(key, now + retry_backoff_delay(1));
                 }
             }
         }

@@ -1,0 +1,92 @@
+{
+  "schema": 1,
+  "observed_at": 1791765517.8904297,
+  "source_base": "661a1f4d0299a58600086abf2dbb9acb9d4fa5f8",
+  "source_files": {
+    "crates/protocol/src/flow.rs": "2043b5444ace487225a346bb8f0a987ee6344dc1fc2efbc6cf7d538fb6e401df",
+    "crates/protocol/src/flow/tests.rs": "b06d9739a87bd84c1f48fc05fab37429673982d91c0521f3f5dbd7b5c6469ee8",
+    "crates/node/src/node/direct.rs": "5f0980421eaefdea47cbed619eafad52c19c175d4d72c910dd8d13cd9c19f578",
+    "crates/node/src/node/direct_maintenance_tests.rs": "74ce8cb6be43649e35b923269873ca4cb89c801f8fe8f4beb04667f8322b6f66"
+  },
+  "change": "authenticated selective coverage permits bounded retry of an exact missing retained counter after the existing jittered short backoff; unknown delivery keeps its original fallback",
+  "original_repair_predicate_control": {
+    "exit_code": 101,
+    "elapsed_seconds": 270.79743846697966,
+    "log_sha256": "63d2c452bef2b8652ecc572144427d66376b0774defa3783db9e1d2f8960604a",
+    "command": [
+      "cargo",
+      "test",
+      "--offline",
+      "--locked",
+      "-p",
+      "gcoms-node",
+      "--all-features",
+      "--lib",
+      "authenticated_counter_gap_retries_before_unknown_delivery_timeout",
+      "--",
+      "--test-threads=1"
+    ]
+  },
+  "node_maintenance_controls": 19,
+  "authenticated_flow_controls": 17,
+  "strict_node_and_protocol_clippy": {
+    "exit_code": 0,
+    "elapsed_seconds": 69.0046162159997,
+    "log_sha256": "f98c680e9bc1bd0f9d479e7b061037eff7197f9bd7f31c6eafd5124fa104322d",
+    "command": [
+      "cargo",
+      "clippy",
+      "--offline",
+      "--locked",
+      "-p",
+      "gcoms-node",
+      "-p",
+      "gcoms-protocol",
+      "--all-features",
+      "--lib",
+      "--tests",
+      "--",
+      "-D",
+      "warnings"
+    ]
+  },
+  "legacy_client_persist_compile": {
+    "exit_code": 0,
+    "elapsed_seconds": 16.685624019999523,
+    "log_sha256": "535ac4641cda8868ec40c5d3d2e0012ac91389e9d5a6071eff56e3f230f41053",
+    "command": [
+      "cargo",
+      "check",
+      "--offline",
+      "--locked",
+      "-p",
+      "gcoms-node",
+      "--no-default-features",
+      "--features",
+      "client-persist",
+      "--lib"
+    ]
+  },
+  "guards": [
+    "forged credit cannot request prompt repair",
+    "credited and unknown counters cannot request repair",
+    "original missing ciphertext and traffic class are reused",
+    "active attempts and outage backoff remain bounded",
+    "no counter credit is manufactured",
+    "original application and run deadlines remain unchanged",
+    "no wire or private-state encoding change"
+  ],
+  "clean_retained_reference": {
+    "state": "failed",
+    "elapsed_seconds": 360.20566461305134,
+    "interruption_frontier": 8547000,
+    "same_run_resume_frontier": 8558000,
+    "late_frontier": 34540000
+  },
+  "remaining_acceptance": [
+    "fresh signed 42 MiB restart/resume/current-process load <=360 seconds",
+    "three immutable promotion original server push-to-all-targets-live <=600 seconds",
+    "real failed-canary functional rollback <=60 seconds"
+  ],
+  "codematch": "unreachable"
+}

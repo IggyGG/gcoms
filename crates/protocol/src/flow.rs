@@ -316,6 +316,18 @@ impl Window {
     pub fn is_credited(&self, counter: u64) -> bool {
         counter != 0 && counter <= self.sent && self.credited.contains(counter)
     }
+    /// Authenticated selective coverage proves a later counter arrived while
+    /// this owned counter is still missing. This never grants counter credit.
+    pub fn is_credit_gap(&self, counter: u64) -> bool {
+        counter != 0
+            && counter <= self.sent
+            && self.tx.contains_key(&counter)
+            && !self.credited.contains(counter)
+            && self
+                .credited
+                .highest()
+                .is_ok_and(|highest| highest > counter)
+    }
     pub fn received_floor(&self) -> u64 {
         self.received.floor
     }

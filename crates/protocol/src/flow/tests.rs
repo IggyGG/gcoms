@@ -104,6 +104,44 @@ fn pair() -> (Endpoint, Endpoint) {
 }
 
 #[test]
+fn credit_gap_requires_authentication_and_closes_only_on_exact_received_counter() {
+    let (mut a, mut b) = pair();
+    let first = a.send(Purpose::Bulk, b"first missing body").unwrap();
+    let second = a.send(Purpose::Bulk, b"later body").unwrap();
+    let third = a.send(Purpose::Bulk, b"last body").unwrap();
+    assert!(!a.flow.is_credit_gap(first.ctr));
+    b.receive(&second);
+    let receipt = b.receive(&third);
+    let unchanged = a.flow.encode_private();
+    let mut forged = receipt;
+    forged[48] ^= 1;
+    assert!(a.flow.accept_credit(&forged).is_err());
+    assert_eq!(a.flow.encode_private(), unchanged);
+    assert!(!a.flow.is_credit_gap(first.ctr));
+    a.flow.accept_credit(&receipt).unwrap();
+    assert!(a.flow.is_credit_gap(first.ctr));
+    assert!(!a.flow.is_credit_gap(second.ctr));
+    assert!(!a.flow.is_credit_gap(third.ctr));
+    assert!(!a.flow.is_credit_gap(0));
+    assert!(!a.flow.is_credit_gap(third.ctr + 1));
+    let before = a.flow.encode_private();
+    let gap = a.flow.retries().next().unwrap();
+    assert_eq!(
+        (gap.0, gap.1, gap.2),
+        (first.ctr, Purpose::Bulk, first.encode().as_slice())
+    );
+    assert_eq!(a.flow.encode_private(), before);
+    a.reload();
+    b.reload();
+    assert!(a.flow.is_credit_gap(first.ctr));
+    let credit = b.receive(&first);
+    a.flow.accept_credit(&credit).unwrap();
+    assert!(!a.flow.is_credit_gap(first.ctr));
+    assert_eq!(a.flow.retries().count(), 0);
+    assert_eq!(a.flow.credited_floor(), third.ctr);
+}
+
+#[test]
 fn volatile_retry_bytes_stay_in_ram_and_restore_requires_recovery_or_credit() {
     let (a, b) = pair();
     let mut sender = CreditedSession::from_authenticated(a.ratchet, a.flow).unwrap();

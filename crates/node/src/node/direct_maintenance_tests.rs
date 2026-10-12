@@ -4,6 +4,73 @@ use std::time::{Duration, Instant};
 use tokio::net::TcpListener;
 use tokio_rustls::TlsAcceptor;
 
+#[cfg(feature = "experimental-gc2")]
+#[test]
+fn authenticated_counter_gap_retries_before_unknown_delivery_timeout() {
+    use gcoms_protocol::flow::{Purpose, Record, Window, BULK_WINDOW};
+    use rand::{rngs::StdRng, SeedableRng};
+    let mut sender = Window::new([37; 16]).unwrap();
+    let mut receiver = Window::new([37; 16]).unwrap();
+    let mut rng = StdRng::seed_from_u64(29);
+    let mut retained = Vec::new();
+    let mut latest = None;
+    for counter in 1..=BULK_WINDOW + 1 {
+        let record = Record::new(Purpose::Bulk, 700, &[counter as u8], &mut rng).unwrap();
+        let packet = vec![counter as u8; 64];
+        sender.record_sent(counter, &packet, &record, 100).unwrap();
+        if counter != 2 {
+            receiver
+                .record_authenticated(counter, &packet, &record)
+                .unwrap();
+            latest = Some(receiver.credit_for_duplicate(counter, &packet).unwrap());
+            if counter == 1 {
+                // The normal setup receipt grants one counter before filling
+                // the remaining bulk window with the missing second packet.
+                sender.accept_credit(&latest.unwrap()).unwrap();
+            }
+        }
+        retained.push((packet, record));
+    }
+    let now = Instant::now();
+    let key = [93; 32];
+    let mut owner = DirectMaintenance::default();
+    let fallback = now + Duration::from_secs(60);
+    owner.repair_due.insert(key, fallback);
+    owner
+        .repair_gap_due
+        .insert(key, now + retry_backoff_delay(1));
+    assert!(!sender.is_credit_gap(2));
+    assert!(!owner.repair_is_due(&key, now + Duration::from_secs(7), sender.is_credit_gap(2)));
+    let mut forged = latest.unwrap();
+    forged[48] ^= 1;
+    assert!(sender.accept_credit(&forged).is_err());
+    assert!(!sender.is_credit_gap(2));
+    sender.accept_credit(&latest.unwrap()).unwrap();
+    assert!(sender.is_credit_gap(2));
+    assert!(!owner.repair_is_due(&key, now + Duration::from_secs(3), sender.is_credit_gap(2)));
+    assert!(
+        owner.repair_is_due(&key, now + Duration::from_secs(7), sender.is_credit_gap(2)),
+        "authenticated selective gap must not wait for the unknown-delivery timer"
+    );
+    assert_eq!(owner.repair_due[&key], fallback);
+    assert_eq!(sender.retries().count(), 1);
+    assert_eq!(sender.retries().next().unwrap().2, retained[1].0);
+    for counter in 3..=BULK_WINDOW + 1 {
+        assert!(!sender.is_credit_gap(counter));
+    }
+    assert!(!sender.is_credit_gap(0));
+    assert!(!sender.is_credit_gap(BULK_WINDOW + 2));
+    assert!(sender.next_counter(Purpose::Bulk).is_err());
+    receiver
+        .record_authenticated(2, &retained[1].0, &retained[1].1)
+        .unwrap();
+    let completed = receiver.credit_for_duplicate(2, &retained[1].0).unwrap();
+    sender.accept_credit(&completed).unwrap();
+    assert!(!sender.is_credit_gap(2));
+    assert_eq!(sender.credited_floor(), BULK_WINDOW + 1);
+    assert_eq!(sender.next_counter(Purpose::Bulk).unwrap(), BULK_WINDOW + 2);
+}
+
 #[tokio::test]
 async fn failed_ack_retries_back_off_without_changing_ciphertext_or_saving() {
     let mut node = persist::tests::state();
