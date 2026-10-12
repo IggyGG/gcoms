@@ -1,0 +1,47 @@
+{
+  "schema": 1,
+  "fix": "F5 bounded Android frontier metadata batching",
+  "at": 1791793740.1540787,
+  "base_commit": "ef6ec0b76a15aac416c0c5a3de5afec5377cba99",
+  "original_control": {
+    "state": "failed",
+    "adb_calls": 258,
+    "expected": 2
+  },
+  "fixed_controls": {
+    "state": "passed",
+    "count": 7
+  },
+  "emulator_comparison": {
+    "at": 1791793670.4165635,
+    "history_states": 38,
+    "original_adb_calls": 39,
+    "batched_adb_calls": 1,
+    "original_seconds": 1.3079833659576252,
+    "batched_seconds": [
+      0.05170700896997005,
+      0.04740462597692385,
+      0.04864766198443249
+    ],
+    "metadata_identical": true,
+    "production_touched": false,
+    "qualification_claim": false
+  },
+  "checks_preserved": [
+    "256-state inventory bound",
+    "exact current artifact hash, length, target and checksum",
+    "exact run directory binding",
+    "original run timestamp",
+    "ambiguous-current-run rejection",
+    "360-second reference deadline"
+  ],
+  "native_operations_excluded": true,
+  "codematch": "unreachable",
+  "full_reference_qualified": false,
+  "three_live_promotions_qualified": false,
+  "functional_rollback_qualified": false,
+  "source_L0": {
+    "passed": true,
+    "paths": 1099
+  }
+}

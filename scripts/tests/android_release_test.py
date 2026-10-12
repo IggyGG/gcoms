@@ -808,13 +808,68 @@ class Maintenance(unittest.TestCase):
         raw[80:84] = (7).to_bytes(4, 'big'); raw[84:92] = (22000).to_bytes(8, 'little')
         raw[124:] = hashlib.sha256(raw[:124]).digest()
         def output(argv):
-            if 'find' in argv: return '\n'.join(paths).encode()
+            if 'find' in argv:
+                return ('90 ' + paths[0] + '\n101 ' + paths[1]).encode()
             if 'stat' in argv: return b'90' if argv[-1] == paths[0] else b'101'
             return bytes(raw)
         with patch.object(host, 'output', side_effect=output), patch.object(host, 'adb', side_effect=lambda _c, _t, *a: list(a)):
             self.assertEqual(qualify.observe_frontier({}, {}, (b'x' * 32).hex(), 100.5), 22000)
             raw[8:40] = bytes.fromhex('a' * 64); raw[124:] = hashlib.sha256(raw[:124]).digest()
             self.assertEqual(qualify.observe_frontier({}, {}, (b'x' * 32).hex(), 100.5), 0)
+
+    def test_reference_progress_batches_metadata_with_a_full_history(self):
+        root = '/data/user/0/' + host.PACKAGE + '/files/d'
+        paths = [root + '/' + format(i, '064x') + '/downloader.state' for i in range(256)]
+        raw = bytearray(156); raw[:8] = b'DSRSUM1\0'; raw[8:40] = bytes.fromhex(format(255, '064x'))
+        raw[40:72] = b'x' * 32; raw[72:80] = qualify.REFERENCE_BYTES.to_bytes(8, 'little')
+        raw[80:84] = (7).to_bytes(4, 'big'); raw[84:92] = (22000).to_bytes(8, 'little')
+        raw[124:] = hashlib.sha256(raw[:124]).digest()
+        calls = []
+        def output(argv):
+            calls.append(argv)
+            if 'find' in argv:
+                if '-exec' not in argv: return '\n'.join(paths).encode()
+                return '\n'.join(('101' if i == 255 else '90') + ' ' + path
+                                 for i, path in enumerate(paths)).encode()
+            if 'stat' in argv: return b'101' if argv[-1] == paths[-1] else b'90'
+            self.assertEqual(argv[-1], paths[-1])
+            return bytes(raw)
+        with patch.object(host, 'output', side_effect=output), patch.object(host, 'adb', side_effect=lambda _c, _t, *a: list(a)):
+            self.assertEqual(qualify.observe_frontier({}, {}, (b'x' * 32).hex(), 100.5), 22000)
+        self.assertEqual(len(calls), 2, 'one metadata inventory and one current state read')
+
+    def test_reference_metadata_keeps_inventory_bounds_and_rejects_untrusted_paths(self):
+        root = '/data/user/0/' + host.PACKAGE + '/files/d'
+        path = root + '/' + 'a' * 64 + '/downloader.state'
+        for inventory in ('101 ' + path + '/extra', '101 ' + root + '/../downloader.state',
+                          'bad ' + path, '101' + path, '90 ' + path):
+            with self.subTest(inventory=inventory), patch.object(host, 'output', return_value=inventory.encode()) as output, \
+                 patch.object(host, 'adb', side_effect=lambda _c, _t, *a: list(a)):
+                self.assertEqual(qualify.observe_frontier({}, {}, 'b' * 64, 100.5), 0)
+                self.assertEqual(output.call_count, 1)
+        with patch.object(host, 'output', return_value=('101 ' + path + '\n').encode() * 257), \
+             patch.object(host, 'adb', side_effect=lambda _c, _t, *a: list(a)):
+            with self.assertRaisesRegex(ValueError, 'inventory exceeds bounds'):
+                qualify.observe_frontier({}, {}, 'b' * 64, 100.5)
+
+    def test_reference_metadata_preserves_artifact_path_binding_and_ambiguity(self):
+        root = '/data/user/0/' + host.PACKAGE + '/files/d'
+        paths = [root + '/' + key * 64 + '/downloader.state' for key in ('a', 'b')]
+        def state(key, sha=b'x' * 32):
+            raw = bytearray(156); raw[:8] = b'DSRSUM1\0'; raw[8:40] = bytes.fromhex(key * 64)
+            raw[40:72] = sha; raw[72:80] = qualify.REFERENCE_BYTES.to_bytes(8, 'little')
+            raw[80:84] = (7).to_bytes(4, 'big'); raw[84:92] = (22000).to_bytes(8, 'little')
+            raw[124:] = hashlib.sha256(raw[:124]).digest()
+            return bytes(raw)
+        inventory = '\n'.join('101 ' + path for path in paths).encode()
+        for raw in (state('a', b'y' * 32), state('b'), state('a')[:-1]):
+            with self.subTest(raw=raw[:8]), patch.object(host, 'output', side_effect=[b'101 ' + paths[0].encode(), raw]), \
+                 patch.object(host, 'adb', side_effect=lambda _c, _t, *a: list(a)):
+                self.assertEqual(qualify.observe_frontier({}, {}, (b'x' * 32).hex(), 100.5), 0)
+        with patch.object(host, 'output', side_effect=[inventory, state('a'), state('b')]), \
+             patch.object(host, 'adb', side_effect=lambda _c, _t, *a: list(a)):
+            with self.assertRaisesRegex(ValueError, 'ambiguous current runs'):
+                qualify.observe_frontier({}, {}, (b'x' * 32).hex(), 100.5)
 
     def test_retained_hub_selection_preserves_live_protocol_files(self):
         with tempfile.TemporaryDirectory() as directory:

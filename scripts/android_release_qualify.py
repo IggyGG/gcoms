@@ -182,13 +182,16 @@ def frontier(bytes_, sha):
 
 def observe_frontier(config, target, sha, pushed_at):
     root = '/data/user/0/' + host.PACKAGE + '/files/d'
-    paths = host.output(host.adb(config, target, 'shell', 'find', root, '-maxdepth', '2',
-                               '-type', 'f', '-name', 'downloader.state')).decode().splitlines()
-    if len(paths) > 256: raise ValueError('Android frontier inventory exceeds bounds')
+    # ADB starts a new remote shell per call. Collect metadata in that shell
+    # instead of letting closed download history multiply observation latency.
+    rows = host.output(host.adb(config, target, 'shell', 'find', root, '-maxdepth', '2',
+                              '-type', 'f', '-name', 'downloader.state', '-exec',
+                              'stat', '-c', "'%Y %n'", '{}', '+')).decode().splitlines()
+    if len(rows) > 256: raise ValueError('Android frontier inventory exceeds bounds')
     current = []
-    for path in paths:
+    for row in rows:
+        modified, _separator, path = row.partition(' ')
         if not re.fullmatch(re.escape(root) + r'/[0-9a-f]{64}/downloader\.state', path): continue
-        modified = host.output(host.adb(config, target, 'shell', 'stat', '-c', '%Y', path)).decode().strip()
         if not modified.isdigit() or int(modified) < int(pushed_at): continue
         raw = host.output(host.adb(config, target, 'exec-out', 'head', '-c', '157', path))
         offset = frontier(raw, sha)
