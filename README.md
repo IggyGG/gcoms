@@ -31,6 +31,12 @@ an immutable source reference and benchmark prose. `.gitleaksignore` records onl
 their exact fingerprints; full-history scanning and rejection of new findings
 remain required. [Review evidence](docs/evidence/source-audit-20261012/summary.json).
 
+F5 native qualification, 2026-10-13: the frozen GChat Linux 0.1.192 workflow
+reproduces a rustfmt failure in two archive-identity source files. Formatting-only
+corrections pass the pinned formatting gate and source L0. Complete native
+qualification of the successor remains required.
+[Evidence](docs/evidence/irc-ux-native-format-20261013/summary.json).
+
 F5 cluster source reuse, 2026-10-12: source sync now authenticates exact advertised refs and skips unchanged repositories. Prepared promotion checks its exact immutable tag and existing commit without fetching unrelated history. A real Git control rejects another fetch for unchanged sources and promotion; all 150 scoped controls pass in Kubernetes (16.673 seconds), with the 1,141-path source audit passing. Native inputs and the real Android deadlines are unchanged. [Evidence](docs/evidence/android-cluster-20261012/source-reuse.json).
 
 F5 isolated cluster lifecycle adapter, 2026-10-12: release Jobs now verify APK signing and all prepared bytes before staging a private, checksum-bound command to the exact lab VM and Android Pod. The guest validates its private mapping, journals mutations, reconnects ADB, preserves uncertain attempts, and runs the existing full interruption/resume/load checks. Operation images and immutable script overlays retain the pinned compiler image and native cache keys. All 150 scoped controls pass in Kubernetes (25.812 seconds); runtime images built in 9.206 seconds. Real Android reference, three promotion clocks, rollback and workstation disconnection remain pending. [Evidence](docs/evidence/android-cluster-20261012/lab-adapter.json).

@@ -1,3 +1,9 @@
+F5 native qualification, 2026-10-13: frozen GChat Linux 0.1.192 provider run
+38320661711 fails the GComs formatting gate. The same failure reproduces locally
+in two archive-identity files; formatting-only corrections pass pinned rustfmt
+and source L0. A successor still requires the complete native release gate.
+[Evidence](docs/evidence/irc-ux-native-format-20261013/summary.json).
+
 F5 preempted guest capture, 2026-10-13: the pipeline can capture its original owner mapping after emulator recovery only when the exact original PVC and volume match the Lab recovery record. It measures the device on its current real Pod and retains both contexts for normal sealed S3 recovery. All 12 provisioning controls pass in Kubernetes (1.097 seconds). Actual guest checkpoint, restore and release acceptance remain pending. [Evidence](docs/evidence/android-cluster-20261012/retained-capture.json).
 
 F5 cluster preflight diagnostics, 2026-10-13: early execution failures retain their exact trace in private cluster state while public receipts remain bounded. Recovery still returns the original terminal failure without rerunning the action. All 26 focused coordinator controls pass (1.623 seconds). The full Android reference stopped before mutation because routine cache maintenance preempted its emulator; its original disk remains intact. [Evidence](docs/evidence/android-cluster-20261012/preflight-diagnostics.json).

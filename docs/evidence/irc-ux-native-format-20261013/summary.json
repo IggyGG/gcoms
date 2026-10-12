@@ -1,0 +1,46 @@
+{
+  "schema": 1,
+  "date": "2026-10-13",
+  "scope": "Formatting-only repair of observed frozen native gate failures; successor release remains required",
+  "provider_run": 38320661711,
+  "version": "0.1.192",
+  "failed_sources": {
+    "gchat": "93045d5a822197526bc5103ffcc7ac6fe6ead44b",
+    "gcoms": "6c88ccd7953cbf1dbc826d4c69f2946d5da2964b"
+  },
+  "failed_jobs": {
+    "gchat": 115047722953,
+    "gcoms": 115047722935
+  },
+  "failure": "cargo fmt --all -- --check",
+  "local_checks": {
+    "gchat": {
+      "source_base": "1e042f268dc64497db6c46150a79b42e20467244",
+      "fmt_before_exit": 1,
+      "fmt_after_exit": 0,
+      "source_audit_passed": true,
+      "corrected_file_sha256": {
+        "crates/core/src/chat_service/host.rs": "cc1d39da76f637afca71e13ac033e42a31d4df6b213921b9eb373fd82fcb5d5c",
+        "crates/core/src/network.rs": "bb93e4da94b427dc93912c150808e7391d956c23ea8f81678f007bb6e37d69d3"
+      }
+    },
+    "gcoms": {
+      "source_base": "6c88ccd7953cbf1dbc826d4c69f2946d5da2964b",
+      "fmt_before_exit": 1,
+      "fmt_after_exit": 0,
+      "source_audit_passed": true,
+      "corrected_file_sha256": {
+        "crates/node/src/node/persist.rs": "64a4137303d191d5d81886dada9338f72792a0ca1ae1759a645a752b5e67c3bd",
+        "crates/node/src/node/persist/owner_aliases.rs": "ed8476ba800a34459368ac5f3d2c6c216aaa3edef2ebbe18903ab9bd5f1a5918"
+      }
+    }
+  },
+  "retained_logs": {
+    "qualify-gchat.log": "a0df5f99a1a0e4b00bf809d21f0b87af6d61ea32650c0180814304843418227c",
+    "gchat-fmt-before.log": "7c607eddaf5eaedf1faaf80a808843171d9cc7d2b76d21b390a78707b97dae67",
+    "gchat-fmt-after.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "qualify-gcoms.log": "9180cf067fd8a97b2c1fe3a59e96033444dd0e8c95543cce5e15d306cf7f6459",
+    "gcoms-fmt-before.log": "e055db6da0dcd5b4398353627876b3dae7021201f3468388a600419af7e4fb81",
+    "gcoms-fmt-after.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  }
+}
