@@ -1,0 +1,37 @@
+{
+  "schema": 1,
+  "scope": "FSN1 artifact storage and cluster-run focused controls",
+  "native_build_changed": false,
+  "controls": {
+    "store": {
+      "passed": 10,
+      "seconds": 0.084,
+      "pod_uid": "4ef7630f-1b31-4bd0-b4b1-39dbdfe9811a"
+    },
+    "all_android_release": {
+      "passed": 71,
+      "seconds": 12.52,
+      "pod_uid": "c79558a2-aadf-4495-95b6-4db55fbeb293"
+    }
+  },
+  "source_audit": {
+    "paths": 1101,
+    "passed": true
+  },
+  "artifact_import": {
+    "components": [
+      "sdk",
+      "installer",
+      "apk",
+      "hub",
+      "worker",
+      "controller"
+    ],
+    "byte_readback_verified": true,
+    "version_pinned": true,
+    "source_files_preserved": true
+  },
+  "cold_cluster_restore": "pending",
+  "migration_qualified": false,
+  "codematch": "unreachable"
+}
