@@ -53,6 +53,12 @@ The trusted runner uses `android_release_lab.py` for preflight, activation, read
 
 Build `release/android-cluster/Dockerfile.lab-runtime` to package operations separately from the compiler. Keep `cluster.builder_image` and `toolchain.builder_image` pinned to the verified compiler. Set `cluster.runner_image` to the lab runner and `cluster.runtime_config_map` to an immutable ConfigMap containing the matching operation scripts; `runtime_sha256` binds those bytes before native execution. Operation edits therefore reuse verified native cache entries. The guest holds neither Kubernetes nor S3 credentials. Compiler scratch and active guest disks stay bounded cluster volumes, while immutable artifacts and release evidence use the FSN1 archive.
 
+The deployment runner contains ADB, the pinned APK signing/alignment tools,
+ELF inspection and a minimal Java runtime. It does not carry Rust, Gradle, Android
+system images or NDK compilers. Its verified OCI archive is about 516 MB;
+compilation remains in the separate 2.76 GB compiler image. Run the real prepared
+APK verification probe when changing this tool packaging.
+
 Cluster qualification records the actual lab identity and boundary, runs the same normally signed 42 MiB interrupted transfer with the 360-second limit, and requires the current process to load the worker. It does not claim the workstation VPN proof. The adapter controls and image build alone do not qualify transfer, deployment, rollback or disconnection.
 
 Render the persistent coordinator and credential-free image warming with

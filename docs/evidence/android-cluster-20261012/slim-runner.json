@@ -1,0 +1,69 @@
+{
+  "schema": 1,
+  "scope": "release image footprint and real APK verification; no live deployment timing claim",
+  "compiler_image": "android-images.triform.cloud/ghost/android-builder@sha256:85e9883b426e9cde99136668d90c16a77d729193bc0e992cbdd4788642435ddc",
+  "previous_runner_archive_bytes": 2755394711,
+  "runner_archive_bytes": 515596487,
+  "image_build": {
+    "schema": 1,
+    "gchat_revision": "7da2a3b292246639f8c5181000e6e5fe89d3b3ad",
+    "source_sha256": "71f3aa4c5bc97d9b0e4cee803236318bee6840efe83ac5b724a951c7b0c115e3",
+    "builder_pod_uid": "3e923fb7-bd3a-419c-b2ba-7991dedf32d8",
+    "images": {
+      "lab-runner": "android-images.triform.cloud/ghost/android-builder@sha256:25694bdfe6f5ad07a486e16a7fc8c45de876298f9ac9089044a6c83c8efdf6d0",
+      "coordinator": "android-images.triform.cloud/ghost/android-coordinator@sha256:18eb2889087f0eb4326b3346cbd65eaed4ca434a934e096e1b0d3928b66a0e5d"
+    },
+    "elapsed_seconds": 67.14692168869078,
+    "job": "android-lab-images-71f3aa4c5bc9"
+  },
+  "probe": {
+    "state": "verified",
+    "apk_signature_verified": true,
+    "embedded_sdk_bytes_verified": true,
+    "all_native_load_segments_verified": true,
+    "compiler_absent": true,
+    "elapsed_seconds": 77.97543120197952,
+    "job": "android-runtime-tools-7249f7500d",
+    "pod_uid": "87274939-a599-43ee-959a-3cfb916d9a1a",
+    "image": "android-images.triform.cloud/ghost/android-builder@sha256:25694bdfe6f5ad07a486e16a7fc8c45de876298f9ac9089044a6c83c8efdf6d0"
+  },
+  "archive": {
+    "schema": 1,
+    "source_sha256": "49e5cd3023135af46dfb396e68c4fa129b45bbb66e8c760e83ee31cb81ef30e2",
+    "job_uid": "74ffe3e6-93c9-4a6c-ab24-0c572c82bc9e",
+    "complete": true,
+    "elapsed_seconds": 21.593300815671682,
+    "receipts": [
+      {
+        "repository": "ghost/android-builder",
+        "digest": "sha256:25694bdfe6f5ad07a486e16a7fc8c45de876298f9ac9089044a6c83c8efdf6d0",
+        "key": "runtime/android-builder/25694bdfe6f5ad07a486e16a7fc8c45de876298f9ac9089044a6c83c8efdf6d0.json",
+        "version": "BniQ7XWmX7tCP23v7G9LGoXAj-fyaGj",
+        "sha256": "d6a88eec3a12647d2eee87f7f576bcb859b290390a38cff1758df0e30aa65107",
+        "bytes": 515596487,
+        "objects": 28
+      },
+      {
+        "repository": "ghost/android-coordinator",
+        "digest": "sha256:18eb2889087f0eb4326b3346cbd65eaed4ca434a934e096e1b0d3928b66a0e5d",
+        "key": "runtime/android-coordinator/18eb2889087f0eb4326b3346cbd65eaed4ca434a934e096e1b0d3928b66a0e5d.json",
+        "version": "tFFa.qtXCaTSHwCe58fD.YQd9EXlDnF",
+        "sha256": "e5c981577d0ab70c6ffabe8a87cc32236df5839ad182e34d40653c4c6c3404c1",
+        "bytes": 480915195,
+        "objects": 21
+      }
+    ],
+    "evidence": {
+      "key": "runtime/android-cluster/49e5cd3023135af46dfb396e68c4fa129b45bbb66e8c760e83ee31cb81ef30e2.json",
+      "version": "VcOusvkrArx8j0xuzJCHHBTLGwQOmeC"
+    },
+    "job": "android-image-archive-49e5cd3023"
+  },
+  "changes": [
+    "Rust, Gradle, Android system images and NDK compiler stay in native build Jobs",
+    "runner retains exact vendor APK signing/alignment and ELF verification tools plus ADB",
+    "minimal Java runtime is derived from the pinned compiler image",
+    "native compiler image and input keys remain unchanged"
+  ],
+  "codematch": "unreachable"
+}

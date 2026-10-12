@@ -2,10 +2,29 @@
 # the separately pinned native compiler image and its verified artifact keys.
 ARG ANDROID_RUNTIME_BASE=android-images.triform.cloud/ghost/android-builder@sha256:85e9883b426e9cde99136668d90c16a77d729193bc0e992cbdd4788642435ddc
 ARG COORDINATOR_RUNTIME_BASE=android-images.triform.cloud/ghost/android-coordinator@sha256:20daf23cba57d40240c0a2f374b4ac89fda71880a676af2767157189799b8ee4
-FROM ${ANDROID_RUNTIME_BASE} AS lab-runner
+FROM ${ANDROID_RUNTIME_BASE} AS verification-tools
+USER root
+RUN /usr/lib/jvm/java-21-openjdk-amd64/bin/jlink \
+    --add-modules java.base,java.logging,java.xml,jdk.crypto.ec \
+    --strip-debug --no-man-pages --no-header-files --compress=2 \
+    --output /opt/android-release-java
+
+FROM ${COORDINATOR_RUNTIME_BASE} AS lab-runner
+# Release operations only need APK/ELF verification and ADB. Rust, Gradle,
+# system images and the NDK compiler stay in the separate native build Jobs.
+COPY --from=verification-tools /opt/android-release-java /usr/lib/jvm/java-21-openjdk-amd64
+COPY --from=verification-tools /opt/android/platform-tools/adb /opt/android/platform-tools/adb
+COPY --from=verification-tools /opt/android/build-tools/36.0.0/apksigner /opt/android/build-tools/36.0.0/apksigner
+COPY --from=verification-tools /opt/android/build-tools/36.0.0/lib/apksigner.jar /opt/android/build-tools/36.0.0/lib/apksigner.jar
+COPY --from=verification-tools /opt/android/build-tools/36.0.0/zipalign /opt/android/build-tools/36.0.0/zipalign
+COPY --from=verification-tools /opt/android/build-tools/36.0.0/lib64/libc++.so /opt/android/build-tools/36.0.0/lib64/libc++.so
+COPY --from=verification-tools /opt/android/ndk/27.3.13750724/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readobj /opt/android/ndk/27.3.13750724/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf
 COPY scripts/android_release*.py scripts/android_release*.sh /opt/gcoms/scripts/
 COPY lab/ghost_lab /opt/lab/ghost_lab/
 ENV PYTHONPATH=/opt/lab:/opt/gcoms/scripts PYTHONDONTWRITEBYTECODE=1
+ENV JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64 ANDROID_HOME=/opt/android ANDROID_NDK_HOME=/opt/android/ndk/27.3.13750724
+ENV PATH=/usr/lib/jvm/java-21-openjdk-amd64/bin:/opt/android/platform-tools:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+USER 10001
 ENTRYPOINT ["python3", "/opt/gcoms/scripts/android_release_cluster.py"]
 CMD ["--config", "/config/android-agent.json", "tick"]
 
