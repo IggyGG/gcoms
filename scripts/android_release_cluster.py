@@ -149,6 +149,9 @@ def checkpoint(config, catalogue):
     value = {'schema': 1, 'configuration_sha256': hashlib.sha256(canonical(config)).hexdigest(), 'files': files}
     if len(canonical(value)) > MAX_CHECKPOINT:
         raise ValueError('coordinator checkpoint is full; archive old indexed events explicitly')
+    existing = catalogue.lookup('checkpoints', 'coordinator')
+    if existing and existing['sha256'] == hashlib.sha256(canonical(value)).hexdigest():
+        return existing
     return catalogue.bind('checkpoints', 'coordinator', catalogue.archive.publish_record(value), replace=True)
 
 
@@ -223,6 +226,42 @@ def job(config, request, request_path):
                     'volumeMounts': mounts}], 'volumes': volumes}}}}
 
 
+def original_job(config, kube, lease, request, request_path, value, already_submitted):
+    """Observe the original execution across coordinator/configuration upgrades."""
+    definition = value.get('job_definition')
+    if definition is not None:
+        return ensure_job(kube, lease, definition, expected_uid=value.get('job_uid'),
+                          previously_submitted=already_submitted)
+    # Legacy effects did not journal the rendered Job. Their recorded UID and
+    # immutable original configuration still identify the admitted execution;
+    # observing it must not render a replacement with today's configuration.
+    resource = kube.get('job', job_name(request['request_id'], request['operation']))
+    if resource is None:
+        raise MissingSubmittedJob('original Android Job is absent')
+    metadata = resource['metadata']
+    pod = resource['spec']['template']['spec']
+    if (metadata.get('uid') != value.get('job_uid')
+            or metadata.get('namespace') != kube.namespace
+            or metadata.get('labels', {}).get('app.kubernetes.io/part-of') != OWNER):
+        raise ValueError('legacy Android Job identity changed')
+    volumes = [v for v in pod['volumes'] if v.get('name') == 'config']
+    if len(volumes) != 1 or set(volumes[0]) != {'name', 'configMap'}:
+        raise ValueError('legacy Android Job configuration volume changed')
+    original = kube.get('configmap', name(volumes[0]['configMap']['name']))
+    if original is None or original.get('immutable') is not True:
+        raise ValueError('original immutable Android configuration is absent')
+    selected = json.loads(original['data']['android-agent.json'])
+    if hashlib.sha256(canonical(selected)).hexdigest() != request['manifest']['configuration_sha256']:
+        raise ValueError('original Android configuration binding changed')
+    containers = pod['containers']
+    expected = job(selected, request, request_path)['spec']['template']['spec']['containers'][0]
+    if (len(containers) != 1 or any(containers[0].get(k) != expected[k] for k in ('name', 'image', 'command'))
+            or pod.get('serviceAccountName') != selected['cluster']['service_account']):
+        raise ValueError('original Android execution binding changed')
+    lease.fence()
+    return resource
+
+
 def submit(config, kube, lease, request, marker, catalogue):
     root = Path(config['state'])
     request_path = root / 'cluster-requests' / (request['request_id'] + '.json')
@@ -237,6 +276,10 @@ def submit(config, kube, lease, request, marker, catalogue):
         return previous
     value = previous or {'schema': 1, 'request': request, 'state': 'submitting'}
     already_submitted = bool(value.get('submission_started'))
+    if not already_submitted:
+        if request['manifest'].get('configuration_sha256') != hashlib.sha256(canonical(config)).hexdigest():
+            raise ValueError('new Android request configuration changed')
+        value['job_definition'] = job(config, request, request_path)
     value['submission_started'] = True
     write_json(marker, value)  # Journal before the external effect.
     if not already_submitted:
@@ -244,8 +287,7 @@ def submit(config, kube, lease, request, marker, catalogue):
         # PVC cannot generate a new request ID or clock for an accepted Job.
         checkpoint(config, catalogue)
     try:
-        resource = ensure_job(kube, lease, job(config, request, request_path),
-                              expected_uid=value.get('job_uid'), previously_submitted=already_submitted)
+        resource = original_job(config, kube, lease, request, request_path, value, already_submitted)
     except MissingSubmittedJob:
         value.update(state='submission_unknown', reason='original Job absent after journaled submission')
         write_json(marker, value)
@@ -304,22 +346,40 @@ def tick(config, kube=None, catalogue=None):
             chosen = promotions[:1] or ([] if prepare_active else events)
             if chosen:
                 event = chosen[-1][1]
-                source_sync(config, promotion=event['ref'] if promotions else None)
                 if promotions:
-                    manifest = promotion_manifest(config, event['ref'][len(PROMOTION):], event['pushed_at'])
-                    if manifest['sources']['gcoms'] != event['commit']:
-                        raise ValueError('promotion tag differs from its immutable prepared source')
+                    try:
+                        source_sync(config, promotion=event['ref'])
+                        manifest = promotion_manifest(config, event['ref'][len(PROMOTION):], event['pushed_at'])
+                        if manifest['sources']['gcoms'] != event['commit']:
+                            raise ValueError('promotion tag differs from its immutable prepared source')
+                    except (ValueError, FileNotFoundError) as error:
+                        # A malformed/missing prepared release is terminal for
+                        # this immutable push. Network/API errors still retry
+                        # observation; they never become a fresh push clock.
+                        request = {'schema': 1, 'operation': 'promote',
+                            'manifest': {'pushed_at': event['pushed_at']},
+                            'events': [row[0] for row in chosen], 'source_push': event}
+                        request['request_id'] = hashlib.sha256(canonical(request)).hexdigest()
+                        rejected = {'schema': 1, 'request': request, 'state': 'failed',
+                            'reason': 'invalid immutable prepared promotion', 'failure_type': type(error).__name__}
+                        catalogue.bind('checkpoints', 'rejection/' + request['request_id'],
+                                       catalogue.archive.publish_record(rejected))
+                        lease.fence()
+                        write_json(effects / (request['request_id'] + '.json'), rejected)
+                        chosen = []
                     operation = 'promote'
                 else:
+                    source_sync(config)
                     # Cold preparation has its own start time; source push
                     # timestamps remain in the request and never become a live pass.
                     manifest = freeze(config, time.time())
                     operation = 'prepare'
-                request = {'schema': 1, 'operation': operation, 'manifest': manifest,
-                           'events': [row[0] for row in chosen], 'source_push': event}
-                request['request_id'] = hashlib.sha256(canonical(request)).hexdigest()
-                marker = effects / (request['request_id'] + '.json')
-                active.append(submit(config, kube, lease, request, marker, catalogue))
+                if chosen:
+                    request = {'schema': 1, 'operation': operation, 'manifest': manifest,
+                               'events': [row[0] for row in chosen], 'source_push': event}
+                    request['request_id'] = hashlib.sha256(canonical(request)).hexdigest()
+                    marker = effects / (request['request_id'] + '.json')
+                    active.append(submit(config, kube, lease, request, marker, catalogue))
         lease.fence()
         checkpoint(config, catalogue)
         status = {'schema': 1, 'observed_at': time.time(), 'execution': 'kubernetes',
@@ -338,31 +398,93 @@ def execute(config, request_path, checksum):
     unsigned = {k: v for k, v in request.items() if k != 'request_id'}
     if request['request_id'] != hashlib.sha256(canonical(unsigned)).hexdigest():
         raise ValueError('cluster execution request identity changed')
+    if request['manifest'].get('configuration_sha256') != hashlib.sha256(canonical(config)).hexdigest():
+        raise ValueError('cluster execution configuration changed')
     destination = Path(config['state']) / 'cluster-results' / (request['request_id'] + '.json')
+    catalogue = Catalogue(config)
+    if not destination.exists():
+        archived = catalogue.lookup('checkpoints', 'result/' + request['request_id'])
+        if archived is not None:
+            restored = catalogue.archive.read_record(archived)
+            if restored.get('request_id') != request['request_id'] or restored.get('request_sha256') != checksum:
+                raise ValueError('archived cluster result binding changed')
+            write_json(destination, restored)
     if destination.exists():
         result = json.loads(destination.read_text())
         if result.get('request_id') != request['request_id'] or result.get('request_sha256') != checksum:
             raise ValueError('original cluster result binding changed')
         return result
     Path(config['state'], 'tmp').mkdir(exist_ok=True)
-    if request['operation'] == 'prepare':
-        value = prepare_release(config, request['manifest'])
-        state = 'prepared'
-    elif request['operation'] == 'promote':
-        value = deploy(config, request['manifest'])
-        state = value['state']
-    elif request['operation'] == 'qualify':
-        from android_release_lab import qualify
-        value = qualify(config, request['manifest']['prepared_id'])
-        state = value['state']
-    else:
-        raise ValueError('cluster execution operation is not installed')
+    try:
+        if request['operation'] == 'prepare':
+            value = prepare_release(config, request['manifest'])
+            state = 'prepared'
+        elif request['operation'] == 'promote':
+            value = deploy(config, request['manifest'])
+            state = value['state']
+        elif request['operation'] == 'qualify':
+            from android_release_lab import qualify
+            value = qualify(config, request['manifest'])
+            state = value['state']
+        else:
+            raise ValueError('cluster execution operation is not installed')
+    except Exception as error:
+        # Preserve an execution failure remotely as well as in the original
+        # Job logs. Restoring an empty cache must never rerun a failed action.
+        value = {'state': 'failed', 'failure_type': type(error).__name__}
+        state = 'failed'
     result = {'schema': 1, 'request_id': request['request_id'], 'request_sha256': checksum,
               'state': state, 'result': value}
-    catalogue = Catalogue(config)
     catalogue.bind('checkpoints', 'result/' + request['request_id'], catalogue.archive.publish_record(result))
     write_json(destination, result)
     return result
+
+
+def workloads(config, coordinator_image, source_secret):
+    """Render the persistent supervisor and image warming with the same placement."""
+    if not re.fullmatch(r'[^\s@]+@sha256:[0-9a-f]{64}', coordinator_image):
+        raise ValueError('cluster coordinator image must be digest-pinned')
+    if config['forgejo']['token_file'] != '/credentials/source/token':
+        raise ValueError('cluster source credentials require their private fixed mount')
+    namespace = config['kubernetes']['namespace']
+    labels = {'app.kubernetes.io/part-of': OWNER, 'app.kubernetes.io/name': 'android-release-coordinator'}
+    pod = job(config, {'operation': 'prepare', 'request_id': '0' * 64}, Path('/unused'))['spec']['template']['spec']
+    pod['restartPolicy'] = 'Always'
+    container = pod['containers'][0]
+    container.update(name='coordinator', image=coordinator_image,
+        command=['python3', '/opt/gcoms/scripts/android_release_cluster.py',
+                 '--config', '/config/android-agent.json', 'serve'])
+    container['volumeMounts'].append({'name': 'source', 'mountPath': '/credentials/source', 'readOnly': True})
+    pod['volumes'].append({'name': 'source', 'secret': {'secretName': name(source_secret), 'defaultMode': 0o440}})
+    deployment = {'apiVersion': 'apps/v1', 'kind': 'Deployment',
+        'metadata': {'name': 'android-release-coordinator', 'namespace': namespace, 'labels': labels},
+        'spec': {'replicas': 1, 'strategy': {'type': 'Recreate'}, 'selector': {'matchLabels': labels},
+                 'template': {'metadata': {'labels': labels}, 'spec': pod}}}
+    warm_labels = {'app.kubernetes.io/part-of': OWNER, 'app.kubernetes.io/name': 'android-release-images'}
+    warm_pod = {k: pod[k] for k in ('nodeSelector', 'affinity', 'imagePullSecrets', 'securityContext')}
+    warm_pod.update(automountServiceAccountToken=False, terminationGracePeriodSeconds=1,
+        containers=[{'name': component, 'image': image,
+            'command': ['python3', '-c', 'import signal; signal.pause()'],
+            'resources': {'requests': {'cpu': '1m', 'memory': '16Mi'}, 'limits': {'cpu': '50m', 'memory': '64Mi'}},
+            'securityContext': {'allowPrivilegeEscalation': False, 'capabilities': {'drop': ['ALL']}}}
+            for component, image in [('coordinator', coordinator_image), ('runner', config['cluster']['runner_image'])]])
+    warmer = {'apiVersion': 'apps/v1', 'kind': 'DaemonSet',
+        'metadata': {'name': 'android-release-images', 'namespace': namespace, 'labels': warm_labels},
+        'spec': {'selector': {'matchLabels': warm_labels},
+                 'template': {'metadata': {'labels': warm_labels}, 'spec': warm_pod}}}
+    return {'apiVersion': 'v1', 'kind': 'List', 'items': [warmer, deployment]}
+
+
+def serve(config):
+    while True:
+        started = time.monotonic()
+        try:
+            print(json.dumps(tick(config)), flush=True)
+        except Exception as error:
+            # Never print a command, token, private guest log or new push clock.
+            print(json.dumps({'schema': 1, 'state': 'observation_failed',
+                              'failure_type': type(error).__name__}), flush=True)
+        time.sleep(max(1, 5 - (time.monotonic() - started)))
 
 
 def main():
@@ -371,11 +493,21 @@ def main():
     sub = parser.add_subparsers(dest='operation', required=True)
     sub.add_parser('tick')
     sub.add_parser('initialize')
+    sub.add_parser('serve')
+    render = sub.add_parser('workloads')
+    render.add_argument('--coordinator-image', required=True)
+    render.add_argument('--source-secret', required=True)
     child = sub.add_parser('execute')
     child.add_argument('--request', type=Path, required=True)
     child.add_argument('--sha256', required=True)
     args = parser.parse_args()
     config = json.loads(args.config.read_text())
+    if args.operation == 'serve':
+        serve(config)
+        return 0
+    if args.operation == 'workloads':
+        print(json.dumps(workloads(config, args.coordinator_image, args.source_secret)))
+        return 0
     if args.operation == 'initialize':
         source_sync(config)
         initialize(config)

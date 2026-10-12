@@ -39,7 +39,8 @@ class ClusterRecovery(unittest.TestCase):
         self.catalogue = Catalogue(self.config, self.api, self.archive)
         release.write_json(self.root / 'source-cursors.json', {'ghost-local/gcoms': 12})
         release.write_json(self.root / 'source-migration.json', {'cursors': {'ghost-local/gcoms': 10}})
-        request = {'schema': 1, 'operation': 'prepare', 'manifest': {'pushed_at': 100},
+        request = {'schema': 1, 'operation': 'prepare', 'manifest': {'pushed_at': 100,
+                   'configuration_sha256': hashlib.sha256(release.canonical(self.config)).hexdigest()},
                    'events': ['gcoms-12.json'], 'source_push': {'pushed_at': 90, 'forgejo_activity_id': 12}}
         request['request_id'] = hashlib.sha256(release.canonical(request)).hexdigest()
         self.request = request
@@ -119,7 +120,8 @@ class ClusterRecovery(unittest.TestCase):
         event = {'project': 'gcoms', 'ref': tag, 'commit': 'b' * 40,
                  'pushed_at': 150, 'server_event_id': 'c' * 64}
         release.write_json(self.root / 'events/promotion.json', event)
-        manifest = {'sources': {'gcoms': 'b' * 40}, 'pushed_at': 150}
+        manifest = {'sources': {'gcoms': 'b' * 40}, 'pushed_at': 150,
+                    'configuration_sha256': hashlib.sha256(release.canonical(self.config)).hexdigest()}
         with patch.object(cluster, 'ingest'), patch.object(cluster, 'source_sync') as sync, \
              patch.object(cluster, 'promotion_manifest', return_value=manifest):
             result = cluster.tick(self.config, self.api, self.catalogue)
@@ -210,6 +212,72 @@ class ClusterRecovery(unittest.TestCase):
         self.assertEqual(self.submit(), value)
         self.assertEqual(self.api.created, created)
 
+    def test_configuration_upgrade_observes_original_job_and_clock(self):
+        original = self.submit()
+        self.config['cluster']['runner_image'] = 'registry.example/runner@sha256:' + 'e' * 64
+        self.config['cluster']['config_map'] = 'android-config-new'
+        created = self.api.created
+        result = self.submit()
+        self.assertEqual(result['job_uid'], original['job_uid'])
+        self.assertEqual(result['request']['source_push']['pushed_at'], 90)
+        self.assertEqual(result['job_definition'], original['job_definition'])
+        self.assertEqual(self.api.created, created)
+
+    def test_legacy_effect_uses_uid_and_original_immutable_configuration(self):
+        original = self.submit()
+        self.api.create('configmap', {'metadata': {'name': 'android-config'}, 'immutable': True,
+            'data': {'android-agent.json': json.dumps(self.config)}})
+        marker = json.loads(self.marker.read_text()); marker.pop('job_definition')
+        release.write_json(self.marker, marker)
+        self.config['cluster']['runner_image'] = 'registry.example/runner@sha256:' + 'e' * 64
+        self.config['cluster']['config_map'] = 'android-config-new'
+        self.assertEqual(self.submit()['job_uid'], original['job_uid'])
+        self.api.objects['configmap', 'android-config']['immutable'] = False
+        with self.assertRaisesRegex(ValueError, 'immutable Android configuration'):
+            self.submit()
+        self.api.objects['configmap', 'android-config']['immutable'] = True
+        self.api.objects['job', original['job_name']]['metadata']['uid'] = 'replacement'
+        with self.assertRaisesRegex(ValueError, 'Job identity changed'):
+            self.submit()
+
+    def test_new_request_cannot_use_a_different_configuration(self):
+        self.config['cluster']['runner_image'] = 'registry.example/runner@sha256:' + 'e' * 64
+        with self.assertRaisesRegex(ValueError, 'request configuration changed'):
+            self.submit()
+        self.assertFalse(any(kind == 'job' for kind, _ in self.api.objects))
+
+    def test_rejected_promotion_is_archived_without_poisoning_later_intake(self):
+        event = {'project': 'gcoms', 'ref': 'refs/tags/android-release/' + 'a' * 64,
+                 'commit': 'b' * 40, 'pushed_at': 150, 'server_event_id': 'c' * 64}
+        release.write_json(self.root / 'events/invalid.json', event)
+        with patch.object(cluster, 'ingest'), patch.object(cluster, 'source_sync'), \
+             patch.object(cluster, 'promotion_manifest', side_effect=FileNotFoundError):
+            self.assertEqual(cluster.tick(self.config, self.api, self.catalogue)['state'], 'idle')
+        marker = next((self.root / 'cluster-effects').glob('*.json'))
+        rejected = json.loads(marker.read_text())
+        self.assertEqual(rejected['state'], 'failed')
+        self.assertEqual(rejected['request']['source_push'], event)
+        descriptor = self.catalogue.lookup('checkpoints', 'rejection/' + rejected['request']['request_id'])
+        self.assertEqual(self.archive.read_record(descriptor), rejected)
+        with patch.object(cluster, 'ingest'), patch.object(cluster, 'source_sync') as sync:
+            cluster.tick(self.config, self.api, self.catalogue)
+        sync.assert_not_called()
+        self.assertFalse(any(kind == 'job' for kind, _ in self.api.objects))
+
+    def test_failed_execution_is_archived_and_cannot_repeat_after_local_result_loss(self):
+        path = self.root / 'request.json'
+        release.write_json(path, self.request)
+        checksum = hashlib.sha256(release.canonical(self.request)).hexdigest()
+        with patch.object(cluster, 'Catalogue', return_value=self.catalogue), \
+             patch.object(cluster, 'prepare_release', side_effect=RuntimeError('failed action')) as action:
+            result = cluster.execute(self.config, path, checksum)
+            self.assertEqual(result['state'], 'failed')
+            (self.root / 'cluster-results' / (self.request['request_id'] + '.json')).unlink()
+            self.assertEqual(cluster.execute(self.config, path, checksum), result)
+        action.assert_called_once()
+        descriptor = self.catalogue.lookup('checkpoints', 'result/' + self.request['request_id'])
+        self.assertEqual(self.archive.read_record(descriptor), result)
+
     def test_complete_job_recovers_its_archived_result_from_empty_result_cache(self):
         value = self.submit()
         result = {'schema': 1, 'request_id': self.request['request_id'],
@@ -254,6 +322,18 @@ class ClusterRecovery(unittest.TestCase):
         self.config['cluster']['runner_image'] = 'registry.example/runner:latest'
         with self.assertRaisesRegex(ValueError, 'digest-pinned'):
             cluster.job(self.config, self.request, self.root / 'request.json')
+
+    def test_image_warming_cannot_read_source_archive_or_cluster_credentials(self):
+        self.config['forgejo']['token_file'] = '/credentials/source/token'
+        rendered = cluster.workloads(self.config, 'registry.example/coordinator@sha256:' + 'a' * 64, 'source-reader')
+        warmer, coordinator = rendered['items']
+        pod = warmer['spec']['template']['spec']
+        self.assertFalse(pod['automountServiceAccountToken'])
+        self.assertNotIn('volumes', pod)
+        self.assertTrue(all('volumeMounts' not in c for c in pod['containers']))
+        self.assertEqual(coordinator['spec']['replicas'], 1)
+        with self.assertRaisesRegex(ValueError, 'digest-pinned'):
+            cluster.workloads(self.config, 'registry.example/coordinator:latest', 'source-reader')
 
     def test_source_mirrors_refuse_workstation_paths_and_wrong_origin(self):
         self.config['sources']['gcoms']['repository'] = '/workstation/old.git'

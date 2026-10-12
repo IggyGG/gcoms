@@ -1,0 +1,19 @@
+{
+  "schema": 1,
+  "scope": "coordinator execution identity and persistent workload rendering; live acceptance remains pending",
+  "controls": {
+    "job": "android-release-controls-1cebd41453",
+    "passed": 158,
+    "elapsed_seconds": 20.438
+  },
+  "changes": [
+    "journal original rendered Job before external admission",
+    "legacy jobs require recorded UID, immutable configuration digest and exact execution binding",
+    "invalid prepared pushes are terminal and do not poison intake",
+    "failed execution restored from verified S3 result before any action",
+    "qualification preserves original manifest/directory",
+    "unchanged coordinator checkpoints reuse their verified archive pointer",
+    "persistent cluster supervisor and credential-free image warming"
+  ],
+  "codematch": "unreachable"
+}

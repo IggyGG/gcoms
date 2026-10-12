@@ -37,11 +37,11 @@ compiler outputs and artifact hashes remain separate. Android application
 edits do not rebuild unchanged native dependencies. Unknown native source inputs
 remain conservative; this is not permission to relabel old tests for changed code.
 
-CPU-heavy work goes through `workstation-batch`, retaining the workstation's
-eight-core shared cap and storage reservations. Compiler outputs and scratch are
-declared to the manager. Signed artifacts and private receipts live on SSD outside
-disposable scratch. An additive Forgejo hook writes small push notifications on
-the existing mounted SSD; it neither changes ownership hooks nor blocks pushes.
+Cluster builds run in bounded Kubernetes Jobs with separate component caches.
+The cluster Forgejo outbox preserves original push receipts in versioned FSN1 S3;
+neither source intake nor execution requires a workstation process or disk.
+The retained optional workstation adapter still uses `workstation-batch` when
+explicitly selected. Its local storage and timers are not cluster prerequisites.
 Source notifications coalesce before preparation. Promotion tags are processed individually with their original server push times. A pre-receive guard refuses tag rewriting/deletion and annotated or malformed tags. Failed requests and artifacts remain.
 The hook recognizes current `agent/` task branches without hardcoding session
 IDs. It accepts only safe ASCII ref names; the consumer still selects the exact
@@ -55,7 +55,22 @@ Build `release/android-cluster/Dockerfile.lab-runtime` to package operations sep
 
 Cluster qualification records the actual lab identity and boundary, runs the same normally signed 42 MiB interrupted transfer with the 360-second limit, and requires the current process to load the worker. It does not claim the workstation VPN proof. The adapter controls and image build alone do not qualify transfer, deployment, rollback or disconnection.
 
-Prepare the retained workstation adapter (no private configuration is committed):
+Render the persistent coordinator and credential-free image warming with
+`android_release_cluster.py --config /config/android-agent.json workloads
+--coordinator-image IMAGE@sha256:DIGEST --source-secret android-source-reader`.
+Apply the resulting resources through the normal cluster deployment mechanism.
+The coordinator runs `serve`, renews the ownership Lease, and reconciles every
+original Job across configuration upgrades. Wait for image warming on eligible
+FSN nodes before a prepared promotion. Warming mounts no source, archive or
+Kubernetes credentials. The source reader remains read-only.
+
+Failed execution results are archived before publication. Restoring empty
+working state observes those results without executing them again. Invalid
+immutable promotion requests retain their original push evidence as terminal
+failures, allowing later requests to proceed. An unresolved submitted Job still
+requires reconciliation; it is never silently recreated.
+
+Optional retained workstation adapter (no private configuration is committed):
 
 ```sh
 python3 scripts/android_release_setup.py --state /absolute/SSD/android-release

@@ -114,4 +114,19 @@ class GuestStaging(unittest.TestCase):
             self.assertEqual(list(root.rglob('.stage-*')), [])
 
 
+class QualificationIdentity(unittest.TestCase):
+    def test_repeated_observation_keeps_original_manifest_and_directory(self):
+        config = {'state': '/cluster', 'cluster_lab': {}}
+        manifest = {'prepared_id': 'a' * 64, 'pushed_at': 100, 'release_id': 'b' * 64}
+        with patch.object(adapter, 'prepared_release', return_value={}), \
+             patch.object(adapter, 'promotion_manifest', return_value=manifest) as bind, \
+             patch.object(adapter, 'remote', return_value={'state': 'failed'}) as remote, \
+             patch.object(adapter.time, 'time', return_value=900):
+            adapter.qualify(config, manifest)
+            adapter.qualify(config, manifest)
+        self.assertEqual(remote.call_args_list[0], remote.call_args_list[1])
+        self.assertEqual(remote.call_args.args[0]['manifest']['pushed_at'], 100)
+        bind.assert_called_with(config, 'a' * 64, 100)
+
+
 if __name__ == '__main__': unittest.main()

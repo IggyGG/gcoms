@@ -162,9 +162,10 @@ def remote(request, operation, prepared=None):
     return value['result']
 
 
-def qualify(config, prepared_id):
-    prepared = prepared_release(config, prepared_id)
-    manifest = promotion_manifest(config, prepared_id, time.time())
+def qualify(config, manifest):
+    prepared = prepared_release(config, manifest['prepared_id'])
+    if manifest != promotion_manifest(config, manifest['prepared_id'], manifest['pushed_at']):
+        raise ValueError('original qualification manifest changed')
     directory = Path(config['state']) / 'cluster-qualification' / manifest['release_id']
     request = {'config': config, 'manifest': manifest, 'directory': str(directory), 'warm': False}
     value = remote(request, 'qualify', prepared)
