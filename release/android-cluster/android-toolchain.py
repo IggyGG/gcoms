@@ -46,6 +46,9 @@ def install():
                     raise ValueError('Android package symlink escapes its verified package')
             destination.parent.mkdir(parents=True, exist_ok=True)
             shutil.move(source_root, destination)
+            # The CMake vendor ZIP marks this public SDK metadata owner-only.
+            # Gradle and our toolchain probe run as the unprivileged builder.
+            (destination / 'source.properties').chmod(0o644)
             receipts.append(dict(package, sha256=sha))
     Path('/opt/android/packages.lock.json').write_text(json.dumps(receipts, indent=2) + '\n')
 

@@ -129,10 +129,16 @@ def build(request):
     if config.get('build_execution') == 'kubernetes' and component != 'apk':
         # Trusted preparation fills only source-pinned dependency caches. All
         # actual Rust compilation and essential checks remain locked/offline.
-        for name_, source in sources.items():
-            for cargo in (source / 'Cargo.toml', source / 'minimal/Cargo.toml'):
-                if cargo.exists():
-                    run(['cargo', 'fetch', '--locked', '--manifest-path', cargo], source)
+        # Cargo follows the selected manifest's companion dependencies itself;
+        # fetching every companion workspace pulls unrelated host/UI graphs.
+        selected = {'sdk': [('gcoms', 'Cargo.toml')],
+                    'installer': [('dropship', 'minimal/Cargo.toml')],
+                    'hub': [('gchat', 'Cargo.toml'), ('gcoms', 'Cargo.toml')],
+                    'worker': [('drone', 'Cargo.toml')],
+                    'controller': [('drone', 'Cargo.toml')]}
+        for name_, relative in selected[component]:
+            source = sources[name_]
+            run(['cargo', 'fetch', '--locked', '--manifest-path', source / relative], source)
     if component == 'sdk':
         run(['python3', 'scripts/build-mobile.py', 'android', '--roles', 'client', '--profiles', 'z',
              '--output', artifact], sources['gcoms'])

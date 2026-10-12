@@ -32,6 +32,11 @@ OPERATION_FILES = frozenset({
     'scripts/android_release_cluster.py', 'scripts/android_release_git_askpass.py',
     'scripts/tests/android_release_cluster_test.py',
     'scripts/android_release_build_job.py', 'scripts/tests/android_release_build_job_test.py',
+    # Container recipes and placement do not enter native compilation. The
+    # actual pinned builder image is a separate, mandatory toolchain input.
+    'release/android-cluster/Dockerfile', 'release/android-cluster/Dockerfile.toolchain',
+    'release/android-cluster/android-packages.json', 'release/android-cluster/android-toolchain.py',
+    'release/android-cluster/requirements.lock', 'release/android-cluster/resources.json',
     # Dispatch-only hosted relay diagnostics never enter these native builds.
     '.github/workflows/relay-recovery.yml', 'scripts/qualify-relay-recovery.py',
     'scripts/tests/relay_recovery_test.py',
@@ -165,6 +170,9 @@ def included(project, component, name):
 
 
 def inputs(config, sources):
+    if config.get('build_execution') == 'kubernetes':
+        if config['toolchain'].get('builder_image') != config['cluster']['builder_image']:
+            raise ValueError('cluster builder image must be part of the frozen toolchain')
     trees = {name: source_tree(row['repository'], sources[name])
              for name, row in config['sources'].items()}
     keys = {}

@@ -1,0 +1,124 @@
+{
+  "schema": 1,
+  "scope": "cluster preparation and recovery; live Android gates still pending",
+  "image_update": {
+    "schema": 1,
+    "gchat_revision": "d91a32879d92d943c0a731e6ffa40b85fe0aeb01",
+    "source_sha256": "70a0f9df990225998027e3dc3e78dd550461386a1ccdabe4f2e1e9a84fd47278",
+    "builder_pod_uid": "3e923fb7-bd3a-419c-b2ba-7991dedf32d8",
+    "images": {
+      "builder": "127.0.0.1:30444/ghost/android-builder@sha256:eff5f141062741b81c64887d6265da7a5164f3fd4a24216098a7cab3604fbedc",
+      "coordinator": "127.0.0.1:30444/ghost/android-coordinator@sha256:1b7ba0f1a9b64941acaa08e9ddf24a7ce77f11f09eaa12781d8c3e4ae7eda0ec"
+    },
+    "elapsed_seconds": 7.59375655092299,
+    "job": "android-images-70a0f9df9902",
+    "job_uid": "964eeabd-153a-4ad1-8e8f-377604466df6"
+  },
+  "release_controls": {
+    "job": "android-release-controls-f45e3d8831",
+    "source_sha256": "f45e3d8831a34f125b24beea011d2e2ee20a51b7f1d4677f01aaee51238e8a2c",
+    "passed": 124,
+    "seconds": 12.845
+  },
+  "oci_archive": {
+    "schema": 1,
+    "source_sha256": "4506b3242435a9993c51507049b718713b6d6e10da69923754e33a9169dca8b5",
+    "job_uid": "3337d800-e5cb-435e-8dfc-a001cf91a1bd",
+    "complete": true,
+    "elapsed_seconds": 359.4518115837127,
+    "receipts": [
+      {
+        "repository": "ghost/gchat-release",
+        "digest": "sha256:d1eab766f3826103c7c7734f58f44ca60f07abe1e1422f9cf49a14b9f1361c8a",
+        "key": "runtime/gchat-release/d1eab766f3826103c7c7734f58f44ca60f07abe1e1422f9cf49a14b9f1361c8a.json",
+        "version": "C-z-b679YMk..MTP.N5qoK3T65-Hkmz",
+        "sha256": "5f283bc5585186dd0860976d7e8be9fb1dd8d93e9f4017fac621c015f996cfe4",
+        "bytes": 464252348,
+        "objects": 14
+      },
+      {
+        "repository": "ghost/android-builder",
+        "digest": "sha256:364f386a26a8308f7f8bf1ba9997d294abbbfc764e1eee1a10be5cbe0f97b941",
+        "key": "runtime/android-builder/364f386a26a8308f7f8bf1ba9997d294abbbfc764e1eee1a10be5cbe0f97b941.json",
+        "version": "3w.K0gQEvKap42k1uS8DNEvsfxHKyXx",
+        "sha256": "4b272a91e2a9653545e4d317526e46f7f4b3a3bd4f145caf9ad98ae572c83b7f",
+        "bytes": 2693594831,
+        "objects": 25
+      },
+      {
+        "repository": "ghost/android-builder",
+        "digest": "sha256:3cb5a5c3ab7f2921680745757112fbf56093ac0d4ad405a73840b70deaecc210",
+        "key": "runtime/android-builder/3cb5a5c3ab7f2921680745757112fbf56093ac0d4ad405a73840b70deaecc210.json",
+        "version": "HzrHkcMNt9RCyHQjHvUCQG32Gay0oxJ",
+        "sha256": "e0c18b3e61517a0324817ba8553b365d8b0598c6a857a3ed5fbc770c6ffd7d00",
+        "bytes": 2693646527,
+        "objects": 26
+      },
+      {
+        "repository": "ghost/android-coordinator",
+        "digest": "sha256:9180166020924a9cec3268e5ebac6cc1c03499304641c2ec6f34d5db6741a6b0",
+        "key": "runtime/android-coordinator/9180166020924a9cec3268e5ebac6cc1c03499304641c2ec6f34d5db6741a6b0.json",
+        "version": "T2byAUa8es-UTioCeKq0TBmFZqkQarf",
+        "sha256": "7f722a2d21624e1ca5f1771a16702c332db15743ec117678cea4e855af5edb2b",
+        "bytes": 480788203,
+        "objects": 19
+      }
+    ],
+    "evidence": {
+      "key": "runtime/android-cluster/4506b3242435a9993c51507049b718713b6d6e10da69923754e33a9169dca8b5.json",
+      "version": "pjP2OQuAH1uvSv544Gdyr7l3mUmhTas"
+    },
+    "job": "android-image-archive-4506b32424",
+    "kubernetes_job_uid": "3337d800-e5cb-435e-8dfc-a001cf91a1bd"
+  },
+  "current_images_archived": false,
+  "storage": {
+    "state_gib": 8,
+    "state_replicas": 2,
+    "compiler_caches": 6,
+    "cache_gib_each": 8,
+    "server_dry_run_passed": true,
+    "applied": false
+  },
+  "toolchain_probe": {
+    "schema": 1,
+    "toolchain": {
+      "builder_image": "127.0.0.1:30444/ghost/android-builder@sha256:eff5f141062741b81c64887d6265da7a5164f3fd4a24216098a7cab3604fbedc",
+      "builder_sha256": "6cf45dc392f0d2c77d4ae8215acfa2f1ff8a705a8323166043c360c9127b9e3d",
+      "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)\nbinary: rustc\ncommit-hash: 48a229ceaefd4985c50990b14116b6d856af0985\ncommit-date: 2026-09-01\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.1\nLLVM version: 22.1.8\n",
+      "java": "openjdk version \"21.0.12.1\" 2026-08-18\nOpenJDK Runtime Environment (build 21.0.12.1+1-1-24.04.4-Ubuntu)\nOpenJDK 64-Bit Server VM (build 21.0.12.1+1-1-24.04.4-Ubuntu, mixed mode, sharing)\n",
+      "ndk": "Pkg.Desc = Android NDK\nPkg.Revision = 27.3.13750724\nPkg.BaseRevision = 27.3.13750724\nPkg.ReleaseName = r27d\n",
+      "jni_ndk": "Pkg.Desc = Android NDK\nPkg.Revision = 28.2.13676358\nPkg.BaseRevision = 28.2.13676358\nPkg.ReleaseName = r28c\n",
+      "cmake": "Pkg.Revision = 3.22.1\nPkg.Path = cmake;3.22.1\nPkg.Desc = CMake 3.22.1\n"
+    },
+    "adb": "Android Debug Bridge version 1.0.41\nVersion 37.0.1-15733141\nInstalled as /opt/android/platform-tools/adb\nRunning on Linux 6.8.0-110-generic (x86_64)\n",
+    "apksigner": "0.9\n",
+    "source": {
+      "android_release_push_hook.sh": "57ab56395cafdc747fa5b7e8068b21afd87c66efbda0251edbf2e54fa784ecaf",
+      "android_release_catalogue.py": "4583ee818f680e5f472407380053d3296b5e145f1adbb41c2f19e3fe6067bbaf",
+      "android_release_hub.py": "4e761aa1a63ad01f609293307c3f8dc3769db51f3eb863b8f94d8cf62ed584ae",
+      "android_release_qualify.py": "de844615a039964a2dbeb177bc4e9017f9971d200e083fd64f6d822984bbcba9",
+      "android_release_queue.py": "572db68972c5972f4ee2fade72bbd28c1009d59b500097dfc876f1699de26141",
+      "android_release_setup.py": "ca6deb013451550bb408eefa908a0b2fe24d1e6bf02d84993713365d8b59ba3b",
+      "android_release_cluster.py": "d741ce90056a4d298efb22bf228bfcc32d63dffd23578f9c5edd3f1cc046b54b",
+      "android_release_git_askpass.py": "ee11c78df5f24bd301fdc992f8ff185d2ad829d3c47b26155adfb0f55a3264a5",
+      "android_release_store.py": "4493d08075a3afc20e7e7343d0a2d1d9aa4212398b6f88da8b62c1d0237d9844",
+      "android_release_kubernetes.py": "890c838c48fb643704666b1b22ee4360f6245fd4be021931e6637ffe7e49450e",
+      "android_release_pre_receive.sh": "3918e3eafdb49a6780d086e1d628fbfa093e3c00956db7e042bb9e5da4371fe1",
+      "android_release_source.py": "79b973ded5a8d6cca8b6eee88995128d145f9d52eb025a81ed4a4a9a849a17c6",
+      "android_release.py": "1622d04281bed99fadf53dcce381d96b88532b19f374e2c43b0bb0dde79e0bfa",
+      "android_release_host.py": "871b58e80c14f5c8cbf739b3b510a37c79cd500a19e8996b608f5499ae5e514a",
+      "android_release_network.py": "67f5a09ce4b3bdd8f9aa23a08c26e713591ebce2328df5420d00ef6f3cb294c2",
+      "android_release_build_job.py": "c16ce16d58af4f510200930486aa2a79f9638afaa8d1575b7daf0c95d4d2bf7f"
+    },
+    "uid": 10001,
+    "pod_uid": "900ed0fd-7e42-40ed-8cd0-cfaa0512a5f0",
+    "job": "android-toolchain-probe-f62bdd5698"
+  },
+  "mirror_pr": {
+    "url": "https://forgejo.triform.dev/triform/tf-infra/pulls/39",
+    "state": "open; required check blocked by existing expired Plane read-fallback migration"
+  },
+  "end_to_end_qualified": false,
+  "codematch": "unreachable"
+}

@@ -549,6 +549,55 @@ class Releases(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'frozen source lockfiles'):
                 pinned_resolution(original, companion, changed)
 
+    def test_cluster_controller_fetches_selected_graph_and_compiles_offline(self):
+        self.config.update(build_directory=str(self.root / 'build'),
+                           compiler_directory=str(self.root / 'compiler'), build_execution='kubernetes')
+        self.config['cluster'] = {'builder_image': 'registry/builder@sha256:' + 'a' * 64}
+        self.config['toolchain']['builder_image'] = self.config['cluster']['builder_image']
+        self.config['toolchain']['builder_sha256'] = host.build_identity()
+        manifest = release.freeze(self.config, time.time())
+        binary = self.root / 'compiler/controller/release/gdrone-fleet'
+        binary.parent.mkdir(parents=True); binary.write_bytes(b'controller')
+        self.config['builds']['controller']['sources'] = ['drone', 'gcoms', 'gchat']
+        for name in ('drone', 'gcoms', 'gchat'):
+            self.config['sources'][name] = {'repository': str(self.root / name)}
+            manifest['sources'][name] = 'a' * 40
+        commands = []
+        with patch.object(host, 'build_identity', return_value=self.config['toolchain']['builder_sha256']), \
+             patch.object(host, 'checkout', side_effect=lambda config, name, commit, parent: self.root / name), \
+             patch.object(host, 'command', side_effect=lambda argv, **kwargs: commands.append(argv)), \
+             patch.dict(os.environ, {'ANDROID_CLUSTER_BUILD': '1'}):
+            host.build({'config': self.config, 'manifest': manifest, 'component': 'controller',
+                        'output': str(self.root / 'artifact')})
+        fetches = [argv for argv in commands if argv[:2] == ['cargo', 'fetch']]
+        self.assertEqual(fetches, [['cargo', 'fetch', '--locked', '--manifest-path', str(self.root / 'drone/Cargo.toml')]])
+        for argv in commands:
+            self.assertNotIn('workstation-batch', argv)
+            self.assertIn('--locked', argv)
+            if argv[1] in ('test', 'build'): self.assertIn('--offline', argv)
+
+    def test_cluster_placement_reuses_native_cache_but_image_change_invalidates_it(self):
+        image = 'registry/builder@sha256:' + 'a' * 64
+        self.config.update(build_execution='kubernetes', cluster={'builder_image': image})
+        self.config['toolchain']['builder_image'] = image
+        first = release.freeze(self.config, time.time())
+        repo = Path(self.config['sources']['gcoms']['repository'])
+        for name in ('resources.json', 'Dockerfile'):
+            path = repo / 'release/android-cluster' / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text('independently qualified cluster placement and image recipe')
+        self.git(repo, 'add', '.')
+        self.git(repo, 'commit', '-qm', 'cluster placement')
+        second = release.freeze(self.config, time.time())
+        self.assertEqual(first['inputs'], second['inputs'])
+        self.config['cluster']['builder_image'] = 'registry/builder@sha256:' + 'b' * 64
+        with self.assertRaisesRegex(ValueError, 'frozen toolchain'):
+            release.freeze(self.config, time.time())
+        self.config['toolchain']['builder_image'] = self.config['cluster']['builder_image']
+        third = release.freeze(self.config, time.time())
+        for component in release.COMPONENTS:
+            self.assertNotEqual(second['inputs'][component], third['inputs'][component])
+
     def test_apk_packaging_does_not_wait_for_independent_hub(self):
         self.config['fault'] = 'apk_overlap'
         _, result = self.run_release()

@@ -1,3 +1,7 @@
+## F5 — cluster image and native-cache boundaries (2026-10-12)
+
+Run the focused `android_release*_test.py` controls in the bounded cluster Job; 124 pass in 12.845 seconds. The cache test requires unchanged native keys after a placement/recipe-only edit, rejection of an unbound image change, and new keys for a changed pinned builder image. The real toolchain probe passes as UID 10001: compiler versions, SDK metadata, ADB and APK signer all work. Keep original failed Jobs and receipts. Archive OCI manifests byte-for-byte and verify exact S3 object versions before reuse. The real 360/600/60-second Android gates and disconnected-workstation completion remain required.
+
 F5 cluster coordinator controls: run `python3 -m unittest discover -s scripts/tests -p "android_release*_test.py" -v` inside the bounded Kubernetes control Job. Require original server timestamps, S3 restoration of immutable success/failure evidence, remote journaling before submission, uncertain-admission reconciliation without resubmission, exact cache-writer identity and APK-only signing credentials. Run source L0. Image/source controls do not replace a real source build, lab isolation, 42 MiB interrupted transfer/load, three original promotion clocks or functional rollback. The current 122 controls pass in 14.111 seconds.
 
 ## F5 / ANDROID-CLUSTER-1 — remote artifacts and execution
