@@ -1,0 +1,19 @@
+{
+  "schema": 1,
+  "at": 1791779758.118685,
+  "source_base": "b0d70856e3b56baf9b5f7e9233e41276a9f14ad8",
+  "original_reference_id": "48dff15155af73d3e0fe063c769be54a",
+  "original_reference_state": "failed",
+  "original_elapsed_seconds": 360.95602063299157,
+  "original_restart_frontier_bytes": 8415000,
+  "original_crash_process_id": 12505,
+  "exception": "ForegroundServiceStartNotAllowedException",
+  "receiver": "boo.gcoms.agent.BootReceiver",
+  "platform_documentation": "https://developer.android.com/about/versions/15/behavior-changes-15",
+  "source_sha256": "3923ca96c8d006051859af3a8895a644a2cdb0a5411bb70450ec4734a810de33",
+  "normal_apk_lint_assembly": "pending",
+  "full_reference": "pending",
+  "three_live_promotions": "pending",
+  "functional_rollback": "pending",
+  "codematch": "unreachable"
+}
