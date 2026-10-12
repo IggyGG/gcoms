@@ -19,6 +19,10 @@ MAX_RESPONSE = 4 * 1024 ** 2
 OWNER = 'android-cluster-release'
 
 
+class MissingSubmittedJob(RuntimeError):
+    """A journaled external execution cannot safely be submitted again."""
+
+
 def name(value):
     if not isinstance(value, str) or not re.fullmatch('[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?', value):
         raise ValueError('bounded Kubernetes resource name required')
@@ -186,7 +190,7 @@ def ensure_job(kube, lease, job, expected_uid=None, previously_submitted=False):
             raise ValueError('preserve the differently bound existing Job')
         return existing
     if previously_submitted or expected_uid is not None:
-        raise RuntimeError('original Android Job is missing; reconcile its retained receipt before retrying')
+        raise MissingSubmittedJob('original Android Job is missing; reconcile its retained receipt before retrying')
     lease.fence()
     try:
         return kube.create('job', desired)

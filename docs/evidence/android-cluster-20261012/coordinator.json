@@ -1,0 +1,39 @@
+{
+  "schema": 1,
+  "scope": "cluster archive recovery, native Job ownership, and existing coordinator integration",
+  "gcoms_controls": {
+    "passed": 122,
+    "seconds": 14.111,
+    "job": "android-release-controls-80a14fe3b1",
+    "pod_uid": "5cab6647-bd36-458a-b306-cfbb55852354",
+    "source_sha256": "80a14fe3b1759d2f758d732ac173c7460f6fb4ec62b5c462abbe3ab86fbd28cd"
+  },
+  "gchat_controls": {
+    "passed": 55,
+    "seconds": 1.942,
+    "job": "android-coordinator-controls-5f41187bc6",
+    "pod_uid": "91f8d5ff-bc91-4782-b853-2bba2070abfa",
+    "source_sha256": "5f41187bc6844a122f6e49846ab65b9fb3f1b19ceacdd838ac2ab8d2a304e1ed"
+  },
+  "source_audit": {
+    "gcoms_paths": 1118,
+    "gchat_paths": 875,
+    "passed": true
+  },
+  "control_harness_failures_retained": [
+    "client apply annotation size; switched owned ConfigMap to server-side apply",
+    "missing imported coordinator test fixture; added original fixture",
+    "missing original policy fixtures; included exact original policy files"
+  ],
+  "native_image_build": {
+    "job": "android-images-b94babcd3ebf",
+    "state": "running_unqualified",
+    "builder_limit_cpu": 8,
+    "builder_limit_memory": "16Gi",
+    "builder_volume": "48Gi"
+  },
+  "live_cluster_execution_qualified": false,
+  "gates_360_600_60_passed": false,
+  "workstation_disconnect_qualified": false,
+  "codematch": "unreachable"
+}

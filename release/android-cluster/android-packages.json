@@ -1,0 +1,44 @@
+[
+  {
+    "package": "platforms;android-36",
+    "url": "https://dl.google.com/android/repository/platform-36_r02.zip",
+    "sha1": "2c1a80dd4d9f7d0e6dd336ec603d9b5c55a6f576",
+    "size": 65878410,
+    "host": null
+  },
+  {
+    "package": "ndk;27.3.13750724",
+    "url": "https://dl.google.com/android/repository/android-ndk-r27d-linux.zip",
+    "sha1": "22105e410cf29afcf163760cc95522b9fb981121",
+    "size": 663956036,
+    "host": "linux"
+  },
+  {
+    "package": "ndk;28.2.13676358",
+    "url": "https://dl.google.com/android/repository/android-ndk-r28c-linux.zip",
+    "sha1": "a7b54a5de87fecd125a17d54f73c446199e72a64",
+    "size": 722261334,
+    "host": "linux"
+  },
+  {
+    "package": "build-tools;36.0.0",
+    "url": "https://dl.google.com/android/repository/build-tools_r36_linux.zip",
+    "sha1": "b0b6376977657e8ad9b969bacf4093601da2c6fb",
+    "size": 63737259,
+    "host": "linux"
+  },
+  {
+    "package": "cmake;3.22.1",
+    "url": "https://dl.google.com/android/repository/cmake-3.22.1-linux.zip",
+    "sha1": "fd0a48b4a758310df8c7aa51f59840ed48fe7ed8",
+    "size": 22308647,
+    "host": "linux"
+  },
+  {
+    "package": "platform-tools",
+    "url": "https://dl.google.com/android/repository/platform-tools_r37.0.1-linux.zip",
+    "sha1": "477254aa5f903c15cf51001717bdf347fb6b53e0",
+    "size": 9054187,
+    "host": "linux"
+  }
+]

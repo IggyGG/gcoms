@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Linux workstation adapters for the Android release runner (no store upload)."""
+"""Android native builds and the retained workstation activation adapter."""
 import base64
 from concurrent.futures import ThreadPoolExecutor
 import hashlib
@@ -119,8 +119,20 @@ def build(request):
         # Wait for storage admission outside prior build outputs. A queued
         # launch in an old output's cwd would make that finished reservation
         # look active and could deadlock admission against its own cached work.
-        command(['workstation-batch', '--', 'env', '--chdir=' + str(cwd), *map(str, argv)],
-                cwd=Path(__file__).resolve().parent, env=environment, timeout=timeout, log=log)
+        if config.get('build_execution') == 'kubernetes':
+            if environment.get('ANDROID_CLUSTER_BUILD') != '1':
+                raise ValueError('cluster compilation must run inside its bounded builder Job')
+            command(list(map(str, argv)), cwd=cwd, env=environment, timeout=timeout, log=log)
+        else:
+            command(['workstation-batch', '--', 'env', '--chdir=' + str(cwd), *map(str, argv)],
+                    cwd=Path(__file__).resolve().parent, env=environment, timeout=timeout, log=log)
+    if config.get('build_execution') == 'kubernetes' and component != 'apk':
+        # Trusted preparation fills only source-pinned dependency caches. All
+        # actual Rust compilation and essential checks remain locked/offline.
+        for name_, source in sources.items():
+            for cargo in (source / 'Cargo.toml', source / 'minimal/Cargo.toml'):
+                if cargo.exists():
+                    run(['cargo', 'fetch', '--locked', '--manifest-path', cargo], source)
     if component == 'sdk':
         run(['python3', 'scripts/build-mobile.py', 'android', '--roles', 'client', '--profiles', 'z',
              '--output', artifact], sources['gcoms'])
@@ -140,7 +152,8 @@ def build(request):
     elif component == 'apk':
         sdk = Path(config['state']) / 'artifacts/sdk' / manifest['inputs']['sdk'] / 'android'
         installer = Path(config['state']) / 'artifacts/installer' / manifest['inputs']['installer']
-        run(['./gradlew', '--offline', '-PgcomsAgent=true', '-PdsminimalLibDir=' + str(installer),
+        offline = [] if config.get('build_execution') == 'kubernetes' else ['--offline']
+        run(['./gradlew', *offline, '-PgcomsAgent=true', '-PdsminimalLibDir=' + str(installer),
              '-PgcomsNativeRoot=' + str(sdk), ':agent:assembleClientRelease', ':agent:lintClientRelease'],
             sources['agent'] / 'mobile/android')
         shutil.copy2(sources['agent'] / 'mobile/android/agent/build/outputs/apk/client/release/agent-client-release.apk',

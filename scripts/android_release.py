@@ -28,11 +28,17 @@ OPERATION_FILES = frozenset({
     'scripts/android_release_store.py', 'scripts/tests/android_release_store_test.py',
     'scripts/android_release_source.py', 'scripts/tests/android_release_source_test.py',
     'scripts/android_release_kubernetes.py', 'scripts/tests/android_release_kubernetes_test.py',
+    'scripts/android_release_catalogue.py', 'scripts/tests/android_release_catalogue_test.py',
+    'scripts/android_release_cluster.py', 'scripts/android_release_git_askpass.py',
+    'scripts/tests/android_release_cluster_test.py',
+    'scripts/android_release_build_job.py', 'scripts/tests/android_release_build_job_test.py',
     # Dispatch-only hosted relay diagnostics never enter these native builds.
     '.github/workflows/relay-recovery.yml', 'scripts/qualify-relay-recovery.py',
     'scripts/tests/relay_recovery_test.py',
 })
 GCHAT_OPERATION_FILES = frozenset({
+    'scripts/release_android_agent.py', 'scripts/tests/release_android_agent_test.py',
+    'scripts/release_coordinator.py', 'scripts/tests/release_coordinator_test.py',
     'scripts/release_controller.py', 'scripts/release_deployment.py',
     'scripts/release_inputs.py', 'scripts/tests/release_controller_test.py',
     'scripts/tests/release_inputs_test.py',
@@ -193,6 +199,9 @@ def freeze(config, pushed_at, commits=None):
 def cached_artifact(config, component, key):
     root = Path(config['state']) / 'artifacts' / component / key
     marker = root / 'receipt.json'
+    if not marker.is_file() and config.get('archive'):
+        from android_release_catalogue import Catalogue
+        Catalogue(config).hydrate_artifact(component, key, root)
     if not marker.is_file():
         return None
     value = json.loads(marker.read_text())
@@ -223,6 +232,9 @@ def prepare_release(config, manifest=None):
     if path.exists() and json.loads(path.read_text()) != value:
         raise ValueError('immutable prepared release changed')
     write_json(path, value)
+    if config.get('archive'):
+        from android_release_catalogue import Catalogue
+        Catalogue(config).prepared(value)
     write_json(Path(config['state']) / 'prepared-latest.json', {'prepared_id': value['prepared_id']})
     return value
 
@@ -232,6 +244,9 @@ def prepared_release(config, ident):
     if not isinstance(ident, str) or not re.fullmatch('[0-9a-f]{64}', ident):
         raise ValueError('invalid prepared release identifier')
     path = Path(config['state']) / 'prepared' / (ident + '.json')
+    if not path.exists() and config.get('archive'):
+        from android_release_catalogue import Catalogue
+        Catalogue(config).hydrate_prepared(ident, path)
     if path.is_symlink() or path.stat().st_size > 128 * 1024:
         raise ValueError('unsafe prepared release receipt')
     value = json.loads(path.read_text())
@@ -295,6 +310,9 @@ def build(config, manifest, component, deadline, directory):
     if value.get('sources') != {name: manifest['sources'][name]
                                 for name in config['builds'][component]['sources']}:
         raise ValueError('new artifact source binding differs from frozen sources')
+    if config.get('archive'):
+        from android_release_catalogue import Catalogue
+        Catalogue(config).artifact(component, key, out)
     return dict(value, cache_hit=False)
 
 
@@ -344,9 +362,15 @@ def deploy(config, manifest, warm=False):
                'deadline_at': deadline.ends,
                'state': 'queued', 'stages': {}, 'artifacts': {}}
     marker = directory / 'receipt.json'
+    if not marker.exists() and config.get('archive'):
+        from android_release_catalogue import Catalogue
+        Catalogue(config).hydrate_run(manifest['release_id'], directory)
     if marker.exists():
         previous = json.loads(marker.read_text())
         if previous['state'] in ('live', 'failed', 'warmed'):
+            if config.get('archive'):
+                from android_release_catalogue import Catalogue
+                Catalogue(config).run(directory)
             return previous  # Original completed observation; never re-time it.
         receipt = previous
     write_json(marker, receipt)
@@ -372,6 +396,9 @@ def deploy(config, manifest, warm=False):
                                    failure_stage='queued',
                                    elapsed_seconds=time.time() - manifest['pushed_at'])
                     write_json(marker, receipt)
+                    if config.get('archive'):
+                        from android_release_catalogue import Catalogue
+                        Catalogue(config).run(directory)
                     return receipt
         mutated = receipt.get('activation_started', False)
         request = directory / 'request.json'
@@ -412,6 +439,9 @@ def deploy(config, manifest, warm=False):
             if warm:
                 receipt.update(state='warmed', finished_at=time.time())
                 write_json(marker, receipt)
+                if config.get('archive'):
+                    from android_release_catalogue import Catalogue
+                    Catalogue(config).run(directory)
                 return receipt
             stage('activation')
             # Journal before any mutation, so interruption enters restoration.
@@ -452,6 +482,9 @@ def deploy(config, manifest, warm=False):
                     receipt['rollback_failure_type'] = type(rollback_error).__name__
             receipt['elapsed_seconds'] = time.time() - manifest['pushed_at']
             write_json(marker, receipt)
+        if config.get('archive'):
+            from android_release_catalogue import Catalogue
+            Catalogue(config).run(directory)
         return receipt
 
 
