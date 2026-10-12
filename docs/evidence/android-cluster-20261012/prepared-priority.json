@@ -1,0 +1,21 @@
+{
+  "schema": 1,
+  "scope": "Cluster preparation and prepared promotion scheduling; no live timing claim",
+  "controls": {
+    "job": "android-release-controls-d56c95602e",
+    "passed": 139,
+    "elapsed_seconds": 17.138
+  },
+  "source_audit": {
+    "paths": 1133,
+    "passed": true
+  },
+  "changes": [
+    "One preparation lock independent of the live activation lock",
+    "Prepared promotions admitted while a single cold preparation runs",
+    "Promotion sync fetches the exact immutable tag without advancing source branches",
+    "Original push timestamps and one live operation retained"
+  ],
+  "codematch": "unreachable",
+  "live_acceptance": "pending"
+}

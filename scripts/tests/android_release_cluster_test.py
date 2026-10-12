@@ -87,12 +87,62 @@ class ClusterRecovery(unittest.TestCase):
         refs = release.git(mirror, 'for-each-ref', '--format=%(refname)').decode().splitlines()
         self.assertEqual(set(refs), {'refs/heads/main', 'refs/heads/agent/android',
                                    'refs/tags/android-release/' + 'a' * 64})
+        git('-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid',
+            'commit', '--allow-empty', '-m', 'newer')
+        git('tag', 'android-release/' + 'b' * 64)
+        git('tag', 'android-release/' + 'c' * 64)
+        before = release.git(mirror, 'rev-parse', 'refs/heads/main')
+        with patch.object(cluster, 'command', side_effect=transport):
+            cluster.source_sync(self.config, promotion='refs/tags/android-release/' + 'b' * 64)
+        refs = release.git(mirror, 'for-each-ref', '--format=%(refname)').decode().splitlines()
+        self.assertEqual(set(refs), {'refs/heads/main', 'refs/heads/agent/android',
+            'refs/tags/android-release/' + 'a' * 64, 'refs/tags/android-release/' + 'b' * 64})
+        self.assertEqual(release.git(mirror, 'rev-parse', 'refs/heads/main'), before)
 
     def test_source_sync_rejects_wildcard_before_git(self):
         self.config['sources']['gcoms']['ref'] = 'refs/heads/*'
         with patch.object(cluster, 'command') as command, self.assertRaisesRegex(ValueError, 'exact branch'):
             cluster.source_sync(self.config)
         command.assert_not_called()
+
+    def test_prepared_promotion_is_admitted_while_one_cold_preparation_runs(self):
+        self.submit()
+        tag = 'refs/tags/android-release/' + 'a' * 64
+        event = {'project': 'gcoms', 'ref': tag, 'commit': 'b' * 40,
+                 'pushed_at': 150, 'server_event_id': 'c' * 64}
+        release.write_json(self.root / 'events/promotion.json', event)
+        manifest = {'sources': {'gcoms': 'b' * 40}, 'pushed_at': 150}
+        with patch.object(cluster, 'ingest'), patch.object(cluster, 'source_sync') as sync, \
+             patch.object(cluster, 'promotion_manifest', return_value=manifest):
+            result = cluster.tick(self.config, self.api, self.catalogue)
+        self.assertEqual({v['operation'] for v in result['active']}, {'prepare', 'promote'})
+        sync.assert_called_once_with(self.config, promotion=tag)
+        requests = [json.loads(p.read_text())['request'] for p in (self.root / 'cluster-effects').glob('*.json')]
+        promotion = next(v for v in requests if v['operation'] == 'promote')
+        self.assertEqual(promotion['source_push'], event)
+        self.assertEqual(promotion['manifest']['pushed_at'], 150)
+        with patch.object(cluster, 'ingest'), patch.object(cluster, 'source_sync') as sync:
+            cluster.tick(self.config, self.api, self.catalogue)
+        sync.assert_not_called()
+        self.assertEqual(len(list((self.root / 'cluster-effects').glob('*.json'))), 2)
+
+    def test_active_preparation_keeps_new_source_events_pending(self):
+        self.submit()
+        event = {'project': 'gcoms', 'ref': 'refs/heads/main', 'commit': 'b' * 40,
+                 'pushed_at': 150, 'server_event_id': 'c' * 64}
+        release.write_json(self.root / 'events/newer.json', event)
+        with patch.object(cluster, 'ingest'), patch.object(cluster, 'source_sync') as sync:
+            result = cluster.tick(self.config, self.api, self.catalogue)
+        sync.assert_not_called()
+        self.assertEqual(len(result['active']), 1)
+        self.assertEqual(result['active'][0]['operation'], 'prepare')
+        self.assertTrue((self.root / 'events/newer.json').is_file())
+
+    def test_promotion_fetch_rejects_wildcards_and_branches_before_git(self):
+        for ref in ('refs/tags/android-release/*', 'refs/heads/main'):
+            with patch.object(cluster, 'command') as command, self.assertRaisesRegex(ValueError, 'exact immutable tag'):
+                cluster.source_sync(self.config, promotion=ref)
+            command.assert_not_called()
 
     def test_remote_checkpoint_precedes_job_submission_and_retains_original_clocks(self):
         create = self.api.create

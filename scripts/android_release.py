@@ -395,7 +395,9 @@ def deploy(config, manifest, warm=False):
     def done(name):
         receipt['stages'][name]['finished_at'] = time.time()
         write_json(marker, receipt)
-    with (root / 'release.lock').open('a') as lock:
+    # Warming writes immutable input-keyed artifacts. It must not hold the
+    # live activation lock while an already prepared promotion is waiting.
+    with (root / ('prepare.lock' if warm else 'release.lock')).open('a') as lock:
         while True:
             try:
                 fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)

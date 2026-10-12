@@ -23,7 +23,7 @@ from android_release_source import Forgejo, PROMOTION, ingest, repository_name
 MAX_CHECKPOINT = 1024 * 1024
 
 
-def source_sync(config):
+def source_sync(config, promotion=None):
     """Fetch HTTPS mirrors using the restricted token, never embedded in a URL."""
     origin = Forgejo(config['forgejo']).origin
     source_root = (Path(config['state']) / 'sources').resolve()
@@ -33,8 +33,12 @@ def source_sync(config):
         GIT_CONFIG_COUNT='2', GIT_CONFIG_KEY_0='credential.helper', GIT_CONFIG_VALUE_0='',
         GIT_CONFIG_KEY_1='http.followRedirects', GIT_CONFIG_VALUE_1='false')
     selected = {}
+    if promotion is not None and not re.fullmatch(re.escape(PROMOTION) + '[0-9a-f]{64}', promotion):
+        raise ValueError('promotion synchronization requires one exact immutable tag')
     for row in config['sources'].values():
         repository = repository_name(row['cluster_repository'])
+        if promotion is not None and row['project'] != 'gcoms':
+            continue
         destination = Path(row['repository']).resolve()
         if destination != source_root / (repository.split('/')[1] + '.git'):
             raise ValueError('cluster source mirrors must stay in their owned source directory')
@@ -60,8 +64,9 @@ def source_sync(config):
         # use different GComs branches). Unrelated refs and auto-followed tags
         # must not make cold Android intake traverse another release's history.
         # Branches may advance/rebase. Promotion tags may never be rewritten.
-        references = ['+' + ref + ':' + ref for ref in sorted(entry['refs'])]
-        if repository.endswith('/gcoms'):
+        references = ([promotion + ':' + promotion] if promotion is not None else
+                      ['+' + ref + ':' + ref for ref in sorted(entry['refs'])])
+        if promotion is None and repository.endswith('/gcoms'):
             references.append(PROMOTION + '*:' + PROMOTION + '*')
         command(['git', '--shallow-file', '/dev/null', '-C', destination, 'fetch', '--no-write-fetch-head',
                  '--no-tags', 'origin', *references],
@@ -239,7 +244,11 @@ def tick(config, kube=None, catalogue=None):
             handled.update(value['request']['events'])
             if value['state'] in ('submitting', 'running', 'submission_unknown'):
                 active.append(value)
-        if not active:
+        # A cold compiler Job cannot delay promotion of already verified
+        # artifacts. Preserve one live operation and one preparation at a time.
+        live_active = any(v['request']['operation'] != 'prepare' for v in active)
+        prepare_active = any(v['request']['operation'] == 'prepare' for v in active)
+        if not live_active:
             events = []
             selected = {(r['project'], r['ref']) for r in config['sources'].values()}
             for path in sorted(Path(config['event_directory']).glob('*.json')):
@@ -251,10 +260,10 @@ def tick(config, kube=None, catalogue=None):
             events.sort(key=lambda row: (row[1]['pushed_at'],
                 str(row[1].get('server_event_id', row[1].get('forgejo_activity_id', '')))))
             promotions = [r for r in events if r[1]['ref'].startswith(PROMOTION)]
-            chosen = promotions[:1] or events
+            chosen = promotions[:1] or ([] if prepare_active else events)
             if chosen:
-                source_sync(config)
                 event = chosen[-1][1]
+                source_sync(config, promotion=event['ref'] if promotions else None)
                 if promotions:
                     manifest = promotion_manifest(config, event['ref'][len(PROMOTION):], event['pushed_at'])
                     if manifest['sources']['gcoms'] != event['commit']:

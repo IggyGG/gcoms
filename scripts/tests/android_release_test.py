@@ -239,6 +239,22 @@ class Releases(unittest.TestCase):
         self.assertEqual(result['state'], 'live')
         self.assertTrue(all(a['cache_hit'] for a in result['artifacts'].values()))
 
+    def test_preparation_and_prepared_promotion_do_not_wait_for_each_other(self):
+        root = Path(self.config['state'])
+        root.mkdir()
+        deadline = release.Deadline
+        with (root / 'release.lock').open('a') as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            with patch.object(release, 'Deadline', side_effect=lambda pushed_at, **kw: deadline(pushed_at, limit=65)):
+                prepared = release.prepare_release(self.config)
+        manifest = release.promotion_manifest(self.config, prepared['prepared_id'], time.time())
+        with (root / 'prepare.lock').open('a') as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            with patch.object(release, 'Deadline', side_effect=lambda pushed_at, **kw: deadline(pushed_at, limit=65)), \
+                 patch.object(release, 'build', side_effect=AssertionError('promotion compiled code')):
+                result = release.deploy(self.config, manifest)
+        self.assertEqual(result['state'], 'live')
+
     def test_prepared_receipt_missing_or_corrupt_artifact_blocks_promotion(self):
         prepared = release.prepare_release(self.config)
         path = Path(self.config['state']) / 'artifacts/sdk' / prepared['inputs']['sdk'] / 'artifact'
