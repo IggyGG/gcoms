@@ -1,0 +1,15 @@
+{
+  "schema": 1,
+  "scope": "source synchronization only",
+  "controls": {
+    "job": "android-release-controls-10c1982966",
+    "passed": 150,
+    "elapsed_seconds": 16.673
+  },
+  "cause": "unchanged source fetches traverse existing object history on the shared volume; observed active git rev-list in an unchanged Dropship fetch",
+  "change": "authenticate exact selected remote refs; skip unchanged fetches; prepared promotion creates only its absent immutable tag after verifying the existing commit",
+  "native_inputs_changed": false,
+  "source_audit_paths": 1141,
+  "codematch": "unreachable",
+  "live_acceptance": "pending"
+}

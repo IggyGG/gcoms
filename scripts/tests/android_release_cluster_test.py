@@ -57,6 +57,7 @@ class ClusterRecovery(unittest.TestCase):
             release.command(['/bin/true'], log=kwargs['log'])
             logs.append(kwargs['log'])
         with patch.object(cluster, 'command', side_effect=executed), \
+             patch.object(cluster, 'advertised_refs', return_value={'refs/heads/main': 'a' * 40}), \
              patch.object(cluster, 'git', return_value=b'https://forgejo.example/ghost-local/gcoms.git\n'):
             cluster.source_sync(self.config)
         self.assertEqual(len(logs), 3)
@@ -78,25 +79,32 @@ class ClusterRecovery(unittest.TestCase):
         original = cluster.command
         def transport(argv, **kwargs):
             argv = list(argv)
-            if 'fetch' in argv:
+            if 'fetch' in argv or 'ls-remote' in argv:
                 argv[argv.index('origin')] = str(origin)
             return original(argv, **kwargs)
         with patch.object(cluster, 'command', side_effect=transport):
             cluster.source_sync(self.config)
         mirror = self.config['sources']['gcoms']['repository']
         refs = release.git(mirror, 'for-each-ref', '--format=%(refname)').decode().splitlines()
-        self.assertEqual(set(refs), {'refs/heads/main', 'refs/heads/agent/android',
-                                   'refs/tags/android-release/' + 'a' * 64})
+        self.assertEqual(set(refs), {'refs/heads/main', 'refs/heads/agent/android'})
+        def unchanged(argv, **kwargs):
+            self.assertNotIn('fetch', argv)
+            return transport(argv, **kwargs)
+        with patch.object(cluster, 'command', side_effect=unchanged):
+            cluster.source_sync(self.config)
         git('-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid',
             'commit', '--allow-empty', '-m', 'newer')
         git('tag', 'android-release/' + 'b' * 64)
         git('tag', 'android-release/' + 'c' * 64)
-        before = release.git(mirror, 'rev-parse', 'refs/heads/main')
+        # A prepared promotion names a commit already imported for preparation.
         with patch.object(cluster, 'command', side_effect=transport):
+            cluster.source_sync(self.config)
+        before = release.git(mirror, 'rev-parse', 'refs/heads/main')
+        with patch.object(cluster, 'command', side_effect=unchanged):
             cluster.source_sync(self.config, promotion='refs/tags/android-release/' + 'b' * 64)
         refs = release.git(mirror, 'for-each-ref', '--format=%(refname)').decode().splitlines()
         self.assertEqual(set(refs), {'refs/heads/main', 'refs/heads/agent/android',
-            'refs/tags/android-release/' + 'a' * 64, 'refs/tags/android-release/' + 'b' * 64})
+            'refs/tags/android-release/' + 'b' * 64})
         self.assertEqual(release.git(mirror, 'rev-parse', 'refs/heads/main'), before)
 
     def test_source_sync_rejects_wildcard_before_git(self):

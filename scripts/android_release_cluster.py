@@ -10,7 +10,9 @@ import json
 import os
 from pathlib import Path
 import re
+import subprocess
 import sys
+import tempfile
 import time
 
 from android_release import (canonical, command, digest, freeze, git, prepare_release,
@@ -21,6 +23,27 @@ from android_release_kubernetes import (Kubernetes, Lease, MissingSubmittedJob, 
 from android_release_source import Forgejo, PROMOTION, ingest, repository_name
 
 MAX_CHECKPOINT = 1024 * 1024
+
+
+def advertised_refs(destination, references, environment, log):
+    # Avoid traversing every object on the shared source volume when a remote
+    # branch has not moved. Authentication and redirect policy match fetch.
+    with tempfile.NamedTemporaryFile(dir=log.parent, prefix='advertised-') as stream:
+        command(['git', '--shallow-file', '/dev/null', '-C', destination,
+                 'ls-remote', '--refs', 'origin', *references], env=environment,
+                timeout=30, log=stream.name)
+        raw = stream.read(128 * 1024 + 1)
+    if len(raw) > 128 * 1024:
+        raise ValueError('advertised Android source references exceed their bound')
+    result = {}
+    for line in raw.decode('ascii').splitlines():
+        sha, separator, ref = line.partition('\t')
+        if not separator or not re.fullmatch('[0-9a-f]{40}', sha) or ref not in references or ref in result:
+            raise ValueError('unexpected advertised Android source reference')
+        result[ref] = sha
+    if set(result) != set(references):
+        raise ValueError('selected Android source reference is absent')
+    return result
 
 
 def source_sync(config, promotion=None):
@@ -60,16 +83,31 @@ def source_sync(config, promotion=None):
                      'remote', 'add', 'origin', url], env=environment, log=log)
         if git(destination, 'remote', 'get-url', 'origin').decode().strip() != url:
             raise ValueError('existing cluster source mirror changed origin')
-        # Fetch every selected branch for a shared repository (the SDK and APK
-        # use different GComs branches). Unrelated refs and auto-followed tags
-        # must not make cold Android intake traverse another release's history.
-        # Branches may advance/rebase. Promotion tags may never be rewritten.
-        references = ([promotion + ':' + promotion] if promotion is not None else
-                      ['+' + ref + ':' + ref for ref in sorted(entry['refs'])])
-        if promotion is None and repository.endswith('/gcoms'):
-            references.append(PROMOTION + '*:' + PROMOTION + '*')
+        references = [promotion] if promotion is not None else sorted(entry['refs'])
+        advertised = advertised_refs(destination, references, environment, log)
+        changed = []
+        for ref, sha in advertised.items():
+            try:
+                current = git(destination, 'rev-parse', '--verify', ref).decode().strip()
+            except subprocess.CalledProcessError:
+                current = None
+            if current == sha:
+                continue
+            if promotion is not None:
+                if current is not None:
+                    raise ValueError('preserve the original immutable Android promotion tag')
+                # Prepared source objects are already present. Authenticate the
+                # exact server tag and create it with compare-and-swap, without
+                # an expensive all-history fetch during the promotion clock.
+                if git(destination, 'cat-file', '-t', sha).strip() != b'commit':
+                    raise ValueError('promotion must name an existing prepared commit')
+                git(destination, 'update-ref', ref, sha, '0' * 40)
+            else:
+                changed.append('+' + ref + ':' + ref)
+        if not changed:
+            continue
         command(['git', '--shallow-file', '/dev/null', '-C', destination, 'fetch', '--no-write-fetch-head',
-                 '--no-tags', 'origin', *references],
+                 '--no-tags', 'origin', *changed],
                 env=environment, timeout=120, log=log)
 
 
