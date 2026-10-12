@@ -345,7 +345,10 @@ def private_file(config, target, relative):
 
 
 def identity(config, target):
-    return hashlib.sha256(private_file(config, target, 'd/identity.seed')).hexdigest()
+    seed = private_file(config, target, 'd/identity.seed')
+    if len(seed) != 32:
+        raise ValueError('Android retained identity seed is absent or malformed')
+    return hashlib.sha256(seed).hexdigest()
 
 
 def route_expiry(value):

@@ -29,6 +29,16 @@ import android_release_qualify as qualify
 import android_release_network as network
 
 
+class AndroidIdentity(unittest.TestCase):
+    def test_empty_adb_output_cannot_claim_identity_preservation(self):
+        for seed in (b'', b'x', b'x' * 31, b'x' * 33):
+            with self.subTest(length=len(seed)), patch.object(host, 'private_file', return_value=seed):
+                with self.assertRaisesRegex(ValueError, 'identity seed'):
+                    host.identity({}, {})
+        with patch.object(host, 'private_file', return_value=b'x' * 32):
+            self.assertEqual(host.identity({}, {}), hashlib.sha256(b'x' * 32).hexdigest())
+
+
 class SourcePushHook(unittest.TestCase):
     def setUp(self):
         temporary = tempfile.TemporaryDirectory()

@@ -1,0 +1,15 @@
+{
+  "schema": 1,
+  "scope": "Android identity receipt validation; real transfer and promotion timing remain pending",
+  "controls": {
+    "job": "android-release-controls-e6e43189ed",
+    "passed": 151,
+    "elapsed_seconds": 14.213
+  },
+  "cases": [
+    "empty seed rejected",
+    "1/31/33-byte seeds rejected",
+    "32-byte seed accepted"
+  ],
+  "codematch": "unreachable"
+}
