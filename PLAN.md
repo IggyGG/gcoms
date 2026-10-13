@@ -16,6 +16,14 @@ deterministic causal/isolation controls are under bounded cluster qualification.
 Keep the original failed test and its deadlines. Native release and installed
 GChat delivery remain pending. See [scheduler semantics](docs/GC2_SCHEDULER.md).
 
+F5 relay restart diagnostics, 2026-10-13 (OC): Linux0.1.192's full campaign
+recorded720 authenticated commands,1.322-second recipientp95 and the verified
+5,235,248-byte file, then failed strict metrics parsing. Its stopped relay had
+appended a complete JSON event without its separately written newline; the
+restarted relay joined its first event to that record. The writer now assembles
+the delimiter before append. The original failure remains failed, and causal
+writer/restart tests plus a fresh full release campaign remain required.
+
 F5 preempted guest capture, 2026-10-13: the pipeline can capture its original owner mapping after emulator recovery only when the exact original PVC and volume match the Lab recovery record. It measures the device on its current real Pod and retains both contexts for normal sealed S3 recovery. All 12 provisioning controls pass in Kubernetes (1.097 seconds). Actual guest checkpoint, restore and release acceptance remain pending. [Evidence](docs/evidence/android-cluster-20261012/retained-capture.json).
 
 F5 cluster preflight diagnostics, 2026-10-13: early execution failures retain their exact trace in private cluster state while public receipts remain bounded. Recovery still returns the original terminal failure without rerunning the action. All 26 focused coordinator controls pass (1.623 seconds). The full Android reference stopped before mutation because routine cache maintenance preempted its emulator; its original disk remains intact. [Evidence](docs/evidence/android-cluster-20261012/preflight-diagnostics.json).

@@ -7,6 +7,13 @@ tests, repeated native ordering checks for the observed race, strict node/test
 Clippy, legacy compilation, formatting and source L0. Qualification is in progress;
 the full frozen native release remains a separate gate.
 
+F5 JSONL restart boundary: inject a stop after the writer's first append, then
+append the replacement relay's first event. Require two independently parseable
+JSONL records. The original `writeln!` operation must fail this causal control;
+the assembled record must pass along with owner-only/bounded-writer controls.
+Keep strict malformed-record rejection and run the full64-client/30-minute gate
+on the successor; successful traffic in a failed evidence run does not qualify it.
+
 F5 S3 guest recovery verified, 2026-10-13: both original guest disks were checkpointed, sealed and removed, then restored from versioned FSN1 objects onto new PVCs. The original VM identity, Android identity seed, installed APK and private owner mapping all passed verification before rebinding the new Pod. All nine network services restarted normally. The coordinator now uses the verified restored context. Full Android transfer and release timing remain pending. [Evidence](docs/evidence/android-cluster-20261012/guest-recovery-live.json).
 
 F5 nested recovery command, 2026-10-13: create private diagnostic parents for staged subdirectory commands and sync each journal’s actual parent. Both guest disks were restored from S3; the first rebind failed before remote mapping because its log directory was absent. The original owner mapping and absent mutation journal were independently verified. All 13 focused provisioning controls pass in Kubernetes (1.471 seconds), including real nested execution and no replay. Full Android release acceptance remains pending. [Evidence](docs/evidence/android-cluster-20261012/nested-recovery.json).

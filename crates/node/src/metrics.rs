@@ -48,7 +48,8 @@ pub fn init(path: &std::path::Path) -> std::io::Result<()> {
         .name("gc-metrics".into())
         .spawn(move || {
             while let Ok(line) = rx.recv() {
-                if written.saturating_add(line.len() as u64 + 1) > MAX_FILE_BYTES {
+                let bytes = line.len() as u64 + 1;
+                if written.saturating_add(bytes) > MAX_FILE_BYTES {
                     if rotate(&path).is_ok() {
                         if let Ok(next) = options.open(&path) {
                             file = next;
@@ -62,8 +63,8 @@ pub fn init(path: &std::path::Path) -> std::io::Result<()> {
                         continue;
                     }
                 }
-                if writeln!(file, "{line}").is_ok() {
-                    written = written.saturating_add(line.len() as u64 + 1);
+                if write_line(&mut file, line).is_ok() {
+                    written = written.saturating_add(bytes);
                 } else {
                     DROPPED.fetch_add(1, Ordering::Relaxed);
                 }
@@ -71,6 +72,14 @@ pub fn init(path: &std::path::Path) -> std::io::Result<()> {
         })?;
     *sender().lock().unwrap_or_else(|p| p.into_inner()) = Some(tx);
     Ok(())
+}
+
+fn write_line(writer: &mut impl Write, mut line: String) -> std::io::Result<()> {
+    // Formatting directly into File can append the JSON and delimiter in
+    // separate writes. A relay stop between them joins the next process's
+    // first event onto this one. Assemble the complete record before append.
+    line.push('\n');
+    writer.write_all(line.as_bytes())
 }
 
 fn rotate(path: &std::path::Path) -> std::io::Result<()> {
@@ -173,6 +182,42 @@ mod tests {
         assert!(FORBIDDEN_FIELDS.contains(&"queue"));
         assert!(FORBIDDEN_FIELDS.contains(&"token"));
         assert!(FORBIDDEN_FIELDS.contains(&"peer"));
+    }
+
+    #[test]
+    fn process_stop_after_record_append_keeps_restart_jsonl_separate() {
+        #[derive(Default)]
+        struct StopAfterAppend {
+            bytes: Vec<u8>,
+            stopped: bool,
+        }
+        impl Write for StopAfterAppend {
+            fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+                if self.stopped {
+                    return Err(std::io::Error::from(std::io::ErrorKind::BrokenPipe));
+                }
+                self.bytes.extend_from_slice(bytes);
+                self.stopped = true;
+                Ok(bytes.len())
+            }
+            fn flush(&mut self) -> std::io::Result<()> {
+                Ok(())
+            }
+        }
+        let first = r#"{"event":"gchat_push_accepted","kind":"data"}"#;
+        let second = r#"{"event":"control_listening","port":"19500"}"#;
+        let mut file = StopAfterAppend::default();
+        let _ = write_line(&mut file, first.to_owned());
+        // The replacement relay opens the retained file in append mode.
+        write_line(&mut file.bytes, second.to_owned()).unwrap();
+        let contents = String::from_utf8(file.bytes).unwrap();
+        let records: Vec<serde_json::Value> = contents
+            .lines()
+            .map(|line| serde_json::from_str(line).expect("JSONL record split at a write boundary"))
+            .collect();
+        assert_eq!(records.len(), 2);
+        assert_eq!(records[0]["event"], "gchat_push_accepted");
+        assert_eq!(records[1]["event"], "control_listening");
     }
 
     #[cfg(unix)]

@@ -394,6 +394,13 @@ or private capabilities and do not alter authentication or recovery policy.
 
 ## Local GC/2 admission diagnostics
 
+The JSONL writer assembles each event and its newline before appending. This
+avoids joining a restarted process's first event onto a complete previous event
+whose separate delimiter write was interrupted. Rotation, owner-only permissions,
+bounded queue and drop accounting keep their existing behavior. The observed
+relay-load failure and the writer's stop-boundary regression are under qualification;
+the load verifier still rejects malformed records.
+
 With the existing optional metrics sink enabled, `gchat_queue_refused` records
 only `operation` (`push` or `subscribe`) and a static refusal reason. It separates
 queue fullness, aggregate storage and replay capacity while retaining the same
