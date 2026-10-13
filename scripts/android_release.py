@@ -3,6 +3,7 @@
 import argparse
 import base64
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from contextlib import nullcontext
 import fcntl
 import hashlib
 import json
@@ -321,10 +322,10 @@ def cached_artifact(config, component, key):
     return value
 
 
-def prepare_release(config, manifest=None):
+def prepare_release(config, manifest=None, *, require_cached=False):
     """Prepare exact sources without starting a live deployment clock."""
     manifest = manifest or freeze(config, time.time())
-    receipt = deploy(config, manifest, warm=True)
+    receipt = deploy(config, manifest, warm=True, require_cached=require_cached)
     if receipt['state'] != 'warmed':
         raise ValueError('release preparation failed; original receipt retained')
     value = {key: manifest[key] for key in ('sources', 'inputs', 'targets', 'configuration_sha256')}
@@ -446,7 +447,9 @@ def adapter(config, name, request, deadline, directory, activation=True):
             timeout=deadline.remaining(activation=activation), log=directory / (name + '.log'))
 
 
-def deploy(config, manifest, warm=False):
+def deploy(config, manifest, warm=False, *, require_cached=False):
+    if type(require_cached) is not bool or (require_cached and not warm):
+        raise ValueError('cache-only selection is an explicit preparation constraint')
     if any(digest(path) != sha for path, sha in config.get('runtime_sha256', {}).items()):
         raise ValueError('release adapter bytes changed after configuration was prepared')
     unsigned = {k: v for k, v in manifest.items() if k != 'release_id'}
@@ -487,10 +490,18 @@ def deploy(config, manifest, warm=False):
     def done(name):
         receipt['stages'][name]['finished_at'] = time.time()
         write_json(marker, receipt)
-    # Warming writes immutable input-keyed artifacts. It must not hold the
-    # live activation lock while an already prepared promotion is waiting.
-    with (root / ('prepare.lock' if warm else 'release.lock')).open('a') as lock:
-        while True:
+    # A complete immutable cache needs only verification, even while another
+    # preparation is compiling different inputs. This path must never build.
+    ready = {c: cached_artifact(config, c, manifest['inputs'][c]) for c in COMPONENTS} if warm else None
+    if ready is not None and any(value is None for value in ready.values()):
+        ready = None
+    if require_cached and ready is None:
+        raise ValueError('complete verified preparation cache required; compilation is forbidden')
+    # Cold preparation retains its compiler lock; live mutation always retains
+    # the deployment lock. Cache-only preparation writes its own release journal.
+    guard = nullcontext() if ready is not None else (root / ('prepare.lock' if warm else 'release.lock')).open('a')
+    with guard as lock:
+        while lock is not None:
             try:
                 fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
                 break
@@ -519,7 +530,13 @@ def deploy(config, manifest, warm=False):
             adapter(config, 'preflight', request, deadline, directory)
             done('preflight')
             stage('building')
-            if not warm and manifest.get('prepared_id'):
+            if ready is not None:
+                for component in COMPONENTS:
+                    if cached_artifact(config, component, manifest['inputs'][component]) != ready[component]:
+                        raise ValueError('verified preparation cache changed; compilation is forbidden')
+                receipt['artifacts'] = {c: dict(value, cache_hit=True) for c, value in ready.items()}
+                write_json(marker, receipt)
+            elif not warm and manifest.get('prepared_id'):
                 prepared_release(config, manifest['prepared_id'])
                 receipt['artifacts'] = {c: dict(cached_artifact(config, c, manifest['inputs'][c]), cache_hit=True)
                                         for c in COMPONENTS}

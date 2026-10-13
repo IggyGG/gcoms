@@ -280,6 +280,39 @@ class Releases(unittest.TestCase):
                 result = release.deploy(self.config, manifest)
         self.assertEqual(result['state'], 'live')
 
+    def test_complete_cache_prepares_while_another_compiler_holds_the_lock(self):
+        prepared = release.prepare_release(self.config)
+        self.config['reviewed_operations_revision'] = 'next configuration'
+        deadline = release.Deadline
+        with (Path(self.config['state']) / 'prepare.lock').open('a') as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            with patch.object(release, 'Deadline', side_effect=lambda pushed_at, **kw: deadline(pushed_at, limit=65)), \
+                    patch.object(release, 'build', side_effect=AssertionError('cached preparation compiled')) as build:
+                current = release.prepare_release(self.config, require_cached=True)
+                build.assert_not_called()
+        self.assertEqual(current['inputs'], prepared['inputs'])
+        self.assertEqual(current['artifacts'], prepared['artifacts'])
+        self.assertNotEqual(current['prepared_id'], prepared['prepared_id'])
+
+    def test_explicit_cached_preparation_refuses_missing_inputs_without_building(self):
+        with patch.object(release, 'build', side_effect=AssertionError('cache miss compiled')) as build:
+            with self.assertRaisesRegex(ValueError, 'compilation is forbidden'):
+                release.prepare_release(self.config, require_cached=True)
+            build.assert_not_called()
+
+    def test_changed_complete_cache_fails_without_falling_back_to_compilation(self):
+        prepared = release.prepare_release(self.config)
+        original = release.adapter
+        def adapter(config, name, *args, **kwargs):
+            original(config, name, *args, **kwargs)
+            if name == 'preflight':
+                (Path(config['state']) / 'artifacts/sdk' / prepared['inputs']['sdk'] / 'artifact').unlink()
+        with patch.object(release, 'adapter', side_effect=adapter), \
+                patch.object(release, 'build', side_effect=AssertionError('changed cache compiled')) as build:
+            with self.assertRaisesRegex(ValueError, 'preparation failed'):
+                release.prepare_release(self.config)
+            build.assert_not_called()
+
     def test_prepared_receipt_missing_or_corrupt_artifact_blocks_promotion(self):
         prepared = release.prepare_release(self.config)
         path = Path(self.config['state']) / 'artifacts/sdk' / prepared['inputs']['sdk'] / 'artifact'
@@ -815,6 +848,31 @@ class SourceInventories(unittest.TestCase):
 
 
 class Maintenance(unittest.TestCase):
+    def test_worker_selection_uses_activation_deadline_and_retains_rollback_end(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            (root / 'run').mkdir()
+            worker = root / 'worker.so'; worker.write_bytes(b'verified worker')
+            state = root / 'releases.json'
+            fleet = root / 'fleet.json'
+            release.write_json(fleet, {'state': str(root), 'channels': [
+                {'name': 'android-x64', 'defaultArtifact': 'worker.so'}]})
+            release.write_json(state, {})
+            request = {'config': {'fleet_config': str(fleet), 'fleet_binary': '/unused'},
+                       'directory': str(root / 'run'), 'manifest': {'pushed_at': 1000}}
+            target = {'id': 'android-x64', 'channel': 'android-x64'}
+            def selected(_seconds):
+                release.write_json(state, {'active': {'android-x64': {
+                    'publication': {'sha256': release.digest(worker)}}}})
+            with patch.object(host, 'command'), patch.object(host.time, 'time', return_value=1200), \
+                    patch.object(host.time, 'sleep', side_effect=selected) as wait:
+                host.publish_worker(request, target, worker)
+                wait.assert_called_once()
+            release.write_json(state, {})
+            with patch.object(host, 'command'), patch.object(host.time, 'time', return_value=1596):
+                with self.assertRaises(TimeoutError):
+                    host.publish_worker(request, target, worker, restoring=True)
+
     def test_mint_uses_the_selected_network_owner_for_activation_and_rollback(self):
         self.assertEqual(host.mint_network({}), [])
         self.assertEqual(host.mint_network({'network_invitation': '/private/lab/invitation'}),
