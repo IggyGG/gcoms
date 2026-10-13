@@ -20,12 +20,19 @@ other service errors remain failures.
 
 | Deadline after push | Stage |
 | --- | --- |
-| 60 seconds | Capacity/toolchain/baseline preflight |
-| 60 seconds | Verify all prepared artifact cache entries; no compilation |
-| 60 seconds | Artifact and signing verification |
+| 120 seconds | Capacity/toolchain/baseline preflight |
+| 120 seconds | Verify all prepared artifact cache entries; no compilation |
+| 120 seconds | Artifact and signing verification |
 | 180 seconds | Activation and fresh private provisioning |
 | 540 seconds | Full downloaded worker readiness on every Android target |
 | 600 seconds | Reserved restoration window |
+
+The first three stages share an absolute two-minute deadline from the server
+push. Measured cluster intake takes about 23 seconds per idle cycle and the
+complete pre-promotion check takes 37.343 seconds, so their former shared
+one-minute cutoff could expire before activation. This changes only the internal
+allocation: activation still ends by 180 seconds, readiness by 540 seconds and
+restoration by the original 600-second deadline.
 
 Preparation builds the SDK, installer, headless hub, downloaded worker and fleet controller in bounded parallel jobs. The running controller is verified against its prepared artifact so the sender cannot remain on an older fixed binary.
 The APK includes ARM64 and x86_64 native client inputs; downloadable workers
@@ -107,6 +114,13 @@ compilation remains in the separate 2.76 GB compiler image. Run the real prepare
 APK verification probe when changing this tool packaging.
 
 Cluster qualification records the actual lab identity and boundary, runs the same normally signed 42 MiB interrupted transfer with the 360-second limit, and requires the current process to load the worker. It does not claim the workstation VPN proof. The adapter controls and image build alone do not qualify transfer, deployment, rollback or disconnection.
+
+The 2026-10-13 cluster reference passed in 278.640 seconds after an actual process interruption at 8,426,000 bytes and same-run resume. Its receipt remains bound to the exact native inputs, guest identity and isolation boundary. Three original-clock promotions and functional rollback still require live receipts. See `docs/evidence/android-cluster-20261012/runtime-qualified.json`.
+
+Source inventories are derived caches: each entry verifies its original Git commit object and reconstructs every tree ID from exact paths, modes and blob IDs, including empty trees. Cache capacity is 256 entries of at most 2 MiB each; uncached sources remain available through Git. Cache loss regenerates the inventory from the cluster source mirrors. A changed or malformed entry fails verification. Before staging, the trusted runner hashes existing privately owned guest files and transfers missing files only. The guest validates all prepared artifact hashes again before any operation. APK verification scratch uses the runner's disposable 128 MiB `/work` volume; signed artifacts and durable receipts retain their existing storage.
+
+The retained failure fixture at `docs/evidence/android-cluster-20261012/android_release_lab_canary.py` requires a distinct prepared configuration with `qualification_scope: cluster-isolated`, `failure_canary: stop-activated-android-app`, and that fixture as the explicit readiness action. Mount its exact bytes in the immutable runtime and include their hash in `runtime_sha256`. It checks the completed activation, exact release/APK/identity/current PID, journals before stopping the app, archives the observed failure and lets the normal release runner restore service. It refuses an uncertain fault replay. The ordinary release configuration continues to use normal readiness.
+
 
 Render the persistent coordinator and credential-free image warming with
 `android_release_cluster.py --config /config/android-agent.json workloads

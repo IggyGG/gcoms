@@ -322,7 +322,9 @@ def verify(request):
                 raise ValueError('APK embeds different SDK native bytes')
         # ZIP alignment alone cannot establish Android 16 KiB compatibility.
         llvm = Path(config['environment']['ANDROID_NDK_HOME']) / 'toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf'
-        with tempfile.TemporaryDirectory(dir=config['state']) as temporary:
+        # Verification scratch follows the runner's bounded disposable volume;
+        # extracting every ELF onto shared durable storage adds avoidable I/O.
+        with tempfile.TemporaryDirectory() as temporary:
             for name in sorted(names):
                 if name.startswith('lib/') and name.endswith('.so'):
                     file = Path(temporary) / 'library.so'

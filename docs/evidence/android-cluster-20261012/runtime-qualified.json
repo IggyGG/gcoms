@@ -1,0 +1,114 @@
+{
+  "schema": 1,
+  "kind": "android-cluster-reference-live-proof",
+  "job": {
+    "job": "android-qualify-80b002257af8f72970bfdc9f",
+    "namespace": "ghost-com",
+    "job_uid": "dc8c7656-bd3d-4795-89db-ab88c9d7820e",
+    "status": {
+      "completionTime": "2026-10-13T00:20:16Z",
+      "conditions": [
+        {
+          "lastProbeTime": "2026-10-13T00:20:16Z",
+          "lastTransitionTime": "2026-10-13T00:20:16Z",
+          "message": "Reached expected number of succeeded pods",
+          "reason": "CompletionsReached",
+          "status": "True",
+          "type": "SuccessCriteriaMet"
+        },
+        {
+          "lastProbeTime": "2026-10-13T00:20:16Z",
+          "lastTransitionTime": "2026-10-13T00:20:16Z",
+          "message": "Reached expected number of succeeded pods",
+          "reason": "CompletionsReached",
+          "status": "True",
+          "type": "Complete"
+        }
+      ],
+      "ready": 0,
+      "startTime": "2026-10-13T00:14:04Z",
+      "succeeded": 1,
+      "terminating": 0,
+      "uncountedTerminatedPods": {}
+    },
+    "pods": [
+      {
+        "name": "android-qualify-80b002257af8f72970bfdc9f-c8kg4",
+        "uid": "153e19f2-738b-4356-9383-1334270cac8a",
+        "phase": "Succeeded"
+      }
+    ]
+  },
+  "result": {
+    "schema": 1,
+    "request_id": "80b002257af8f72970bfdc9f81ca70cb23f780a6cb94175441379571c09fc5a4",
+    "request_sha256": "68fc7e1a755b39d2fbccfb8a2be003f146c41f54b5e09681953a7419f961cd2b",
+    "state": "qualified",
+    "result": {
+      "schema": 1,
+      "kind": "android-runtime-qualification",
+      "inputs": {
+        "apk": "ba5ae4c223958a2cf97d409bc51be5e2b4d140134ee9b7e2ad041016fe2e887b",
+        "controller": "a21eb7595df307598306e87277933d679306d082c1787cfc6860287c98136d06",
+        "hub": "25a830fc0778c65bc0ae302dab5443ef5bc02ee797b1a152da231a301da4a2d5",
+        "installer": "7108522798ad67ade97a46f2e169807e300150977ec3727ac18837d7a2fad043",
+        "sdk": "153311ac45b55a9b9173c3a6645a9bb8e6b624d7ddcd813bb8a68c5262c4ce05",
+        "worker": "95d593e5548fdf4b79b0fbdfe5256fcb0606230975ea803507db8b85d3619f15"
+      },
+      "sources": {
+        "agent": "761e131e802b89d07cd032e891013324ac0936b5",
+        "drone": "84958b17ab6b42a8003e4e953f89b0a79ba9657c",
+        "dropship": "7fbe185d980cac2553296e0ce4751cccfdfa3580",
+        "gchat": "cce917396d2cb4c3b5cb62a78eda262d37dbcd32",
+        "gcoms": "b9e03286ff2a43cabe0b47aa716b3823d00bf9f3"
+      },
+      "prepared_id": "65e6f9daf64a72d9cff44ac5d38af9e47bc323282e413ce6ad512000775bd4ec",
+      "scope": "cluster-isolated",
+      "state": "qualified",
+      "observed_at": 1791850808.9404263,
+      "cluster_lab": {
+        "android_pod_ip": "10.244.42.176",
+        "android_pod_uid": "72bfcf8e-0333-4290-abc3-47632554405f",
+        "boundary_sha256": "379d2a01709857319145c7409c63c9f3f63401d4b4b7341c2e3df3d983484a5e",
+        "schema": 1,
+        "vm_uuid": "4eb258ef-7048-4a1a-83bb-402bcfe447da"
+      },
+      "android": {
+        "full_download_verified": true,
+        "loaded_worker_ready": true,
+        "identity_preserved": true,
+        "resume_verified": true
+      },
+      "reference_transfer": {
+        "bytes": 44040192,
+        "sha256": "8a289bc995cca20cefbb0e43d9b2dd643541b30cf2127b5f1c39767385d7e9b8",
+        "elapsed_seconds": 278.64012436899975,
+        "sha256_verified": true,
+        "current_process_verified": true
+      },
+      "process_id": 3538,
+      "run_id": "815b0130-2564-4d76-9ddb-d0d87101953e",
+      "interruption": {
+        "before_pid": 3260,
+        "frontier": 8426000,
+        "at": 1791850569.43051
+      },
+      "evidence": {
+        "request_sha256": "0be13a9ea55055dcc99bb501dd6db1bf982cd76de2b22d0b6b72648b90c11c41",
+        "payload_receipt_sha256": "0d47d747cebbab83df5b4860e2c2198687a8587b34e602dca7fd518cc28e6add"
+      }
+    }
+  },
+  "archive": {
+    "key": "android-release/records/e898145da332f3dd46716743c0fa614b82e5d1bcc612bd9faa9a8d2f328cc899.json",
+    "version": "KmyuvylVOPpzdL8MTA-YMcnL0L7oxFo",
+    "sha256": "e898145da332f3dd46716743c0fa614b82e5d1bcc612bd9faa9a8d2f328cc899",
+    "bytes": 2061
+  },
+  "original_failed_attempts_retained": true,
+  "remaining": [
+    "three original-clock prepared promotions within600s",
+    "functional failed-canary restoration within60s",
+    "submitting-client-disconnected completion"
+  ]
+}

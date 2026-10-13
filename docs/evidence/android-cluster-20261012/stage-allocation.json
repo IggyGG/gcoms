@@ -1,0 +1,25 @@
+{
+  "schema": 1,
+  "kind": "android-cluster-stage-allocation",
+  "preflight_seconds": 37.34315252304077,
+  "coordinator_idle_seconds": 23.089190758764744,
+  "absolute_stage_deadlines_seconds": {
+    "preflight": 120,
+    "building": 120,
+    "verifying": 120,
+    "activation": 180,
+    "readiness": 540,
+    "restoration": 600
+  },
+  "original_push_clock_unchanged": true,
+  "full_reference_limit_seconds": 360,
+  "rollback_reserve_seconds": 60,
+  "controls": {
+    "job": "android-stage-budget-controls-80a66d5843",
+    "passed": 7,
+    "seconds": 3.722,
+    "original_one_minute_stage_control_failed": true
+  },
+  "codematch": "unreachable",
+  "live_promotion_acceptance": "pending original server-clock pushes"
+}

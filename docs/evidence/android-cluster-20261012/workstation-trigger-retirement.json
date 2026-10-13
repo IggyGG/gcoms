@@ -1,0 +1,36 @@
+{
+  "schema": 1,
+  "kind": "retired-workstation-android-triggers",
+  "observed_at": 1791853047.941668,
+  "units": {
+    "gcoms-android-release.service": {
+      "ActiveState": "inactive",
+      "SubState": "dead",
+      "UnitFileState": "static",
+      "ConditionResult": "no"
+    },
+    "gcoms-android-release.timer": {
+      "ActiveState": "inactive",
+      "SubState": "dead",
+      "UnitFileState": "disabled",
+      "ConditionResult": "no"
+    },
+    "gcoms-android-warm.service": {
+      "ActiveState": "failed",
+      "SubState": "failed",
+      "UnitFileState": "static",
+      "ConditionResult": "yes"
+    },
+    "gcoms-android-warm.timer": {
+      "ActiveState": "inactive",
+      "SubState": "dead",
+      "UnitFileState": "disabled",
+      "ConditionResult": "no"
+    }
+  },
+  "local_post_receive_removed": true,
+  "retired_post_receive_sha256": "9edf96875105b0728887a3a8427955d46ab22b646cb470ea2dfbb15ec814e5b5",
+  "original_services_and_state_retained": true,
+  "future_starts_gated": true,
+  "cluster_forgejo_outbox_unchanged": true
+}

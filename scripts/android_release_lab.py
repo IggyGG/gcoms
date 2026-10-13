@@ -60,6 +60,55 @@ with tarfile.open(fileobj=sys.stdin.buffer,mode='r|') as archive:
 '''
 
 
+INVENTORY = r'''import hashlib,json,os,pathlib,re,stat,sys
+root=pathlib.Path('/home/lab/.local/state/android-cluster-release')
+info=root.lstat()
+if not stat.S_ISDIR(info.st_mode) or info.st_uid!=os.getuid() or info.st_mode&0o077:raise ValueError('private guest root required')
+raw=sys.stdin.buffer.read(1024**2+1)
+if len(raw)>1024**2:raise ValueError('guest inventory exceeds bounds')
+files=json.loads(raw)
+if not isinstance(files,dict) or len(files)>4096:raise ValueError('bounded guest inventory required')
+missing=[]
+for name,checksum in files.items():
+ parts=name.split('/')
+ if (any(x in ('','.','..') for x in parts) or name.startswith('/') or chr(92) in name
+     or len(name.encode())>2048 or parts[0] not in ('runtimes','release','commands')
+     or not isinstance(checksum,str) or not re.fullmatch('[0-9a-f]{64}',checksum)):raise ValueError('unsafe guest inventory member')
+ parent=root;absent=False
+ for part in parts[:-1]:
+  parent=parent/part
+  try:info=parent.lstat()
+  except FileNotFoundError:absent=True;break
+  if not stat.S_ISDIR(info.st_mode) or info.st_uid!=os.getuid() or info.st_mode&0o077:raise ValueError('unsafe guest inventory parent')
+ if absent:missing.append(name);continue
+ path=root.joinpath(*parts)
+ try:info=path.lstat()
+ except FileNotFoundError:missing.append(name);continue
+ if (not stat.S_ISREG(info.st_mode) or info.st_uid!=os.getuid() or info.st_nlink!=1
+     or info.st_mode&0o077 or info.st_size>1024**3):raise ValueError('preserve unsafe guest inventory file')
+ with path.open('rb') as stream:actual=hashlib.file_digest(stream,'sha256').hexdigest()
+ if actual!=checksum:raise ValueError('preserve different immutable guest stage bytes')
+print(json.dumps({'manifest_sha256':hashlib.sha256(raw).hexdigest(),'missing':missing}))
+'''
+
+
+def missing_files(ssh, files):
+    """Only exact privately owned bytes may be omitted from staging."""
+    data = canonical({name: digest(path) for name, path in files.items()})
+    if len(data) > 1024**2: raise ValueError('guest inventory exceeds bounds')
+    result = subprocess.run(ssh + ['python3 -c ' + shlex.quote(INVENTORY)], input=data,
+                            stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=30)
+    if result.returncode or len(result.stdout) > 1024**2:
+        raise ValueError('existing guest artifacts failed exact inventory verification')
+    value = json.loads(result.stdout)
+    missing = value.get('missing')
+    if (value.get('manifest_sha256') != hashlib.sha256(data).hexdigest()
+            or not isinstance(missing, list) or any(not isinstance(name, str) for name in missing)
+            or len(missing) != len(set(missing)) or not set(missing).issubset(files)):
+        raise ValueError('guest inventory response binding changed')
+    return {name: files[name] for name in missing}
+
+
 def create_lab(config):
     from ghost_lab.cluster_operator import configure
     from ghost_lab.lifecycle import Lab
@@ -140,6 +189,7 @@ def stage(ssh, envelope):
             files['release/artifacts/' + component + '/' + manifest['inputs'][component] + '/' + name] = regular_file(root, name)
     checksum = hashlib.sha256(canonical(envelope)).hexdigest()
     command_path = 'commands/' + checksum + '.json'
+    files = missing_files(ssh, files)
     process = subprocess.Popen(ssh + ['python3 -c ' + shlex.quote(RECEIVER)], stdin=subprocess.PIPE,
                                stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
     try:

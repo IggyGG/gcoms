@@ -249,6 +249,21 @@ class Releases(unittest.TestCase):
         self.assertEqual(result['state'], 'live')
         self.assertTrue(all(a['cache_hit'] for a in result['artifacts'].values()))
 
+    def test_cluster_intake_uses_original_clock_and_preserves_rollback_minute(self):
+        self.config['require_prepared'] = True
+        prepared = release.prepare_release(self.config)
+        manifest = release.promotion_manifest(self.config, prepared['prepared_id'], time.time() - 75)
+        with patch.object(release, 'build', side_effect=AssertionError('promotion compiled code')):
+            result = release.deploy(self.config, manifest)
+        self.assertEqual(result['state'], 'live')
+        self.assertEqual(result['pushed_at'], manifest['pushed_at'])
+        self.assertEqual(result['deadline_at'], manifest['pushed_at'] + 600)
+        with patch.object(release.time, 'time', return_value=1000), patch.object(release.time, 'monotonic', return_value=20):
+            deadline = release.Deadline(459)
+            with self.assertRaises(TimeoutError):
+                deadline.remaining(activation=True)
+            self.assertEqual(deadline.remaining(), 59)
+
     def test_preparation_and_prepared_promotion_do_not_wait_for_each_other(self):
         root = Path(self.config['state'])
         root.mkdir()
@@ -712,6 +727,91 @@ class Releases(unittest.TestCase):
         self.assertNotEqual(first['inputs']['worker'], second['inputs']['worker'])
         self.assertTrue(all(first['inputs'][c] == second['inputs'][c]
                             for c in release.COMPONENTS if c != 'worker'))
+
+
+class SourceInventories(unittest.TestCase):
+    git = Releases.git
+
+    def setUp(self):
+        Releases.setUp(self)
+        self.repo = Path(self.config['sources']['gcoms']['repository'])
+        self.cache = self.root / 'inventories'
+
+    def head(self):
+        return self.git(self.repo, 'rev-parse', 'HEAD').decode().strip()
+
+    def test_verified_inventory_reuses_exact_git_rows_without_git_io(self):
+        for name in ('a.file', 'a/value', 'a0', 'å/line\nname'):
+            path = self.repo / name; path.parent.mkdir(parents=True, exist_ok=True); path.write_text(name)
+        (self.repo / 'executable').write_text('executable'); (self.repo / 'executable').chmod(0o755)
+        (self.repo / 'link').symlink_to('source.rs')
+        self.git(self.repo, 'add', '.'); self.git(self.repo, 'commit', '-qm', 'tree ordering and modes')
+        commit = self.head()
+        expected = release.source_tree(self.repo, commit)
+        self.assertEqual(release.source_tree(self.repo, commit, self.cache), expected)
+        with patch.object(release, 'git', side_effect=AssertionError('warm cache must not scan Git')):
+            self.assertEqual(release.source_tree(self.repo, commit, self.cache), expected)
+
+    def test_original_git_commit_authenticates_all_names_modes_and_blob_ids(self):
+        commit = self.head(); release.source_tree(self.repo, commit, self.cache)
+        path = self.cache / (commit + '.json'); original = json.loads(path.read_text())
+        for field, changed in [(0, 'different.rs'), (1, '100755'), (2, 'f' * 40)]:
+            value = json.loads(json.dumps(original)); value['rows'][0][field] = changed
+            release.write_json(path, value)
+            with self.assertRaisesRegex(ValueError, 'tree binding'):
+                release.source_tree(self.repo, commit, self.cache)
+            self.assertEqual(json.loads(path.read_text()), value)
+        value = dict(original, commit_object=base64.b64encode(b'other commit').decode())
+        release.write_json(path, value)
+        with self.assertRaisesRegex(ValueError, 'commit binding'):
+            release.source_tree(self.repo, commit, self.cache)
+
+    def test_empty_git_trees_are_preserved_in_the_authenticated_inventory(self):
+        def git_input(args, data):
+            return subprocess.check_output(['git', '-C', str(self.repo), *args], input=data).decode().strip()
+        empty = git_input(['mktree'], b'')
+        blob = self.git(self.repo, 'rev-parse', 'HEAD:source.rs').decode().strip()
+        tree = git_input(['mktree'], f'040000 tree {empty}\tempty\n100644 blob {blob}\tsource.rs\n'.encode())
+        commit = git_input(['commit-tree', tree], b'tracked empty directory\n')
+        expected = release.source_tree(self.repo, commit)
+        self.assertEqual(release.source_tree(self.repo, commit, self.cache), expected)
+        with patch.object(release, 'git', side_effect=AssertionError('cached tree')):
+            self.assertEqual(release.source_tree(self.repo, commit, self.cache), expected)
+
+    def test_cache_preserves_input_keys_and_cannot_hide_new_source(self):
+        manifest = release.freeze(self.config, time.time())
+        self.config.update(build_execution='kubernetes', cluster={'builder_image': 'pinned-builder'})
+        self.config['toolchain']['builder_image'] = 'pinned-builder'
+        first = release.inputs(self.config, manifest['sources'])
+        with patch.object(release, 'git', side_effect=AssertionError('cached exact source')):
+            self.assertEqual(release.inputs(self.config, manifest['sources']), first)
+        local = dict(self.config, build_execution='workstation')
+        self.assertEqual(release.inputs(local, manifest['sources']), first)
+        (self.repo / 'source.rs').write_text('new source')
+        self.git(self.repo, 'commit', '-qam', 'native source changed')
+        changed = dict(manifest['sources'], gcoms=self.head())
+        self.assertNotEqual(release.inputs(self.config, changed), first)
+        self.assertEqual(release.inputs(self.config, manifest['sources']), first)
+
+    def test_linked_or_oversized_cache_and_duplicate_entries_are_refused(self):
+        commit = self.head(); release.source_tree(self.repo, commit, self.cache)
+        path = self.cache / (commit + '.json'); original = json.loads(path.read_text())
+        retained = self.root / 'retained.json'; path.rename(retained); path.symlink_to(retained)
+        with self.assertRaises(OSError): release.source_tree(self.repo, commit, self.cache)
+        path.unlink(); path.write_bytes(b' ' * (2 * 1024**2 + 1))
+        with self.assertRaisesRegex(ValueError, 'unsafe source inventory'):
+            release.source_tree(self.repo, commit, self.cache)
+        value = dict(original, rows=original['rows'] * 2); release.write_json(path, value)
+        with self.assertRaisesRegex(ValueError, 'duplicate source inventory'):
+            release.source_tree(self.repo, commit, self.cache)
+
+    def test_full_derived_cache_keeps_git_available_without_expanding_storage(self):
+        self.cache.mkdir()
+        for n in range(256): (self.cache / f'retained-{n}.json').write_text('{}')
+        commit = self.head(); expected = release.source_tree(self.repo, commit)
+        self.assertEqual(release.source_tree(self.repo, commit, self.cache), expected)
+        self.assertFalse((self.cache / (commit + '.json')).exists())
+        self.assertEqual(len(list(self.cache.iterdir())), 256)
 
 
 class Maintenance(unittest.TestCase):

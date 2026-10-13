@@ -1,0 +1,31 @@
+{
+  "schema": 1,
+  "job": {
+    "name": "android-controller-precondition-24556c9794",
+    "uid": "2d11e5d9-91d0-4df8-b397-df8bb1f774a3",
+    "started_at": "2026-10-13T00:56:00Z",
+    "completed_at": "2026-10-13T00:56:28Z"
+  },
+  "result": {
+    "schema": 1,
+    "kind": "android-cluster-controller-promotion-precondition",
+    "state": "restored",
+    "previous": {
+      "pid": 2247,
+      "sha256": "e1f6fa5ccbc637a9fd567e1555e3186d1c2e75d7fea7c92bb14fc2e56008fdf9"
+    },
+    "current": {
+      "pid": 3461,
+      "sha256": "a8e495c54aec181af8d0f4eae48357e3c6adec852cdae8d0a34bc7f232f68563"
+    },
+    "qualification_release_id": "11c7faec84563fa936e84aba8a8deb7a8b4ec27ae6ae7363c744c3bdecda57c3",
+    "finished_at": 1791852983.0436225
+  },
+  "archive": {
+    "key": "android-release/records/24fef6459d094f1af3fb1766b604100a43c02ff02da41c17800849c30561fa7f.json",
+    "version": "J1XJmAtwJMAF7qDMp2zc0ugclmzCcV2",
+    "sha256": "24fef6459d094f1af3fb1766b604100a43c02ff02da41c17800849c30561fa7f",
+    "bytes": 416
+  },
+  "purpose": "First measured promotion must activate an actually different retained controller binary."
+}

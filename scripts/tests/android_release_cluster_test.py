@@ -332,6 +332,9 @@ class ClusterRecovery(unittest.TestCase):
         self.assertEqual(spec['activeDeadlineSeconds'], 3600)
         self.assertEqual(pod['restartPolicy'], 'Never')
         self.assertEqual(pod['containers'][0]['resources']['limits']['cpu'], '1')
+        self.assertIn({'name': 'scratch', 'emptyDir': {'sizeLimit': '128Mi'}}, pod['volumes'])
+        self.assertIn({'name': 'scratch', 'mountPath': '/work'}, pod['containers'][0]['volumeMounts'])
+        self.assertIn({'name': 'TMPDIR', 'value': '/work'}, pod['containers'][0]['env'])
         self.config['cluster']['runner_image'] = 'registry.example/runner:latest'
         with self.assertRaisesRegex(ValueError, 'digest-pinned'):
             cluster.job(self.config, self.request, self.root / 'request.json')
