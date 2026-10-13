@@ -87,9 +87,11 @@ and traffic class after confirmation or credit returns. This closes the interval
 before maintenance assigns the older records their ratchet slots. Expired work,
 other peers and the other scheduling class do not block it; control remains
 independently admissible. Logical IDs, sequence numbers, persistence and original
-deadlines use the same deferred-record path. This correction is under qualification
-after Linux0.1.193 observed delivery order `0,7,1,2,3,4,5,6` in the existing TLS
-restart regression.
+deadlines use the same deferred-record path. Linux0.1.193 observed delivery order
+`0,7,1,2,3,4,5,6` in the existing TLS restart regression. The causal control,
+74 GC/2 controls and the native restart journey now pass, including ten additional
+order-race runs. Full release and installed acceptance remain required;
+[scoped evidence](evidence/irc-ux-release-repairs-20261013/summary.json) is retained.
 
 Code comparison found no close implementation for this admission guard. The
 closest post-change indexed shapes were

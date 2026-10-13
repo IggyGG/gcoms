@@ -1,0 +1,77 @@
+{
+  "schema": 1,
+  "date": "2026-10-13",
+  "scope": "Scoped native qualification of delivery-order and JSONL restart repairs; complete signed release and installed GChat acceptance remain required",
+  "source_checkpoint": "6eb52dde81fe1d93760dce122e42dc95bd193b50",
+  "implementation_commits": [
+    "d3415fe",
+    "2dc2e6f",
+    "906a8a0"
+  ],
+  "native_source_base": "42fe91396f2d780556cfbaa84c7f31c709870c7c",
+  "integration_operations_parent": "6632a02",
+  "operations_merge_preserves_native_crates_manifests_toolchain": true,
+  "source_sha256": {
+    "crates/node/src/node/direct.rs": "db6689bacd51f017b0e533e4241fb01d9f840b07e1df541840f44afcbe0fb206",
+    "crates/node/src/node/persist/gc2_session_tests.rs": "fcc95d16dc747397765cf546f3dbaf3aea0d3a969308eb7a6d3d98798b50a75e",
+    "crates/node/tests/gc2_sessions.rs": "1b3919fc8563951a8b01f43d9ca8c2f53899066f62ae7095e62e08a316213cbb",
+    "crates/node/src/metrics.rs": "65532f8d4607fa2acb79e7ef7a8b839d387187766e4fd3c551aa18589fe05c15"
+  },
+  "qualification": {
+    "image": "android-images.triform.cloud/ghost/android-builder@sha256:85e9883b426e9cde99136668d90c16a77d729193bc0e992cbdd4788642435ddc",
+    "rust": "1.98.0 (88d9e12ae 2026-08-18)",
+    "job_uid": "8f18a286-3275-4473-9c1e-8929d9505d9e",
+    "job_complete": true,
+    "container_exit": 0,
+    "elapsed_seconds": 364.6914422130212,
+    "causal_negative_controls": 2,
+    "gc2_tests_passed": 74,
+    "explicit_live_probe_ignored": 1,
+    "metrics_tests_passed": 4,
+    "native_tls_tests_passed": 4,
+    "additional_order_race_runs_passed": 10,
+    "strict_node_all_target_clippy": "passed",
+    "legacy_compile": "passed",
+    "format": "passed",
+    "source_audit": "passed"
+  },
+  "retained_failures": {
+    "linux_192": {
+      "provider_run": 38320661711,
+      "relay_artifact_id": 11780566457,
+      "relay_zip_sha256": "698fd8e4825c79373c1665c5d4dd661905fe7773cdfcb54890ace1172785e574",
+      "failure": "Strict JSONL parsing after relay restart: two complete records joined by interrupted separate delimiter write",
+      "commands_observed": 720,
+      "recipient_p95_seconds": 1.3221587579998868,
+      "qualified": false
+    },
+    "linux_193": {
+      "provider_run": 38322537878,
+      "gcoms_job": 115053707784,
+      "failure": "Existing native TLS test observed durable messages 0,7,1,2,3,4,5,6",
+      "gchat_native_passed": true,
+      "relay_load_passed": true,
+      "package_produced": false
+    }
+  },
+  "comparison": [
+    {
+      "repo_path": "0xHarbs/hyperlane-monorepo-tron:rust/main/agents/relayer/src/msg/pending_message.rs",
+      "cosine": 0.6662,
+      "rerank": 0,
+      "outcome": "No close admission-guard implementation; verified with deterministic peer/class/expiry and native ordering controls"
+    },
+    {
+      "repo_path": "rust-lang/rust:library/alloc/src/io/buffered/linewritershim.rs",
+      "cosine": 0.6282,
+      "rerank": 0.9196,
+      "outcome": "Generic line-buffered writer shape. Our owned String includes its delimiter before write_all; strict malformed-record rejection remains. No arbitrary I/O atomicity claim."
+    }
+  ],
+  "evidence": {
+    "irc-ux-native-1aa9453a7df6-report.json": "180fdfc9ca9b4d50e1d78efaf20d695b65c9ca3ad0dddf9fa7452c58563b6ad7",
+    "irc-ux-native-1aa9453a7df6.log": "36f65566de8d1453b2dde9d4fd3dd9cc8280eb65b5389f22fd58b21d3fa8c2bf",
+    "irc-ux-native-1aa9453a7df6-final-job.json": "fc2f8d4b18b4c62369ad15b70c6e5c2b1b5553a7e57cc4d33b8709a84d66ebb3",
+    "irc-ux-native-1aa9453a7df6-final-pods.json": "809b7dbf0fe01550b2c0f0710a25a059ff40413e5bf28b161427da14f52ab1a1"
+  }
+}

@@ -51,9 +51,11 @@ qualification of the successor remains required.
 
 F5 durable ordering, 2026-10-13: Linux0.1.193 exposed a fresh send overtaking
 deferred messages after session confirmation. Same-peer, same-class durable
-admission now joins that retained queue. Causal, isolation and unchanged native
-TLS/restart checks are under qualification; no installed repair is claimed.
-See [scheduler behavior](docs/GC2_SCHEDULER.md).
+admission now joins that retained queue. Both causal controls,74 GC/2 controls,
+four metrics controls, four native TLS/restart checks and ten additional ordering
+runs pass, with strict Clippy and legacy compilation. Full signed release and
+installed delivery follow. See [scheduler behavior](docs/GC2_SCHEDULER.md) and
+[qualification evidence](docs/evidence/irc-ux-release-repairs-20261013/summary.json).
 
 F5 cluster source reuse, 2026-10-12: source sync now authenticates exact advertised refs and skips unchanged repositories. Prepared promotion checks its exact immutable tag and existing commit without fetching unrelated history. A real Git control rejects another fetch for unchanged sources and promotion; all 150 scoped controls pass in Kubernetes (16.673 seconds), with the 1,141-path source audit passing. Native inputs and the real Android deadlines are unchanged. [Evidence](docs/evidence/android-cluster-20261012/source-reuse.json).
 
@@ -406,8 +408,9 @@ The JSONL writer assembles each event and its newline before appending. This
 avoids joining a restarted process's first event onto a complete previous event
 whose separate delimiter write was interrupted. Rotation, owner-only permissions,
 bounded queue and drop accounting keep their existing behavior. The observed
-relay-load failure and the writer's stop-boundary regression are under qualification;
-the load verifier still rejects malformed records.
+relay-load failure is retained and the writer's stop-boundary regression passes;
+the load verifier still rejects malformed records. This avoids the observed
+split-format write, without claiming arbitrary I/O or power-loss atomicity.
 
 With the existing optional metrics sink enabled, `gchat_queue_refused` records
 only `operation` (`push` or `subscribe`) and a static refusal reason. It separates

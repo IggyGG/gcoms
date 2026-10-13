@@ -20,7 +20,7 @@ F5 durable admission order, 2026-10-13 (OC): Linux0.1.193 passed formatting and
 reached the original GC/2 TLS restart test, which observed `0,7,1,2,3,4,5,6`
 instead of sender order. A fresh send can take a ratchet slot after confirmation
 but before deferred predecessors materialize. The scoped peer/class guard and
-deterministic causal/isolation controls are under bounded cluster qualification.
+deterministic causal/isolation controls pass bounded cluster qualification.
 Keep the original failed test and its deadlines. Native release and installed
 GChat delivery remain pending. See [scheduler semantics](docs/GC2_SCHEDULER.md).
 
@@ -28,16 +28,19 @@ Focused cluster controls now reproduce both original failures and pass74 GC/2
 controls (one explicit live-probe exclusion) plus all four metrics controls.
 The native journey then reached an obsolete receiver archive literal: current
 retired-setup state uses authenticatedGCNSTO, while the initiating-only archive
-still usesGCNSTL. The fixture now requires those exact respective formats; full
-native/strict checks are continuing before main publication.
+still usesGCNSTL. The fixture now requires those exact respective formats. All
+four native TLS controls and ten further ordering runs pass, along with strict
+node/test Clippy, legacy compilation, formatting and L0. The complete corrected
+run took364.691 seconds; its [source-bound receipt](docs/evidence/irc-ux-release-repairs-20261013/summary.json)
+retains original failures. Full signed release and installed acceptance follow.
 
 F5 relay restart diagnostics, 2026-10-13 (OC): Linux0.1.192's full campaign
 recorded720 authenticated commands,1.322-second recipientp95 and the verified
 5,235,248-byte file, then failed strict metrics parsing. Its stopped relay had
 appended a complete JSON event without its separately written newline; the
 restarted relay joined its first event to that record. The writer now assembles
-the delimiter before append. The original failure remains failed, and causal
-writer/restart tests plus a fresh full release campaign remain required.
+the delimiter before append. The causal writer/restart tests pass. The original
+failure remains failed, and the successor still requires its full release campaign.
 
 F5 preempted guest capture, 2026-10-13: the pipeline can capture its original owner mapping after emulator recovery only when the exact original PVC and volume match the Lab recovery record. It measures the device on its current real Pod and retains both contexts for normal sealed S3 recovery. All 12 provisioning controls pass in Kubernetes (1.097 seconds). Actual guest checkpoint, restore and release acceptance remain pending. [Evidence](docs/evidence/android-cluster-20261012/retained-capture.json).
 

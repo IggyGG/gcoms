@@ -4,8 +4,11 @@ original admission path and pass with the repair. Keep peer/class/expiry isolati
 unchanged counters before materialization, original deadlines and exact decrypted
 delivery order. Run GC/2 unit controls, the original `gc2_sessions` TLS/restart
 journey, repeated native ordering checks for the observed race, strict node/test
-Clippy, legacy compilation, formatting and source L0. Qualification is in progress;
-the full frozen native release remains a separate gate.
+Clippy, legacy compilation, formatting and source L0. Scoped qualification passes:
+two causal negatives,74 GC/2 positives (one explicit live-probe exclusion), four
+metrics controls, four native TLS checks, ten additional order runs and all strict
+checks. [Exact sources and logs](docs/evidence/irc-ux-release-repairs-20261013/summary.json).
+The full frozen native release remains a separate gate.
 
 The native receiver fixture now requires `GCNSTO`, the authenticated retired-setup
 extension introduced by386f85a; its initiating-only archive check still requires
@@ -19,6 +22,7 @@ JSONL records. The original `writeln!` operation must fail this causal control;
 the assembled record must pass along with owner-only/bounded-writer controls.
 Keep strict malformed-record rejection and run the full64-client/30-minute gate
 on the successor; successful traffic in a failed evidence run does not qualify it.
+
 F5 cluster stage allocation, 2026-10-13: the updated real pre-promotion check passed in 37.343 seconds (previously 59.645). Measured idle intake costs 23.089 seconds, so preflight, cache verification and signing checks now share an absolute 120-second cutoff; activation stays at 180 seconds, readiness at 540 and restoration at 600 from the original server push. The original one-minute cutoff fails the delayed-intake control; seven focused controls pass in 3.722 seconds, including no compilation, immutable clocks and the reserved rollback minute. Workstation timers and their local release hook are retired, with original files/state retained. Three genuine timed promotions and functional rollback remain pending. [Stage evidence](docs/evidence/android-cluster-20261012/stage-allocation.json), [trigger retirement](docs/evidence/android-cluster-20261012/workstation-trigger-retirement.json).
 
 F5 S3 guest recovery verified, 2026-10-13: both original guest disks were checkpointed, sealed and removed, then restored from versioned FSN1 objects onto new PVCs. The original VM identity, Android identity seed, installed APK and private owner mapping all passed verification before rebinding the new Pod. All nine network services restarted normally. The coordinator now uses the verified restored context. Full Android transfer and release timing remain pending. [Evidence](docs/evidence/android-cluster-20261012/guest-recovery-live.json).
