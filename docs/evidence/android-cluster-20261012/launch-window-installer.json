@@ -1,0 +1,70 @@
+{
+  "schema": 1,
+  "state": "passed",
+  "component": "installer",
+  "sources": {
+    "gcoms": "5ffd621f088b378732883039dc58c0177b95e9ec",
+    "agent": "761e131e802b89d07cd032e891013324ac0936b5",
+    "dropship": "65d36cac00305a3ff65a20dc9cfc657da17fcfa5",
+    "gchat": "cce917396d2cb4c3b5cb62a78eda262d37dbcd32",
+    "drone": "e39902c6e5cd5c283c95c9b8fb82edd0e26cda00"
+  },
+  "input_sha256": "a6dcfd87b5dccb1abec7878fe0d2f0542f0bdaaf470baa0ad62540c591f38d3a",
+  "baseline_source_sha256": "24cff21991a4be69840b8db8bc988dcfcc5d128c4b032425c3f507883ca5be98",
+  "fixed_source_sha256": "b5da87ccf5993b13f15f30fa9d1fee5e85ee4582a74c7ef052c0c0a6b1c56aed",
+  "native_artifact_unchanged": true,
+  "checks": [
+    {
+      "label": "original-negative",
+      "selector": "client::tests::launch_exchange_accounts_for_network_delay_and_checks_the_admitted_selection",
+      "returncode": 101,
+      "expected_failure": true,
+      "seconds": 9.739772319793701,
+      "log_sha256": "791792ce170526d9fbd1305f182e24b22e08a4f6718918ae3cc0c5cd7a85d718",
+      "summary": [
+        "test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 80 filtered out; finished in 0.16s"
+      ]
+    },
+    {
+      "label": "fixed-regression",
+      "selector": "client::tests::launch_exchange_accounts_for_network_delay_and_checks_the_admitted_selection",
+      "returncode": 0,
+      "expected_failure": false,
+      "seconds": 3.8143513202667236,
+      "log_sha256": "cd5492cb7a12b86b9b5440a99bb52ecce95603bf7ab3381c17e2a7614987b13d",
+      "summary": [
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 80 filtered out; finished in 0.21s"
+      ]
+    },
+    {
+      "label": "fixed-related-0",
+      "selector": "client::tests::",
+      "returncode": 0,
+      "expected_failure": false,
+      "seconds": 2.170912742614746,
+      "log_sha256": "fe11beb5e258d3a802942ae364e6960a4cf9981bfc337143ff251c29640cdb4c",
+      "summary": [
+        "test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 77 filtered out; finished in 1.77s"
+      ]
+    },
+    {
+      "label": "fixed-related-1",
+      "selector": "launch::tests::",
+      "returncode": 0,
+      "expected_failure": false,
+      "seconds": 0.6868841648101807,
+      "log_sha256": "a2c613ac957927721419fb255003ab325f3bc76216b38e7c37004cdf3d0787c5",
+      "summary": [
+        "test result: ok. 15 passed; 0 failed; 0 ignored; 0 measured; 66 filtered out; finished in 0.28s"
+      ]
+    }
+  ],
+  "job_name": "android-launch-check-installer-68c52bd964",
+  "job_uid": "9bfe15a0-b187-4678-9071-e31d764afc92",
+  "archive": {
+    "key": "android-release/records/8911d4799b0cdb82b0936050ae4d5ca6cdb31dd8c0fb2daeb602d0096fd0f487.json",
+    "version": "zDbsty50SWs1MXARuKU4n.HVpcENyXI",
+    "sha256": "8911d4799b0cdb82b0936050ae4d5ca6cdb31dd8c0fb2daeb602d0096fd0f487",
+    "bytes": 2153
+  }
+}

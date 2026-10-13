@@ -1,0 +1,59 @@
+{
+  "schema": 1,
+  "state": "passed",
+  "component": "controller",
+  "sources": {
+    "gcoms": "5ffd621f088b378732883039dc58c0177b95e9ec",
+    "agent": "761e131e802b89d07cd032e891013324ac0936b5",
+    "dropship": "65d36cac00305a3ff65a20dc9cfc657da17fcfa5",
+    "gchat": "cce917396d2cb4c3b5cb62a78eda262d37dbcd32",
+    "drone": "e39902c6e5cd5c283c95c9b8fb82edd0e26cda00"
+  },
+  "input_sha256": "6dcdbd5b422c732dd2a3a8e9ab0b1b587775fa80b0d0f5f91c36f7ad18a497ca",
+  "baseline_source_sha256": "fc52cb1a88fe6cb6dd9e9f4d08a4de5c636fc4f2eacdd8e5d018a1b7bffc190e",
+  "fixed_source_sha256": "7fed4fe0442d8347852ee5ae6c7e95c1221235cb3f5c0e2692bd7c0290c132e3",
+  "native_artifact_unchanged": true,
+  "checks": [
+    {
+      "label": "original-negative",
+      "selector": "admission::tests::launch_requires_completed_transfer_and_retains_one_signed_decision_across_restart",
+      "returncode": 101,
+      "expected_failure": true,
+      "seconds": 64.87230062484741,
+      "log_sha256": "893ea627de429da65936ff859abf5a06c7b9449d17408e7e97d89050a29051e0",
+      "summary": [
+        "test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 41 filtered out; finished in 0.59s"
+      ]
+    },
+    {
+      "label": "fixed-regression",
+      "selector": "admission::tests::launch_requires_completed_transfer_and_retains_one_signed_decision_across_restart",
+      "returncode": 0,
+      "expected_failure": false,
+      "seconds": 8.0899658203125,
+      "log_sha256": "7d36b628b92720359ab431c36f44a1beb9e924880be3ed93d46fb98d35b70673",
+      "summary": [
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 41 filtered out; finished in 0.94s"
+      ]
+    },
+    {
+      "label": "fixed-related-0",
+      "selector": "bootstrap::launch_reply::tests::",
+      "returncode": 0,
+      "expected_failure": false,
+      "seconds": 0.6716132164001465,
+      "log_sha256": "4ac4d3c3582ec5be9a6d417d795ad714e0d56b7c3157317c128dd489a3123491",
+      "summary": [
+        "test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 38 filtered out; finished in 0.00s"
+      ]
+    }
+  ],
+  "job_name": "android-launch-check-controller-12b6c49191",
+  "job_uid": "612655a7-7410-4c6c-9f0a-ec5d6aa5c759",
+  "archive": {
+    "key": "android-release/records/8873178ab40ca56fcf24bbd98d82e63c290c6e565e80e12c4247b430c27121e3.json",
+    "version": "Xc6Ozo9L7V1oaLyvc9FDL5NgYySlvUe",
+    "sha256": "8873178ab40ca56fcf24bbd98d82e63c290c6e565e80e12c4247b430c27121e3",
+    "bytes": 1870
+  }
+}
