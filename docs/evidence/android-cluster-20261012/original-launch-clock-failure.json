@@ -1,0 +1,218 @@
+{
+  "schema": 1,
+  "kind": "original-cluster-promotion-launch-clock-failure",
+  "prepared_id": "df45f37bbc325c1967ab82a1ae7547d9355273d433e833acc4276a67cf7ecb86",
+  "job_name": "android-promote-f2ef1f890407e71177a7c167",
+  "job_uid": "153c1173-eff6-44ad-a7d8-17e6802554fa",
+  "source_push": {
+    "schema": 1,
+    "project": "gcoms",
+    "repository": "ghost-local/gcoms",
+    "ref": "refs/tags/android-release/df45f37bbc325c1967ab82a1ae7547d9355273d433e833acc4276a67cf7ecb86",
+    "commit": "ea85fa6cd28937d5199027e2329aa20eea72a1ca",
+    "pushed_at": 1791857358,
+    "nonce": "6c19eb5d-19e4-4561-97bf-0e73101f4dd2",
+    "server_event_id": "e23b32d6f11bb4663c5e4f70e42e3c4cd0b2f7626c0f9dc1c9ed4c8a34997c6d"
+  },
+  "request_id": "f2ef1f890407e71177a7c167e136b21c1c8d17d9b467a12b0c433ad37b6c1e30",
+  "manifest": {
+    "sources": {
+      "gcoms": "ea85fa6cd28937d5199027e2329aa20eea72a1ca",
+      "agent": "761e131e802b89d07cd032e891013324ac0936b5",
+      "dropship": "7fbe185d980cac2553296e0ce4751cccfdfa3580",
+      "gchat": "cce917396d2cb4c3b5cb62a78eda262d37dbcd32",
+      "drone": "84958b17ab6b42a8003e4e953f89b0a79ba9657c"
+    },
+    "inputs": {
+      "sdk": "153311ac45b55a9b9173c3a6645a9bb8e6b624d7ddcd813bb8a68c5262c4ce05",
+      "installer": "7108522798ad67ade97a46f2e169807e300150977ec3727ac18837d7a2fad043",
+      "apk": "ba5ae4c223958a2cf97d409bc51be5e2b4d140134ee9b7e2ad041016fe2e887b",
+      "hub": "25a830fc0778c65bc0ae302dab5443ef5bc02ee797b1a152da231a301da4a2d5",
+      "worker": "95d593e5548fdf4b79b0fbdfe5256fcb0606230975ea803507db8b85d3619f15",
+      "controller": "a21eb7595df307598306e87277933d679306d082c1787cfc6860287c98136d06"
+    },
+    "targets": [
+      {
+        "id": "hub",
+        "kind": "hub"
+      },
+      {
+        "id": "android-x64",
+        "kind": "android",
+        "serial": "10.244.42.176:5555",
+        "abi": "x86_64",
+        "channel": "android-x64"
+      }
+    ],
+    "configuration_sha256": "c764458b8d8b64f4ca95fd6186ab85c268f4f66e17450304aac3b08f5f7305d3",
+    "schema": 1,
+    "pushed_at": 1791857358,
+    "prepared_id": "df45f37bbc325c1967ab82a1ae7547d9355273d433e833acc4276a67cf7ecb86",
+    "release_id": "23c4aec38173ba8b46816aed37835f006fe2a9c7648b7332eca967644378e79a"
+  },
+  "receipt": {
+    "release_id": "23c4aec38173ba8b46816aed37835f006fe2a9c7648b7332eca967644378e79a",
+    "pushed_at": 1791857358,
+    "deadline_at": 1791857958,
+    "state": "failed",
+    "stages": {
+      "preflight": {
+        "started_at": 1791857427.2429469,
+        "finished_at": 1791857458.2410202
+      },
+      "building": {
+        "started_at": 1791857458.8271077,
+        "finished_at": 1791857463.6820538
+      },
+      "verifying": {
+        "started_at": 1791857464.3337529,
+        "finished_at": 1791857467.1588812
+      },
+      "activation": {
+        "started_at": 1791857467.7424073,
+        "finished_at": 1791857509.3775606
+      },
+      "readiness": {
+        "started_at": 1791857509.9638257
+      }
+    },
+    "activation_started": true,
+    "failure_type": "RuntimeError",
+    "failure_stage": "readiness",
+    "finished_at": 1791857895.5572772,
+    "rollback": "failed",
+    "rollback_failure_type": "TimeoutExpired",
+    "elapsed_seconds": 600.2949233055115
+  },
+  "result_archive": {
+    "bytes": 4390,
+    "key": "android-release/records/dff6237aafc9564676c49c39b5a0efc286127272375ad1a0711ddb02f2e09866.json",
+    "sha256": "dff6237aafc9564676c49c39b5a0efc286127272375ad1a0711ddb02f2e09866",
+    "version": "lvMyzpfm0bGh8RfQZlms8LAonLPE.b6"
+  },
+  "run_archive": {
+    "bytes": 5388,
+    "key": "android-release/records/b0f8d5abc828ea95b19a243616e0df7444b521539ad80d254700e4a457680f6b.json",
+    "sha256": "b0f8d5abc828ea95b19a243616e0df7444b521539ad80d254700e4a457680f6b",
+    "version": "iR0lXQnmSQo0UoqPRGsaP0Lat0LoLZn"
+  },
+  "native_download_bytes": 26006512,
+  "complete_download_observed": true,
+  "clock_samples": [
+    {
+      "guest_before": 1791858413.1148698,
+      "guest_after": 1791858413.1739535,
+      "android": 1791858413.6198876,
+      "minimum_ahead_seconds": 0.4459340572357178,
+      "maximum_ahead_seconds": 0.5050177574157715
+    },
+    {
+      "guest_before": 1791858413.1739638,
+      "guest_after": 1791858413.2838156,
+      "android": 1791858413.7173676,
+      "minimum_ahead_seconds": 0.4335520267486572,
+      "maximum_ahead_seconds": 0.5434038639068604
+    },
+    {
+      "guest_before": 1791858413.2838242,
+      "guest_after": 1791858413.3493733,
+      "android": 1791858413.8284588,
+      "minimum_ahead_seconds": 0.47908544540405273,
+      "maximum_ahead_seconds": 0.5446345806121826
+    },
+    {
+      "guest_before": 1791858413.3493829,
+      "guest_after": 1791858413.438938,
+      "android": 1791858413.8852196,
+      "minimum_ahead_seconds": 0.44628167152404785,
+      "maximum_ahead_seconds": 0.5358366966247559
+    },
+    {
+      "guest_before": 1791858413.438946,
+      "guest_after": 1791858413.5050626,
+      "android": 1791858413.981016,
+      "minimum_ahead_seconds": 0.4759533405303955,
+      "maximum_ahead_seconds": 0.5420699119567871
+    }
+  ],
+  "admission_observation": {
+    "observed_at": 1791858519.572986,
+    "controller": {
+      "pid": 6288,
+      "sha256": "a8e495c54aec181af8d0f4eae48357e3c6adec852cdae8d0a34bc7f232f68563"
+    },
+    "runs": [
+      {
+        "profile_file": "profile.json",
+        "profile_id": "9dd06f67-082c-4522-910b-8bcbb028ea52",
+        "revoked": true,
+        "profile_times": {
+          "expiresAtUnix": 1791871905,
+          "maxRunSeconds": 14400
+        },
+        "run_id": "b54036e8-96a8-4c35-bef9-00bb536958de",
+        "expires": 1791871905,
+        "status": "staged",
+        "launch_present": true,
+        "attempt": {
+          "id": "315f5651-8456-43b2-b2ba-697d1d0980e5",
+          "generation": 1,
+          "expiresAtUnix": 1791871905,
+          "finishSent": true,
+          "complete": true
+        },
+        "launch": {
+          "artifactBytes": 26006512,
+          "artifactSha256": "3975724ab472a41a734989f18e0591ba5366af850ccc60b3d4ce0294038108f4",
+          "createdAtUnix": 1791857608,
+          "expiresAtUnix": 1791857908,
+          "handoffSha256": "be51778a5c7841703e9359458133490e4afaacfb1a41705030eba0b7494ecf77"
+        },
+        "handoff_expires_at_unix": 1791858509,
+        "handoff_created_lower_bound": 1791857609,
+        "launch_receipt": null,
+        "enrollment_present": false
+      },
+      {
+        "profile_file": "rollback-profile.json",
+        "profile_id": "1fab45ac-3003-402a-b37c-be4e51ec4a64",
+        "revoked": false,
+        "profile_times": {
+          "expiresAtUnix": 1791872334,
+          "maxRunSeconds": 14400
+        },
+        "run_id": "fb358262-3eb0-42ac-a84a-76af8c13cdbe",
+        "expires": 1791872334,
+        "status": "staged",
+        "launch_present": true,
+        "attempt": {
+          "id": "3b7db486-96cd-4835-86be-cf1e1b36c811",
+          "generation": 1,
+          "expiresAtUnix": 1791872334,
+          "finishSent": true,
+          "complete": true
+        },
+        "launch": {
+          "artifactBytes": 44040192,
+          "artifactSha256": "8a289bc995cca20cefbb0e43d9b2dd643541b30cf2127b5f1c39767385d7e9b8",
+          "createdAtUnix": 1791857940,
+          "expiresAtUnix": 1791858240,
+          "handoffSha256": "aa13c6210aeae80b85ef5891a76d97c8a71795b7e167350f63ffe983757d05e6"
+        },
+        "handoff_expires_at_unix": 1791858840,
+        "handoff_created_lower_bound": 1791857940,
+        "launch_receipt": {
+          "kind": "report",
+          "launchSha256": "5f97c41b7c3d254016b1338f65f3a75df5ab4b0751214bb8bdc2f4633bf0ec78",
+          "observedAtUnix": 1791857942,
+          "outcome": "created",
+          "processId": 7288
+        },
+        "enrollment_present": false
+      }
+    ]
+  },
+  "finding": "Android handoff expires at 1791858509 with the signed 900-second lifetime, placing creation no earlier than 1791857609. The controller signed at 1791857608. The client required issuance at or after its own request clock. Renewed transport operations also rejected an already issued launch decision.",
+  "disposition": "Original readiness and rollback failures retained. Repair branches need focused cluster checks and a new full native Android reference before promotion.",
+  "codematch": "unreachable"
+}
