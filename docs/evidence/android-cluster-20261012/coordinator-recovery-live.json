@@ -1,0 +1,56 @@
+{
+  "schema": 1,
+  "kind": "android-cluster-coordinator-empty-cache-live-proof",
+  "date": "2026-10-13",
+  "coordinator_recovery": {
+    "schema": 1,
+    "kind": "android-coordinator-empty-cache-recovery",
+    "state": "passed",
+    "started_at": 1791848793.3052716,
+    "finished_at": 1791848794.0034661,
+    "checkpoint": {
+      "bytes": 101105,
+      "key": "android-release/records/fa7a1db812f0e3e11371cf0711c074dcf2791266379d99f829534aa5bf95efb3.json",
+      "sha256": "fa7a1db812f0e3e11371cf0711c074dcf2791266379d99f829534aa5bf95efb3",
+      "version": "nb.GcozKWzwZnDxJyxgAEiUp7vMXUU6"
+    },
+    "configuration_sha256": "b2713cb64285d4cdfc6dc016a07915529443bd818363d6fae0c49f854fbd5285",
+    "original_files_verified": 73,
+    "original_effects": 17,
+    "original_events": 54,
+    "original_failed_effects": 6,
+    "original_active_job_uids_verified": [
+      {
+        "request_id": "99936edda4fbcd33a3ed8c94ad9e121617b4f301e3ad681d08a6586fec766a8b",
+        "job_name": "android-prepare-99936edda4fbcd33a3ed8c94",
+        "job_uid": "6ac6c3bc-c7ce-4298-b911-03c5a0489b6d"
+      }
+    ],
+    "actions_submitted_or_replayed": 0,
+    "workstation_dependencies": [],
+    "scope": "coordinator state recovery only; no promotion or timing claim",
+    "archive": {
+      "key": "android-release/records/add70f8e7eb2d5781a072531448909518fdf6e6c29e573d99ffc8c37cd465ee8.json",
+      "version": "vSmcmF0RqRcjkd4s0iYQXf98D3S6Si8",
+      "sha256": "add70f8e7eb2d5781a072531448909518fdf6e6c29e573d99ffc8c37cd465ee8",
+      "bytes": 945
+    },
+    "job": "android-state-recovery-0e9e7280d3"
+  },
+  "storage": {
+    "release_state_capacity_gib": 8,
+    "release_state_observed_used_mib": 1002,
+    "compiler_cache_volumes": 7,
+    "compiler_cache_capacity_gib_each": 8,
+    "android_disk_capacity_gib": 32,
+    "network_disk_capacity_gib": 48,
+    "durable_archive": "Hetzner FSN1 versioned S3"
+  },
+  "remaining": [
+    "normally signed 42MiB same-run interruption/resume and current-process load within360s",
+    "three real original-clock promotions within600s",
+    "functional failed-canary restoration within60s",
+    "client-disconnected release/rollback completion"
+  ],
+  "codematch": "unreachable"
+}
