@@ -36,6 +36,14 @@ and restoration by the original 600-second deadline. A failed tag is never
 restarted or given a new clock.
 
 Preparation builds the SDK, installer, headless hub, downloaded worker and fleet controller in bounded parallel jobs. The running controller is verified against its prepared artifact so the sender cannot remain on an older fixed binary.
+When every artifact is already verified, preparation bypasses the global compiler
+lock and verifies its own immutable release journal. An explicit cluster request
+with `require_cached: true` fails on missing or changed artifacts and can never
+compile. This supports a newly reviewed operations configuration for an already
+qualified source family while another native preparation runs. Live mutation still
+requires the deployment lock. Both worker publication and profile mint use the
+shared activation deadline; restoration retains its separate final-minute bound.
+
 The APK includes ARM64 and x86_64 native client inputs; downloadable workers
 compile only the ABIs in the declared Android target inventory.
 APK packaging waits only for SDK and installer inputs. Cached artifacts require

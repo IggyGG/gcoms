@@ -437,7 +437,7 @@ def execute(config, request_path, checksum):
     Path(config['state'], 'tmp').mkdir(exist_ok=True)
     try:
         if request['operation'] == 'prepare':
-            value = prepare_release(config, request['manifest'])
+            value = prepare_release(config, request['manifest'], require_cached=request.get('require_cached', False))
             state = 'prepared'
         elif request['operation'] == 'promote':
             value = deploy(config, request['manifest'])

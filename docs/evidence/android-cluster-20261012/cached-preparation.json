@@ -1,0 +1,27 @@
+{
+  "schema": 1,
+  "kind": "verified-cached-preparation-and-activation-deadlines",
+  "controls": {
+    "job": "android-cached-only-controls-6ddd7ca678",
+    "namespace": "ghost",
+    "passed": 13,
+    "seconds": 6.751,
+    "causal_negatives": [
+      "original 175-second publication helper cutoff",
+      "original global compiler lock for complete verified caches"
+    ]
+  },
+  "properties": [
+    "complete cached preparations verify independently of an unrelated compiler lock",
+    "require_cached is bound to the immutable cluster request and forbids any fallback compilation",
+    "changed or absent cached artifacts fail before compilation",
+    "native input hashes and APK signing verification remain required",
+    "live mutations retain their original deployment lock",
+    "publication and profile mint share the declared activation deadline",
+    "original 600-second push deadline and final rollback minute remain fixed",
+    "recovered terminal cluster results do not reexecute"
+  ],
+  "native_inputs_changed": false,
+  "codematch": "unreachable",
+  "live_validation": "pending matching immutable cluster configuration and explicit cached request"
+}

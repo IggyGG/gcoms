@@ -273,6 +273,22 @@ class ClusterRecovery(unittest.TestCase):
         sync.assert_not_called()
         self.assertFalse(any(kind == 'job' for kind, _ in self.api.objects))
 
+    def test_cached_preparation_constraint_is_bound_and_recovered_without_reexecution(self):
+        self.request['require_cached'] = True
+        self.request['request_id'] = hashlib.sha256(release.canonical(
+            {key: value for key, value in self.request.items() if key != 'request_id'})).hexdigest()
+        path = self.root / 'request.json'
+        release.write_json(path, self.request)
+        checksum = hashlib.sha256(release.canonical(self.request)).hexdigest()
+        with patch.object(cluster, 'Catalogue', return_value=self.catalogue), \
+                patch.object(cluster, 'prepare_release', return_value={'prepared_id': 'a' * 64}) as action:
+            result = cluster.execute(self.config, path, checksum)
+            self.assertEqual(result['state'], 'prepared')
+            action.assert_called_once_with(self.config, self.request['manifest'], require_cached=True)
+            (self.root / 'cluster-results' / (self.request['request_id'] + '.json')).unlink()
+            self.assertEqual(cluster.execute(self.config, path, checksum), result)
+            action.assert_called_once()
+
     def test_failed_execution_is_archived_and_cannot_repeat_after_local_result_loss(self):
         path = self.root / 'request.json'
         release.write_json(path, self.request)

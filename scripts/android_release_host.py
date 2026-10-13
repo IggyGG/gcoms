@@ -17,7 +17,7 @@ import time
 import tomllib
 import zipfile
 
-from android_release import command, digest, git, write_json
+from android_release import LIMIT_SECONDS, STAGE_SECONDS, command, digest, git, write_json
 
 PACKAGE = 'boo.gcoms.agent'
 ABIS = {'arm64-v8a': 'aarch64-linux-android', 'x86_64': 'x86_64-linux-android'}
@@ -382,7 +382,8 @@ def publish_worker(request, target, file, restoring=False, deadline=None):
     command([config['fleet_binary'], 'publish', '--config', config['fleet_config'],
              '--channel', target['channel'], '--file', staged], timeout=budget, log=folder / 'publish.log')
     wanted = digest(file)
-    until = min(time.time() + 20, request['manifest']['pushed_at'] + (595 if restoring else 175))
+    limit = LIMIT_SECONDS if restoring else STAGE_SECONDS['activation']
+    until = min(time.time() + 20, request['manifest']['pushed_at'] + limit - 5)
     while True:
         state = json.loads((Path(fleet['state']) / 'releases.json').read_text())
         current = state.get('active', {}).get(target['channel'], {})
@@ -475,7 +476,7 @@ def activate(request):
                  '--property=StandardError=append:' + str(folder / 'mint.log'),
                  config['fleet_binary'], 'mint-ds', '--config', config['fleet_config'],
                  '--channel', target['channel'], '--output', profile, '--keep-alive', '600', *mint_network(config)])
-        until = min(time.time() + 45, manifest['pushed_at'] + 175)
+        until = min(time.time() + 45, manifest['pushed_at'] + STAGE_SECONDS['activation'] - 5)
         while not profile.exists():
             if time.time() >= until:
                 raise TimeoutError('fresh Android profile mint did not complete')
