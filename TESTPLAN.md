@@ -1,3 +1,5 @@
+F5 cached preparation under an active compiler, 2026-10-13: the real cache-only Job prepared source `e449994` in 25 seconds with all six qualified native artifacts unchanged. Its submission helper and preparation together took 139 seconds, including coordinator ownership and source synchronization. The original independent native preparation kept its exact Job UID and continued. The result is pinned in FSN1 S3; no compilation or broad test run was part of this cached request. Original-clock live promotion remains pending. [Evidence](docs/evidence/android-cluster-20261012/cached-preparation-live.json).
+
 F5 deferred durable ordering, 2026-10-13: require the causal
 `gc2_fresh_durable_send_keeps_confirmed_deferred_predecessors` check to fail on the
 original admission path and pass with the repair. Keep peer/class/expiry isolation,
