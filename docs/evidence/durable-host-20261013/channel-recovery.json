@@ -1,0 +1,63 @@
+{
+  "schema": 1,
+  "scope": "F5 retained channel recovery fairness",
+  "baseline": "c84f0a7d460939d7b9729e8f5c07767d03cef552",
+  "runtime_sha256": "bf0225952a668db0c7fde52b13a26a8c42b6c3030f37d46845be7732ab324219",
+  "tests_sha256": "7831be6dfccdce1de0cfaa6b224a6f20fe520f8e539afbad965354ed38ff61cd",
+  "causal_before": {
+    "label": "channel-recovery-fairness-before-1",
+    "runtime_sha256": "82ee34b8a2645036e614a61f56bf2c62bd5e5d6485bb9c9ed45d6dfdd764b207",
+    "exit_code": 101,
+    "failure": "healthy retained channels starved behind a full batch: {}",
+    "test_seconds": 2.59,
+    "log_sha256": "07cf5fe3540544729277aed3a04204f979c6c44740b93c319b927d5f870923a2"
+  },
+  "qualification": [
+    {
+      "label": "channel-recovery-fairness-after-1",
+      "result": "2 focused real-TLS queue-cover/MLS-state controls pass",
+      "log_sha256": "888373c90e035badb88e68961cbc6c263faf169a8aed0f887c2d8b89fe4859c4"
+    },
+    {
+      "label": "channel-recovery-node-suite-1",
+      "command": "cargo test --locked --offline -p gcoms-node --lib --features client-persist,experimental-gc2",
+      "passed": 453,
+      "failed": 0,
+      "ignored": [
+        "real_denied_low_port_falls_back_without_privileges: existing isolated-namespace requirement",
+        "deployed_relay_probe: existing separately authorized live provisioning requirement"
+      ],
+      "log_sha256": "dd4b3a87bad2198a65fc16618a0a8d0fdce1418f7c08b9321ea3621d14276c93"
+    },
+    {
+      "label": "channel-recovery-clippy-1",
+      "command": "cargo clippy --locked --offline -p gcoms-node --all-targets --features client-persist,experimental-gc2 -- -D warnings",
+      "exit_code": 0,
+      "log_sha256": "ac245a182b9a36f6c2314eabd8b44c676525c11b45bad374daa32656111c1131"
+    },
+    {
+      "label": "channel-recovery-client-check-1",
+      "command": "cargo check --locked --offline -p gcoms-node --no-default-features --features client-persist,experimental-gc2",
+      "exit_code": 0,
+      "log_sha256": "0ec9229feddbe1cddef179a57d114fe2deda549bf9047ab9029fab99c5f615a9"
+    }
+  ],
+  "frozen_sources_unchanged_during_checks": true,
+  "invariants": [
+    "at most four channel and four prepared-route attempts per pass",
+    "deferred channels are not marked ready",
+    "existing control ciphertexts and membership epochs survive",
+    "prepared key packages survive; recovery does not consume a join",
+    "durable checkpoint failures retain the owner-pause path",
+    "no admission cap, wire format, API, route-independence or delivery deadline change"
+  ],
+  "code_comparison": {
+    "before": "no close source implementation; unrelated decompiled results at rerank <=0.057",
+    "after": "hubv/reth:crates/stages/stages/src/stages/sender_recovery.rs",
+    "cosine": 0.6817,
+    "rerank": 0.0325088,
+    "assessment": "generic recovery-stage resemblance only; no implementation copied"
+  },
+  "retained_evidence_root": "/run/media/user/SSD-2/retained/ghost/durable-host-20261012",
+  "installed_acceptance": "pending: signed 0.1.214 retained the original 300-second live message failure; this source change needs a newly qualified successor"
+}

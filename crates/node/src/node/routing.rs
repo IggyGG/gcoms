@@ -143,6 +143,8 @@ pub(crate) struct RoutingRuntime {
     provision_request: [u8; 32],
     pub channel_ready: Mutex<HashSet<String>>,
     prepared_ready: Mutex<HashSet<u64>>,
+    channel_recovery_cursor: Mutex<Option<String>>,
+    prepared_recovery_cursor: Mutex<Option<u64>>,
     entry: Arc<PersistedEntry>,
 }
 
@@ -314,6 +316,8 @@ impl RoutingRuntime {
             provision_request: random_nonzero(),
             channel_ready: Mutex::new(HashSet::new()),
             prepared_ready: Mutex::new(HashSet::new()),
+            channel_recovery_cursor: Mutex::new(None),
+            prepared_recovery_cursor: Mutex::new(None),
             entry,
         }))
     }
@@ -865,6 +869,23 @@ async fn recover_aliases(
     .map_err(|_| "route recovery exceeded original lifetime")?
 }
 
+/// A repeatedly deferred first batch must not hide later retained routes.
+/// Only four candidates are attempted per pass, with process-local cursors;
+/// these cursors convey no readiness or durable delivery authority.
+fn recovery_batch<K: Ord + Clone>(mut pending: Vec<K>, cursor: &Mutex<Option<K>>) -> Vec<K> {
+    pending.sort();
+    let mut last = cursor.lock().unwrap_or_else(|p| p.into_inner());
+    let split = last.as_ref().map_or(0, |key| {
+        pending.partition_point(|candidate| candidate <= key)
+    });
+    pending.rotate_left(split);
+    pending.truncate(4);
+    if let Some(key) = pending.last() {
+        *last = Some(key.clone());
+    }
+    pending
+}
+
 async fn recover_channels(
     state: &Arc<Mutex<NodeState>>,
     scheduler: &RelayScheduler,
@@ -883,14 +904,18 @@ async fn recover_channels(
             .lock()
             .unwrap_or_else(|p| p.into_inner());
         ready.retain(|name| st.channels.contains_key(name));
-        let channels: Vec<_> = st
+        let pending = st
             .channels
-            .iter()
-            .filter(|(name, _)| !ready.contains(*name))
-            .take(4)
-            .map(|(name, cs)| {
+            .keys()
+            .filter(|name| !ready.contains(*name))
+            .cloned()
+            .collect();
+        let channels: Vec<_> = recovery_batch(pending, &runtime.channel_recovery_cursor)
+            .into_iter()
+            .map(|name| {
+                let cs = &st.channels[&name];
                 (
-                    name.clone(),
+                    name,
                     cs.own_route.public.clone(),
                     cs.own_route.aliases.clone(),
                     cs.own_route.direct_secret,
@@ -902,12 +927,15 @@ async fn recover_channels(
             .lock()
             .unwrap_or_else(|p| p.into_inner());
         ready.retain(|id| st.prepared.contains_key(id));
-        let prepared: Vec<_> = st
+        let pending = st
             .prepared
-            .iter()
-            .filter(|(id, _)| !ready.contains(id))
-            .take(4)
-            .map(|(id, p)| (*id, p.route.aliases.clone()))
+            .keys()
+            .filter(|id| !ready.contains(*id))
+            .copied()
+            .collect();
+        let prepared: Vec<_> = recovery_batch(pending, &runtime.prepared_recovery_cursor)
+            .into_iter()
+            .map(|id| (id, st.prepared[&id].route.aliases.clone()))
             .collect();
         (authority, st.client_relay.clone(), channels, prepared)
     };
@@ -935,6 +963,7 @@ async fn recover_channels(
             .unwrap_or_else(|p| p.into_inner())
             .insert(id);
     }
+    let mut deferred = None;
     for (name, public, retained, direct_secret) in channels {
         let route = match recover_aliases(scheduler, &authority, &retained).await {
             Ok(aliases) => crate::channel::OwnedChannelRoute {
@@ -943,7 +972,15 @@ async fn recover_channels(
                 aliases,
             },
             Err(_) => {
-                provision_channel_route(scheduler, &relay, public.pseudonym, direct_secret).await?
+                match provision_channel_route(scheduler, &relay, public.pseudonym, direct_secret)
+                    .await
+                {
+                    Ok(route) => route,
+                    Err(error) => {
+                        deferred.get_or_insert(error);
+                        continue;
+                    }
+                }
             }
         };
         let mut st = state.lock().unwrap_or_else(|p| p.into_inner());
@@ -976,14 +1013,19 @@ async fn recover_channels(
         // route checkpoint but precede its announcement. Keep this channel
         // pending until every peer has its own durable control destination;
         // the bounded overlay does not forward directory messages onward.
-        stage_recovered_route_announcements(&mut st, &name)?;
+        if let Err(error) = stage_recovered_route_announcements(&mut st, &name) {
+            // This channel keeps its exact pending controls and partial fanout.
+            // Other channels still need their own recovery/receive progress.
+            deferred.get_or_insert(error);
+            continue;
+        }
         runtime
             .channel_ready
             .lock()
             .unwrap_or_else(|p| p.into_inner())
             .insert(name);
     }
-    Ok(())
+    deferred.map_or(Ok(()), Err)
 }
 
 pub(super) async fn recover_owner(
@@ -1200,3 +1242,7 @@ async fn resume_owner(
 #[cfg(all(test, feature = "experimental-gc2", feature = "relay-host"))]
 #[path = "gc2_inbox_tests.rs"]
 mod gc2_inbox_tests;
+
+#[cfg(all(test, feature = "client-persist"))]
+#[path = "routing_channel_recovery_tests.rs"]
+mod channel_recovery_tests;
