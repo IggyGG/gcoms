@@ -20,20 +20,15 @@ other service errors remain failures.
 
 | Deadline after push | Stage |
 | --- | --- |
-| 180 seconds | Capacity/toolchain/baseline preflight |
-| 180 seconds | Verify all prepared artifact cache entries; no compilation |
-| 180 seconds | Artifact and signing verification |
-| 300 seconds | Activation and fresh private provisioning |
-| 540 seconds | Full downloaded worker readiness on every Android target |
+| 540 seconds, shared | Preflight, prepared cache/signing verification, activation and full downloaded worker readiness on every target |
 | 600 seconds | Reserved restoration window |
 
-The first three stages share an absolute three-minute deadline from the server
-push. The first real promotion started preflight 93.894 seconds after its original
-push and failed the previous two-minute cutoff without activation. Idle polling
-alone underestimated admission and durable journaling. These stages now include
-that measured overhead; activation ends by 300 seconds, readiness by 540 seconds
-and restoration by the original 600-second deadline. A failed tag is never
-restarted or given a new clock.
+All normal stages share the original nine-minute deadline from the server push.
+Earlier internal cutoffs rejected two real requests before activation at 120.221
+and 182.351 seconds, even though the overall budget remained. Stage timestamps
+remain in the receipt for diagnosis; individual commands retain their own timeouts.
+Starting at or beyond 540 seconds refuses activation and preserves the last
+minute for restoration. A failed tag is never restarted or given a new clock.
 
 Preparation builds the SDK, installer, headless hub, downloaded worker and fleet controller in bounded parallel jobs. The running controller is verified against its prepared artifact so the sender cannot remain on an older fixed binary.
 When every artifact is already verified, preparation bypasses the global compiler

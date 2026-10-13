@@ -4,10 +4,10 @@
   "preflight_seconds": 37.34315252304077,
   "coordinator_idle_seconds": 23.089190758764744,
   "absolute_stage_deadlines_seconds": {
-    "preflight": 180,
-    "building": 180,
-    "verifying": 180,
-    "activation": 300,
+    "preflight": 540,
+    "building": 540,
+    "verifying": 540,
+    "activation": 540,
     "readiness": 540,
     "restoration": 600
   },
@@ -15,21 +15,33 @@
   "full_reference_limit_seconds": 360,
   "rollback_reserve_seconds": 60,
   "controls": {
-    "job": "android-admission-budget-controls-9185cff4b7",
-    "passed": 7,
-    "seconds": 3.641,
-    "original_two_minute_stage_control_failed": true
+    "job": "android-global-deadline-controls-a5823222a9",
+    "passed": 8,
+    "seconds": 5.05,
+    "original_three_minute_stage_control_failed": true
   },
   "codematch": "unreachable",
   "live_promotion_acceptance": "pending original server-clock pushes",
-  "previous_allocation": {
-    "preflight": 120,
-    "building": 120,
-    "verifying": 120,
-    "activation": 180,
-    "readiness": 540,
-    "restoration": 600
-  },
   "admission_failure": "original-promotion-admission-failure.json",
-  "preflight_admission_seconds": 93.89404797554016
+  "preflight_admission_seconds": 93.89404797554016,
+  "superseded_allocations": [
+    {
+      "preflight": 120,
+      "building": 120,
+      "verifying": 120,
+      "activation": 180,
+      "readiness": 540,
+      "restoration": 600
+    },
+    {
+      "preflight": 180,
+      "building": 180,
+      "verifying": 180,
+      "activation": 300,
+      "readiness": 540,
+      "restoration": 600
+    }
+  ],
+  "latest_original_failure": "original-stage-cutoff-failure.json",
+  "reason": "Premature internal cutoffs rejected verified work with end-to-end time remaining; every normal stage now shares the original 540-second deadline and retains the final rollback minute."
 }
