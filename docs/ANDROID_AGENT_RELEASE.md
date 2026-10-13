@@ -58,6 +58,43 @@ The hook recognizes current `agent/` task branches without hardcoding session
 IDs. It accepts only safe ASCII ref names; the consumer still selects the exact
 source refs in the private configuration before requesting preparation.
 
+## Routine cluster releases
+
+Push source changes to the refs selected by the cluster configuration. The
+coordinator prepares their immutable source manifest in Kubernetes and publishes
+verified artifacts to FSN1 S3. Read the original preparation Job's result before
+choosing a release; a newer source notification does not make that candidate
+qualified or live.
+
+Select the exact prepared ID, configuration and source commit. Reuse the full
+Android reference only when all six native input keys and the lab context match
+and its validity window remains open. An operations-only release can explicitly
+select the qualified source family with `require_cached: true`; retain the
+original artifact provenance. A missing cache entry fails that request. Changed
+native inputs require their relevant checks and a new Android reference.
+
+Run the actual preflight for that prepared configuration in a trusted cluster
+Job. Confirm that normal relay introductions cover the release and restoration
+window; wait for normal rotation when they do not. Verify the exact promotion
+tag is absent, then push the selected full commit to
+`refs/tags/android-release/<prepared-id>` on the cloud Forgejo remote. The
+server receipt starts the clock. After the Git client exits, the coordinator,
+runner, guests and archive complete the operation independently.
+
+Observe the original Job UID and archived result. Success requires every declared
+target, the installed APK hash, the current Android process, downloaded worker
+readiness and the original push-to-live duration. A failed release retains its
+failure and any functional restoration result. Do not recreate an old Job or tag
+to obtain a new clock. Routine promotion compiles nothing and does not repeat
+Apple, Windows, desktop GUI or relay soak matrices.
+
+Cold preparation and timed promotion have separate measurements: the fresh
+six-component native preparation on 2026-10-13 took 25 minutes 39 seconds. The
+ten-minute objective applies to a prepared release tag, including intake and
+queueing; it is not evidence of a ten-minute cold source build. Workstation
+timers and the local Android release hook are retired. The cluster's original
+receipts and FSN1 archive remain authoritative if the submitting client exits.
+
 ## Isolated cluster runtime
 
 `android_release_lab_provision.py --config /config/provision.json network|connect|fleet|android|inspect`
