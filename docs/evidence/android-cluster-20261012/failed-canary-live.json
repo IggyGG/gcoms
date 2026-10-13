@@ -1,0 +1,248 @@
+{
+  "schema": 1,
+  "kind": "real-android-failed-canary-restoration",
+  "prepared_id": "d99dd19939aacf5c804565fe8455dbee011a97689e534b6105ff2ebc77eb050c",
+  "job_name": "android-promote-0392ee14d17c04bee4c646fa",
+  "job_uid": "d03af3dc-f7e6-4e31-a4cb-b686fec19472",
+  "source_push": {
+    "schema": 1,
+    "project": "gcoms",
+    "repository": "ghost-local/gcoms",
+    "ref": "refs/tags/android-release/d99dd19939aacf5c804565fe8455dbee011a97689e534b6105ff2ebc77eb050c",
+    "commit": "4b8a929ac7663e921bae1502d147b2da5ebd320e",
+    "pushed_at": 1791864131,
+    "nonce": "682213be-12a0-465a-9aeb-d5c4a4b9b97a",
+    "server_event_id": "eba3eb2a3c5d5c53b4481791a8b147beb3675eae9225bcd51ed84a1f3caa5af0"
+  },
+  "result": {
+    "release_id": "4be9b44ea8d39c335065ba1d8996d5b126dc512684e416b653a51840b5d9b3b1",
+    "pushed_at": 1791864131,
+    "deadline_at": 1791864731,
+    "state": "failed",
+    "stages": {
+      "preflight": {
+        "started_at": 1791864266.7526402,
+        "finished_at": 1791864337.783854
+      },
+      "building": {
+        "started_at": 1791864338.369841,
+        "finished_at": 1791864344.0596688
+      },
+      "verifying": {
+        "started_at": 1791864344.6550162,
+        "finished_at": 1791864347.4052982
+      },
+      "activation": {
+        "started_at": 1791864347.9889185,
+        "finished_at": 1791864384.8760371
+      },
+      "readiness": {
+        "started_at": 1791864385.457003
+      }
+    },
+    "artifacts": {
+      "sdk": {
+        "schema": 1,
+        "component": "sdk",
+        "input_sha256": "c25677dca908710f337d969a3259cb02bfc4101d4908da344fd2616f1ba7cad1",
+        "sources": {
+          "gcoms": "1ab416bc59d9b73f131163a9a2d268a50e7e2e00"
+        },
+        "files": {
+          "summary.json": "535991a0f64239cf479cd72f5dd0130912a655f85b6455a9c233ccb8fe22eae4",
+          "evidence/client-aarch64-linux-android-opt-z.so": "15a287971572ed54c9cadafe07bb8ff07d7a3c0dc1b40d3077341af43325bfd3",
+          "evidence/client-x86_64-linux-android-opt-z.so": "c714e1eba7dcf73bc62a1e02285c545fc15872e4d3b828a12405e927e17114d2",
+          "android/client/build.json": "641e75dfea8ec4d0f0e377715aae870191bda9a98dbe0cc23f314e3a914383ce",
+          "android/client/x86_64/libgcoms_mobile.so": "c714e1eba7dcf73bc62a1e02285c545fc15872e4d3b828a12405e927e17114d2",
+          "android/client/arm64-v8a/libgcoms_mobile.so": "15a287971572ed54c9cadafe07bb8ff07d7a3c0dc1b40d3077341af43325bfd3"
+        },
+        "qualification": "focused Android release inputs; live readiness checked separately",
+        "cache_hit": true
+      },
+      "installer": {
+        "schema": 1,
+        "component": "installer",
+        "input_sha256": "a6dcfd87b5dccb1abec7878fe0d2f0542f0bdaaf470baa0ad62540c591f38d3a",
+        "sources": {
+          "dropship": "65d36cac00305a3ff65a20dc9cfc657da17fcfa5",
+          "gcoms": "c5a4df34ffaae068d52c7f3b97cd627ec7427967",
+          "drone": "e39902c6e5cd5c283c95c9b8fb82edd0e26cda00",
+          "gchat": "cce917396d2cb4c3b5cb62a78eda262d37dbcd32"
+        },
+        "files": {
+          "libdsminimal-android-arm64.a": "1d0a9c182204be6409fe856804937e881c65263e53888be8f284e874a78dae5d",
+          "libdsminimal-android-x86_64.a": "738da327abd63005a5cc450a62da900f422086c22fbc5929a907f0d2768deb1f"
+        },
+        "qualification": "focused Android release inputs; live readiness checked separately",
+        "cache_hit": true
+      },
+      "apk": {
+        "schema": 1,
+        "component": "apk",
+        "input_sha256": "b2464fa6717d0754adfc1dbaaf392de5fd37b0edc0054d698a936aa048ca2f98",
+        "sources": {
+          "agent": "761e131e802b89d07cd032e891013324ac0936b5"
+        },
+        "files": {
+          "agent.apk": "d241db69e1a514cf21c91050f18ce7b8dcb989b326d1163d400f1e23d74ce11a"
+        },
+        "qualification": "focused Android release inputs; live readiness checked separately",
+        "cache_hit": true
+      },
+      "hub": {
+        "schema": 1,
+        "component": "hub",
+        "input_sha256": "3ad668192288b19a77e86cea4fe0e167dd5ac341f7d0df8092e8dd94d3221cd6",
+        "sources": {
+          "gchat": "cce917396d2cb4c3b5cb62a78eda262d37dbcd32",
+          "gcoms": "1ab416bc59d9b73f131163a9a2d268a50e7e2e00"
+        },
+        "files": {
+          "gchat": "9420c1945094cb3ab2b4d7a287773df1b51f3726f59070cd078a1e6ad7819e60",
+          "resolved-Cargo.lock": "91a316a0d4473419f15d08a67fe63af0d0b86d3b360612e538f2ab9eef9241c1"
+        },
+        "qualification": "focused Android release inputs; live readiness checked separately",
+        "cache_hit": true
+      },
+      "worker": {
+        "schema": 1,
+        "component": "worker",
+        "input_sha256": "1870e9956fe276ae43f1b0ae04abf5b6beb404408694b8a8c5f6b803ac53aba3",
+        "sources": {
+          "drone": "e39902c6e5cd5c283c95c9b8fb82edd0e26cda00",
+          "gcoms": "c5a4df34ffaae068d52c7f3b97cd627ec7427967",
+          "gchat": "cce917396d2cb4c3b5cb62a78eda262d37dbcd32"
+        },
+        "files": {
+          "x86_64/worker.so": "7650027cf75258c215021d5df13af6bf7452b4f6e41e7c6a68c8715b87411af6"
+        },
+        "qualification": "focused Android release inputs; live readiness checked separately",
+        "cache_hit": true
+      },
+      "controller": {
+        "schema": 1,
+        "component": "controller",
+        "input_sha256": "6dcdbd5b422c732dd2a3a8e9ab0b1b587775fa80b0d0f5f91c36f7ad18a497ca",
+        "sources": {
+          "drone": "e39902c6e5cd5c283c95c9b8fb82edd0e26cda00",
+          "gcoms": "c5a4df34ffaae068d52c7f3b97cd627ec7427967",
+          "gchat": "cce917396d2cb4c3b5cb62a78eda262d37dbcd32"
+        },
+        "files": {
+          "gdrone-fleet": "be8821d5119c00e399b4fcfa4d236a739cb5505f1c116987996d969d68bea34b"
+        },
+        "qualification": "focused Android release inputs; live readiness checked separately",
+        "cache_hit": true
+      }
+    },
+    "activation_started": true,
+    "failure_type": "RuntimeError",
+    "failure_stage": "readiness",
+    "finished_at": 1791864415.6513863,
+    "rollback": "ready",
+    "elapsed_seconds": 325.8623869419098
+  },
+  "result_archive": {
+    "bytes": 4345,
+    "key": "android-release/records/ae7c206f6f1628ef0770ab21bf08f03cdf1c9744e7ad0b956db599f045996a3d.json",
+    "sha256": "ae7c206f6f1628ef0770ab21bf08f03cdf1c9744e7ad0b956db599f045996a3d",
+    "version": "nqPS4xesZN5Foaqe9aH4nJpswCPO.0U"
+  },
+  "fault": {
+    "schema": 1,
+    "state": "fault_observed",
+    "envelope_sha256": "00c5ad42bb44696902045350ba4b9f8c59e364ec31947c50fa99356c44f77408",
+    "release_id": "4be9b44ea8d39c335065ba1d8996d5b126dc512684e416b653a51840b5d9b3b1",
+    "prepared_id": "d99dd19939aacf5c804565fe8455dbee011a97689e534b6105ff2ebc77eb050c",
+    "observed_at": 1791864412.0580075,
+    "prior_process_id": 11231,
+    "process_present": false,
+    "fault": "stop-activated-android-app",
+    "selected": {
+      "release_id": "4be9b44ea8d39c335065ba1d8996d5b126dc512684e416b653a51840b5d9b3b1",
+      "apk_sha256": "d241db69e1a514cf21c91050f18ce7b8dcb989b326d1163d400f1e23d74ce11a",
+      "worker_sha256": "7650027cf75258c215021d5df13af6bf7452b4f6e41e7c6a68c8715b87411af6"
+    },
+    "identity_sha256": "03d16a1467450203f45f223edb6fb44cc81d6a48049562e7c0ac13c025958a82",
+    "requires_functional_restoration": true
+  },
+  "fault_archive": {
+    "key": "android-release/records/ab518879770013f6e6579ffbbfc027350245b53100426bde3fa347c95271178d.json",
+    "version": "kANujKdpxGin8KGwIaMTxq7pmy7FAku",
+    "sha256": "ab518879770013f6e6579ffbbfc027350245b53100426bde3fa347c95271178d",
+    "bytes": 782
+  },
+  "functional_restoration_seconds": 44.8043794631958,
+  "target_proof": {
+    "schema": 1,
+    "release_id": "4be9b44ea8d39c335065ba1d8996d5b126dc512684e416b653a51840b5d9b3b1",
+    "prepared_id": "d99dd19939aacf5c804565fe8455dbee011a97689e534b6105ff2ebc77eb050c",
+    "original_result_archive": {
+      "bytes": 4345,
+      "key": "android-release/records/ae7c206f6f1628ef0770ab21bf08f03cdf1c9744e7ad0b956db599f045996a3d.json",
+      "sha256": "ae7c206f6f1628ef0770ab21bf08f03cdf1c9744e7ad0b956db599f045996a3d",
+      "version": "nqPS4xesZN5Foaqe9aH4nJpswCPO.0U"
+    },
+    "source_push": {
+      "schema": 1,
+      "project": "gcoms",
+      "repository": "ghost-local/gcoms",
+      "ref": "refs/tags/android-release/d99dd19939aacf5c804565fe8455dbee011a97689e534b6105ff2ebc77eb050c",
+      "commit": "4b8a929ac7663e921bae1502d147b2da5ebd320e",
+      "pushed_at": 1791864131,
+      "nonce": "682213be-12a0-465a-9aeb-d5c4a4b9b97a",
+      "server_event_id": "eba3eb2a3c5d5c53b4481791a8b147beb3675eae9225bcd51ed84a1f3caa5af0"
+    },
+    "unattended": null,
+    "evidence": {
+      "rollback.json": {
+        "previous_artifacts_verified": true,
+        "functional_readiness_verified": true,
+        "targets": [
+          {
+            "abi": "x86_64",
+            "channel": "android-x64",
+            "id": "android-x64",
+            "kind": "android",
+            "serial": "10.244.42.176:5555",
+            "healthy": true,
+            "matches": true,
+            "identity_preserved": true,
+            "loaded_worker_ready": true
+          }
+        ]
+      },
+      "failed-canary-observation.json": {
+        "schema": 1,
+        "state": "fault_observed",
+        "envelope_sha256": "00c5ad42bb44696902045350ba4b9f8c59e364ec31947c50fa99356c44f77408",
+        "release_id": "4be9b44ea8d39c335065ba1d8996d5b126dc512684e416b653a51840b5d9b3b1",
+        "prepared_id": "d99dd19939aacf5c804565fe8455dbee011a97689e534b6105ff2ebc77eb050c",
+        "observed_at": 1791864412.0580075,
+        "prior_process_id": 11231,
+        "process_present": false,
+        "fault": "stop-activated-android-app",
+        "selected": {
+          "release_id": "4be9b44ea8d39c335065ba1d8996d5b126dc512684e416b653a51840b5d9b3b1",
+          "apk_sha256": "d241db69e1a514cf21c91050f18ce7b8dcb989b326d1163d400f1e23d74ce11a",
+          "worker_sha256": "7650027cf75258c215021d5df13af6bf7452b4f6e41e7c6a68c8715b87411af6"
+        },
+        "identity_sha256": "03d16a1467450203f45f223edb6fb44cc81d6a48049562e7c0ac13c025958a82",
+        "requires_functional_restoration": true
+      }
+    },
+    "archive": {
+      "key": "android-release/records/1cc5216599e0593518dba13ade645d5118db52f6981e4cf8f8534cc5f09cd51f.json",
+      "version": "O2w6vbIV81X6yB5bJlji231XsleP2Vo",
+      "sha256": "1cc5216599e0593518dba13ade645d5118db52f6981e4cf8f8534cc5f09cd51f",
+      "bytes": 1959
+    }
+  },
+  "ordinary_configuration_restored": true,
+  "final_state_archive": {
+    "key": "android-release/records/f89c8dd643ec3fe0a3e0d4956093d189c38ed18ad10e534140cee09c8f34f9e5.json",
+    "version": ".JnEF1yvxbCI6oHS0knNVvMbHezVel8",
+    "sha256": "f89c8dd643ec3fe0a3e0d4956093d189c38ed18ad10e534140cee09c8f34f9e5",
+    "bytes": 8097
+  }
+}

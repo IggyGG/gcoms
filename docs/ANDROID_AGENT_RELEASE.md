@@ -95,6 +95,18 @@ queueing; it is not evidence of a ten-minute cold source build. Workstation
 timers and the local Android release hook are retired. The cluster's original
 receipts and FSN1 archive remain authoritative if the submitting client exits.
 
+The 2026-10-13 acceptance covers the declared isolated Android x86_64 target and its managed hub/controller. Three original server-push clocks were 356.590, 288.456 and 213.545 seconds; deliberate process-stop restoration was 44.804 seconds. The first release completed after its client exited, with no operator cluster or guest calls for the following ten-minute window. This proves client-independent completion; it does not claim a physical workstation poweroff. The ordinary configuration is restored and the failed canary remains a failed release. [Final evidence](evidence/android-cluster-20261012/completion.json).
+
+| State | Location |
+| --- | --- |
+| Source synchronization, scheduling, native builds, release and rollback | Kubernetes Jobs and coordinator |
+| Android emulator and isolated relay/hub/controller lab | Reserved Kubernetes lab guests |
+| Artifacts, original push receipts, checkpoints, access recovery and evidence | Versioned Hetzner FSN1 S3 |
+| Coordinator working state and component caches | 8 GiB state PVC; six 8 GiB cache PVCs |
+| Active guest disks and runner scratch | 32 GiB Android; 48 GiB network guest; 128 MiB runner scratch |
+
+Actual recovery was verified from empty artifact/coordinator/access caches and from S3 guest checkpoints onto new PVCs. S3 stores durable objects; running filesystems and writable database state use bounded cluster volumes. Existing local source checkouts and retained evidence are optional development material, and the local release timers/hook are disabled.
+
 ## Isolated cluster runtime
 
 `android_release_lab_provision.py --config /config/provision.json network|connect|fleet|android|inspect`
@@ -156,7 +168,7 @@ APK verification probe when changing this tool packaging.
 
 Cluster qualification records the actual lab identity and boundary, runs the same normally signed 42 MiB interrupted transfer with the 360-second limit, and requires the current process to load the worker. It does not claim the workstation VPN proof. The adapter controls and image build alone do not qualify transfer, deployment, rollback or disconnection.
 
-The current 2026-10-13 cluster reference passed in 292.090 seconds with the launch clock/retry repairs and current main native inputs. It interrupted the signed 42 MiB transfer at 8,635,000 bytes, resumed the same run after PID 8308 became 8619, preserved the identity and verified in-process load. Its S3 receipt binds the exact native inputs and guest boundary. The earlier 278.640-second reference remains valid only for its older inputs. Three consecutive real promotion tags then reached every declared target in 356.590, 288.456 and 213.545 seconds from their original server timestamps. Each reused all six verified artifacts. The first completed after its submitting client exited, with no operator cluster or guest calls during a following ten-minute window. Functional failed-canary restoration remains pending. See `docs/evidence/android-cluster-20261012/live-promotions.json`. See `docs/evidence/android-cluster-20261012/runtime-qualified-launch-repair.json` and the retained older `runtime-qualified.json`.
+The current 2026-10-13 cluster reference passed in 292.090 seconds with the launch clock/retry repairs and current main native inputs. It interrupted the signed 42 MiB transfer at 8,635,000 bytes, resumed the same run after PID 8308 became 8619, preserved the identity and verified in-process load. Its S3 receipt binds the exact native inputs and guest boundary. The earlier 278.640-second reference remains valid only for its older inputs. Three consecutive real promotion tags then reached every declared target in 356.590, 288.456 and 213.545 seconds from their original server timestamps. Each reused all six verified artifacts. The first completed after its submitting client exited, with no operator cluster or guest calls during a following ten-minute window. The explicit process-stop canary then restored the prior artifacts and a loaded worker with unchanged identity in 44.804 seconds. Its original Job and release remain failed, and the ordinary configuration is restored. See `docs/evidence/android-cluster-20261012/completion.json` and `failed-canary-live.json`. See `docs/evidence/android-cluster-20261012/live-promotions.json`. See `docs/evidence/android-cluster-20261012/runtime-qualified-launch-repair.json` and the retained older `runtime-qualified.json`.
 
 Source inventories are derived caches: each entry verifies its original Git commit object and reconstructs every tree ID from exact paths, modes and blob IDs, including empty trees. Cache capacity is 256 entries of at most 2 MiB each; uncached sources remain available through Git. Cache loss regenerates the inventory from the cluster source mirrors. A changed or malformed entry fails verification. Before staging, the trusted runner hashes existing privately owned guest files and transfers missing files only. The guest validates all prepared artifact hashes again before any operation. APK verification scratch uses the runner's disposable 128 MiB `/work` volume; signed artifacts and durable receipts retain their existing storage.
 

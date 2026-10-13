@@ -1,0 +1,278 @@
+{
+  "schema": 1,
+  "kind": "android-cluster-migration-final-acceptance",
+  "state": "passed",
+  "observed_at": 1791864852.6117578,
+  "configuration_sha256": "13f42f42c33f47fd855e0fe4397cdba293c53b4d31121f3b01698205e9873a33",
+  "configuration_map": "android-lab-config-baf3f424cdfd",
+  "coordinator": {
+    "uid": "af1ffbdd-039f-4204-a95c-ba737feda0bb",
+    "generation": 16,
+    "ready_replicas": 1,
+    "available_replicas": 1
+  },
+  "guest": {
+    "schema": 1,
+    "state": "restored_services_observed",
+    "observed_at": 1791864748.279746,
+    "original_canary_release": "4be9b44ea8d39c335065ba1d8996d5b126dc512684e416b653a51840b5d9b3b1",
+    "hub": {
+      "pid": 7289,
+      "sha256": "9420c1945094cb3ab2b4d7a287773df1b51f3726f59070cd078a1e6ad7819e60"
+    },
+    "controller": {
+      "pid": 7268,
+      "sha256": "be8821d5119c00e399b4fcfa4d236a739cb5505f1c116987996d969d68bea34b"
+    },
+    "android": {
+      "pid": 11365,
+      "apk_sha256": "d241db69e1a514cf21c91050f18ce7b8dcb989b326d1163d400f1e23d74ce11a",
+      "adb_uid": 2000,
+      "restoration_identity_sha256": "03d16a1467450203f45f223edb6fb44cc81d6a48049562e7c0ac13c025958a82"
+    },
+    "functional_rollback": {
+      "previous_artifacts_verified": true,
+      "functional_readiness_verified": true,
+      "targets": [
+        {
+          "abi": "x86_64",
+          "channel": "android-x64",
+          "id": "android-x64",
+          "kind": "android",
+          "serial": "10.244.42.176:5555",
+          "healthy": true,
+          "matches": true,
+          "identity_preserved": true,
+          "loaded_worker_ready": true
+        }
+      ]
+    },
+    "rollback_guest_completed_at": 1791864453.372545,
+    "routing": {
+      "checked_at": 1791864748.5221298,
+      "routing_expiry_unix": 1791867600,
+      "distinct_relays": 5,
+      "required_until": 1791865438.279755
+    }
+  },
+  "original_promotion_history": {
+    "observed_at": 1791864790.2993546,
+    "promotions": [
+      {
+        "request_id": "5bf39cf645d60128084352c0d47fc64eddf11081727eb752f2690fcc12ddaeef",
+        "prepared_id": "4721c07623291d822d1c98fc26b7db66743ccad22f778257e1b21cd5bf8b9924",
+        "pushed_at": 1791861460,
+        "job_name": "android-promote-5bf39cf645d60128084352c0",
+        "job_uid": "b9b881d8-6439-4609-9ace-ed88ff6435eb",
+        "state": "complete"
+      },
+      {
+        "request_id": "cd89663ea72e3d5c352bd0446cb246f58bfdd61db68d46ae3782086f6d7de14a",
+        "prepared_id": "3ce28213217b3b45699d37381baefde285196285c8b20a10d2df0827777c142b",
+        "pushed_at": 1791862347,
+        "job_name": "android-promote-cd89663ea72e3d5c352bd044",
+        "job_uid": "8b0ba1a9-90ec-4525-8c07-4aeef91c748b",
+        "state": "complete"
+      },
+      {
+        "request_id": "aecd94a642ae81780e32e8e282e670f270e19e28945d3991f5c2bea1ae48c62d",
+        "prepared_id": "e69cadc0beed355af8f3196ecf1533e7ad05cfe88044d1ceb83fe35349a0fae5",
+        "pushed_at": 1791862777,
+        "job_name": "android-promote-aecd94a642ae81780e32e8e2",
+        "job_uid": "3b9419e2-3678-4650-9ff3-d1184d12f4bf",
+        "state": "complete"
+      },
+      {
+        "request_id": "0392ee14d17c04bee4c646fa258b162433ae7ed642728ddc15b70cc357139a71",
+        "prepared_id": "d99dd19939aacf5c804565fe8455dbee011a97689e534b6105ff2ebc77eb050c",
+        "pushed_at": 1791864131,
+        "job_name": "android-promote-0392ee14d17c04bee4c646fa",
+        "job_uid": "d03af3dc-f7e6-4e31-a4cb-b686fec19472",
+        "state": "failed"
+      }
+    ]
+  },
+  "acceptance": {
+    "schema": 1,
+    "state": "passed",
+    "promotions": [
+      {
+        "prepared_id": "4721c07623291d822d1c98fc26b7db66743ccad22f778257e1b21cd5bf8b9924",
+        "job_uid": "b9b881d8-6439-4609-9ace-ed88ff6435eb",
+        "server_push": {
+          "schema": 1,
+          "project": "gcoms",
+          "repository": "ghost-local/gcoms",
+          "ref": "refs/tags/android-release/4721c07623291d822d1c98fc26b7db66743ccad22f778257e1b21cd5bf8b9924",
+          "commit": "039223221f38fee70f28d7a3c74998da6feccf75",
+          "pushed_at": 1791861460,
+          "nonce": "43152f76-844d-491c-95d0-c1d4c330832f",
+          "server_event_id": "99e86ec494f2bf47ebfee830caf77f088c795411dd968afcb59b30d86b3a32de"
+        },
+        "elapsed_seconds": 356.59039282798767,
+        "targets": [
+          {
+            "id": "hub",
+            "kind": "hub"
+          },
+          {
+            "id": "android-x64",
+            "kind": "android",
+            "serial": "10.244.42.176:5555",
+            "abi": "x86_64",
+            "channel": "android-x64"
+          }
+        ],
+        "archive": {
+          "bytes": 4300,
+          "key": "android-release/records/a221f61c31b5cb56c536fb370fb0730616b25d3d03a2075d024f42f1356c09b9.json",
+          "sha256": "a221f61c31b5cb56c536fb370fb0730616b25d3d03a2075d024f42f1356c09b9",
+          "version": "LFeb44R4uVopa5ZYHVeHulpU-HfEaON"
+        }
+      },
+      {
+        "prepared_id": "3ce28213217b3b45699d37381baefde285196285c8b20a10d2df0827777c142b",
+        "job_uid": "8b0ba1a9-90ec-4525-8c07-4aeef91c748b",
+        "server_push": {
+          "schema": 1,
+          "project": "gcoms",
+          "repository": "ghost-local/gcoms",
+          "ref": "refs/tags/android-release/3ce28213217b3b45699d37381baefde285196285c8b20a10d2df0827777c142b",
+          "commit": "33269889acde1b28e24c37c846ac35090ec99301",
+          "pushed_at": 1791862347,
+          "nonce": "87a87960-64d5-48e3-93c0-e679f0c93bdd",
+          "server_event_id": "08c8c768fd1bfe9bb1145b6d6c11d2935bff0923881784b7be34e7dcf99c82d8"
+        },
+        "elapsed_seconds": 288.4556999206543,
+        "targets": [
+          {
+            "id": "hub",
+            "kind": "hub"
+          },
+          {
+            "id": "android-x64",
+            "kind": "android",
+            "serial": "10.244.42.176:5555",
+            "abi": "x86_64",
+            "channel": "android-x64"
+          }
+        ],
+        "archive": {
+          "bytes": 4295,
+          "key": "android-release/records/746e28aef259b5baa729e0503f823d41958c66f5df24d1a6df7cbb4572cd9ab9.json",
+          "sha256": "746e28aef259b5baa729e0503f823d41958c66f5df24d1a6df7cbb4572cd9ab9",
+          "version": "YHveHB.tfWlx.E9XuCTrHyvmmQnfU7Q"
+        }
+      },
+      {
+        "prepared_id": "e69cadc0beed355af8f3196ecf1533e7ad05cfe88044d1ceb83fe35349a0fae5",
+        "job_uid": "3b9419e2-3678-4650-9ff3-d1184d12f4bf",
+        "server_push": {
+          "schema": 1,
+          "project": "gcoms",
+          "repository": "ghost-local/gcoms",
+          "ref": "refs/tags/android-release/e69cadc0beed355af8f3196ecf1533e7ad05cfe88044d1ceb83fe35349a0fae5",
+          "commit": "4b8a929ac7663e921bae1502d147b2da5ebd320e",
+          "pushed_at": 1791862777,
+          "nonce": "303ec46f-3219-43f6-bc6c-c0880c3b25b6",
+          "server_event_id": "ef714b9bd7476f91e4c663decc49d55442a2b49d13e6d10348bf692f806b64d6"
+        },
+        "elapsed_seconds": 213.54535818099976,
+        "targets": [
+          {
+            "id": "hub",
+            "kind": "hub"
+          },
+          {
+            "id": "android-x64",
+            "kind": "android",
+            "serial": "10.244.42.176:5555",
+            "abi": "x86_64",
+            "channel": "android-x64"
+          }
+        ],
+        "archive": {
+          "bytes": 4300,
+          "key": "android-release/records/6949c77af68f6270d35bdd99f7d7c48f251ac96835147f6f0e3d4df6c0de2309.json",
+          "sha256": "6949c77af68f6270d35bdd99f7d7c48f251ac96835147f6f0e3d4df6c0de2309",
+          "version": ".Wssits8SUP5hms35oZQfkkIFLK-wd6"
+        }
+      }
+    ],
+    "canary": {
+      "prepared_id": "d99dd19939aacf5c804565fe8455dbee011a97689e534b6105ff2ebc77eb050c",
+      "functional_restoration_seconds": 44.8043794631958,
+      "original_failure_retained": true,
+      "archive": {
+        "bytes": 4345,
+        "key": "android-release/records/ae7c206f6f1628ef0770ab21bf08f03cdf1c9744e7ad0b956db599f045996a3d.json",
+        "sha256": "ae7c206f6f1628ef0770ab21bf08f03cdf1c9744e7ad0b956db599f045996a3d",
+        "version": "nqPS4xesZN5Foaqe9aH4nJpswCPO.0U"
+      }
+    },
+    "unattended": [
+      {
+        "schema": 1,
+        "prepared_id": "4721c07623291d822d1c98fc26b7db66743ccad22f778257e1b21cd5bf8b9924",
+        "scope": "submitting client exited; no operator cluster or guest access during the release window",
+        "client_pid": 1810878,
+        "client_exited_at": 1791861462.504594,
+        "client_absent_observed_at": 1791861491.8119226,
+        "observation_allowed_after": 1791862067.504594,
+        "physical_workstation_poweroff_claimed": false,
+        "operator_cluster_access_after_push": false,
+        "state": "complete",
+        "completed_at": 1791862084.62621,
+        "submitting_process_present": false
+      }
+    ],
+    "target_proof_archives": [
+      {
+        "prepared_id": "4721c07623291d822d1c98fc26b7db66743ccad22f778257e1b21cd5bf8b9924",
+        "archive": {
+          "key": "android-release/records/fced3ad786c106d50f9a4402e3090db71cd3687ed142e45aa7c7e84e9cbf14cf.json",
+          "version": "KztZh8tmh0gIeF.MsQ7-kQF3steWqqC",
+          "sha256": "fced3ad786c106d50f9a4402e3090db71cd3687ed142e45aa7c7e84e9cbf14cf",
+          "bytes": 1779
+        }
+      },
+      {
+        "prepared_id": "3ce28213217b3b45699d37381baefde285196285c8b20a10d2df0827777c142b",
+        "archive": {
+          "key": "android-release/records/c028c3895bb4f29d18014deee9bc70bf018b61373e46f2387edaef877a986a62.json",
+          "version": "dQ9zIk9mteHo5Ppl6jP9TcznFF68ENP",
+          "sha256": "c028c3895bb4f29d18014deee9bc70bf018b61373e46f2387edaef877a986a62",
+          "bytes": 1264
+        }
+      },
+      {
+        "prepared_id": "e69cadc0beed355af8f3196ecf1533e7ad05cfe88044d1ceb83fe35349a0fae5",
+        "archive": {
+          "key": "android-release/records/76f0f155888b06731bff7bf6272c82f9be4647656e577fd2c80659e8be343a8d.json",
+          "version": "3FzNCtONAcrZHH612HUyLKtaRLDx6WQ",
+          "sha256": "76f0f155888b06731bff7bf6272c82f9be4647656e577fd2c80659e8be343a8d",
+          "bytes": 1266
+        }
+      },
+      {
+        "prepared_id": "d99dd19939aacf5c804565fe8455dbee011a97689e534b6105ff2ebc77eb050c",
+        "archive": {
+          "key": "android-release/records/1cc5216599e0593518dba13ade645d5118db52f6981e4cf8f8534cc5f09cd51f.json",
+          "version": "O2w6vbIV81X6yB5bJlji231XsleP2Vo",
+          "sha256": "1cc5216599e0593518dba13ade645d5118db52f6981e4cf8f8534cc5f09cd51f",
+          "bytes": 1959
+        }
+      }
+    ],
+    "codematch": "unreachable"
+  },
+  "ordinary_configuration_restored": true,
+  "production_fleet_mutated": false,
+  "physical_workstation_poweroff_claimed": false,
+  "archive": {
+    "key": "android-release/records/f89c8dd643ec3fe0a3e0d4956093d189c38ed18ad10e534140cee09c8f34f9e5.json",
+    "version": ".JnEF1yvxbCI6oHS0knNVvMbHezVel8",
+    "sha256": "f89c8dd643ec3fe0a3e0d4956093d189c38ed18ad10e534140cee09c8f34f9e5",
+    "bytes": 8097
+  }
+}
