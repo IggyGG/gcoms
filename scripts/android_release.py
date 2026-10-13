@@ -18,10 +18,11 @@ import time
 LIMIT_SECONDS = 600
 ACTIVATION_SECONDS = 540  # Reserve the last minute for restoration.
 COMPONENTS = ('sdk', 'installer', 'apk', 'hub', 'worker', 'controller')
-# Cluster intake, Job startup and the complete artifact checks share two
-# minutes. The original push clock, activation cap and rollback reserve remain.
-STAGE_SECONDS = {'preflight': 120, 'building': 120, 'verifying': 120,
-                 'activation': 180, 'readiness': ACTIVATION_SECONDS}
+# Cluster intake, Job startup and the complete artifact checks share three
+# minutes, including observed admission/journaling overhead. The original push
+# clock and final rollback minute remain fixed.
+STAGE_SECONDS = {'preflight': 180, 'building': 180, 'verifying': 180,
+                 'activation': 300, 'readiness': ACTIVATION_SECONDS}
 DEPENDENCIES = {'sdk': (), 'installer': (), 'hub': (), 'worker': (), 'controller': (),
                 'apk': ('sdk', 'installer')}
 OPERATION_FILES = frozenset({

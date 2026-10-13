@@ -1,0 +1,47 @@
+{
+  "schema": 1,
+  "kind": "original-cluster-promotion-admission-failure",
+  "job_name": "android-promote-2aafd4d1aa9764b59c378b6a",
+  "job_uid": "b9e6b8ac-0b5e-4bd3-bd0f-d910a2c254c9",
+  "source_push": {
+    "schema": 1,
+    "project": "gcoms",
+    "repository": "ghost-local/gcoms",
+    "ref": "refs/tags/android-release/8bd53d8288b7fd738a58ec783f1d2fbe7bc56d4cd50bf0f4a5a46c941fbc7f56",
+    "commit": "6632a02e122840694700354cbaa48a5b398b2ef9",
+    "pushed_at": 1791853846,
+    "nonce": "9a170459-16d9-471d-b2b7-dd551b24fbbd",
+    "server_event_id": "3fbfc8f06d5fc0661cfe305b6b193dcedf84c790b8f99cd6a06c5b7d6dd903f1"
+  },
+  "record": {
+    "schema": 1,
+    "request_id": "2aafd4d1aa9764b59c378b6a44d0f39d583c6175ba7a8a39c62c59a80e0a1206",
+    "request_sha256": "e565de0828249c528f564df0da94607c5c5bdf5b41b6695d164a33e0670d52b4",
+    "state": "failed",
+    "result": {
+      "release_id": "00f5b7245f51aa3116425d4fa3dae50b3e679519fd619fc2fd3cbac12d92dee9",
+      "pushed_at": 1791853846,
+      "deadline_at": 1791854446,
+      "state": "failed",
+      "stages": {
+        "preflight": {
+          "started_at": 1791853939.894048
+        }
+      },
+      "artifacts": {},
+      "failure_type": "TimeoutExpired",
+      "failure_stage": "preflight",
+      "finished_at": 1791853966.1839104,
+      "elapsed_seconds": 120.22114372253418
+    }
+  },
+  "archive": {
+    "bytes": 550,
+    "key": "android-release/records/b094b4681d9ccda4d62526bb6600566bc1f2b9e57ff311d7b28630dc7f6f6342.json",
+    "sha256": "b094b4681d9ccda4d62526bb6600566bc1f2b9e57ff311d7b28630dc7f6f6342",
+    "version": "3ZDd7ttzHReO6ks81eY7JfGufit4pI3"
+  },
+  "activation_started": false,
+  "preflight_admission_seconds": 93.89404797554016,
+  "original_failure_retained": true
+}

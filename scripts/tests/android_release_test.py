@@ -252,7 +252,7 @@ class Releases(unittest.TestCase):
     def test_cluster_intake_uses_original_clock_and_preserves_rollback_minute(self):
         self.config['require_prepared'] = True
         prepared = release.prepare_release(self.config)
-        manifest = release.promotion_manifest(self.config, prepared['prepared_id'], time.time() - 75)
+        manifest = release.promotion_manifest(self.config, prepared['prepared_id'], time.time() - 150)
         with patch.object(release, 'build', side_effect=AssertionError('promotion compiled code')):
             result = release.deploy(self.config, manifest)
         self.assertEqual(result['state'], 'live')
