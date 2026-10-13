@@ -16,6 +16,13 @@ deterministic causal/isolation controls are under bounded cluster qualification.
 Keep the original failed test and its deadlines. Native release and installed
 GChat delivery remain pending. See [scheduler semantics](docs/GC2_SCHEDULER.md).
 
+Focused cluster controls now reproduce both original failures and pass74 GC/2
+controls (one explicit live-probe exclusion) plus all four metrics controls.
+The native journey then reached an obsolete receiver archive literal: current
+retired-setup state uses authenticatedGCNSTO, while the initiating-only archive
+still usesGCNSTL. The fixture now requires those exact respective formats; full
+native/strict checks are continuing before main publication.
+
 F5 relay restart diagnostics, 2026-10-13 (OC): Linux0.1.192's full campaign
 recorded720 authenticated commands,1.322-second recipientp95 and the verified
 5,235,248-byte file, then failed strict metrics parsing. Its stopped relay had

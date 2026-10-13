@@ -2,10 +2,16 @@ F5 deferred durable ordering, 2026-10-13: require the causal
 `gc2_fresh_durable_send_keeps_confirmed_deferred_predecessors` check to fail on the
 original admission path and pass with the repair. Keep peer/class/expiry isolation,
 unchanged counters before materialization, original deadlines and exact decrypted
-delivery order. Run GC/2 unit controls, the unchanged `gc2_sessions` TLS/restart
-tests, repeated native ordering checks for the observed race, strict node/test
+delivery order. Run GC/2 unit controls, the original `gc2_sessions` TLS/restart
+journey, repeated native ordering checks for the observed race, strict node/test
 Clippy, legacy compilation, formatting and source L0. Qualification is in progress;
 the full frozen native release remains a separate gate.
+
+The native receiver fixture now requires `GCNSTO`, the authenticated retired-setup
+extension introduced by386f85a; its initiating-only archive check still requires
+`GCNSTL`. This corrects an obsolete literal exposed after ordering passed. Exact
+message order, identity, restored IDs, real decoding and authenticated receipt
+checks retain their existing assertions and deadlines.
 
 F5 JSONL restart boundary: inject a stop after the writer's first append, then
 append the replacement relay's first event. Require two independently parseable

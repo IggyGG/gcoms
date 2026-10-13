@@ -105,7 +105,9 @@ async fn gc2_sessions_carry_durable_applications_over_tls_and_resume_after_resta
     media(&b, &transient).await;
     assert_eq!(b.application_inbox(0, 32).await.unwrap().len(), 8);
     let saved = ba.lock().unwrap().clone();
-    assert_eq!(&saved[..6], b"GCNSTL");
+    // A receiver retains the authenticated setup replay guard in the current
+    // archive extension. The initiating-only archive below still uses GCNSTL.
+    assert_eq!(&saved[..6], b"GCNSTO");
     b.shutdown().await;
     b = endpoint(62, ba, Some(&saved)).await;
     assert_eq!(b.info.identity_pk, original.identity_pk);
