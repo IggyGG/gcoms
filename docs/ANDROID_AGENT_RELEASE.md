@@ -20,12 +20,19 @@ other service errors remain failures.
 
 | Deadline after push | Stage |
 | --- | --- |
-| 60 seconds | Capacity/toolchain/baseline preflight |
-| 60 seconds | Verify all prepared artifact cache entries; no compilation |
-| 60 seconds | Artifact and signing verification |
+| 120 seconds | Capacity/toolchain/baseline preflight |
+| 120 seconds | Verify all prepared artifact cache entries; no compilation |
+| 120 seconds | Artifact and signing verification |
 | 180 seconds | Activation and fresh private provisioning |
 | 540 seconds | Full downloaded worker readiness on every Android target |
 | 600 seconds | Reserved restoration window |
+
+The first three stages share an absolute two-minute deadline from the server
+push. Measured cluster intake takes about 23 seconds per idle cycle and the
+complete pre-promotion check takes 37.343 seconds, so their former shared
+one-minute cutoff could expire before activation. This changes only the internal
+allocation: activation still ends by 180 seconds, readiness by 540 seconds and
+restoration by the original 600-second deadline.
 
 Preparation builds the SDK, installer, headless hub, downloaded worker and fleet controller in bounded parallel jobs. The running controller is verified against its prepared artifact so the sender cannot remain on an older fixed binary.
 The APK includes ARM64 and x86_64 native client inputs; downloadable workers

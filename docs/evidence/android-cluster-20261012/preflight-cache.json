@@ -47,7 +47,24 @@
     "128MiB disposable pod verification scratch"
   ],
   "native_inputs_changed": false,
-  "new_live_preflight_measurement": "pending operations rollout",
+  "new_live_preflight_measurement": {
+    "schema": 1,
+    "kind": "android-prepromotion-preflight-measurement",
+    "prepared_id": "2d6416a98d1ea9064af232b5e6f2c26b5952ece90da693885bc885a4db9b1de7",
+    "started_at": 1791853241.193973,
+    "manifest_verified_at": 1791853248.6167421,
+    "actual_promotion_pushed": false,
+    "configuration_sha256": "937b399f6d48e63f735ffaab6e301c0342c97bd8933ae0930aec6a8f02e7642e",
+    "state": "passed",
+    "finished_at": 1791853278.5371246,
+    "seconds": 37.34315252304077,
+    "archive": {
+      "key": "android-release/records/094a1cdbe7e078cafdad099eec3b7f98edc7674a8308f1a26506b31d0c9be741.json",
+      "version": "yhzfPYo8bC8jpUfA5yjK.M5-cKWS1qR",
+      "sha256": "094a1cdbe7e078cafdad099eec3b7f98edc7674a8308f1a26506b31d0c9be741",
+      "bytes": 418
+    }
+  },
   "codematch": "unreachable",
   "git_object_format_reference": "https://git-scm.com/book/en/v2/Git-Internals-Git-Objects",
   "scratch_and_upgrade_controls": {

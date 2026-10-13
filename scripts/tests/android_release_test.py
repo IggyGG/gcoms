@@ -249,6 +249,21 @@ class Releases(unittest.TestCase):
         self.assertEqual(result['state'], 'live')
         self.assertTrue(all(a['cache_hit'] for a in result['artifacts'].values()))
 
+    def test_cluster_intake_uses_original_clock_and_preserves_rollback_minute(self):
+        self.config['require_prepared'] = True
+        prepared = release.prepare_release(self.config)
+        manifest = release.promotion_manifest(self.config, prepared['prepared_id'], time.time() - 75)
+        with patch.object(release, 'build', side_effect=AssertionError('promotion compiled code')):
+            result = release.deploy(self.config, manifest)
+        self.assertEqual(result['state'], 'live')
+        self.assertEqual(result['pushed_at'], manifest['pushed_at'])
+        self.assertEqual(result['deadline_at'], manifest['pushed_at'] + 600)
+        with patch.object(release.time, 'time', return_value=1000), patch.object(release.time, 'monotonic', return_value=20):
+            deadline = release.Deadline(459)
+            with self.assertRaises(TimeoutError):
+                deadline.remaining(activation=True)
+            self.assertEqual(deadline.remaining(), 59)
+
     def test_preparation_and_prepared_promotion_do_not_wait_for_each_other(self):
         root = Path(self.config['state'])
         root.mkdir()

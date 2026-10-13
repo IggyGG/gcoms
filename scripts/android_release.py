@@ -18,7 +18,9 @@ import time
 LIMIT_SECONDS = 600
 ACTIVATION_SECONDS = 540  # Reserve the last minute for restoration.
 COMPONENTS = ('sdk', 'installer', 'apk', 'hub', 'worker', 'controller')
-STAGE_SECONDS = {'preflight': 60, 'building': 60, 'verifying': 60,
+# Cluster intake, Job startup and the complete artifact checks share two
+# minutes. The original push clock, activation cap and rollback reserve remain.
+STAGE_SECONDS = {'preflight': 120, 'building': 120, 'verifying': 120,
                  'activation': 180, 'readiness': ACTIVATION_SECONDS}
 DEPENDENCIES = {'sdk': (), 'installer': (), 'hub': (), 'worker': (), 'controller': (),
                 'apk': ('sdk', 'installer')}
