@@ -2388,7 +2388,21 @@ where
             .get(&peer.identity_pk)
             .is_some_and(|s| !s.can_send(&direct))
             || (durable && legacy_application_window_full(&st, &peer.identity_pk));
-        if routing_recovering || awaiting_confirmation || window_full {
+        // Confirmation/credit can arrive before maintenance drains deferred
+        // records. A fresh durable send must not take their next ratchet slot.
+        // Keep peer/class isolation so control and interactive work can still
+        // progress while an unrelated or bulk queue waits.
+        let deferred_predecessor = durable
+            && st.pending_1to1.values().any(|pending| {
+                pending.delivery.peer.identity_pk == peer.identity_pk
+                    && pending.delivery.cells.is_empty()
+                    && pending.expires > std::time::Instant::now()
+                    && pending.logical_record.as_deref().is_some_and(|record| {
+                        crate::proto::is_durable_direct_data(record)
+                            && direct_traffic_class(record) == traffic
+                    })
+            });
+        if routing_recovering || awaiting_confirmation || window_full || deferred_predecessor {
             if !(durable
                 || (control
                     && st

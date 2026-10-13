@@ -82,6 +82,23 @@ session is confirmed. They consume no ratchet counters while waiting. Ordinary
 non-durable callers receive explicit backpressure during that wait. Control
 recovery remains necessary for a peer whose receive address changes during setup.
 
+Fresh durable work also joins an existing unmaterialized queue for the same peer
+and traffic class after confirmation or credit returns. This closes the interval
+before maintenance assigns the older records their ratchet slots. Expired work,
+other peers and the other scheduling class do not block it; control remains
+independently admissible. Logical IDs, sequence numbers, persistence and original
+deadlines use the same deferred-record path. This correction is under qualification
+after Linux0.1.193 observed delivery order `0,7,1,2,3,4,5,6` in the existing TLS
+restart regression.
+
+Code comparison found no close implementation for this admission guard. The
+closest post-change indexed shapes were
+`0xHarbs/hyperlane-monorepo-tron:rust/main/agents/relayer/src/msg/pending_message.rs`
+(cosine0.6662, rerank0) and
+`apache/cxf:rt/ws/rm/src/main/java/org/apache/cxf/ws/rm/DestinationSequence.java`
+(cosine0.6589, rerank0). The deterministic confirmation-before-maintenance control
+and original native ordering/restart checks remain the required evidence.
+
 Archive `GCNSTJ` (v19) extends the durable-deferred-record invariant to known
 sessions without requiring a routing-recovery directory. v15–v18 migration is
 covered, including both historical v16 grammars, retained channel grants, machine

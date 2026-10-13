@@ -119,6 +119,106 @@ async fn gc2_explicit_bulk_class_reserves_the_bulk_window_for_opaque_records() {
 }
 
 #[tokio::test]
+async fn gc2_fresh_durable_send_keeps_confirmed_deferred_predecessors() {
+    let alice = Arc::new(Mutex::new(gc2_node(95)));
+    let mut bob = gc2_node(96);
+    let scheduler = alice.lock().unwrap().scheduler.clone();
+    let first = super::super::direct::prepare_durable_1to1(
+        &alice, &bob.info, b"first", None,
+    ).unwrap().message_id;
+    let deferred = super::super::direct::prepare_durable_1to1(
+        &alice, &bob.info, b"deferred", None,
+    ).unwrap().message_id;
+    let (events, _) = broadcast::channel(32);
+    let (first_cells, deadline) = {
+        let a = alice.lock().unwrap();
+        assert!(a.pending_1to1[&deferred].delivery.cells.is_empty());
+        (a.pending_1to1[&first].delivery.cells.clone(), a.pending_1to1[&deferred].expires)
+    };
+    for cell in first_cells {
+        gc2_direct::incoming(&mut bob, &cell.payload, &events).unwrap();
+    }
+    let counter = {
+        let mut a = alice.lock().unwrap();
+        for ack in &bob.direct_ack_outbox {
+            for cell in &ack.cells {
+                gc2_direct::incoming(&mut a, &cell.payload, &events).unwrap();
+            }
+        }
+        assert!(matches!(a.session_states[&bob.info.identity_pk], DirectSessionState::Established));
+        a.sessions[&bob.info.identity_pk].send_ctr()
+    };
+    // Force the real race: confirmation arrived, but maintenance has not yet
+    // materialized its durable queue. A new caller must join that queue.
+    let fresh = super::super::direct::prepare_durable_1to1(
+        &alice, &bob.info, b"fresh", None,
+    ).unwrap().message_id;
+    let mut a = alice.lock().unwrap();
+    assert!(a.pending_1to1[&fresh].delivery.cells.is_empty(), "fresh send overtook the deferred predecessor");
+    assert_eq!(a.sessions[&bob.info.identity_pk].send_ctr(), counter);
+    assert_eq!(a.pending_1to1[&deferred].expires, deadline);
+    assert!(a.pending_1to1[&deferred].sequence < a.pending_1to1[&fresh].sequence);
+    materialize_deferred(&mut a).unwrap();
+    assert_eq!(a.pending_1to1[&deferred].expires, deadline);
+    for id in [deferred, fresh] {
+        for cell in &a.pending_1to1[&id].delivery.cells {
+            gc2_direct::incoming(&mut bob, &cell.payload, &events).unwrap();
+        }
+    }
+    assert_eq!(bob.application_inbox.entries.iter().map(|m| m.body.as_slice()).collect::<Vec<_>>(),
+        vec![b"first".as_slice(), b"deferred".as_slice(), b"fresh".as_slice()]);
+    scheduler.shutdown();
+    bob.scheduler.shutdown();
+}
+
+#[tokio::test]
+async fn gc2_deferred_predecessors_keep_peer_class_and_expiry_isolation() {
+    let alice = Arc::new(Mutex::new(gc2_node(97)));
+    let mut bob = gc2_node(98);
+    let carol = gc2_node(99);
+    let scheduler = alice.lock().unwrap().scheduler.clone();
+    let first = super::super::direct::prepare_durable_1to1(
+        &alice, &bob.info, b"first", None,
+    ).unwrap().message_id;
+    let deferred = super::super::direct::prepare_durable_1to1(
+        &alice, &bob.info, b"deferred interactive", None,
+    ).unwrap().message_id;
+    let (events, _) = broadcast::channel(32);
+    let first_cells = alice.lock().unwrap().pending_1to1[&first].delivery.cells.clone();
+    for cell in first_cells {
+        gc2_direct::incoming(&mut bob, &cell.payload, &events).unwrap();
+    }
+    {
+        let mut a = alice.lock().unwrap();
+        for ack in &bob.direct_ack_outbox {
+            for cell in &ack.cells {
+                gc2_direct::incoming(&mut a, &cell.payload, &events).unwrap();
+            }
+        }
+    }
+    let other_peer = super::super::direct::prepare_durable_1to1(
+        &alice, &carol.info, b"other peer", None,
+    ).unwrap().message_id;
+    let other_class = super::super::direct::prepare_durable_1to1_class(
+        &alice, &bob.info, b"other class", None, Some(gcoms_core::TrafficClass::Bulk),
+    ).unwrap().message_id;
+    {
+        let mut a = alice.lock().unwrap();
+        assert!(!a.pending_1to1[&other_peer].delivery.cells.is_empty());
+        assert!(!a.pending_1to1[&other_class].delivery.cells.is_empty());
+        assert!(a.pending_1to1[&deferred].delivery.cells.is_empty());
+        a.pending_1to1.get_mut(&deferred).unwrap().expires = std::time::Instant::now();
+    }
+    let expired_predecessor = super::super::direct::prepare_durable_1to1(
+        &alice, &bob.info, b"expired predecessor", None,
+    ).unwrap().message_id;
+    assert!(!alice.lock().unwrap().pending_1to1[&expired_predecessor].delivery.cells.is_empty());
+    scheduler.shutdown();
+    bob.scheduler.shutdown();
+    carol.scheduler.shutdown();
+}
+
+#[tokio::test]
 async fn gc2_runtime_durable_delivery_credit_and_ack_survive_restart() {
     let alice=Arc::new(Mutex::new(gc2_node(21)));
     let mut bob=gc2_node(22);

@@ -41,6 +41,12 @@ corrections pass the pinned formatting gate and source L0. Complete native
 qualification of the successor remains required.
 [Evidence](docs/evidence/irc-ux-native-format-20261013/summary.json).
 
+F5 durable ordering, 2026-10-13: Linux0.1.193 exposed a fresh send overtaking
+deferred messages after session confirmation. Same-peer, same-class durable
+admission now joins that retained queue. Causal, isolation and unchanged native
+TLS/restart checks are under qualification; no installed repair is claimed.
+See [scheduler behavior](docs/GC2_SCHEDULER.md).
+
 F5 cluster source reuse, 2026-10-12: source sync now authenticates exact advertised refs and skips unchanged repositories. Prepared promotion checks its exact immutable tag and existing commit without fetching unrelated history. A real Git control rejects another fetch for unchanged sources and promotion; all 150 scoped controls pass in Kubernetes (16.673 seconds), with the 1,141-path source audit passing. Native inputs and the real Android deadlines are unchanged. [Evidence](docs/evidence/android-cluster-20261012/source-reuse.json).
 
 F5 isolated cluster lifecycle adapter, 2026-10-12: release Jobs now verify APK signing and all prepared bytes before staging a private, checksum-bound command to the exact lab VM and Android Pod. The guest validates its private mapping, journals mutations, reconnects ADB, preserves uncertain attempts, and runs the existing full interruption/resume/load checks. Operation images and immutable script overlays retain the pinned compiler image and native cache keys. All 150 scoped controls pass in Kubernetes (25.812 seconds); runtime images built in 9.206 seconds. Real Android reference, three promotion clocks, rollback and workstation disconnection remain pending. [Evidence](docs/evidence/android-cluster-20261012/lab-adapter.json).
