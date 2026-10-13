@@ -108,6 +108,13 @@ APK verification probe when changing this tool packaging.
 
 Cluster qualification records the actual lab identity and boundary, runs the same normally signed 42 MiB interrupted transfer with the 360-second limit, and requires the current process to load the worker. It does not claim the workstation VPN proof. The adapter controls and image build alone do not qualify transfer, deployment, rollback or disconnection.
 
+The 2026-10-13 cluster reference passed in 278.640 seconds after an actual process interruption at 8,426,000 bytes and same-run resume. Its receipt remains bound to the exact native inputs, guest identity and isolation boundary. Three original-clock promotions and functional rollback still require live receipts. See `docs/evidence/android-cluster-20261012/runtime-qualified.json`.
+
+Source inventories are derived caches: each entry verifies its original Git commit object and reconstructs every tree ID from exact paths, modes and blob IDs, including empty trees. Cache capacity is 256 entries of at most 2 MiB each; uncached sources remain available through Git. Cache loss regenerates the inventory from the cluster source mirrors. A changed or malformed entry fails verification. Before staging, the trusted runner hashes existing privately owned guest files and transfers missing files only. The guest validates all prepared artifact hashes again before any operation. APK verification scratch uses the runner's disposable 128 MiB `/work` volume; signed artifacts and durable receipts retain their existing storage.
+
+The retained failure fixture at `docs/evidence/android-cluster-20261012/android_release_lab_canary.py` requires a distinct prepared configuration with `qualification_scope: cluster-isolated`, `failure_canary: stop-activated-android-app`, and that fixture as the explicit readiness action. Mount its exact bytes in the immutable runtime and include their hash in `runtime_sha256`. It checks the completed activation, exact release/APK/identity/current PID, journals before stopping the app, archives the observed failure and lets the normal release runner restore service. It refuses an uncertain fault replay. The ordinary release configuration continues to use normal readiness.
+
+
 Render the persistent coordinator and credential-free image warming with
 `android_release_cluster.py --config /config/android-agent.json workloads
 --coordinator-image IMAGE@sha256:DIGEST --source-secret android-source-reader`.

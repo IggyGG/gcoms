@@ -1,0 +1,58 @@
+{
+  "schema": 1,
+  "kind": "android-cluster-preflight-overhead",
+  "before": {
+    "schema": 1,
+    "kind": "android-prepromotion-preflight-measurement",
+    "prepared_id": "65e6f9daf64a72d9cff44ac5d38af9e47bc323282e413ce6ad512000775bd4ec",
+    "started_at": 1791851036.9688153,
+    "manifest_verified_at": 1791851052.9744902,
+    "actual_promotion_pushed": false,
+    "state": "passed",
+    "finished_at": 1791851096.6141503,
+    "seconds": 59.64533543586731,
+    "archive": {
+      "key": "android-release/records/bc696372b6c7b2fe4cc1feb8824e8a3330d6f2f3fbecda92ffabeb106457fbfd.json",
+      "version": "Fd1y0U62tyYc3vPcvgUP6hM7WyHolR3",
+      "sha256": "bc696372b6c7b2fe4cc1feb8824e8a3330d6f2f3fbecda92ffabeb106457fbfd",
+      "bytes": 329
+    }
+  },
+  "source_cache_live_probe": {
+    "schema": 1,
+    "kind": "android-authenticated-source-inventory-measurement",
+    "state": "passed",
+    "prepared_id": "65e6f9daf64a72d9cff44ac5d38af9e47bc323282e413ce6ad512000775bd4ec",
+    "all_six_native_inputs_unchanged": true,
+    "cold_seconds": 24.601074866950512,
+    "warm_seconds": 0.8322811089456081,
+    "observed_at": 1791851593.4778361,
+    "archive": {
+      "key": "android-release/records/3e2e616e9ea76b01a22e87f1dfc5e1147fc5facca9bb779dbae4394c6bcf4830.json",
+      "version": "eTx5-OGW4ToZNYDbveTp884EdtNYVSa",
+      "sha256": "3e2e616e9ea76b01a22e87f1dfc5e1147fc5facca9bb779dbae4394c6bcf4830",
+      "bytes": 310
+    }
+  },
+  "focused_controls": {
+    "job": "android-preflight-controls-8813e4d1e9",
+    "passed": 11,
+    "seconds": 3.015
+  },
+  "original_source_scan_seconds": 11.773794019594789,
+  "original_apk_verification_seconds": 10.331284042447805,
+  "changes": [
+    "commit-object and full-tree-verified source inventories, bounded512MiB",
+    "private guest byte inventory omits unchanged artifact uploads; every byte remains hash-checked",
+    "128MiB disposable pod verification scratch"
+  ],
+  "native_inputs_changed": false,
+  "new_live_preflight_measurement": "pending operations rollout",
+  "codematch": "unreachable",
+  "git_object_format_reference": "https://git-scm.com/book/en/v2/Git-Internals-Git-Objects",
+  "scratch_and_upgrade_controls": {
+    "job": "android-scratch-controls-5fd0ae1d1c",
+    "passed": 5,
+    "seconds": 0.02
+  }
+}

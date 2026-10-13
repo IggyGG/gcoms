@@ -92,6 +92,63 @@ class GuestExecution(unittest.TestCase):
 
 
 class GuestStaging(unittest.TestCase):
+    def test_existing_private_artifacts_are_verified_without_upload_or_replacement(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            folder = root / 'release/artifacts'; folder.mkdir(parents=True, mode=0o700)
+            (root / 'release').chmod(0o700)
+            artifact = folder / 'owned'; artifact.write_bytes(b'original'); artifact.chmod(0o600)
+            inventory = adapter.INVENTORY.replace(str(adapter.ROOT), str(root))
+            files = {'release/artifacts/owned': release.digest(artifact), 'runtimes/new/script.py': 'a' * 64}
+            def inspect(value):
+                data = release.canonical(value)
+                result = subprocess.run([sys.executable, '-c', inventory], input=data,
+                                        stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=5)
+                return data, result
+            before = artifact.stat().st_mtime_ns
+            data, result = inspect(files)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(json.loads(result.stdout), {'manifest_sha256': hashlib.sha256(data).hexdigest(),
+                                                        'missing': ['runtimes/new/script.py']})
+            self.assertEqual(artifact.stat().st_mtime_ns, before)
+            self.assertEqual(artifact.read_bytes(), b'original')
+            artifact.write_bytes(b'changed')
+            self.assertNotEqual(inspect(files)[1].returncode, 0)
+            self.assertEqual(artifact.read_bytes(), b'changed')
+
+    def test_inventory_rejects_links_public_paths_and_foreign_members(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            folder = root / 'commands'; folder.mkdir(mode=0o700)
+            artifact = folder / 'owned'; artifact.write_bytes(b'owned'); artifact.chmod(0o600)
+            inventory = adapter.INVENTORY.replace(str(adapter.ROOT), str(root))
+            def inspect(name):
+                return subprocess.run([sys.executable, '-c', inventory],
+                    input=release.canonical({name: release.digest(artifact)}),
+                    stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=5).returncode
+            (folder / 'link').symlink_to(artifact)
+            for name in ('commands/link', '../outside', '/commands/owned', 'foreign/path', 'commands//owned'):
+                with self.subTest(name=name): self.assertNotEqual(inspect(name), 0)
+            artifact.chmod(0o644)
+            self.assertNotEqual(inspect('commands/owned'), 0)
+            artifact.chmod(0o600); folder.chmod(0o755)
+            self.assertNotEqual(inspect('commands/owned'), 0)
+
+    def test_inventory_reply_is_bound_to_the_complete_requested_set(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / 'artifact'; path.write_bytes(b'original')
+            files = {'release/owned': path}
+            checksum = hashlib.sha256(release.canonical({'release/owned': release.digest(path)})).hexdigest()
+            def reply(value): return SimpleNamespace(returncode=0, stdout=json.dumps(value).encode())
+            with patch.object(adapter.subprocess, 'run', return_value=reply({'manifest_sha256': checksum, 'missing': []})):
+                self.assertEqual(adapter.missing_files(['ssh'], files), {})
+            for changed in [dict(manifest_sha256='f' * 64, missing=[]),
+                            dict(manifest_sha256=checksum, missing=['foreign']),
+                            dict(manifest_sha256=checksum, missing=['release/owned', 'release/owned'])]:
+                with patch.object(adapter.subprocess, 'run', return_value=reply(changed)):
+                    with self.assertRaisesRegex(ValueError, 'response binding'):
+                        adapter.missing_files(['ssh'], files)
+
     def test_receiver_refuses_traversal_links_and_replacement_of_immutable_bytes(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

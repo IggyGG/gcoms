@@ -1,0 +1,15 @@
+{
+  "schema": 1,
+  "kind": "explicit-isolated-android-failure-fixture",
+  "state": "six ownership and replay controls passed; real failed-canary run remains pending",
+  "job": "android-canary-controls-c554e6f149",
+  "passed": 6,
+  "seconds": 0.13,
+  "fault": "stop-activated-android-app",
+  "source_sha256": {
+    "android_release_lab_canary.py": "31ae013507b86afcab5549f72fe75721287e7f53e8b295102593d71cf9c0a7e1",
+    "android_release_lab_canary_test.py": "fa1dc8770cc5df5bb1e1eb7e5326d5613d8c6316a6edf7b59e6060f4867c1f48"
+  },
+  "normal_release_configuration_uses_fixture": false,
+  "codematch": "unreachable"
+}

@@ -1,13 +1,16 @@
 #!/usr/bin/env python3
 """Bounded Android-agent releases; artifacts and live readiness are separate."""
 import argparse
+import base64
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import fcntl
 import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import signal
+import stat
 import subprocess
 import tempfile
 import time
@@ -146,17 +149,91 @@ def git(repo, *args):
                                     *args], stderr=subprocess.PIPE, timeout=30)
 
 
-def source_tree(repo, commit):
-    rows = []
-    for record in git(repo, 'ls-tree', '-rz', '--full-tree', commit).split(b'\0'):
+def verified_source_inventory(value, commit):
+    """Authenticate the complete inventory against Git's original commit/tree IDs."""
+    if (not isinstance(value, dict) or set(value) != {'schema', 'commit_object', 'rows', 'directories'}
+            or value['schema'] != 1 or not re.fullmatch('[0-9a-f]{40}', commit)
+            or not isinstance(value['rows'], list) or not 0 < len(value['rows']) <= 20000
+            or not isinstance(value['directories'], list) or len(value['directories']) > 20000):
+        raise ValueError('invalid source inventory')
+    raw = base64.b64decode(value['commit_object'], validate=True)
+    def object_id(kind, data):
+        # SHA-1 is the existing Git object format, not a release signature.
+        return hashlib.sha1(kind + b' ' + str(len(data)).encode() + b'\0' + data).digest()
+    if (len(raw) > 128 * 1024 or object_id(b'commit', raw).hex() != commit
+            or not re.fullmatch(rb'tree [0-9a-f]{40}', raw.partition(b'\n')[0])):
+        raise ValueError('source inventory commit binding changed')
+    tree = {}
+    def parts(path):
+        if (not isinstance(path, str) or '\0' in path or len(path.encode()) > 4096
+                or any(p in ('', '.', '..') for p in path.split('/')) or len(path.split('/')) > 64):
+            raise ValueError('invalid source inventory path')
+        return path.split('/')
+    def directory(segments):
+        node = tree
+        for segment in segments:
+            node = node.setdefault(segment, {})
+            if not isinstance(node, dict): raise ValueError('source inventory file/directory collision')
+        return node
+    for path in value['directories']:
+        directory(parts(path))  # Include tracked empty tree objects too.
+    for row in value['rows']:
+        if (not isinstance(row, list) or len(row) != 3 or row[1] not in ('100644', '100755', '120000')
+                or not isinstance(row[2], str) or not re.fullmatch('[0-9a-f]{40}', row[2])):
+            raise ValueError('invalid source inventory blob')
+        path, mode, ident = row; segments = parts(path); parent = directory(segments[:-1])
+        if segments[-1] in parent: raise ValueError('duplicate source inventory entry')
+        parent[segments[-1]] = (mode, ident)
+    ordered = []
+    def encode(node, prefix=''):
+        data = bytearray()
+        for name in sorted(node, key=lambda n: n.encode() + (b'/' if isinstance(node[n], dict) else b'\0')):
+            child = node[name]
+            if isinstance(child, dict):
+                mode, ident = '40000', encode(child, prefix + name + '/')
+            else:
+                mode, checksum = child; ident = bytes.fromhex(checksum)
+                ordered.append([prefix + name, mode, checksum])
+            data.extend(mode.encode() + b' ' + name.encode() + b'\0' + ident)
+        return object_id(b'tree', data)
+    if encode(tree).hex().encode() != raw.partition(b'\n')[0][5:] or ordered != value['rows']:
+        raise ValueError('source inventory tree binding or order changed')
+    return value['rows']
+
+
+def source_tree(repo, commit, cache=None):
+    path = Path(cache) / (commit + '.json') if cache is not None else None
+    if path is not None:
+        if not re.fullmatch('[0-9a-f]{40}', commit): raise ValueError('source inventory needs an exact Git commit')
+        if path.exists() or path.is_symlink():
+            with os.fdopen(os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | os.O_CLOEXEC), 'rb') as stream:
+                info = os.fstat(stream.fileno())
+                if not stat.S_ISREG(info.st_mode) or not 0 < info.st_size <= 2 * 1024**2:
+                    raise ValueError('unsafe source inventory cache')
+                data = stream.read(2 * 1024**2 + 1)
+                if len(data) > 2 * 1024**2: raise ValueError('source inventory exceeds bounds')
+            return verified_source_inventory(json.loads(data), commit)
+    rows, directories = [], []
+    for record in git(repo, 'ls-tree', '-rtz' if path is not None else '-rz', '--full-tree', commit).split(b'\0'):
         if record:
-            metadata, path = record.split(b'\t', 1)
+            metadata, filename = record.split(b'\t', 1)
             mode, kind, object_id = metadata.decode().split()
+            if path is not None and kind == 'tree':
+                directories.append(filename.decode()); continue
             if kind != 'blob':
                 raise ValueError('release sources must not contain submodules')
-            rows.append([path.decode(), mode, object_id])
+            rows.append([filename.decode(), mode, object_id])
     if not rows:
         raise ValueError('empty source tree')
+    if path is not None:
+        value = {'schema': 1, 'commit_object': base64.b64encode(git(repo, 'cat-file', 'commit', commit)).decode(),
+                 'rows': rows, 'directories': directories}
+        verified_source_inventory(value, commit)
+        path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        # At most 512 MiB of derived metadata; a full cache still uses Git.
+        if (len(json.dumps(value, indent=2).encode()) + 1 <= 2 * 1024**2
+                and sum(1 for _ in path.parent.glob('*.json')) < 256):
+            write_json(path, value)
     return rows
 
 
@@ -188,7 +265,8 @@ def inputs(config, sources):
     if config.get('build_execution') == 'kubernetes':
         if config['toolchain'].get('builder_image') != config['cluster']['builder_image']:
             raise ValueError('cluster builder image must be part of the frozen toolchain')
-    trees = {name: source_tree(row['repository'], sources[name])
+    inventory = Path(config['state']) / 'source-inventories' if config.get('build_execution') == 'kubernetes' else None
+    trees = {name: source_tree(row['repository'], sources[name], inventory)
              for name, row in config['sources'].items()}
     keys = {}
     for component in COMPONENTS:

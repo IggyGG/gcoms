@@ -203,9 +203,11 @@ def job(config, request, request_path):
     deadline = 3600 if request['operation'] == 'prepare' else (420 if request['operation'] == 'qualify' else 600)
     labels = {'app.kubernetes.io/part-of': OWNER, 'ghost.io/android-operation': request['operation']}
     mounts = [{'name': 'state', 'mountPath': config['state']},
+              {'name': 'scratch', 'mountPath': '/work'},
               {'name': 'config', 'mountPath': '/config', 'readOnly': True},
               {'name': 'archive', 'mountPath': '/credentials/archive', 'readOnly': True}]
     volumes = [{'name': 'state', 'persistentVolumeClaim': {'claimName': name(cluster['state_claim'])}},
+               {'name': 'scratch', 'emptyDir': {'sizeLimit': '128Mi'}},
                {'name': 'config', 'configMap': {'name': name(cluster['config_map'])}},
                {'name': 'archive', 'secret': {'secretName': name(cluster['archive_secret']), 'defaultMode': 0o440}}]
     if cluster.get('runtime_config_map'):
@@ -233,7 +235,7 @@ def job(config, request, request_path):
                                 '--config', '/config/android-agent.json', 'execute', '--request', str(request_path),
                                 '--sha256', hashlib.sha256(canonical(request)).hexdigest()],
                     'env': [{'name': 'PYTHONDONTWRITEBYTECODE', 'value': '1'},
-                            {'name': 'TMPDIR', 'value': config['state'] + '/tmp'}],
+                            {'name': 'TMPDIR', 'value': '/work'}],
                     'resources': {'requests': {'cpu': '100m', 'memory': '256Mi', 'ephemeral-storage': '64Mi'},
                                   'limits': {'cpu': '1', 'memory': '1Gi', 'ephemeral-storage': '256Mi'}},
                     'securityContext': {'allowPrivilegeEscalation': False, 'capabilities': {'drop': ['ALL']}},
