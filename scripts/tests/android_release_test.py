@@ -252,7 +252,7 @@ class Releases(unittest.TestCase):
     def test_cluster_intake_uses_original_clock_and_preserves_rollback_minute(self):
         self.config['require_prepared'] = True
         prepared = release.prepare_release(self.config)
-        manifest = release.promotion_manifest(self.config, prepared['prepared_id'], time.time() - 150)
+        manifest = release.promotion_manifest(self.config, prepared['prepared_id'], time.time() - 200)
         with patch.object(release, 'build', side_effect=AssertionError('promotion compiled code')):
             result = release.deploy(self.config, manifest)
         self.assertEqual(result['state'], 'live')
@@ -263,6 +263,16 @@ class Releases(unittest.TestCase):
             with self.assertRaises(TimeoutError):
                 deadline.remaining(activation=True)
             self.assertEqual(deadline.remaining(), 59)
+
+    def test_late_intake_preserves_rollback_minute_without_activation(self):
+        self.config['require_prepared'] = True
+        prepared = release.prepare_release(self.config)
+        manifest = release.promotion_manifest(self.config, prepared['prepared_id'], time.time() - 541)
+        result = release.deploy(self.config, manifest)
+        self.assertEqual(result['state'], 'failed')
+        self.assertNotIn('activation_started', result)
+        self.assertEqual(result['deadline_at'], manifest['pushed_at'] + 600)
+        self.assertGreaterEqual(result['elapsed_seconds'], 541)
 
     def test_preparation_and_prepared_promotion_do_not_wait_for_each_other(self):
         root = Path(self.config['state'])
@@ -864,7 +874,7 @@ class Maintenance(unittest.TestCase):
             def selected(_seconds):
                 release.write_json(state, {'active': {'android-x64': {
                     'publication': {'sha256': release.digest(worker)}}}})
-            with patch.object(host, 'command'), patch.object(host.time, 'time', return_value=1200), \
+            with patch.object(host, 'command'), patch.object(host.time, 'time', return_value=1420), \
                     patch.object(host.time, 'sleep', side_effect=selected) as wait:
                 host.publish_worker(request, target, worker)
                 wait.assert_called_once()
