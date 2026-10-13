@@ -1,0 +1,99 @@
+{
+  "schema": 1,
+  "state": "live",
+  "prepared_id": "4721c07623291d822d1c98fc26b7db66743ccad22f778257e1b21cd5bf8b9924",
+  "request_id": "5bf39cf645d60128084352c0d47fc64eddf11081727eb752f2690fcc12ddaeef",
+  "release_id": "1123b360c2cac8c80b39b1b59b76683f6b580933d634619656972f2519ab3478",
+  "job_name": "android-promote-5bf39cf645d60128084352c0",
+  "job_uid": "b9b881d8-6439-4609-9ace-ed88ff6435eb",
+  "source_push": {
+    "schema": 1,
+    "project": "gcoms",
+    "repository": "ghost-local/gcoms",
+    "ref": "refs/tags/android-release/4721c07623291d822d1c98fc26b7db66743ccad22f778257e1b21cd5bf8b9924",
+    "commit": "039223221f38fee70f28d7a3c74998da6feccf75",
+    "pushed_at": 1791861460,
+    "nonce": "43152f76-844d-491c-95d0-c1d4c330832f",
+    "server_event_id": "99e86ec494f2bf47ebfee830caf77f088c795411dd968afcb59b30d86b3a32de"
+  },
+  "elapsed_seconds": 356.59039282798767,
+  "stages": {
+    "preflight": {
+      "started_at": 1791861555.4062088,
+      "finished_at": 1791861585.9330149
+    },
+    "building": {
+      "started_at": 1791861586.5295777,
+      "finished_at": 1791861591.5910823
+    },
+    "verifying": {
+      "started_at": 1791861592.2218146,
+      "finished_at": 1791861595.2719834
+    },
+    "activation": {
+      "started_at": 1791861595.955781,
+      "finished_at": 1791861637.3546631
+    },
+    "readiness": {
+      "started_at": 1791861637.9541469,
+      "finished_at": 1791861815.9699636
+    }
+  },
+  "all_six_artifacts_cached": true,
+  "inputs": {
+    "sdk": "c25677dca908710f337d969a3259cb02bfc4101d4908da344fd2616f1ba7cad1",
+    "installer": "a6dcfd87b5dccb1abec7878fe0d2f0542f0bdaaf470baa0ad62540c591f38d3a",
+    "apk": "b2464fa6717d0754adfc1dbaaf392de5fd37b0edc0054d698a936aa048ca2f98",
+    "hub": "3ad668192288b19a77e86cea4fe0e167dd5ac341f7d0df8092e8dd94d3221cd6",
+    "worker": "1870e9956fe276ae43f1b0ae04abf5b6beb404408694b8a8c5f6b803ac53aba3",
+    "controller": "6dcdbd5b422c732dd2a3a8e9ab0b1b587775fa80b0d0f5f91c36f7ad18a497ca"
+  },
+  "targets": [
+    {
+      "id": "hub",
+      "kind": "hub",
+      "healthy": true,
+      "matches": true
+    },
+    {
+      "abi": "x86_64",
+      "channel": "android-x64",
+      "id": "android-x64",
+      "kind": "android",
+      "serial": "10.244.42.176:5555",
+      "healthy": true,
+      "matches": true,
+      "full_download_verified": true,
+      "loaded_worker_ready": true,
+      "identity_preserved": true
+    }
+  ],
+  "result_archive": {
+    "bytes": 4300,
+    "key": "android-release/records/a221f61c31b5cb56c536fb370fb0730616b25d3d03a2075d024f42f1356c09b9.json",
+    "sha256": "a221f61c31b5cb56c536fb370fb0730616b25d3d03a2075d024f42f1356c09b9",
+    "version": "LFeb44R4uVopa5ZYHVeHulpU-HfEaON"
+  },
+  "acceptance_archive": {
+    "key": "android-release/records/fced3ad786c106d50f9a4402e3090db71cd3687ed142e45aa7c7e84e9cbf14cf.json",
+    "version": "KztZh8tmh0gIeF.MsQ7-kQF3steWqqC",
+    "sha256": "fced3ad786c106d50f9a4402e3090db71cd3687ed142e45aa7c7e84e9cbf14cf",
+    "bytes": 1779
+  },
+  "unattended": {
+    "schema": 1,
+    "prepared_id": "4721c07623291d822d1c98fc26b7db66743ccad22f778257e1b21cd5bf8b9924",
+    "scope": "submitting client exited; no operator cluster or guest access during the release window",
+    "client_pid": 1810878,
+    "client_exited_at": 1791861462.504594,
+    "client_absent_observed_at": 1791861491.8119226,
+    "observation_allowed_after": 1791862067.504594,
+    "physical_workstation_poweroff_claimed": false,
+    "operator_cluster_access_after_push": false,
+    "state": "complete",
+    "completed_at": 1791862084.62621,
+    "submitting_process_present": false
+  },
+  "remaining_successful_promotions": 2,
+  "functional_failed_canary_pending": true
+}
