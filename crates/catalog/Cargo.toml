@@ -26,7 +26,7 @@ gcoms-routing = { version = "0.1.0", path = "../routing" }
 gcoms-transport = { version = "0.1.0", path = "../transport" }
 gcoms-sdk = { version = "0.1.0", path = "../sdk", default-features = false, features = ["ipc", "descriptor-verification"] }
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
-rustls = { version = "0.23.45", default-features = false, features = ["aws-lc-rs", "std"] }
+rustls = { version = "0.23.46", default-features = false, features = ["aws-lc-rs", "std"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sha2 = "0.10"

@@ -23,7 +23,7 @@ gcoms-routing = { version = "0.1.0", path = "../routing" }
 gcoms-network-client = { version = "0.1.0", path = "../network-client" }
 tokio = { version = "1", features = ["rt", "macros", "net", "time", "io-util", "sync"] }
 tokio-rustls = "0.26"
-rustls = { version = "0.23.45", default-features = false, features = ["aws-lc-rs", "std"] }
+rustls = { version = "0.23.46", default-features = false, features = ["aws-lc-rs", "std"] }
 bytes = "1"
 futures-util = { version = "0.3", default-features = false, features = ["std"] }
 rand = "0.8"
