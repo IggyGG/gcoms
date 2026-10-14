@@ -9,6 +9,9 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
+if sys.platform == 'win32':
+    raise unittest.SkipTest('POSIX Android deployment orchestration')
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import android_release as release
 import android_release_cluster as cluster
@@ -55,7 +58,7 @@ class ClusterRecovery(unittest.TestCase):
         def executed(argv, **kwargs):
             # Exercise the real logging sink on an empty state volume. Git's
             # transport is replaced so the control uses no remote credentials.
-            release.command(['/bin/true'], log=kwargs['log'])
+            release.command([sys.executable, '-c', 'pass'], log=kwargs['log'])
             logs.append(kwargs['log'])
         with patch.object(cluster, 'command', side_effect=executed), \
              patch.object(cluster, 'advertised_refs', return_value={'refs/heads/main': 'a' * 40}), \

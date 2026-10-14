@@ -9,6 +9,9 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
+if sys.platform == 'win32':
+    raise unittest.SkipTest('POSIX Android deployment orchestration')
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import android_release_outbox as outbox
 from android_release_store_test import S3
@@ -25,7 +28,8 @@ class ServerOutbox(unittest.TestCase):
     def setUp(self):
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
-        self.root = Path(temporary.name)
+        # The hook compares its physical cwd with the configured repository.
+        self.root = Path(temporary.name).resolve()
         self.directory = self.root / 'outbox'
         self.directory.mkdir(mode=0o700)
         self.config = {'archive': {'endpoint': 'https://fsn1.your-objectstorage.com',
@@ -133,6 +137,7 @@ class ServerOutbox(unittest.TestCase):
             outbox.ingest(self.config, self.archive)
         self.assertEqual(first[0]['pushed_at'], 1788256800)
 
+    @unittest.skipUnless(sys.platform == 'linux', 'Linux Forgejo server hook uses procfs')
     def test_real_server_hook_persists_once_without_network_credentials(self):
         repositories = self.root / 'repos'
         repository = repositories / 'ghost-local/gcoms.git'

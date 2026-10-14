@@ -8,6 +8,10 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
+# These exercise the POSIX deployment coordinator, not the native Android SDK.
+if sys.platform == 'win32':
+    raise unittest.SkipTest('POSIX Android deployment orchestration')
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import android_release as release
 import android_release_build_job as build

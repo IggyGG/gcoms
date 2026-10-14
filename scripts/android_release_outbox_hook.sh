@@ -1,4 +1,5 @@
 #!/bin/sh
+export LC_ALL=C
 # Additive cloud Forgejo post-receive hook. This process holds no S3 credentials.
 project=$(basename "$PWD" .git)
 case "$project" in gcoms|dropship|gchat|drone) ;; *) exit 0 ;; esac

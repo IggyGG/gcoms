@@ -1,6 +1,7 @@
 #!/bin/sh
 # Additive global Forgejo post-receive.d hook. Never blocks an accepted push.
 # The mounted SSD mailbox contains only source IDs and the original push time.
+export LC_ALL=C
 project=$(basename "$PWD" .git)
 case "$project" in gcoms|dropship|gchat|drone) ;; *) exit 0 ;; esac
 mailbox=/var/lib/gitea/android-release/events

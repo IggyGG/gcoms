@@ -7,6 +7,9 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
+if sys.platform == 'win32':
+    raise unittest.SkipTest('POSIX Android deployment orchestration')
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import android_release as release
 import android_release_lab_context as context
@@ -19,7 +22,9 @@ class IsolatedCluster(unittest.TestCase):
     def setUp(self):
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
-        self.root = Path(temporary.name)
+        # The production mapping rejects aliases; managed SSD TMPDIRs can have
+        # a symlinked ancestor, so freeze this fixture's actual owned directory.
+        self.root = Path(temporary.name).resolve()
         self.identity = {'schema': 1, 'vm_uuid': '79db4460-2ee6-43a2-8f58-2fbb12c28185',
             'android_pod_uid': '488cee51-cd94-4a25-9f5d-1050214888c3', 'android_pod_ip': '10.244.77.21',
             'boundary_sha256': 'a' * 64}

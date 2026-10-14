@@ -6,6 +6,15 @@ It never waits for Apple, Windows, desktop GUI matrices, or a relay soak during
 routine activation. Relevant protocol/load qualification belongs before the
 release push; the required focused auth/persistence checks remain in this lane.
 
+The deployment coordinator and its filesystem/locking adapters run on POSIX
+workers. The eleven `android_release*_test.py` modules exercise that orchestration
+and are explicitly inapplicable on Windows, before importing `fcntl`. They all
+remain in Linux CI, while macOS exercises their portable POSIX cases. The two
+`SO_PEERCRED` maintenance-socket controls and the actual Forgejo hook's procfs
+UUID control require Linux. These reported exclusions do not skip the native
+SDK, Rust, Android application, installer or signature checks. Native platform
+results record their actual tested and excluded counts separately.
+
 The deadline is 600 wall-clock seconds from the original Forgejo post-receive
 timestamp, including consumer polling, queueing, artifact checks, activation and retries. The clock starts at promotion of a fully prepared immutable release; source pushes request preparation. Native
 signatures, byte hashes and every declared target remain mandatory. Deadlines

@@ -1,6 +1,6 @@
 """Release regressions use a simulated adapter, never the production hub."""
 import json
-import fcntl
+from contextlib import chdir
 import base64
 import hashlib
 import io
@@ -17,6 +17,11 @@ import threading
 import unittest
 from types import SimpleNamespace
 from unittest.mock import patch
+
+if sys.platform == 'win32':
+    raise unittest.SkipTest('POSIX Android deployment orchestration')
+
+import fcntl
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import android_release as release
@@ -55,10 +60,11 @@ class SourcePushHook(unittest.TestCase):
         self.hook.write_text(text.replace('mailbox=/var/lib/gitea/android-release/events',
                                          'mailbox=' + shlex.quote(str(self.mailbox))))
 
-    def push(self, refs):
+    def push(self, refs, locale=None):
         rows = ''.join('0' * 40 + ' ' + '1' * 40 + ' ' + ref + '\n' for ref in refs)
         subprocess.run(['/bin/sh', str(self.hook)], cwd=self.repo, input=rows,
-                       text=True, check=True, timeout=5)
+                       text=True, check=True, timeout=5,
+                       env=dict(os.environ, LC_ALL=locale) if locale else None)
         return [json.loads(path.read_text()) for path in self.mailbox.glob('*.json')]
 
     def test_current_task_branch_notifies_only_its_configured_consumer(self):
@@ -76,8 +82,13 @@ class SourcePushHook(unittest.TestCase):
 
     def test_unsafe_json_refs_never_emit_events(self):
         self.assertEqual(self.push(['refs/heads/agent/quote"injection',
-                                    'refs/heads/agent/back\\slash',
-                                    'refs/heads/agent/unicode-\u00e9']), [])
+                                     'refs/heads/agent/back\\slash',
+                                     'refs/heads/agent/unicode-\u00e9']), [])
+
+    def test_ascii_filter_is_independent_of_utf8_collation(self):
+        locale = 'en_US.UTF-8' if sys.platform == 'darwin' else 'C.UTF-8'
+        rows = self.push(['refs/heads/agent/valid-az', 'refs/heads/agent/unicode-\u00e9'], locale)
+        self.assertEqual([row['ref'] for row in rows], ['refs/heads/agent/valid-az'])
 
 
 class RoutingHorizon(unittest.TestCase):
@@ -1044,9 +1055,10 @@ class Maintenance(unittest.TestCase):
         raw[84:92] = (22001).to_bytes(8, 'little'); raw[124:] = hashlib.sha256(raw[:124]).digest()
         self.assertIsNone(qualify.frontier(bytes(raw), (b'x' * 32).hex()))
 
+    @unittest.skipUnless(sys.platform == 'linux', 'Linux SO_PEERCRED maintenance socket')
     def test_oversized_private_frame_is_rejected_before_allocation(self):
-        with tempfile.TemporaryDirectory() as directory:
-            path = Path(directory) / 'hub.sock'
+        with tempfile.TemporaryDirectory() as directory, chdir(directory):
+            path = Path('hub.sock')
             with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as server:
                 server.bind(str(path)); server.listen()
                 def respond():
@@ -1059,9 +1071,10 @@ class Maintenance(unittest.TestCase):
                     hub.exchange(path, 'a' * 64, os.getpid(), {'kind': 'identify'})
                 thread.join(timeout=2); self.assertFalse(thread.is_alive())
 
+    @unittest.skipUnless(sys.platform == 'linux', 'Linux SO_PEERCRED maintenance socket')
     def test_private_socket_checks_process_identity_and_bounded_framing(self):
-        with tempfile.TemporaryDirectory() as directory:
-            path = Path(directory) / 'hub.sock'
+        with tempfile.TemporaryDirectory() as directory, chdir(directory):
+            path = Path('hub.sock')
             server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
             server.bind(str(path)); server.listen()
             self.addCleanup(server.close)

@@ -4,6 +4,7 @@ import json
 import base64
 import copy
 import concurrent.futures
+from contextlib import chdir
 import os
 from pathlib import Path
 import socket
@@ -523,8 +524,10 @@ class ControllerTests(unittest.TestCase):
 
     def test_reopen_removes_only_dead_owned_probe_socket_and_preserves_profile(self):
         endpoint = self.root / "c0/probe.sock"
-        with socket.socket(socket.AF_UNIX) as stream:
-            stream.bind(str(endpoint))
+        # Exercise a real stale socket even when the SSD TMPDIR is longer than
+        # the host's sockaddr_un limit; the production path is still unchanged.
+        with socket.socket(socket.AF_UNIX) as stream, chdir(endpoint.parent):
+            stream.bind(endpoint.name)
         profile = self.root / "c0/profile"
         profile.write_bytes(b"retained encrypted fixture bytes")
         self.worker.children.append(("probe0", mock.Mock(poll=lambda: -15)))

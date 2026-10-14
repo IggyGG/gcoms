@@ -9,6 +9,9 @@ import unittest
 from urllib.error import HTTPError
 from unittest.mock import patch
 
+if sys.platform == 'win32':
+    raise unittest.SkipTest('POSIX Android deployment orchestration')
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import android_release_kubernetes as cluster
 
