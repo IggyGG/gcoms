@@ -4,6 +4,22 @@ The submitting client exited, and this session made no cluster or guest calls du
 
 The dated investigation entries below retain the evidence and status at each earlier step. The acceptance record above is the current status of this Android cluster migration.
 
+F5 native desktop tooling boundaries, 2026-10-15: source 85611e4 corrects the
+qualification failures reproduced on the owner's physical Mac and Windows hosts.
+Mac baseline 465 tests had 1 failure/5 errors; Windows 279 had 11 fcntl import errors.
+The final same-source checks pass 466/466 on Linux, 463 with 3 Linux-only exclusions
+on Apple Silicon, and 216 with 63 explicitly inventoried exclusions on Windows 11.
+All 198 Android POSIX orchestration tests execute on Linux; no native SDK or
+application gate is disabled. Preserve the real SO_PEERCRED/procfs requirements,
+private-path guards and original failed logs. Relative socket fixture paths and
+canonical owned temporary roots work with long/symlinked SSD scratch. Both shell
+hooks pin the C locale, and an actual Mac locale regression verifies ASCII-only
+ref names. The tested diff SHA is 04740d91376b804e287838ef8faac3cd4e675e8206b42254e2d94dd5359acf47.
+These are source/tooling checks, not signed installer or public availability proof.
+Full native compilation, installer/signature and publication gates remain in the
+normal immutable successor pipeline. GChat retains the source-bound receipts in
+`docs/evidence/release-follow-through-20261014/deployed.json` and private native logs.
+
 F5 original Android launch-clock failure, 2026-10-13: the real tag completed all 26,006,512 download bytes but failed current-process readiness. Android measured about 0.5 seconds ahead; its handoff time was 1791857609 and the signed controller decision 1791857608, below the client’s strict request-time floor. Fresh transport retries also rejected the retained decision. The original 600.295-second failure and unsuccessful functional rollback remain archived. Both original behaviors fail the causal regressions. The repaired installer passes 19 affected client/launch checks; the controller passes its retained-decision and four reply-contract checks. Exact native artifacts remain unchanged by those controls; their records were read back from FSN1 S3. Native preparation completed in 512 seconds, and both fixes are published to main. The repaired native family then passed the fresh signed 42 MiB interrupted transfer and current-process load in 292.090 seconds; PID 8308 restarted as 8619 with unchanged identity. [New reference](docs/evidence/android-cluster-20261012/runtime-qualified-launch-repair.json). The first real prepared promotion then reached every declared target in 356.590 seconds from its original server push. Its client exited and this session made no cluster or guest calls for the following ten-minute window; all six artifacts were cached. [Live promotion](docs/evidence/android-cluster-20261012/first-live-promotion.json). The next two immutable tags reached every target in 288.456 and 213.545 seconds, also using cached artifacts. All three consecutive deployments are within 600 seconds of their original server pushes. [Three live releases](docs/evidence/android-cluster-20261012/live-promotions.json). The real failed canary restored functional readiness in 44.804 seconds; the ordinary configuration is restored. [Acceptance](docs/evidence/android-cluster-20261012/completion.json). [Installer checks](docs/evidence/android-cluster-20261012/launch-window-installer.json), [controller checks](docs/evidence/android-cluster-20261012/launch-window-controller.json). [Evidence](docs/evidence/android-cluster-20261012/original-launch-clock-failure.json).
 
 F5 cluster release procedure, 2026-10-13: document exact prepared-source selection, native-reference reuse, original server clocks, cluster execution after the submitting client exits, and retained failed Jobs. Routine promotion performs no compilation or broad platform matrix. Cold native preparation took 25m39s and remains separate from the 600-second prepared-tag objective. Three consecutive original-clock promotions and functional failed-canary restoration pass. [Procedure](docs/ANDROID_AGENT_RELEASE.md#routine-cluster-releases).
