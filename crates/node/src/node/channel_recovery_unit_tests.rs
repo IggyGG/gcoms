@@ -734,6 +734,184 @@ async fn recovery_received_directory_and_reply_commit_together_or_exact_wire_ret
 }
 
 #[tokio::test]
+async fn full_control_outbox_accepts_authenticated_route_without_losing_retained_wires() {
+    authenticated_route_at_control_capacity(false).await;
+}
+
+#[tokio::test]
+async fn full_control_outbox_does_not_mistake_prior_fanout_for_a_reciprocal_route_reply() {
+    authenticated_route_at_control_capacity(true).await;
+}
+
+async fn authenticated_route_at_control_capacity(partial_fanout: bool) {
+    use std::sync::atomic::{AtomicBool, Ordering};
+    let (mut a, mut b, welcome) = fixture();
+    let a_seed = a.identity_seed;
+    let b_seed = b.identity_seed;
+    for (node, seed, byte, own_name) in [
+        (&mut a, a_seed, 95, "owner"),
+        (&mut b, b_seed, 96, "member"),
+    ] {
+        let cs = node.channels.get_mut("recovery").unwrap();
+        cs.own_route = current_owned(byte, &cs.role, &seed, "recovery");
+        cs.directory
+            .insert(own_name.into(), cs.own_route.public.clone());
+    }
+    let current_owner = a.channels["recovery"].own_route.public.clone();
+    let current_member = b.channels["recovery"].own_route.public.clone();
+    let owner = &a.channels["recovery"];
+    let peer = recovery_recipient(owner, owner.id, owner.role.epoch(), &welcome).unwrap();
+    let (dir, dir_id) = stage_own_route_announcement(&mut a, "recovery", &peer).unwrap();
+    let old_owner = b.channels["recovery"].directory["owner"].clone();
+    if partial_fanout {
+        stage_own_route_announcement(&mut b, "recovery", &old_owner).unwrap();
+        let cs = b.channels.get_mut("recovery").unwrap();
+        // This destination was accepted before its peer descriptor changed.
+        cs.pending_control.clear();
+        cs.route_announcement
+            .as_mut()
+            .unwrap()
+            .recovery_targets
+            .insert(old_owner.pseudonym);
+    }
+    let cs = b.channels.get_mut("recovery").unwrap();
+    let epoch = cs.role.epoch();
+    for index in 0..crate::channel::CHANNEL_ACK_LIMIT {
+        let ack = cs
+            .role
+            .send(&crate::channel::encode_text_ack([index as u8; 16], false))
+            .unwrap();
+        cs.pending_control.push_back((old_owner.clone(), ack));
+    }
+    let retained = cs.pending_control.clone();
+    let runtime = super::super::routing::RoutingRuntime::new(
+        RoutingConfig::default(),
+        gcoms_routing::Directory::new(),
+        true,
+    )
+    .unwrap();
+    runtime
+        .channel_ready
+        .lock()
+        .unwrap()
+        .insert("recovery".into());
+    b.routing = Some(runtime.clone());
+    let allow_save = Arc::new(AtomicBool::new(false));
+    let allowed = allow_save.clone();
+    let saved = Arc::new(Mutex::new(Vec::new()));
+    let sink = saved.clone();
+    b.durable_state_sink = Some(Arc::new(move |bytes| {
+        if !allowed.load(Ordering::SeqCst) {
+            return Err("fixture receive persistence failure".into());
+        }
+        *sink.lock().unwrap() = bytes;
+        Ok(())
+    }));
+    let b = Arc::new(Mutex::new(b));
+    let (events, _) = broadcast::channel(32);
+    input(&b, &dir, &events);
+    {
+        let node = b.lock().unwrap();
+        assert_eq!(node.channels["recovery"].directory["owner"], old_owner);
+        assert_eq!(node.channels["recovery"].pending_control, retained);
+        assert!(saved.lock().unwrap().is_empty());
+        if partial_fanout {
+            assert!(node.channels["recovery"]
+                .route_announcement
+                .as_ref()
+                .unwrap()
+                .recovery_targets
+                .contains(&old_owner.pseudonym));
+        }
+    }
+    allow_save.store(true, Ordering::SeqCst);
+    input(&b, &dir, &events);
+    {
+        let node = b.lock().unwrap();
+        let cs = &node.channels["recovery"];
+        assert_eq!(
+            cs.directory["owner"], current_owner,
+            "reply capacity must not block the authenticated route that drains existing controls"
+        );
+        assert_eq!(cs.pending_control.len(), crate::channel::CHANNEL_ACK_LIMIT);
+        for ((route, wire), (_, original)) in cs.pending_control.iter().zip(&retained) {
+            assert_eq!(route, &current_owner);
+            assert_eq!(wire, original);
+        }
+        assert_eq!(cs.own_route.public, current_member);
+        assert_eq!(cs.role.epoch(), epoch);
+        assert!(
+            !cs.commit_ack_cache.contains_key(&dir_id),
+            "no unadmitted reply is fabricated"
+        );
+        assert!(
+            !runtime.channel_ready.lock().unwrap().contains("recovery"),
+            "automatic routing still owes its reciprocal announcement"
+        );
+        if partial_fanout {
+            assert!(!cs
+                .route_announcement
+                .as_ref()
+                .unwrap()
+                .recovery_targets
+                .contains(&current_owner.pseudonym));
+        }
+    }
+    let snapshot = saved.lock().unwrap().clone();
+    let mut reopening = state();
+    // Match automatic constructor restoration: retained routes are decoded
+    // first, then the separate routing task recovers their transport.
+    reopening.routing = Some(
+        super::super::routing::RoutingRuntime::new(
+            RoutingConfig::default(),
+            gcoms_routing::Directory::new(),
+            true,
+        )
+        .unwrap(),
+    );
+    let restored = Arc::new(Mutex::new(reopening));
+    let scheduler = restored.lock().unwrap().scheduler.clone();
+    persist::decode_state_at_startup(&restored, &scheduler, &snapshot)
+        .await
+        .unwrap();
+    {
+        let mut node = restored.lock().unwrap();
+        let cs = node.channels.get_mut("recovery").unwrap();
+        assert_eq!(cs.directory["owner"], current_owner);
+        assert_eq!(cs.pending_control.len(), retained.len());
+        for ((route, wire), (_, original)) in cs.pending_control.iter().zip(&retained) {
+            assert_eq!(route, &current_owner);
+            assert_eq!(wire, original);
+        }
+        assert!(
+            cs.role.receive_authenticated(&dir).is_err(),
+            "MLS receive replay protection survives reopen"
+        );
+        // Model one real control completing, making exactly one slot available.
+        cs.pending_control.pop_front();
+        node.durable_state_sink = Some(Arc::new(|_| Ok(())));
+        stage_recovered_route_announcements(&mut node, "recovery").unwrap();
+        assert_eq!(
+            node.channels["recovery"].pending_control.len(),
+            retained.len()
+        );
+        let reply = node.channels["recovery"]
+            .route_announcement
+            .as_ref()
+            .unwrap()
+            .wire
+            .clone();
+        let a = Arc::new(Mutex::new(a));
+        input(&a, &reply, &events);
+        assert_eq!(
+            a.lock().unwrap().channels["recovery"].directory["member"],
+            current_member
+        );
+    }
+    scheduler.shutdown();
+}
+
+#[tokio::test]
 async fn recovery_expired_local_route_keeps_authenticated_owner_dir_and_exact_ack() {
     for expired_index in [0, 1] {
         let (mut a, b, welcome) = fixture();

@@ -215,12 +215,17 @@ pub(crate) fn spawn_channel_subscription_pump(
                 }
                 st.channels
                     .iter()
-                    .filter(|(name, _)| {
+                    .filter(|(name, channel)| {
                         st.routing.as_ref().is_none_or(|r| {
                             r.channel_ready
                                 .lock()
                                 .unwrap_or_else(|p| p.into_inner())
                                 .contains(*name)
+                                || r.channel_receiving
+                                    .lock()
+                                    .unwrap_or_else(|p| p.into_inner())
+                                    .get(*name)
+                                    .is_some_and(|route| route.matches(&channel.own_route))
                         })
                     })
                     .flat_map(|(channel, channel_state)| {
@@ -278,6 +283,11 @@ pub(crate) fn spawn_channel_subscription_pump(
                             {
                                 runtime
                                     .channel_ready
+                                    .lock()
+                                    .unwrap_or_else(|p| p.into_inner())
+                                    .remove(&key.0);
+                                runtime
+                                    .channel_receiving
                                     .lock()
                                     .unwrap_or_else(|p| p.into_inner())
                                     .remove(&key.0);

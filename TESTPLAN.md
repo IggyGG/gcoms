@@ -1392,3 +1392,14 @@ closure after receipt of the missing counter, restart retention and unchanged
 unknown-delivery fallback/deadlines. The original repair predicate must fail
 the prompt-gap assertion. Unit checks do not qualify live bulk throughput.
 F5 retained recovery fairness: create eight real MLS channel states, saturate exactly the old implementation's first four control outboxes, and require every other channel to recover through pinned loopback queue-cover transport. Preserve all original blocked controls and membership epochs; never mark deferred channels ready. Separately expire the first four prepared routes and require later preparations to recover without consuming or changing any key package. The original channel implementation fails; both repaired controls, the 453-positive node suite, strict Clippy and client-only compilation pass. Signed native qualification and live installed authenticated delivery remain separate gates. [Source-bound receipt](docs/evidence/durable-host-20261013/channel-recovery.json).
+
+F5 backpressure recovery, 2026-10-14: require the old source to fail actual pinned-
+TLS subscription progress with a full control outbox and fail real MLS directory
+retargeting at reply capacity. Reject receiving after failed persistence, changed
+descriptors or changed private subscription authority. Preserve every existing
+control wire and membership epoch; verify durable route/MLS receive restoration,
+exact retry after persistence failure, delayed reciprocal announcement and
+partial-fanout invalidation. Full node qualification passes 459 cases with the two
+existing explicitly separate probes; strict all-target Clippy and client-only
+features pass. Keep the original 0.1.216 300-second delivery failure unchanged.
+[Source-bound receipt](docs/evidence/durable-host-20261014/channel-backpressure.json).

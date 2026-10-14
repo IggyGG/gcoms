@@ -1,0 +1,65 @@
+{
+  "schema": 1,
+  "scope": "Retained-channel transport and authenticated-directory recovery under a full bounded control outbox",
+  "base_commit": "9e889b7c17702ebbe365f8c34eb42f1c4fe7193b",
+  "source_sha256": {
+    "crates/node/src/node/routing.rs": "161fa3b68960c565be41bc6253aca4a01873f1e00b37d8ef8329effcb232e8bc",
+    "crates/node/src/node/ticks.rs": "df17e7a8877e6c7ed5823f38d5d51f0a3ec70d66579364653b334c4b329c04bf",
+    "crates/node/src/node/channels.rs": "c2d82cf72d785b1ea67973638356b9df04be9be26bec85e5af4f4aff049eae2d",
+    "crates/node/src/node/channel_recovery.rs": "57e498d1a22563063b7967d11db2821142a1b878aad3c2064c0ff3e2267ffe99",
+    "crates/node/src/node/routing_channel_recovery_tests.rs": "92ad6b1d892ddf6b3d98808b95612d0a17bb138ce1ed756c198f14b0608fe4df",
+    "crates/node/src/node/channel_recovery_unit_tests.rs": "477f6de65907aeab34a0a4df2d0dce9018acfe2959cf2d9fa054dbceee2e772d"
+  },
+  "behavior": {
+    "receive_readiness": "Established only after exact owned aliases are restored and the route checkpoint commits; binds both public descriptor and private alias authority.",
+    "announcement_readiness": "Remains pending until the existing bounded announcement round is durably staged.",
+    "full_reply_outbox": "Authenticated peer descriptors and MLS receive state can commit without creating a new reciprocal reply. Existing controls retain their bytes and acquire only the authenticated current destination.",
+    "deferred_reciprocal": "Clear only this peer's partial-announcement completion and retry through ordinary automatic recovery. Reopen derives recovery from the durable current directory.",
+    "persistence_failure": "Retains rollback of receive state and directory changes; cannot authorize subscriptions.",
+    "limits": "No outbox enlargement, new wire format, membership epoch change, invented ACK, queue clearing, or deadline extension."
+  },
+  "causal_before": [
+    {
+      "receipt": "channel-receiving-backpressure-before-1",
+      "result": "FAIL: restored channel could not make authenticated subscription requests while its outgoing control queue was full",
+      "test_seconds": 3.44
+    },
+    {
+      "receipt": "channel-directory-backpressure-before-1",
+      "result": "FAIL: full reply capacity rolled back the authenticated peer route needed to drain retained controls",
+      "test_seconds": 1.01
+    }
+  ],
+  "qualification": {
+    "focused_recovery": {"receipt": "channel-backpressure-after-2", "passed": 26, "failed": 0},
+    "final_node_suite": {"receipt": "channel-backpressure-node-suite-2", "passed": 459, "failed": 0, "ignored": 2, "test_seconds": 171.44},
+    "strict_all_targets_clippy": {"receipt": "channel-backpressure-clippy-2", "exit_code": 0},
+    "client_only_features": {"receipt": "channel-backpressure-client-check-2", "exit_code": 0},
+    "source_unchanged_during_each_run": true,
+    "native_controls": [
+      "Pinned loopback TLS and capability-checked SUB requests; actual receiving streams become active with the full control queue unchanged",
+      "Failed route checkpoint does not enable receiving",
+      "Changed public descriptor and changed private subscription authority cannot reuse an earlier receive proof",
+      "Real MLS directory input, capacity refusal, persistence-failure rollback and exact-wire retry",
+      "Current route and every retained control survive constructor-style reopen; MLS replay protection remains",
+      "A released control slot permits the reciprocal directory without changing membership",
+      "Earlier partial fanout does not suppress a newly owed reciprocal route update"
+    ],
+    "ignored_controls": [
+      "Existing privileged low-port namespace fixture, invoked separately by its owning gate",
+      "Existing explicitly authorized live relay provisioning probe"
+    ],
+    "retained_intermediate_failure": "channel-backpressure-after-1 passed 23 checks and failed its new restore fixture because it selected inline live transport restoration. The fixture now uses the same fresh routing-runtime constructor path as automatic restoration; production checks were not weakened."
+  },
+  "code_comparison": {
+    "before": "No close implementation; only very-low-rerank unrelated recovery/commit snippets.",
+    "after": [
+      {"source": "amqp-rs/lapin:src/channel_recovery_context.rs", "cosine": 0.701, "rerank": 0.4478, "comparison": "Retains recovery context and expected replies separately; different protocol and completion mechanism."},
+      {"source": "lightningdevkit/rust-lightning:lightning/src/ln/channelmanager.rs", "cosine": 0.5919, "rerank": 0.0, "comparison": "Generic guarded channel state and pending monitor actions; not a close implementation."}
+    ],
+    "code_copied": false
+  },
+  "private_evidence_root": "/run/media/user/SSD-2/retained/ghost/durable-host-20261012/",
+  "production_delivery_qualified": false,
+  "remaining": "Normal signed successor and actual retained-peer authenticated messaging, interrupted-file and installed lifecycle acceptance. The original 0.1.216 delivery deadline failure remains failed."
+}

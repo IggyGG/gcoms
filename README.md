@@ -757,3 +757,13 @@ The image-pull deployment in `release/android-cluster/image-pull.json` exposes a
 
 The server outbox deployment is declared in `release/android-cluster/server-outbox.json`. Install its ConfigMap with `android_release_outbox.py` and an `outbox.json` archive configuration, plus the image-pull and archive Secrets out of band. The Forgejo post-receive hook writes only `/data/android-release/outbox`; retain the existing generated Forgejo hooks and add the Android hook alongside them. The forwarding Pod shares the Forgejo PVC only at that subdirectory, stays on its node, and has outbound DNS/public HTTPS only. Preserve S3 receipts during operational compaction; they carry the original push clock.
 Retained route recovery fairness (F5), 2026-10-13: a full channel control outbox no longer prevents other retained channels from recovering. Process-local cursors rotate both channel and prepared-join batches while retaining the existing four-attempt bounds; per-channel deferrals preserve exact controls and partial fanout, and durable checkpoint failures still pause the owner. A pinned loopback/MLS regression fails on the original code; both new controls, 453 node tests (two existing explicit exclusions), strict Clippy and the client-only feature check pass. Signed release and actual installed delivery remain pending. [Source evidence](docs/evidence/durable-host-20261013/channel-recovery.json).
+
+Retained-channel backpressure (F5), 2026-10-14: restored, durably committed queues
+can receive authenticated traffic while their outgoing control queue is full.
+Receive readiness binds the exact descriptor and alias authority; announcement
+completion remains separate. Authenticated directory updates retarget existing
+controls without admitting another reply, while storage failure still rolls back.
+Both original blockage mechanisms fail causal controls; the repaired full node
+suite passes 459 tests with two existing explicit exclusions, strict Clippy and
+client-only feature checks. Signed retained-peer acceptance remains required.
+[Source-bound evidence](docs/evidence/durable-host-20261014/channel-backpressure.json).

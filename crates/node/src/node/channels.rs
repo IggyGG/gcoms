@@ -1006,10 +1006,20 @@ pub(crate) fn commit_authenticated_directory(
         })
     });
     // Commit the receive state, route replacement and any available reciprocal
-    // Dir atomically. Other reply or persistence failures still roll back the
-    // receive, allowing the exact incoming wire to retry.
+    // Dir atomically. A full reply outbox must not prevent retargeting the exact
+    // existing controls to the authenticated route that can drain them. No new
+    // control or receipt is admitted in that case. Other failures still roll
+    // back the receive, allowing the exact incoming wire to retry.
+    let mut deferred_reply = false;
     let committed = match reply_route {
-        Some(route) => stage_own_route_reply(st, chan, route, id).map(|(wire, _)| Some(wire)),
+        Some(route) => match stage_own_route_reply(st, chan, route, id) {
+            Ok((wire, _)) => Ok(Some(wire)),
+            Err(error) if error == super::channel_recovery::CONTROL_OUTBOX_FULL => {
+                deferred_reply = true;
+                persist_current_direct_state(st).map(|_| None)
+            }
+            Err(error) => Err(error),
+        },
         None => persist_current_direct_state(st).map(|_| None),
     };
     let reply = match committed {
@@ -1028,6 +1038,23 @@ pub(crate) fn commit_authenticated_directory(
             return false;
         }
     };
+    if deferred_reply {
+        // Partial fanout to an earlier descriptor does not satisfy this peer's
+        // reciprocal update. The normal recovery round retries it after space
+        // opens; reopening also reannounces from the durable current directory.
+        if let (Some(cs), Some(route)) = (st.channels.get_mut(chan), reply_route) {
+            if let Some(announcement) = &mut cs.route_announcement {
+                announcement.recovery_targets.remove(&route.pseudonym);
+            }
+        }
+        if let Some(runtime) = &st.routing {
+            runtime
+                .channel_ready
+                .lock()
+                .unwrap_or_else(|p| p.into_inner())
+                .remove(chan);
+        }
+    }
     let scheduler = st.scheduler.clone();
     if let (Some(route), Some(wire)) = (reply_route, reply) {
         enqueue_channel_control(&scheduler, chan, route, &wire);

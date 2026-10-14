@@ -9,6 +9,8 @@ use std::time::Duration;
 struct TransportFixture {
     server: tokio::task::JoinHandle<()>,
     scheduler: RelayScheduler,
+    queues: Arc<Mutex<HashMap<String, OwnedAlias>>>,
+    subscriptions: tokio::sync::mpsc::Receiver<[u8; 32]>,
 }
 
 impl Drop for TransportFixture {
@@ -26,38 +28,66 @@ async fn accepting_owned_queue_transport() -> (RelayTarget, TransportFixture) {
         relay_service_id: identity.service_id(),
     };
     let acceptor = tokio_rustls::TlsAcceptor::from(Arc::new(identity.server_config().unwrap()));
+    let queues = Arc::new(Mutex::new(HashMap::<String, OwnedAlias>::new()));
+    let known_queues = queues.clone();
+    let (observed, subscriptions) = tokio::sync::mpsc::channel(16);
     let server = tokio::spawn(async move {
         let mut connections = tokio::task::JoinSet::new();
         loop {
             let (tcp, _) = listener.accept().await.unwrap();
             let acceptor = acceptor.clone();
+            let queues = known_queues.clone();
+            let observed = observed.clone();
             connections.spawn(async move {
                 let tls = acceptor.accept(tcp).await.unwrap();
                 let mut h2 = h2::server::handshake(tls).await.unwrap();
+                let mut requests = tokio::task::JoinSet::new();
                 while let Some(Ok((request, mut reply))) = h2.accept().await {
-                    let mut body = request.into_body();
-                    let mut wire = Vec::new();
-                    while let Some(Ok(bytes)) = body.data().await {
-                        assert!(wire.len() + bytes.len() <= 1024 * 1024);
-                        body.flow_control().release_capacity(bytes.len()).unwrap();
-                        wire.extend_from_slice(&bytes);
-                    }
-                    // This fixture acknowledges queue-cover transport only. It
-                    // never manufactures an application or membership receipt.
-                    let cell = gcoms_core::decode(&wire).unwrap();
-                    assert_eq!(cell.cell_type().unwrap(), gcoms_core::CellType::RelayPush);
-                    let mut response = reply.send_response(http::Response::new(()), false).unwrap();
-                    response
-                        .send_data(
-                            bytes::Bytes::from(
-                                gcoms_transport::HopReply::Accepted
-                                    .cell()
-                                    .encode_wire()
-                                    .unwrap(),
-                            ),
-                            true,
-                        )
-                        .unwrap();
+                    let alias = queues.lock().unwrap().get(request.uri().path()).cloned();
+                    let observed = observed.clone();
+                    requests.spawn(async move {
+                        let mut body = request.into_body();
+                        let mut wire = Vec::new();
+                        while let Some(Ok(bytes)) = body.data().await {
+                            assert!(wire.len() + bytes.len() <= 1024 * 1024);
+                            body.flow_control().release_capacity(bytes.len()).unwrap();
+                            wire.extend_from_slice(&bytes);
+                        }
+                        let cell = gcoms_core::decode(&wire).unwrap();
+                        if cell.cell_type().unwrap() == gcoms_core::CellType::RelaySub {
+                            let alias = alias.expect("only a registered owned queue can subscribe");
+                            let sub = crate::relay::RelaySub::decode_from_cell(
+                                &cell,
+                                &alias.capabilities.sub,
+                                &alias.contact.target.relay_service_id,
+                                now_unix(),
+                            )
+                            .unwrap();
+                            assert_eq!(sub.queue_id, alias.contact.queue_id);
+                            assert_eq!(sub.epoch, alias.contact.epoch);
+                            let _stream =
+                                reply.send_response(http::Response::new(()), false).unwrap();
+                            observed.send(sub.queue_id).await.unwrap();
+                            std::future::pending::<()>().await;
+                            return;
+                        }
+                        // Acknowledge queue-cover transport only, never application
+                        // or membership delivery. Subscription streams stay open.
+                        assert_eq!(cell.cell_type().unwrap(), gcoms_core::CellType::RelayPush);
+                        let mut response =
+                            reply.send_response(http::Response::new(()), false).unwrap();
+                        response
+                            .send_data(
+                                bytes::Bytes::from(
+                                    gcoms_transport::HopReply::Accepted
+                                        .cell()
+                                        .encode_wire()
+                                        .unwrap(),
+                                ),
+                                true,
+                            )
+                            .unwrap();
+                    });
                 }
             });
         }
@@ -66,7 +96,15 @@ async fn accepting_owned_queue_transport() -> (RelayTarget, TransportFixture) {
         Arc::new(Tp1Client::new().unwrap()),
         crate::scheduler::SchedulerProfile::compressed_production(94),
     );
-    (target, TransportFixture { server, scheduler })
+    (
+        target,
+        TransportFixture {
+            server,
+            scheduler,
+            queues,
+            subscriptions,
+        },
+    )
 }
 
 fn live_owned_route(
@@ -276,5 +314,203 @@ async fn full_channel_controls_do_not_starve_other_retained_channels() {
     assert!(
         !saved.lock().unwrap().is_empty(),
         "route changes must cross the durable barrier"
+    );
+}
+
+#[tokio::test]
+async fn recovered_channel_receives_while_its_control_outbox_is_full() {
+    blocked_channel_subscription(true, UncommittedRoute::None).await;
+}
+
+#[tokio::test]
+async fn uncommitted_channel_recovery_cannot_enable_receiving() {
+    blocked_channel_subscription(false, UncommittedRoute::None).await;
+}
+
+#[tokio::test]
+async fn recovered_receiving_proof_cannot_authorize_a_different_channel_route() {
+    blocked_channel_subscription(true, UncommittedRoute::Descriptor).await;
+}
+
+#[tokio::test]
+async fn recovered_receiving_proof_cannot_authorize_changed_subscription_authority() {
+    blocked_channel_subscription(true, UncommittedRoute::SubscriptionAuthority).await;
+}
+
+#[derive(PartialEq)]
+enum UncommittedRoute {
+    None,
+    Descriptor,
+    SubscriptionAuthority,
+}
+
+async fn blocked_channel_subscription(
+    checkpoint_succeeds: bool,
+    replacement_kind: UncommittedRoute,
+) {
+    let (target, mut transport) = accepting_owned_queue_transport().await;
+    let mut node = state();
+    node.scheduler.shutdown();
+    node.scheduler = transport.scheduler.clone();
+    let runtime = RoutingRuntime::new(RoutingConfig::default(), Directory::new(), true).unwrap();
+    runtime.recovering_owner.store(false, Ordering::Release);
+    node.routing = Some(runtime.clone());
+    node.client_relay.aliases =
+        live_owned_route(owned_channel_route(150, [150; 32], [151; 32]), &target, 150).aliases;
+    let name = "blocked-receiving";
+    let mut channel = established_owner_fixture(name);
+    channel.own_route = live_owned_route(
+        owned_channel_route(
+            10,
+            channel.role.own_pseudonym(),
+            channel.own_route.direct_secret,
+        ),
+        &target,
+        10,
+    );
+    channel
+        .directory
+        .insert("owner".into(), channel.own_route.public.clone());
+    let prepared = gcoms_mls::ChannelMember::prepare("member").unwrap();
+    let package = gcoms_mls::ChannelMember::key_package_bytes(&prepared).unwrap();
+    let member = live_owned_route(
+        owned_channel_route(
+            100,
+            gcoms_mls::ChannelMember::prepared_pseudonym(&prepared),
+            [101; 32],
+        ),
+        &target,
+        100,
+    );
+    super::super::stage_recovery_admission_fixture(
+        &mut channel,
+        name,
+        &member.public,
+        &package,
+        "member",
+    )
+    .unwrap();
+    channel
+        .directory
+        .insert("member".into(), member.public.clone());
+    for byte in 0..crate::channel::CHANNEL_ACK_LIMIT {
+        channel
+            .pending_control
+            .push_back((member.public.clone(), vec![byte as u8]));
+    }
+    let original = channel.pending_control.clone();
+    let epoch = channel.role.epoch();
+    let expected: HashSet<_> = channel
+        .own_route
+        .aliases
+        .iter()
+        .map(|alias| alias.contact.queue_id)
+        .collect();
+    for alias in &channel.own_route.aliases {
+        transport.queues.lock().unwrap().insert(
+            format!(
+                "/{}",
+                gcoms_transport::encode_b64url(&alias.contact.queue_id)
+            ),
+            alias.clone(),
+        );
+    }
+    node.channels.insert(name.into(), channel);
+    node.durable_state_sink = Some(Arc::new(move |_| {
+        if checkpoint_succeeds {
+            Ok(())
+        } else {
+            Err("fixture checkpoint unavailable".into())
+        }
+    }));
+    let state = Arc::new(Mutex::new(node));
+    let result = recover_channels(&state, &transport.scheduler, &runtime).await;
+    assert!(result.is_err());
+    assert!(!runtime.channel_ready.lock().unwrap().contains(name));
+    if replacement_kind != UncommittedRoute::None {
+        let mut node = state.lock().unwrap();
+        let cs = node.channels.get_mut(name).unwrap();
+        let replacement = if replacement_kind == UncommittedRoute::SubscriptionAuthority {
+            let mut route = cs.own_route.clone();
+            route.aliases[0].capabilities.sub = [242; 32];
+            route
+        } else {
+            live_owned_route(
+                owned_channel_route(180, cs.role.own_pseudonym(), cs.own_route.direct_secret),
+                &target,
+                180,
+            )
+        };
+        for alias in &replacement.aliases {
+            transport.queues.lock().unwrap().insert(
+                format!(
+                    "/{}",
+                    gcoms_transport::encode_b64url(&alias.contact.queue_id)
+                ),
+                alias.clone(),
+            );
+        }
+        // An earlier receive proof must not authorize this uncommitted route.
+        cs.own_route = replacement;
+    }
+    let (events, _) = broadcast::channel(4);
+    let pump = super::super::ticks::spawn_channel_subscription_pump(
+        state.clone(),
+        transport.scheduler.clone(),
+        events,
+    );
+    let received = tokio::time::timeout(Duration::from_secs(3), async {
+        let mut queues = HashSet::new();
+        while queues.len() < expected.len() {
+            queues.insert(transport.subscriptions.recv().await.unwrap());
+        }
+        queues
+    })
+    .await;
+    if checkpoint_succeeds && replacement_kind == UncommittedRoute::None {
+        assert_eq!(
+            received.expect("a full outgoing control queue must not block authenticated receiving"),
+            expected
+        );
+        tokio::time::timeout(Duration::from_secs(2), async {
+            loop {
+                if expected.iter().all(|queue| {
+                    transport
+                        .scheduler
+                        .subscription_classes()
+                        .iter()
+                        .all(|class| {
+                            state
+                                .lock()
+                                .unwrap()
+                                .subscribed_classes
+                                .contains(&(*queue, *class))
+                        })
+                }) {
+                    break;
+                }
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .expect("the authenticated subscription streams become active");
+    } else {
+        assert!(
+            received.is_err(),
+            "failed persistence or another descriptor cannot grant queue readiness"
+        );
+        assert_eq!(
+            state.lock().unwrap().owner_transition_failed,
+            !checkpoint_succeeds
+        );
+    }
+    pump.stop.send(true).unwrap_or(());
+    pump.task.await.unwrap();
+    let node = state.lock().unwrap();
+    assert_eq!(node.channels[name].pending_control, original);
+    assert_eq!(node.channels[name].role.epoch(), epoch);
+    assert!(
+        !runtime.channel_ready.lock().unwrap().contains(name),
+        "receiving is not announcement completion"
     );
 }

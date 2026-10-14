@@ -2,6 +2,8 @@
 //! The carrier is unchanged MSG/FRWD; only existing MLS commits and self-Dir travel.
 use super::*;
 
+pub(crate) const CONTROL_OUTBOX_FULL: &str = "channel control outbox is full";
+
 /// Stage one self announcement per current epoch/owned route. This transient
 /// cache contains no global peer identity. Exact wires also live in the existing
 /// durable control outbox; a retry never invents an ACK or advances membership.
@@ -125,7 +127,7 @@ fn stage_route_announcement(
         return Ok((wire.clone(), crate::channel::msg_id(channel, &wire)));
     }
     if !pending && cs.pending_control.len() >= crate::channel::CHANNEL_ACK_LIMIT {
-        return Err("channel control outbox is full".into());
+        return Err(CONTROL_OUTBOX_FULL.into());
     }
     let previous_replies =
         original_id.map(|_| (cs.commit_ack_cache.clone(), cs.commit_ack_order.clone()));

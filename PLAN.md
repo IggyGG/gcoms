@@ -1721,3 +1721,14 @@ maintenance/flow controls, strict Clippy and legacy client-persist compilation
 pass. Evidence: `docs/evidence/android-selective-gap-repair-20261012/summary.json`.
 Normal native preparation and fresh 360/600/60-second live gates remain open.
 F5 retained channel recovery fairness, 2026-10-13 (durable-host): the old fixed first batch and fail-fast announcement error causally starve healthy retained channels behind four full outboxes. The bounded cursor/defer repair passes two new real-TLS queue-cover/MLS controls, 453 node tests (two existing explicit exclusions), strict Clippy and client-only compilation. Control records, prepared keys, membership epochs, checkpoint barriers and four-attempt limits are preserved. The installed 0.1.214 failure remains retained; a newly qualified signed successor and actual delivery are still required. [Evidence](docs/evidence/durable-host-20261013/channel-recovery.json).
+
+F5 retained-channel backpressure, 2026-10-14: two further causal controls expose
+receive subscription and authenticated directory update depending on outbound
+reply capacity. The repair separates durable queue receiving from announcement
+completion and commits authenticated route updates while deferring a full reply
+queue. Exact descriptors/alias authority, original control wires, membership,
+limits, MLS replay protection and persistence rollback remain enforced. The final
+459-positive node suite, strict Clippy and client-only compilation pass. The
+installed 0.1.216 trial remains failed; qualify a signed successor and its real
+retained-peer journey before declaring delivery recovered.
+[Evidence](docs/evidence/durable-host-20261014/channel-backpressure.json).

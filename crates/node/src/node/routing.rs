@@ -116,6 +116,17 @@ pub(crate) struct Gc2Routing {
     pub control: Arc<Tp1Client>,
 }
 
+pub(crate) struct RecoveredChannelTransport {
+    public: crate::channel::ChannelRoute,
+    aliases: Vec<OwnedAlias>,
+}
+
+impl RecoveredChannelTransport {
+    pub(crate) fn matches(&self, route: &crate::channel::OwnedChannelRoute) -> bool {
+        self.public == route.public && self.aliases == route.aliases
+    }
+}
+
 pub(crate) struct RoutingRuntime {
     #[cfg(feature = "relay-host")]
     pub relay_capacity: super::RelayCapacity,
@@ -142,6 +153,9 @@ pub(crate) struct RoutingRuntime {
     pub fixture: bool,
     provision_request: [u8; 32],
     pub channel_ready: Mutex<HashSet<String>>,
+    /// Exact restored, durable queue descriptors can receive while outbound
+    /// announcements are still backpressured. This is not send/ACK readiness.
+    pub channel_receiving: Mutex<HashMap<String, RecoveredChannelTransport>>,
     prepared_ready: Mutex<HashSet<u64>>,
     channel_recovery_cursor: Mutex<Option<String>>,
     prepared_recovery_cursor: Mutex<Option<u64>>,
@@ -315,6 +329,7 @@ impl RoutingRuntime {
             fixture,
             provision_request: random_nonzero(),
             channel_ready: Mutex::new(HashSet::new()),
+            channel_receiving: Mutex::new(HashMap::new()),
             prepared_ready: Mutex::new(HashSet::new()),
             channel_recovery_cursor: Mutex::new(None),
             prepared_recovery_cursor: Mutex::new(None),
@@ -720,6 +735,11 @@ pub(crate) fn spawn(
                         .unwrap_or_else(|p| p.into_inner())
                         .clear();
                     runtime
+                        .channel_receiving
+                        .lock()
+                        .unwrap_or_else(|p| p.into_inner())
+                        .clear();
+                    runtime
                         .prepared_ready
                         .lock()
                         .unwrap_or_else(|p| p.into_inner())
@@ -904,6 +924,15 @@ async fn recover_channels(
             .lock()
             .unwrap_or_else(|p| p.into_inner());
         ready.retain(|name| st.channels.contains_key(name));
+        runtime
+            .channel_receiving
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .retain(|name, route| {
+                st.channels
+                    .get(name)
+                    .is_some_and(|cs| route.matches(&cs.own_route))
+            });
         let pending = st
             .channels
             .keys()
@@ -1005,10 +1034,22 @@ async fn recover_channels(
             }
         }
         cs.own_route = route;
+        let receiving = RecoveredChannelTransport {
+            public: cs.own_route.public.clone(),
+            aliases: cs.own_route.aliases.clone(),
+        };
         if let Err(error) = persist_current_direct_state(&st) {
             st.pause_failed_owner_transition();
             return Err(error);
         }
+        // Receiving authenticated route updates/receipts must not depend on
+        // space for a new outgoing announcement. Keep the exact queue binding;
+        // channel_ready below still owns completion of the announcement round.
+        runtime
+            .channel_receiving
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .insert(name.clone(), receiving);
         // Reannounce even an exact restore: a crash may follow the durable
         // route checkpoint but precede its announcement. Keep this channel
         // pending until every peer has its own durable control destination;
