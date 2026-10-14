@@ -21,14 +21,15 @@ pub type Result<T> = std::result::Result<T, Box<dyn Error + Send + Sync>>;
 const REQUEST_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(60);
 /// Idle pull streams are abandoned when no cell arrives for this long.
 pub const STREAM_IDLE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(300);
-/// Concurrent HTTP/2 connections kept warm. A lane never opens a fresh TLS
-/// connection in response to real traffic when its peer is already pooled.
+/// Idle HTTP/2 connections kept warm. Subscriptions reuse pinned connections
+/// up to their stream allowance, then open a bounded shard for the same route.
 pub const MAX_POOLED_CONNECTIONS: usize = 8;
 /// Hard bound includes busy connections and connection attempts.
 pub const MAX_ACTIVE_CONNECTIONS: usize = 64;
 const MAX_CONNECTION_ATTEMPTS: usize = 4;
 pub const MAX_FINITE_REQUESTS: usize = 4;
 pub const MAX_BULK_REQUESTS: usize = 3;
+const MAX_LONG_LIVED_STREAMS: usize = 16;
 // A failed dial must not make every queued job repeat the OS's connection
 // timeout (notably Windows' delayed refusal). This is a bounded negative cache
 // of pre-TLS I/O failures, scoped exactly like authenticated connections.
@@ -117,7 +118,9 @@ pub struct Tp1Client {
 
 /// A pooled peer is always addressed by its pinned service identity. There
 /// is no unpinned path: a connection without a pin cannot be represented.
-type PoolKey = (SocketAddr, [u8; 32], [u8; 32], Option<TrafficClass>);
+// Shard zero retains finite/control credit. Additional shards carry bounded
+// long-lived subscriptions over the same pinned route and traffic class.
+type PoolKey = (SocketAddr, [u8; 32], [u8; 32], Option<TrafficClass>, usize);
 
 #[derive(Clone, Copy)]
 struct Route<'a> {
@@ -132,7 +135,7 @@ impl Route<'_> {
             return Err("too many terminal route exclusions".into());
         }
         if self.excluded.is_empty() {
-            return Ok((self.addr, self.service_id, [0; 32], class));
+            return Ok((self.addr, self.service_id, [0; 32], class, 0));
         }
         let mut excluded = self.excluded.to_vec();
         excluded.sort_unstable();
@@ -153,7 +156,7 @@ impl Route<'_> {
             hash.update(addr.port().to_be_bytes());
             hash.update(pin);
         }
-        Ok((self.addr, self.service_id, hash.finalize().into(), class))
+        Ok((self.addr, self.service_id, hash.finalize().into(), class, 0))
     }
 }
 
@@ -161,6 +164,8 @@ struct PooledConnection {
     sender: h2::client::SendRequest<Bytes>,
     /// Open streams (pull channels) that must not be evicted from under.
     in_flight: AtomicUsize,
+    long_lived: AtomicUsize,
+    shard: usize,
     finite: Arc<Semaphore>,
     bulk: Arc<Semaphore>,
     _driver: ConnectionDriver,
@@ -180,10 +185,14 @@ struct ConnectionLease {
     connection: Arc<PooledConnection>,
     _finite: Option<OwnedSemaphorePermit>,
     _bulk: Option<OwnedSemaphorePermit>,
+    long_lived: bool,
 }
 
 impl Drop for ConnectionLease {
     fn drop(&mut self) {
+        if self.long_lived {
+            self.connection.long_lived.fetch_sub(1, Ordering::AcqRel);
+        }
         self.connection.in_flight.fetch_sub(1, Ordering::AcqRel);
     }
 }
@@ -195,6 +204,7 @@ impl PooledConnection {
             connection: self.clone(),
             _finite: None,
             _bulk: None,
+            long_lived: false,
         };
         if finite {
             // Bulk waits for its own credit first, leaving one total permit
@@ -205,6 +215,37 @@ impl PooledConnection {
             lease._finite = Some(self.finite.clone().acquire_owned().await?);
         }
         Ok(lease)
+    }
+
+    fn subscription_lease(self: &Arc<Self>) -> Option<ConnectionLease> {
+        let peer = self.sender.current_max_send_streams();
+        let capacity = if self.shard == 0 {
+            peer.saturating_sub(MAX_FINITE_REQUESTS)
+        } else {
+            peer
+        }
+        .min(MAX_LONG_LIVED_STREAMS);
+        let mut active = self.long_lived.load(Ordering::Acquire);
+        while active < capacity {
+            match self.long_lived.compare_exchange_weak(
+                active,
+                active + 1,
+                Ordering::AcqRel,
+                Ordering::Acquire,
+            ) {
+                Ok(_) => {
+                    self.in_flight.fetch_add(1, Ordering::AcqRel);
+                    return Some(ConnectionLease {
+                        connection: self.clone(),
+                        _finite: None,
+                        _bulk: None,
+                        long_lived: true,
+                    });
+                }
+                Err(current) => active = current,
+            }
+        }
+        None
     }
 }
 
@@ -267,13 +308,24 @@ impl Pool {
             // permit enforces MAX_ACTIVE_CONNECTIONS for all busy connections.
             let Some(victim) = self.order.iter().copied().find(|k| {
                 self.entries.get(k).is_some_and(|c| {
-                    c.in_flight.load(Ordering::Acquire) == 0 && Arc::strong_count(c) == 1
+                    c.in_flight.load(Ordering::Acquire) == 0
+                        && Arc::strong_count(c) == 1
+                        && !self.reserved_for_subscriptions(*k)
                 })
             }) else {
                 break;
             };
             self.remove(&victim);
         }
+    }
+
+    fn reserved_for_subscriptions(&self, key: PoolKey) -> bool {
+        key.4 == 0
+            && self.entries.iter().any(|(other, connection)| {
+                other.4 != 0
+                    && (other.0, other.1, other.2, other.3) == (key.0, key.1, key.2, key.3)
+                    && connection.long_lived.load(Ordering::Acquire) != 0
+            })
     }
 
     fn insert(&mut self, key: PoolKey, connection: Arc<PooledConnection>) {
@@ -593,11 +645,9 @@ impl Tp1Client {
                 .as_ref()
                 .and_then(Weak::upgrade);
             if let Some(connection) = connection {
-                self.remove_connection(
-                    route.key(self.bind_traffic_classes.then_some(class))?,
-                    &connection,
-                )
-                .await;
+                let mut key = route.key(self.bind_traffic_classes.then_some(class))?;
+                key.4 = connection.shard;
+                self.remove_connection(key, &connection).await;
             }
         }
         Err(progress.timeout())
@@ -612,14 +662,22 @@ impl Tp1Client {
         progress: &RequestProgress,
         class: TrafficClass,
     ) -> Result<(Response<h2::RecvStream>, ConnectionLease)> {
-        let pool_key = route.key(self.bind_traffic_classes.then_some(class))?;
+        let base_key = route.key(self.bind_traffic_classes.then_some(class))?;
         let addr = route.addr;
         for attempt in 0..2 {
             progress.set(0);
-            let connection = self.connection(route, class).await?;
+            let lease = if progress.finite {
+                let connection = self.connection(route, class).await?;
+                progress.connection(&connection);
+                progress.set(1);
+                connection.lease(true, class).await?
+            } else {
+                self.subscription_lease(route, class).await?
+            };
+            let connection = lease.connection.clone();
             progress.connection(&connection);
-            progress.set(1);
-            let lease = connection.lease(progress.finite, class).await?;
+            let mut pool_key = base_key;
+            pool_key.4 = connection.shard;
             progress.set(2);
             let mut client = match connection.sender.clone().ready().await {
                 Ok(client) => client,
@@ -742,7 +800,47 @@ impl Tp1Client {
         route: Route<'_>,
         class: TrafficClass,
     ) -> Result<Arc<PooledConnection>> {
-        let pool_key = route.key(self.bind_traffic_classes.then_some(class))?;
+        self.connection_at(route, class, 0).await
+    }
+
+    async fn subscription_lease(
+        &self,
+        route: Route<'_>,
+        class: TrafficClass,
+    ) -> Result<ConnectionLease> {
+        // Concurrent callers share the existing per-key dial lock, then reserve
+        // a stream atomically. No payload is prepared before this admission.
+        // The common physical-connection permit still includes every shard.
+        // Retain shard zero while establishing the first overflow shard. In a
+        // full pool, idle eviction must not remove its reserved control credit
+        // between these operations (including peers advertising one stream).
+        let control = self.connection(route, class).await?;
+        if control.sender.current_max_send_streams() == 0 {
+            return Err("peer has suspended HTTP/2 stream admission".into());
+        }
+        if let Some(lease) = control.subscription_lease() {
+            return Ok(lease);
+        }
+        for shard in 1..MAX_ACTIVE_CONNECTIONS {
+            let connection = self.connection_at(route, class, shard).await?;
+            if connection.sender.current_max_send_streams() == 0 {
+                return Err("peer has suspended HTTP/2 stream admission".into());
+            }
+            if let Some(lease) = connection.subscription_lease() {
+                return Ok(lease);
+            }
+        }
+        Err("terminal subscription capacity exhausted".into())
+    }
+
+    async fn connection_at(
+        &self,
+        route: Route<'_>,
+        class: TrafficClass,
+        shard: usize,
+    ) -> Result<Arc<PooledConnection>> {
+        let mut pool_key = route.key(self.bind_traffic_classes.then_some(class))?;
+        pool_key.4 = shard;
         {
             let mut pool = self.connections.lock().await;
             if let Some(connection) = pool.get(pool_key) {
@@ -832,12 +930,14 @@ impl Tp1Client {
         if tls_stream.get_ref().1.alpn_protocol() != Some(tls::ALPN_H2) {
             return Err("endpoint did not negotiate h2".into());
         }
-        let (sender, connection) = h2::client::Builder::new()
+        let (sender, mut connection) = h2::client::Builder::new()
+            .initial_max_send_streams(0)
             .max_frame_size(H2_MAX_FRAME_SIZE)
             .initial_window_size(H2_INITIAL_STREAM_WINDOW)
             .initial_connection_window_size(H2_INITIAL_CONNECTION_WINDOW)
             .handshake(tls_stream)
             .await?;
+        let mut ping = connection.ping_pong().ok_or("HTTP/2 ping unavailable")?;
         let driver = ConnectionDriver(tokio::spawn(async move {
             // Count the actual connection driver, including cancellation teardown.
             let _slot = slot;
@@ -846,10 +946,18 @@ impl Tp1Client {
         let candidate = Arc::new(PooledConnection {
             sender,
             in_flight: AtomicUsize::new(0),
+            long_lived: AtomicUsize::new(0),
+            shard,
             finite: Arc::new(Semaphore::new(MAX_FINITE_REQUESTS)),
             bulk: Arc::new(Semaphore::new(MAX_BULK_REQUESTS)),
             _driver: driver,
         });
+
+        // A fresh SendRequest::ready() does not wait for SETTINGS. A PING reply
+        // follows the peer's initial SETTINGS, so capacity admission sees its
+        // real limit before publishing this connection. This handshake remains
+        // inside the caller's original request/warming deadline.
+        ping.ping(h2::Ping::opaque()).await?;
 
         let mut connections = self.connections.lock().await;
         if let Some(connection) = connections.get(pool_key) {

@@ -31,6 +31,24 @@ busy connections and their drivers. Eviction aborts the owned driver when its la
 borrower disappears. Pins and canonical route exclusions remain in the pool key;
 lane warmup uses its authenticated cover route's exclusions.
 
+Long-lived subscriptions reserve a separate per-connection allowance. The first
+connection of a pinned route/class keeps up to four stream credits for finite work;
+subscriptions beyond its allowance use bounded shards of that same route. Each
+shard admits at most sixteen subscriptions and never exceeds the peer's advertised
+HTTP/2 stream limit. A peer advertising only one stream retains a control-only
+first connection. It stays warm while overflow subscriptions are live, including
+at the global 64-connection bound. Concurrent callers reserve subscription credit
+atomically; cancellation and stream drop return it. Every shard retains the same
+TLS pin, canonical exclusions and connector-selected traffic class.
+A peer advertising zero streams refuses subscription admission before preparing
+authenticated bytes or opening further connections.
+
+Connection establishment waits for an HTTP/2 PING reply, which follows the peer's
+initial SETTINGS, before publishing capacity to waiters. A fresh `SendRequest`
+`ready()` alone does not wait for those settings. This readiness barrier and all
+shard establishment remain inside the existing request/warmup deadline. No server
+limit, credential lifetime, byte preparation or retry identity is changed.
+
 These terminal bounds are separate from the future GCT2 limit of 16 logical
 streams per shared entry connection. They do not change the relay's allocation
 pool, admission reservations, replay records or credential expiry.

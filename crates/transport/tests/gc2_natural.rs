@@ -96,6 +96,101 @@ fn request() -> gcoms_transport::client::Result<NaturalCell> {
 }
 
 #[tokio::test]
+async fn retained_subscription_sets_leave_control_credit_and_can_exceed_one_connection() {
+    let identity = TlsIdentity::generate().unwrap();
+    let (release, released) = tokio::sync::watch::channel(false);
+    let handler = Arc::new(move |token: &str| {
+        let held = match token {
+            "held" => true,
+            "control" => false,
+            _ => return None,
+        };
+        let mut released = released.clone();
+        let accepted: AcceptedDuplex = Box::new(move |mut body, mut reply| {
+            Box::pin(async move {
+                let bytes = gcoms_transport::server::read_body(&mut body, 16384)
+                    .await
+                    .unwrap();
+                let cell = NaturalCell::decode(&bytes).unwrap();
+                let marker = cell.payload()[1];
+                let mut send = reply.send_response(http::Response::new(()), false).unwrap();
+                send.send_data(Bytes::from(status_cell(HopReply::Accepted).encode()), !held)
+                    .unwrap();
+                if held {
+                    let _ = released.changed().await;
+                    let message = NaturalCell::new(CellType::Msg, 0, vec![marker]).unwrap();
+                    let _ = send.send_data(Bytes::from(message.encode()), true);
+                }
+            })
+        });
+        Some(accepted)
+    });
+    let server = Tp1Server::bind_with_identity(
+        "127.0.0.1:0".parse().unwrap(),
+        TokenRegistry::new(),
+        Arc::new(|_, _| Ok(None)),
+        Arc::new(|_| None),
+        &identity,
+    )
+    .await
+    .unwrap()
+    .with_duplex(handler);
+    let address = server.local_addr().unwrap();
+    let pin = identity.service_id();
+    let (stop, stopped) = oneshot::channel();
+    let server = tokio::spawn(server.run_until(async {
+        let _ = stopped.await;
+    }));
+    let client = Tp1Client::new().unwrap();
+    let route = |token| NaturalRoute {
+        addr: address,
+        service_id: pin,
+        token,
+        excluded: &[],
+        class: TrafficClass::Bulk,
+    };
+    let make = |marker| Ok(NaturalCell::new(CellType::RelaySub, 0, vec![1, marker]).unwrap());
+    let mut streams = Vec::new();
+    let limit = gcoms_transport::server::MAX_INFLIGHT_PER_CONNECTION;
+    for index in 0..limit + 4 {
+        if index == limit {
+            let result = tokio::time::timeout(
+                Duration::from_secs(3),
+                client.post_natural_prepared(route("control"), || make(250)),
+            )
+            .await
+            .expect("live subscriptions must leave credit for finite recovery controls")
+            .unwrap();
+            assert_eq!(result, NaturalOutcome::Accepted(None));
+        }
+        streams.push(
+            tokio::time::timeout(
+                Duration::from_secs(3),
+                client.open_natural_prepared(
+                    route("held"),
+                    tokio::time::Instant::now() + Duration::from_secs(20),
+                    || make(index as u8),
+                ),
+            )
+            .await
+            .expect("retained subscriptions must not wait for another stream to expire")
+            .unwrap(),
+        );
+    }
+    assert_eq!(client.pooled_connections().await, 2, "reuse bounded shards");
+    release.send(true).unwrap();
+    for (index, stream) in streams.iter_mut().enumerate() {
+        assert_eq!(
+            stream.recv().await.unwrap().unwrap().payload(),
+            [index as u8]
+        );
+    }
+    drop(streams);
+    stop.send(()).unwrap();
+    server.await.unwrap().unwrap();
+}
+
+#[tokio::test]
 async fn natural_finite_status_and_legacy_wire_are_explicitly_separate() {
     for reply in [
         HopReply::Accepted,

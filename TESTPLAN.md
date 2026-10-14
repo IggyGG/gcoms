@@ -1,3 +1,18 @@
+F5 retained subscription admission, 2026-10-15: run `cargo test --offline --locked
+-p gcoms-transport --all-features -- --test-threads=1`, strict all-target transport
+Clippy, and `cargo test --offline --locked -p gcoms-node --all-features --test
+gc2_sessions -- --test-threads=1` through the workstation runner. Require the old
+code to fail `retained_subscription_sets_leave_control_credit_and_can_exceed_one_connection`
+at its original three-second control bound; the repaired actual Tp1Server must
+retain twenty live streams on two connections and deliver every marker.
+`subscription_pool` additionally verifies concurrent 4+8 stream allocations for
+each pinned route/class, unchanged exclusions and TLS-pin refusal, a one-stream
+peer at the 64-connection hard bound with working control traffic, cancellation
+reuse, and zero-stream refusal before authenticated body preparation. Full signed
+release and installed delivery remain separate gates. Preserve the first failed
+SETTINGS-barrier implementation and old private fixture compilation failure.
+See [source-bound evidence](docs/evidence/durable-host-20261015/subscription-credit.json).
+
 F5 Android cluster migration accepted, 2026-10-13: source intake, builds, the isolated Android lab and release/rollback now execute in Kubernetes. Versioned Hetzner FSN1 S3 holds durable artifacts, checkpoints and evidence; bounded cluster volumes hold working state. The fresh signed 42 MiB interrupted transfer and in-process load passed in 292.090 seconds. Three consecutive prepared-tag promotions reached every declared target in 356.590, 288.456 and 213.545 seconds. The deliberate Android process-stop canary restored a loaded worker with unchanged identity in 44.804 seconds. The normal coordinator configuration is restored, the app and managed services are healthy, and the original failures remain retained. [Final acceptance](docs/evidence/android-cluster-20261012/completion.json), [rollback proof](docs/evidence/android-cluster-20261012/failed-canary-live.json).
 
 The submitting client exited, and this session made no cluster or guest calls during the first release’s following ten-minute window; physical workstation poweroff was not tested. Workstation release timers and their hook are retired. The ten-minute target starts at the push of a prepared, qualified release tag; cold native preparation took 25m39s. Routine promotion reuses exact artifacts and runs no broad platform matrix. [Release procedure](docs/ANDROID_AGENT_RELEASE.md#routine-cluster-releases).

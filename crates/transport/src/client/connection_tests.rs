@@ -100,11 +100,12 @@ async fn refusal_cache_is_bounded_and_expired_entries_are_reclaimed() {
             [1; 32],
             [0; 32],
             None,
+            0,
         ));
         assert!(pool.failed.len() <= MAX_FAILED_ROUTES);
     }
     tokio::time::advance(CONNECT_FAILURE_COOLDOWN).await;
-    assert!(!pool.cooling_down(("127.0.0.1:1".parse().unwrap(), [1; 32], [0; 32], None)));
+    assert!(!pool.cooling_down(("127.0.0.1:1".parse().unwrap(), [1; 32], [0; 32], None, 0)));
     assert!(pool.failed.is_empty());
 }
 

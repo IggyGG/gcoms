@@ -1,0 +1,85 @@
+{
+  "schema": 1,
+  "date": "2026-10-15",
+  "scope": "retained subscription/control capacity; source qualification only",
+  "base": "5f4fa280e679fe536395126ab0aa8f84b89bd90d",
+  "causal_baseline": "665d95e402bd62bface577cd80493aba608bc2df",
+  "files": {
+    "crates/transport/src/client.rs": "02caacce7c181c9da92c7f1d8ae8509881fdbb72e6cbbdfdbd43d6da9ab9cd60",
+    "crates/transport/src/client/connection_tests.rs": "c76d1531144c11fcd94e47a549e1eb959f8d6a15f38e0d941e1908682ce5ee6a",
+    "crates/transport/tests/gc2_natural.rs": "2aed3c528b2f8a36aa2f5f7c4f0210c93c4e79a0e582d3bf4c6c491ac345622b",
+    "crates/transport/tests/subscription_pool.rs": "94b65c57d8f0bc27cb0e6ce02e69d128574a6ddad5f75e616ee7609e3a9600c2"
+  },
+  "causal_regression": {
+    "test": "retained_subscription_sets_leave_control_credit_and_can_exceed_one_connection",
+    "actual_tls_and_tp1_server": true,
+    "before": "failed: finite recovery control exceeded original three-second bound with sixteen held subscriptions",
+    "before_receipt_sha256": "fecbe93949978775cf18612b53166ecef4a1c5585c0fcc2fb09f295451f53a38",
+    "after": "passed: twenty subscriptions on two pooled connections, finite progress and every original marker received"
+  },
+  "qualification": {
+    "transport_tests_passed": 76,
+    "existing_transport_tests_ignored": 4,
+    "real_node_tls_and_restart_tests_passed": 4,
+    "strict_transport_all_target_clippy": "passed",
+    "workspace_format": "passed",
+    "tested_source_unchanged": true,
+    "seconds": 150.790511358995,
+    "input_inventory_sha256": "23082082215648e9e80eee5d6fad4aef9e9feb3b1d2aaec316f0774b39f8596c",
+    "receipt_sha256": "044f0ab707d3bac32ee49bd4cf6eea84a6c64f470974d0c50701a982d678f0e1",
+    "log_sha256": "c1164d9ec1967e3d4193fdbb5b98c3fe1b720ccabd7505ea3e694dc3a1bf107f",
+    "wrapper_exit_code": 1,
+    "wrapper_failure": "Final source-inventory command required Git metadata absent from the frozen scratch copy. All preceding Rust tests, Clippy and formatting commands passed. Source L0 is checked separately in the actual task checkout."
+  },
+  "additional_controls": [
+    "Concurrent reservations converge on two shards per route with actual peer capacity eight: four subscription streams on the control shard and eight on the overflow shard.",
+    "Each shard preserves the selected address, TLS pin, canonical terminal exclusions and traffic class; a wrong pin remains refused.",
+    "A peer advertising one stream supports sixty-three held subscriptions plus the reserved control connection at the existing global sixty-four connection bound.",
+    "Excess admission fails before authenticated body preparation; finite controls still complete.",
+    "Cancelling one subscription returns its original connection credit, with all remaining streams intact.",
+    "A peer advertising zero streams refuses before body preparation or overflow dials."
+  ],
+  "source_l0": {
+    "passed": true,
+    "paths": 1197,
+    "ran_in_actual_git_checkout": true,
+    "receipt_sha256": "3077f5d3b3934f14c32e285177a9f5d7f10c4c24d0dadd497a5631690ce00b88",
+    "log_sha256": "35147547aae778602471646e72d1a63c11fd23f49c1295a2485453f3c82369a2"
+  },
+  "preserved_failed_evidence": [
+    "subscription-credit-before-1792018096: original causal failure",
+    "subscription-credit-after-1: fresh SendRequest.ready did not wait for initial peer SETTINGS",
+    "subscription-credit-full-1: two old private PoolKey test literals lacked shard zero",
+    "subscription-credit-final-1: source inventory requires a Git checkout"
+  ],
+  "code_comparison": [
+    {
+      "phase": "before",
+      "path": "kocaptcha/wreq-5.3.0:src/util/client/mod.rs",
+      "cosine": 0.6399,
+      "rerank": 0.37965,
+      "conclusion": "Generic HTTP/2 pooling/readiness pattern; no code copied."
+    },
+    {
+      "phase": "after",
+      "path": "istio/ztunnel:src/proxy/pool.rs",
+      "cosine": 0.7546,
+      "rerank": 0.9555488574799607,
+      "content_fetched": true,
+      "conclusion": "Comparable same-key dial serialization and overflow pooling. This implementation additionally reserves finite-control credit, uses owned atomic subscription leases and retains the existing global physical-connection cap."
+    },
+    {
+      "phase": "after",
+      "path": "BoBoat1/AppFlowy-Cloud-Old:libs/collab-stream/src/lease.rs",
+      "cosine": 0.7406,
+      "rerank": 0,
+      "content_fetched": true,
+      "conclusion": "Generic RAII lease terminology only; unrelated distributed Redis lease mechanism."
+    }
+  ],
+  "private_evidence_root": "/run/media/user/SSD-2/retained/ghost/durable-host-20261012",
+  "signed_release_qualified": false,
+  "installed_delivery_qualified": false,
+  "original_installed_223_trial": "failed and retained; no message resubmission",
+  "next_required": "Normal immutable paired-source native and signed release qualification, then one bounded installed authenticated-delivery/offline/file/fleet journey."
+}

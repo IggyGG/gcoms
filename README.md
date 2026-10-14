@@ -1,3 +1,12 @@
+F5 retained subscription capacity, 2026-10-15: terminal connection pools reserve
+finite recovery-control credit and admit additional long-lived subscriptions on
+bounded shards of the same pinned route and traffic class. Admission uses the
+peer's actual HTTP/2 SETTINGS, preserves the existing 64-connection hard bound,
+and returns credit on cancellation. The original real-server regression blocks a
+finite control behind sixteen subscriptions. See [connection ownership](docs/GC2_SCHEDULER.md#requests-and-connection-ownership)
+and [source qualification](docs/evidence/durable-host-20261015/subscription-credit.json).
+Installed authenticated delivery and full signed qualification remain separate gates.
+
 F5 Android cluster migration accepted, 2026-10-13: source intake, builds, the isolated Android lab and release/rollback now execute in Kubernetes. Versioned Hetzner FSN1 S3 holds durable artifacts, checkpoints and evidence; bounded cluster volumes hold working state. The fresh signed 42 MiB interrupted transfer and in-process load passed in 292.090 seconds. Three consecutive prepared-tag promotions reached every declared target in 356.590, 288.456 and 213.545 seconds. The deliberate Android process-stop canary restored a loaded worker with unchanged identity in 44.804 seconds. The normal coordinator configuration is restored, the app and managed services are healthy, and the original failures remain retained. [Final acceptance](docs/evidence/android-cluster-20261012/completion.json), [rollback proof](docs/evidence/android-cluster-20261012/failed-canary-live.json).
 
 The submitting client exited, and this session made no cluster or guest calls during the first release’s following ten-minute window; physical workstation poweroff was not tested. Workstation release timers and their hook are retired. The ten-minute target starts at the push of a prepared, qualified release tag; cold native preparation took 25m39s. Routine promotion reuses exact artifacts and runs no broad platform matrix. [Release procedure](docs/ANDROID_AGENT_RELEASE.md#routine-cluster-releases).

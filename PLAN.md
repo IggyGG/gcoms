@@ -1,3 +1,14 @@
+F5 retained GChat transport recovery, 2026-10-15 (OC): signed223's designated-peer
+trial retained its original authenticated-delivery failure. A causal real TLS/H2
+control demonstrates subscriptions consuming every stream on the sole pooled
+connection. The repair reserves finite credit and adds bounded same-route/class
+subscription shards using the peer's actual settings, preserving all original
+server, connection, credential and request limits. Source qualification is tracked
+in [the receipt](docs/evidence/durable-host-20261015/subscription-credit.json).
+A new immutable signed pair, installed recipient ACK/offline-once/file recovery
+and fleet/lifecycle acceptance remain required; this source test does not establish
+the complete cause or resolution of the production trial.
+
 F5 Android cluster migration accepted, 2026-10-13: source intake, builds, the isolated Android lab and release/rollback now execute in Kubernetes. Versioned Hetzner FSN1 S3 holds durable artifacts, checkpoints and evidence; bounded cluster volumes hold working state. The fresh signed 42 MiB interrupted transfer and in-process load passed in 292.090 seconds. Three consecutive prepared-tag promotions reached every declared target in 356.590, 288.456 and 213.545 seconds. The deliberate Android process-stop canary restored a loaded worker with unchanged identity in 44.804 seconds. The normal coordinator configuration is restored, the app and managed services are healthy, and the original failures remain retained. [Final acceptance](docs/evidence/android-cluster-20261012/completion.json), [rollback proof](docs/evidence/android-cluster-20261012/failed-canary-live.json).
 
 The submitting client exited, and this session made no cluster or guest calls during the first release’s following ten-minute window; physical workstation poweroff was not tested. Workstation release timers and their hook are retired. The ten-minute target starts at the push of a prepared, qualified release tag; cold native preparation took 25m39s. Routine promotion reuses exact artifacts and runs no broad platform matrix. [Release procedure](docs/ANDROID_AGENT_RELEASE.md#routine-cluster-releases).
