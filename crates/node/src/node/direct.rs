@@ -1850,9 +1850,6 @@ pub(crate) fn queue_forward_grant(
     st: &mut NodeState,
     peer: &[u8],
 ) -> Result<Option<DirectDelivery>, String> {
-    if st.pending_1to1.len() >= 1024 {
-        return Ok(None);
-    }
     if !st.peer_routes.contains_key(peer) {
         return Ok(None);
     }
@@ -1889,8 +1886,12 @@ pub(crate) fn queue_session_control(
     lifetime: std::time::Duration,
     retry_delay: std::time::Duration,
 ) -> Result<Option<DirectDelivery>, String> {
-    if st.pending_1to1.len() >= 1024 || st.pending_1to1.contains_key(&message_id) {
+    if st.pending_1to1.contains_key(&message_id) {
         return Ok(None);
+    }
+    let superseded = super::route_control::superseded(st, peer, message_id, &record);
+    if st.pending_1to1.len().saturating_sub(superseded.len()) >= 1024 {
+        return Err("control outbox capacity reached".into());
     }
     let route = st
         .peer_routes
@@ -1926,6 +1927,10 @@ pub(crate) fn queue_session_control(
     st.next_direct_sequence = sequence
         .checked_add(1)
         .ok_or("direct message sequence exhausted")?;
+    let previous: Vec<_> = superseded
+        .into_iter()
+        .filter_map(|id| st.pending_1to1.remove(&id).map(|pending| (id, pending)))
+        .collect();
     st.pending_1to1.insert(
         message_id,
         PendingDirect {
@@ -1937,14 +1942,25 @@ pub(crate) fn queue_session_control(
             application_event: false,
         },
     );
-    if let Err(error) = persist_direct_state(
+    if let Err(error) = checkpoint_direct_state(
         st,
         prepared.as_ref().map(|p| (peer, p.sealed_state())),
         true,
     ) {
         st.pending_1to1.remove(&message_id);
+        st.pending_1to1.extend(previous);
         st.next_direct_sequence = sequence;
-        return Err(error);
+        #[cfg(feature = "client-persist")]
+        if matches!(&error, DirectPersistenceError::Storage(_)) {
+            st.pause_failed_owner_transition();
+        }
+        return Err(error.into_string());
+    }
+    if !previous.is_empty() {
+        metrics::log_event(
+            "deferred_route_controls_superseded",
+            &[("count", previous.len().to_string())],
+        );
     }
     if let Some(prepared) = prepared {
         st.sessions

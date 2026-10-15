@@ -1,3 +1,115 @@
+#[tokio::test]
+async fn gc2_blocked_window_owner_announcements_keep_only_latest_deferred_contact() {
+    let (alice, mut bob, original_id) = gc2_recovery_pair(211, 212).await;
+    let peer = bob.info.identity_pk.clone();
+    let mut a = alice.lock().unwrap();
+    let original = (
+        a.pending_1to1[&original_id].logical_record.clone(),
+        a.pending_1to1[&original_id].sequence,
+        a.pending_1to1[&original_id].expires,
+    );
+    let packets = gc2_fill_control_window(&mut a, &peer, 0x93);
+    let generation = gc2_generation(&a, &peer);
+    for alias in &mut a.info.aliases {
+        alias.expiry = now_unix() + 3600;
+    }
+    for _ in 0..32 {
+        queue_contact_updates(&mut a).unwrap();
+        let updates: Vec<_> = a
+            .pending_1to1
+            .values()
+            .filter(|p| {
+                p.logical_record.as_ref().is_some_and(|bytes| {
+                    matches!(
+                        decode_direct_record(bytes),
+                        Some(DirectRecord::ContactUpdate { .. })
+                    )
+                })
+            })
+            .collect();
+        assert!(updates.iter().all(|p| p.delivery.cells.is_empty()));
+        assert_eq!(
+            updates.len(),
+            1,
+            "superseded unmaterialized contact announcements consume the recovery reserve"
+        );
+        let pending = &a.pending_1to1[&original_id];
+        assert_eq!(
+            (&pending.logical_record, pending.sequence, pending.expires),
+            (&original.0, original.1, original.2),
+            "application data and its original deadline survive"
+        );
+        assert_eq!(
+            gc2_generation(&a, &peer),
+            generation,
+            "announcement retries cannot rotate the session"
+        );
+        let PeerSession::Credited(session) = &a.sessions[&peer] else {
+            panic!("GC2")
+        };
+        assert_eq!(
+            session
+                .window()
+                .retries()
+                .map(|(_, _, bytes)| bytes.to_vec())
+                .collect::<Vec<_>>(),
+            packets,
+            "already encrypted frames cannot be retired or rewritten"
+        );
+    }
+    let archived = decode_v2(&encode_state(&a).unwrap(), &a.identity_seed).unwrap();
+    let contacts = archived
+        .pending_direct
+        .iter()
+        .filter(|p| {
+            p.2.as_ref().is_some_and(|bytes| {
+                matches!(
+                    decode_direct_record(bytes),
+                    Some(DirectRecord::ContactUpdate { .. })
+                )
+            })
+        })
+        .count();
+    assert_eq!(
+        contacts, 1,
+        "the durable archive keeps the same bounded latest-only state"
+    );
+    let (events, _) = broadcast::channel(32);
+    for packet in &packets {
+        gc2_direct::incoming(&mut bob, packet, &events).unwrap();
+    }
+    gc2_drain_fixture_acks(&mut a, &mut bob, &events);
+    materialize_deferred(&mut a).unwrap();
+    let updates: Vec<_> = a
+        .pending_1to1
+        .values()
+        .filter(|p| {
+            p.logical_record.as_ref().is_some_and(|bytes| {
+                matches!(
+                    decode_direct_record(bytes),
+                    Some(DirectRecord::ContactUpdate { .. })
+                )
+            })
+        })
+        .flat_map(|p| p.delivery.cells.clone())
+        .collect();
+    assert!(
+        !updates.is_empty(),
+        "fresh credit releases the latest contact update"
+    );
+    for cell in updates {
+        gc2_direct::incoming(&mut bob, &cell.payload, &events).unwrap();
+    }
+    assert_eq!(bob.peer_routes[&a.info.identity_pk], a.info.public());
+    assert_eq!(
+        bob.peer_route_generations[&a.info.identity_pk],
+        a.local_contact_generation
+    );
+    gc2_drain_fixture_acks(&mut a, &mut bob, &events);
+    a.scheduler.shutdown();
+    bob.scheduler.shutdown();
+}
+
 // Real hybrid-crypto, node archive and inbox transactions, with selected packet
 // loss. The independent TLS integration suite exercises the carrier separately.
 #[tokio::test]

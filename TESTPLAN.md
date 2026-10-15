@@ -1,3 +1,17 @@
+F5 deferred routing controls, 2026-10-15: require
+`gc2_blocked_window_owner_announcements_keep_only_latest_deferred_contact` to fail
+on old code, then preserve every application ID and allocated ciphertext across
+32 announcements. Deliver and authenticate the latest contact after releasing
+actual counter credit. Exercise256 retained duplicate controls through archive
+reopen, unchanged1024-item admission, tamper/generation/peer isolation, exact
+forward-grant scope, and rollback of memory/sequence/budget on storage uncertainty.
+Reopen the actually written uncertain candidate and advance the next sequence.
+Admission pressure retries in place; an uncertain write cannot be retried merely
+by replacing the sink. Run all-feature node library tests, all-target strict
+Clippy, legacy `client-persist` compile and actual `gc2_sessions` TLS/restart tests.
+Preserve the repeated native ACK failure; do not qualify from a single passing
+run while that failure remains unexplained. [Evidence](docs/evidence/durable-host-20261015/deferred-route-controls.json).
+
 F5 fleet status dispatch, 2026-10-15: require the real GChat retained fleet test
 to fail on the former machine allowlist, then permit `RuntimeStatus` only through
 the existing authenticated `IdentityRead` gate. Verify it after credential rotation

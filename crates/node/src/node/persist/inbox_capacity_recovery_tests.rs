@@ -197,16 +197,6 @@ async fn retained_inbox_fixture(saturated: bool) {
         assert!(state.lock().unwrap().pending_1to1.is_empty());
         assert!(runtime.owner_announcement_pending.load(Ordering::Acquire));
         drop(pressure);
-        // A storage failure also retains the pending announcement and cannot
-        // claim publication. Restored receiving authority remains unchanged.
-        let sink = state.lock().unwrap().durable_state_sink.clone();
-        state.lock().unwrap().durable_state_sink =
-            Some(Arc::new(|_| Err("announcement storage failpoint".into())));
-        assert!(routing::announce_owner(&state, &events, &runtime).is_err());
-        assert!(runtime.owner_announcement_pending.load(Ordering::Acquire));
-        assert!(state.lock().unwrap().pending_1to1.is_empty());
-        assert!(event_rx.try_recv().is_err());
-        state.lock().unwrap().durable_state_sink = sink;
         routing::announce_owner(&state, &events, &runtime).unwrap();
         assert!(!runtime.owner_announcement_pending.load(Ordering::Acquire));
         let st = state.lock().unwrap();
@@ -226,6 +216,32 @@ async fn retained_inbox_fixture(saturated: bool) {
             event_rx.try_recv(),
             Ok(Ev::IdentityUpdated { .. })
         ));
+        assert!(event_rx.try_recv().is_err());
+
+        // Admission pressure is retryable in place. An uncertain storage
+        // outcome must instead pause until constructor recovery: restoring
+        // the sink cannot prove which ratchet checkpoint reached storage.
+        runtime.owner_announcement_pending.store(true, Ordering::Release);
+        let sink = state.lock().unwrap().durable_state_sink.clone();
+        let before_failure = record(&state.lock().unwrap());
+        state.lock().unwrap().durable_state_sink =
+            Some(Arc::new(|_| Err("announcement storage failpoint".into())));
+        assert!(routing::announce_owner(&state, &events, &runtime).is_err());
+        assert!(runtime.owner_announcement_pending.load(Ordering::Acquire));
+        assert_eq!(state.lock().unwrap().pending_1to1.len(), count);
+        assert!(state.lock().unwrap().owner_transition_failed);
+        assert!(event_rx.try_recv().is_err());
+        state.lock().unwrap().durable_state_sink = sink;
+        assert_eq!(
+            routing::announce_owner(&state, &events, &runtime).unwrap_err(),
+            "owner transition requires recovery"
+        );
+        let after_failure = record(&state.lock().unwrap());
+        assert_eq!(before_failure.groups.len(), after_failure.groups.len());
+        for (old, new) in before_failure.groups.iter().zip(&after_failure.groups) {
+            assert_eq!(old.role, new.role);
+            assert_eq!(old.provision, new.provision);
+        }
         assert!(event_rx.try_recv().is_err());
     }
 }

@@ -89,6 +89,7 @@ mod presence;
 mod relay_capacity;
 #[cfg(feature = "relay-host")]
 mod relay_service;
+mod route_control;
 mod routing;
 mod startup_transport;
 mod state;

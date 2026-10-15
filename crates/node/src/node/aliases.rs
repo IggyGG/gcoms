@@ -1013,9 +1013,6 @@ pub(crate) fn queue_contact_updates(st: &mut NodeState) -> Result<Vec<DirectDeli
     let peers = st.sessions.keys().cloned().collect::<Vec<_>>();
     let mut deliveries = Vec::new();
     for peer in peers {
-        if st.pending_1to1.len() >= 1024 {
-            return Err("contact update outbox capacity reached".into());
-        }
         if !st.peer_routes.contains_key(&peer) {
             continue;
         }

@@ -2967,6 +2967,8 @@ pub(in crate::node) mod tests {
     #[cfg(feature = "experimental-gc2")]
     include!("persist/gc2_control_tests.rs");
     #[cfg(feature = "experimental-gc2")]
+    include!("persist/route_control_tests.rs");
+    #[cfg(feature = "experimental-gc2")]
     include!("persist/gc2_bulk_dispatch_tests.rs");
     include!("persist/channel_directory_tests.rs");
     include!("persist/channel_pex_tests.rs");

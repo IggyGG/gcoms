@@ -1,3 +1,12 @@
+F5 deferred routing-control recovery, 2026-10-15 (OC): the retained228 profile
+contained323 deferred contact updates and332 deferred forward grants. Repeated
+announcements fill the control reserve while old states remain unmaterialized.
+The causal blocked-window test fails old code and passes bounded, transactional
+supersession. Ten focused controls,473 node tests, strict Clippy and legacy compile
+pass. A real TLS restart ACK failure recurs under repetition, so source publication
+to main and signed acceptance remain pending its diagnosis and retained-input
+rehearsal. [Evidence](docs/evidence/durable-host-20261015/deferred-route-controls.json).
+
 F5 fleet status dispatch, 2026-10-15 (OC): signed228 recovered its fleet endpoint
 and authenticated the intended component, but denied the existing `IdentityRead`
 runtime-status operation. The missing machine allowlist arm is corrected without

@@ -186,6 +186,29 @@ so wire and result order still match preparation order and cancellation
 releases the successor. Invite, membership, replay and recovery commands still
 hold their key across network waits.
 
+## Deferred routing-control supersession
+
+Repeated owner announcements can accumulate obsolete routing state when a peer's
+finite counter window is blocked. A new, valid signed contact update can replace
+older signed generations for that peer only while their journal records have no
+allocated ciphertext. A forward grant can replace a deferred grant only for the
+same issuer, relay target, forwarding path and hop key, with no shorter expiry.
+Application, invitation, presence and ACK records never enter this policy.
+
+The replacement and new ratchet state share the existing durable checkpoint.
+Failure restores the original entries, sequence and reserved budget in memory;
+uncertain storage failure additionally pauses the owner until constructor reopen.
+The stored candidate is authoritative on reopen, so a committed counter/sequence
+cannot be reused. Already allocated frames retain exact bytes and retries. The
+1024 pending-record,2048 retained-item and4MiB control budgets remain unchanged;
+replacement at a full item bound requires retiring eligible old controls.
+
+The causal blocked-window control fails before this change, then delivers the
+latest authenticated contact after real counter credit returns. Retained duplicate
+archives, uncertain checkpoints, scope/signature guards and application retention
+have dedicated coverage. [Source evidence](evidence/durable-host-20261015/deferred-route-controls.json)
+tracks the still-open repeated native restart ACK failure and signed deployment.
+
 ## Larger useful file chunks
 
 The SDK recommends 11,264 useful bytes, negotiating down to the recipient's chunk

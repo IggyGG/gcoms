@@ -1,0 +1,122 @@
+{
+  "schema": 1,
+  "scope": "transactional supersession of deferred owner routing controls",
+  "base": "780fa03",
+  "source_sha256": {
+    "crates/node/src/node/aliases.rs": "1403a4923fcf718d9851224bdb58d87442280a5a91039ce6be5623572d1e5015",
+    "crates/node/src/node/direct.rs": "9834f173353fe65b19a6e77ef05309f45d534d1764b6d1945ab0463790900d71",
+    "crates/node/src/node/mod.rs": "1f88fefceb2398d6dca70b8dc914685dda04c18165972f3d24cd53c2dd8093a6",
+    "crates/node/src/node/persist.rs": "538d054fe0bd885eb0b7070c55eef6c6cfa59e5d56e03aab9f432f493b8eb11d",
+    "crates/node/src/node/route_control.rs": "2d4da8228f5339c9b848f5619188cf094c7349967a3c4486249c5722a498cc6e",
+    "crates/node/src/node/persist/route_control_tests.rs": "c2aca238488f05df6d31f27a2e0309cee37d7baf6e812f3a0cf7d34cb68bc5c0",
+    "crates/node/src/node/persist/gc2_recovery_tests.rs": "a98abc5d9c1977133830296a1653593e5cb28555feaa4d931a6215b133326787",
+    "crates/node/src/node/persist/inbox_capacity_recovery_tests.rs": "9efb432fc46827af9aea4725bd29f00946ee564e300113ffeaa1c0569ab243fd"
+  },
+  "qualification_complete": false,
+  "causal_before": "old queue retains two deferred announcements after the second update; repaired queue retains only the valid latest contact while preserving allocated frames and applications",
+  "guards": [
+    "same peer and local identity",
+    "valid signed increasing contact generations",
+    "equivalent grant issuer,target,path,key and nondecreasing expiry",
+    "never application events or allocated ciphertext",
+    "existing budgets and item limits",
+    "memory rollback and owner pause on uncertain storage",
+    "constructor reopening of the actually written candidate"
+  ],
+  "checks": {
+    "focused_controls": 10,
+    "full_node_passed": 473,
+    "full_node_ignored": 2,
+    "strict_all_target_clippy": "passed",
+    "legacy_client_persist_compile": "passed",
+    "one_full_tls_suite_passed": 4,
+    "repeated_tls_restart": "Original30s reverse ACK failure also reproduces on pre-coalescing production code and with the checkpoint moved after orderly shutdown. Source cause remains under investigation; both-endpoint diagnostic capture is running.",
+    "retained_profile_rehearsal": "pending; private constructor succeeded, transaction diagnostic running inside isolated network namespace",
+    "source_l0": {
+      "passed": true,
+      "paths": 1202
+    }
+  },
+  "receipts": {
+    "owner-announcement-coalescing-before-2": {
+      "exit_code": 101,
+      "receipt_sha256": "7ceb08e99bf558862d7c213a8f819d4e9d4ffdf62ef36a91803cb9042fae4038",
+      "log_sha256": "47601e817df4fb30e338b88d0906b92c6e194d34fb58155bbd2d95dd93ce441e",
+      "seconds": 53.32853638099914,
+      "source_unchanged": true
+    },
+    "owner-announcement-controls-3": {
+      "exit_code": 0,
+      "receipt_sha256": "e4deb0d09b65b7d1f842a20bd45742aee4fc6c43c6c2fb7212c79fa8ca8136ed",
+      "log_sha256": "c64285636b60ae49378d87bddcc5d191e5ddf1ff62887b14efcb8190d882bbe6",
+      "seconds": 113.71114142501028,
+      "source_unchanged": true
+    },
+    "owner-announcement-full-1": {
+      "exit_code": 1,
+      "receipt_sha256": "87fb58c81cafe184789e4cd667d3fc20b49e3cfec74e766d52bc043547757efb",
+      "log_sha256": "4e98b7683c84f0475a3268e8ac359b24a97e8de1d013b8041743130f008f15ca",
+      "seconds": 707.7780400350166,
+      "source_unchanged": true
+    },
+    "owner-announcement-full-2": {
+      "exit_code": 0,
+      "receipt_sha256": "91eba457d90ba90980bd299dfbe6cc72c9927ecac7170398f0f319cdad37acfc",
+      "log_sha256": "a40a5f4e884c33d6d3ef968ba7433764650e1b79e2ca4a0694471d13df21e7c2",
+      "seconds": 759.888796565996,
+      "source_unchanged": true
+    },
+    "owner-announcement-restart-1": {
+      "exit_code": 1,
+      "receipt_sha256": "cad3fe0576d7fe787a8dd171e6997e30deb2509f7c3734bdad63643d10fae63a",
+      "log_sha256": "8e162f114e8f27fc2ea1fa6fb918b3f2295da7e4b9ed6494ed7ece65eff3f487",
+      "seconds": 287.0875427300052,
+      "source_unchanged": true
+    },
+    "owner-announcement-tls-repeat-1": {
+      "exit_code": 1,
+      "receipt_sha256": "1ca67a93060b21e251543be4b596d7ea40f6a09747e29d05fff96382cad1b909",
+      "log_sha256": "ec2a4c8eed1d3eb2b22fbbf2f80af1dfb2cbaabe29393b60759c698bc884be46",
+      "seconds": 127.52449757300201,
+      "source_unchanged": true
+    },
+    "owner-announcement-tls-diagnostic-1": {
+      "exit_code": 1,
+      "receipt_sha256": "ab5fe225d81281e8083dd67aff64caf146a9d949b5f3d6409b05c1de39feff23",
+      "log_sha256": "f8ab06ffa05446fe6798f2bf89cb1dcb502a4f874eab0d53b21309e6896254f5",
+      "seconds": 75.80277155799558,
+      "source_unchanged": true
+    },
+    "tls-snapshot-precoalescing-1": {
+      "exit_code": 101,
+      "receipt_sha256": "baa2e4db4ee5a50fe98d64aa7bd50b8e1c2b1278362a631394db208296b2a557",
+      "log_sha256": "6093e128c58a1b84bd1d8314efa80f649d75f055d713d800910807d010796544",
+      "seconds": 129.98894976297743,
+      "source_unchanged": true
+    },
+    "tls-post-shutdown-snapshot-1": {
+      "exit_code": 1,
+      "receipt_sha256": "a0f97ee63dd0a9b96bad519f14300b754f1ea91e8c2678cffa2382590b26e2b7",
+      "log_sha256": "90ffc0398f1eeb85b9d0d89d0f6f94df209c67b01125ee637dc74777cbcdff22",
+      "seconds": 72.75011741899652,
+      "source_unchanged": true
+    }
+  },
+  "code_comparison": {
+    "before": {
+      "repo_path": "hanzoai/node:hanzo-bin/hanzo-node/src/network/libp2p_manager.rs",
+      "cosine": 0.625,
+      "rerank": 0.0032
+    },
+    "after": {
+      "repo_path": "0xHarbs/hyperlane-monorepo-tron:rust/main/agents/relayer/src/msg/pending_message.rs",
+      "cosine": 0.663,
+      "rerank": 0.020231659210101855,
+      "fetched": true
+    },
+    "assessment": "Generic durable-success commit idiom; no equivalent deferred coalescing implementation. Existing local transaction and causal/adversarial checks establish the safety boundary."
+  },
+  "private_evidence_root": "/run/media/user/SSD-2/retained/ghost/durable-host-20261012",
+  "signed_qualified": false,
+  "installed_acceptance_passed": false
+}

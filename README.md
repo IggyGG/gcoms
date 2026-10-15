@@ -1,3 +1,13 @@
+F5 deferred routing-control recovery, 2026-10-15: renewed owner announcements
+atomically replace obsolete, still-unencrypted contact updates for the same peer.
+Equivalent deferred forward grants can be superseded only without shortening or
+changing their authority. Application records and allocated ratchet frames remain
+intact, with the existing byte/item limits. An uncertain checkpoint pauses the
+owner until reopen. See [transaction semantics](docs/GC2_SCHEDULER.md#deferred-routing-control-supersession)
+and [source evidence](docs/evidence/durable-host-20261015/deferred-route-controls.json).
+The full node suite passes; retained-input rehearsal and an intermittent native
+restart ACK failure remain under investigation before signed qualification.
+
 F5 fleet status dispatch, 2026-10-15: a registered `IdentityRead` component can
 request the existing read-only runtime connection/relay status. The machine
 allowlist had omitted this operation after the normal IPC capability check.
