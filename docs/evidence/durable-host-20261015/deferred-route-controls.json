@@ -12,7 +12,7 @@
     "crates/node/src/node/persist/gc2_recovery_tests.rs": "a98abc5d9c1977133830296a1653593e5cb28555feaa4d931a6215b133326787",
     "crates/node/src/node/persist/inbox_capacity_recovery_tests.rs": "9efb432fc46827af9aea4725bd29f00946ee564e300113ffeaa1c0569ab243fd"
   },
-  "qualification_complete": false,
+  "qualification_complete": true,
   "causal_before": "old queue retains two deferred announcements after the second update; repaired queue retains only the valid latest contact while preserving allocated frames and applications",
   "guards": [
     "same peer and local identity",
@@ -30,7 +30,7 @@
     "strict_all_target_clippy": "passed",
     "legacy_client_persist_compile": "passed",
     "one_full_tls_suite_passed": 4,
-    "repeated_tls_restart": "Known dial cooldown and materialized-predecessor dispatch repairs pass ten complete four-case native suites; final combined node suite remains pending.",
+    "repeated_tls_restart": "Both diagnosed native failures have causal regressions; combined repair passes40native checks,474node cases, strict checks and paired GChat actual host lifecycle.",
     "retained_profile_rehearsal": "passed with normal optimized constructor in isolated network namespace",
     "source_l0": {
       "passed": true,
@@ -135,5 +135,30 @@
     "channels_and_owner_routes_unchanged": true,
     "protected_direct_records_present_in_input": 0,
     "scope": "No live profile mutation; unit controls separately cover allocated ciphertext/application retention."
+  },
+  "combined_source_qualification": {
+    "sources": {
+      "gchat": "515bafd00438fa8456a2987fd645c6d18c9ab0b4",
+      "gcoms": "6e42e8466eddf434e0dc8c09e85ad7e696e9ec4a"
+    },
+    "node_passed": 474,
+    "node_existing_ignored": 2,
+    "strict_node_all_target_clippy": true,
+    "legacy_client_persist_compile": true,
+    "formatting": true,
+    "node_receipt_sha256": "0f9caa9efaf78613c05ebd0c58052afce76b283d2492410e6f1ef9e3d3c4419f",
+    "node_log_sha256": "cdb3f3e7ef30106ea21b9ddc7550cfccfb9c3ea0b4357ada311dbf58e8a4277b",
+    "node_seconds": 824.15787129401,
+    "paired_fleet": 4,
+    "paired_ownership": 3,
+    "paired_actual_daemon": 3,
+    "paired_strict_core_tui_clippy": true,
+    "paired_receipt_sha256": "cb41bc47fe4174b38372c2b9fb91265c2ff97534a7c2d46503e7be524deaea1f",
+    "paired_seconds": 887.2640163090255,
+    "source_unchanged": true,
+    "source_l0": {
+      "gcoms": 1204,
+      "gchat": 923
+    }
   }
 }

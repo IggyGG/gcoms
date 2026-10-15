@@ -5,7 +5,8 @@ caller independently enqueued first. Preserve fresh ciphertext in the same durab
 outbox and transfer dispatch to maintenance when same-peer/class predecessors
 remain. No wait for recipient ACK is added to window preparation. The causal
 actual-admission test, all three predecessor controls and ten complete native
-TLS/restart suites pass. Final combined node checks and signed release pending.
+TLS/restart suites pass. Final474node/strictClippy/legacy/fmt and GChat paired
+4fleet/3ownership/3actual-daemon/strictcore-Tui checks pass; signed release pending.
 [Evidence](docs/evidence/durable-host-20261015/materialized-dispatch.json).
 
 F5 queued POST recovery, 2026-10-15 (OC): native restart diagnostics exposed
@@ -23,8 +24,9 @@ The causal blocked-window test fails old code and passes bounded, transactional
 supersession. Ten focused controls,473 node tests, strict Clippy and legacy compile
 pass. Isolated production-input rehearsal also passes:143 obsolete deferred
 controls retired transactionally, all channel/owner routes preserved. The later
-cooldown and dispatch-order repairs pass40 native checks; final combined checks
-and signed acceptance remain pending.
+cooldown and dispatch-order repairs pass40 native checks and the final combined
+node/pair qualification. Normal signed successor and installed acceptance remain
+pending.
 [Evidence](docs/evidence/durable-host-20261015/deferred-route-controls.json).
 
 F5 fleet status dispatch, 2026-10-15 (OC): signed228 recovered its fleet endpoint

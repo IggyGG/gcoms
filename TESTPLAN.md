@@ -8,6 +8,10 @@ isolation and counter-allocation checks. Repeat the unchanged four-case native
 TLS suite; all ten repetitions pass. Its restart checkpoint is captured only after
 orderly shutdown and its original30s ACK bound now reports phase and observed IDs.
 Opt-in fixture metrics aid diagnosis without changing normal production behavior.
+Final combined checks pass474node tests (two existing explicit exclusions), strict
+all-target Clippy, legacy no-default `client-persist` compilation and formatting.
+The exact GChat consumer pair passes4fleet,3ownership and3actual-daemon cases plus
+strict core/Tui Clippy. Source L0 checks1204SDK and923GChat paths.
 [Evidence](docs/evidence/durable-host-20261015/materialized-dispatch.json).
 
 F5 queued POST recovery, 2026-10-15: run the actual TLS/H2
