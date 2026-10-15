@@ -1,6 +1,19 @@
 {
   "schema": 1,
-  "status": "node_source_qualified_paired_and_full_relay_pending",
+  "status": "node_and_paired_source_qualified_full_relay_pending",
+  "paired_source": {
+    "gchat": "547690e29535a15035187ee6371fcfd4120dccee",
+    "gcoms": "8ae7cb58a560709d4882c00a46f3064b6d5faef6",
+    "passed": true,
+    "registration": 11,
+    "fleet": 4,
+    "endpoint_ownership": 3,
+    "actual_daemon_lifecycle": 4,
+    "strict_core_tui_all_target_clippy": true,
+    "source_unchanged": true,
+    "seconds": 1337.5637738319929,
+    "receipt_sha256": "b5111a845b31bae8da96e339495259d877028ab7c0b95a75d05148028ac87127"
+  },
   "full_node_source": {
     "source": "8ae7cb58a560709d4882c00a46f3064b6d5faef6",
     "passed": 476,
@@ -90,5 +103,5 @@
     "durable direct announcement to every current member",
     "all product delivery, file and full relay qualification thresholds"
   ],
-  "remaining": "Final paired source and normal signed native qualification, complete64-client1800-second campaign, final installed acceptance"
+  "remaining": "Normal signed native qualification, complete64-client1800-second campaign, final installed acceptance"
 }

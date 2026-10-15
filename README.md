@@ -4,7 +4,8 @@ This lets a healthy third member bridge two peers whose old queues disappeared
 together. The original MLS ciphertext and recipient authentication are preserved;
 the durable all-member direct announcement remains authoritative. Causal old-source
 failure, all 22 focused recovery cases, all 476 node tests, strict Clippy and
-legacy compilation pass. Paired and full release qualification is in progress.
+legacy compilation pass. The combined GChat registration/fleet/actual-daemon and
+strict checks also pass. Full release qualification is in progress.
 See [channel peer exchange](docs/CHANNEL_PEX_RELAY_FIX.md#simultaneous-route-replacement).
 
 F5 materialized dispatch order, 2026-10-15: fresh GC/2 durable frames follow the

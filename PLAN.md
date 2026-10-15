@@ -6,8 +6,9 @@ for a committed, current, original-sender self-directory wire. Route authorizati
 direct journals, message IDs, ACK requirements and queue bounds remain intact.
 All 22 focused and 476 node tests, strict Clippy, legacy compilation and formatting
 pass. Source inventory passes on the exact committed checkout; its original
-metadata-free snapshot invocation remains a retained harness failure. Paired checks
-and a fresh full relay campaign are pending.
+metadata-free snapshot invocation remains a retained harness failure. Paired GChat
+registration/fleet/ownership/actual-daemon and strict checks pass. A fresh full
+relay campaign and normal signed native qualification remain pending.
 
 F5 materialized dispatch order, 2026-10-15 (OC): the repeated native suite exposed
 `0,7,1,2,3,4,5,6` after the original unmaterialized-predecessor guard. Maintenance
