@@ -129,6 +129,16 @@ closest post-change indexed shapes were
 (cosine0.6589, rerank0). The deterministic confirmation-before-maintenance control
 and original native ordering/restart checks remain the required evidence.
 
+The dispatch owner also covers the interval after older records have been
+materialized but before their network futures have run. When a same-peer/class
+GC/2 durable predecessor remains, fresh counter preparation still uses the
+available window, but its exact ciphertext stays ready in the durable outbox and
+the caller's completion performs no independent enqueue. Maintenance is awakened
+to dispatch the shared queue. This preserves pipelining without waiting for a
+recipient ACK before preparing later frames. A causal scheduler-admission control
+and ten complete TLS/restart suites cover the observed `0,7,1,2,3,4,5,6` race.
+See [dispatch evidence](evidence/durable-host-20261015/materialized-dispatch.json).
+
 Archive `GCNSTJ` (v19) extends the durable-deferred-record invariant to known
 sessions without requiring a routing-recovery directory. v15–v18 migration is
 covered, including both historical v16 grammars, retained channel grants, machine
@@ -217,7 +227,8 @@ The causal blocked-window control fails before this change, then delivers the
 latest authenticated contact after real counter credit returns. Retained duplicate
 archives, uncertain checkpoints, scope/signature guards and application retention
 have dedicated coverage. [Source evidence](evidence/durable-host-20261015/deferred-route-controls.json)
-tracks the still-open repeated native restart ACK failure and signed deployment.
+retains the original repeated native failures, their later repairs and the pending
+combined signed deployment.
 
 ## Larger useful file chunks
 

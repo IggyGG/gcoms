@@ -30,8 +30,8 @@
     "strict_all_target_clippy": "passed",
     "legacy_client_persist_compile": "passed",
     "one_full_tls_suite_passed": 4,
-    "repeated_tls_restart": "Original30s reverse ACK failure also reproduces on pre-coalescing production code and with the checkpoint moved after orderly shutdown. Source cause remains under investigation; both-endpoint diagnostic capture is running.",
-    "retained_profile_rehearsal": "pending; private constructor succeeded, transaction diagnostic running inside isolated network namespace",
+    "repeated_tls_restart": "Known dial cooldown and materialized-predecessor dispatch repairs pass ten complete four-case native suites; final combined node suite remains pending.",
+    "retained_profile_rehearsal": "passed with normal optimized constructor in isolated network namespace",
     "source_l0": {
       "passed": true,
       "paths": 1202
@@ -118,5 +118,22 @@
   },
   "private_evidence_root": "/run/media/user/SSD-2/retained/ghost/durable-host-20261012",
   "signed_qualified": false,
-  "installed_acceptance_passed": false
+  "installed_acceptance_passed": false,
+  "retained_input_rehearsal": {
+    "passed": true,
+    "receipt_sha256": "e99c27d8d54cfb6436d547f78caf22df271d3e2a9a988c347cd35b9a9dec079b",
+    "binary_sha256": "c4d3b27fd068044f02c36568e12f993fd8bbfe8653577c4d4fcba75f41f5b61d",
+    "seconds": 5.699542442016536,
+    "network_isolated": true,
+    "input_files_unchanged": true,
+    "pending_before": 440,
+    "pending_after": 331,
+    "retired_deferred_controls": 143,
+    "bytes_before": 1972468,
+    "bytes_after": 1453338,
+    "new_materialized_controls": 34,
+    "channels_and_owner_routes_unchanged": true,
+    "protected_direct_records_present_in_input": 0,
+    "scope": "No live profile mutation; unit controls separately cover allocated ciphertext/application retention."
+  }
 }

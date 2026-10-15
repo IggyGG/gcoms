@@ -2474,6 +2474,24 @@ where
             });
         }
 
+        // A predecessor may already own a counter while its maintenance
+        // network future has not been polled yet. Keep this fresh GC/2 durable
+        // frame on that same dispatch owner instead of independently enqueuing
+        // ahead of it. Counter preparation can still fill the existing window.
+        let maintenance_dispatch = durable
+            && st
+                .sessions
+                .get(&peer.identity_pk)
+                .and_then(PeerSession::tag)
+                .is_some()
+            && st.pending_1to1.values().any(|pending| {
+                pending.delivery.peer.identity_pk == peer.identity_pk
+                    && pending.expires > std::time::Instant::now()
+                    && pending.logical_record.as_deref().is_some_and(|record| {
+                        crate::proto::is_durable_direct_data(record)
+                            && direct_traffic_class(record) == traffic
+                    })
+            });
         let old_route = st
             .peer_routes
             .insert(peer.identity_pk.clone(), peer.clone());
@@ -2530,7 +2548,7 @@ where
             prepared.packet(&st.info.identity_pk)?,
             if first_move.is_some() { 2 } else { 3 },
         ));
-        let delivery = DirectDelivery {
+        let mut delivery = DirectDelivery {
             peer: peer.clone(),
             relay,
             cells,
@@ -2542,7 +2560,11 @@ where
                 delivery: delivery.clone(),
                 logical_record: Some(std::mem::take(&mut *direct)),
                 sequence,
-                next_attempt: now + std::time::Duration::from_secs(60),
+                next_attempt: if maintenance_dispatch {
+                    now
+                } else {
+                    now + std::time::Duration::from_secs(60)
+                },
                 expires,
                 application_event,
             },
@@ -2575,6 +2597,13 @@ where
         st.peer_route_generations
             .entry(peer.identity_pk.clone())
             .or_insert(0);
+        if maintenance_dispatch {
+            // Only the caller's completion is empty. The exact ciphertext and
+            // original logical ID/deadline remain in the durable retry outbox.
+            delivery.cells.clear();
+            #[cfg(feature = "experimental-gc2")]
+            st.direct_maintenance_wake.notify_one();
+        }
         let policy = st.frwd_target_policy.clone();
         PreparedDirect {
             message_id,
@@ -2646,8 +2675,8 @@ pub(crate) async fn complete_direct_record_with_admission<F: FnOnce() + Send>(
         ..
     } = prepared;
     if delivery.cells.is_empty() {
-        // Deferred during preparation: there is nothing to dispatch yet. The
-        // maintenance owner materializes it when a counter and route exist.
+        // Maintenance owns dispatch, either because preparation deferred the
+        // counter or because this frame follows its already-materialized queue.
         return Ok(message_id);
     }
     if delivery.cells.len() == 2 {

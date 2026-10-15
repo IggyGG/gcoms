@@ -1,3 +1,13 @@
+F5 materialized dispatch order, 2026-10-15 (OC): the repeated native suite exposed
+`0,7,1,2,3,4,5,6` after the original unmaterialized-predecessor guard. Maintenance
+had already allocated older counters, but its network futures had not run; a new
+caller independently enqueued first. Preserve fresh ciphertext in the same durable
+outbox and transfer dispatch to maintenance when same-peer/class predecessors
+remain. No wait for recipient ACK is added to window preparation. The causal
+actual-admission test, all three predecessor controls and ten complete native
+TLS/restart suites pass. Final combined node checks and signed release pending.
+[Evidence](docs/evidence/durable-host-20261015/materialized-dispatch.json).
+
 F5 queued POST recovery, 2026-10-15 (OC): native restart diagnostics exposed
 discarded queued controls during the transport's known five-second dial cooldown.
 A typed wait condition preserves admitted finite POSTs within the original request
@@ -11,9 +21,11 @@ contained323 deferred contact updates and332 deferred forward grants. Repeated
 announcements fill the control reserve while old states remain unmaterialized.
 The causal blocked-window test fails old code and passes bounded, transactional
 supersession. Ten focused controls,473 node tests, strict Clippy and legacy compile
-pass. A real TLS restart ACK failure recurs under repetition, so source publication
-to main and signed acceptance remain pending its diagnosis and retained-input
-rehearsal. [Evidence](docs/evidence/durable-host-20261015/deferred-route-controls.json).
+pass. Isolated production-input rehearsal also passes:143 obsolete deferred
+controls retired transactionally, all channel/owner routes preserved. The later
+cooldown and dispatch-order repairs pass40 native checks; final combined checks
+and signed acceptance remain pending.
+[Evidence](docs/evidence/durable-host-20261015/deferred-route-controls.json).
 
 F5 fleet status dispatch, 2026-10-15 (OC): signed228 recovered its fleet endpoint
 and authenticated the intended component, but denied the existing `IdentityRead`

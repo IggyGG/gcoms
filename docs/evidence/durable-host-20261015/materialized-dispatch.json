@@ -1,0 +1,59 @@
+{
+  "schema": 1,
+  "base": "26b5357",
+  "scope": "one maintenance dispatch owner for materialized GC2 durable predecessors",
+  "source_sha256": {
+    "crates/node/src/node/direct.rs": "aaf61e121dd602b016d2d5f5966bf32773529e81616d1826f0f5ca4006db76fd",
+    "crates/node/src/node/persist/gc2_session_tests.rs": "57f98197a4aeb89a431a4514c131e9934fe3a0928d152f7482f130cd94e343a4",
+    "crates/node/tests/gc2_sessions.rs": "80ff2148dfd3327583d9e3ce3432c092f692a262c85adfeb83be15ea42b345b7"
+  },
+  "causal_before": "Fresh completion independently admits one frame while an older materialized frame awaits its maintenance network future; expected scheduler admissions0, observed1.",
+  "checks": {
+    "predecessor_controls_passed": 3,
+    "native_tls_suites": 10,
+    "native_tests_passed": 40,
+    "native_skips": 0,
+    "original_ack_deadline_seconds": 30,
+    "combined_full_node_suite": "pending"
+  },
+  "receipts": {
+    "materialized-dispatch-before-1": {
+      "exit_code": 101,
+      "source_unchanged": true,
+      "receipt_sha256": "f1163cb9f5d784af326e5b4e3c5e9547ebcd200a17da234095fb86d5ceb57bf6",
+      "log_sha256": "4975fefdbccc1a07c0781ade548393a28ca4459dfffd035ee3561a6716d5a715",
+      "seconds": 57.52950526800123
+    },
+    "materialized-dispatch-after-1": {
+      "exit_code": 0,
+      "source_unchanged": true,
+      "receipt_sha256": "fbed33babb47df1933ca5194ac9a8be3ef97cf65daa057f5119e2bb53ae9432e",
+      "log_sha256": "1bbcd8c5316d0c38c108f9d6528a72e375d3216cd288f03050184754d802969e",
+      "seconds": 163.89625014399644
+    }
+  },
+  "invariants": [
+    "same peer and traffic class only",
+    "durable local acceptance and existing counter-window pipelining",
+    "exact pending ciphertext, IDs, sequence and deadlines remain durable",
+    "caller does not independently bypass the maintenance dispatch queue",
+    "legacy and volatile paths retain existing dispatch",
+    "checkpoint copied after orderly fixture shutdown; prior snapshot hypothesis alone did not fix original ACK failure"
+  ],
+  "code_comparison": {
+    "before": {
+      "path": "hyperledger/iroha:crates/iroha_p2p/src/network.rs",
+      "cosine": 0.5581,
+      "rerank": 0.06962045408677238
+    },
+    "after": {
+      "path": "web3infra-foundation/libp2p-rs:protocols/gossipsub/src/peer_score.rs",
+      "cosine": 0.6747,
+      "rerank": 0
+    },
+    "assessment": "No close implementation; causal actual scheduler admission and repeated authenticated native delivery establish the guard."
+  },
+  "private_evidence_root": "/run/media/user/SSD-2/retained/ghost/durable-host-20261012",
+  "signed_qualified": false,
+  "installed_acceptance_passed": false
+}

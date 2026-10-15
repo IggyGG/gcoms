@@ -1,3 +1,10 @@
+F5 materialized dispatch order, 2026-10-15: fresh GC/2 durable frames follow the
+maintenance dispatch owner while same-peer/class durable predecessors remain.
+They can still allocate available counters and pipeline; caller completion cannot
+enqueue ahead of older, already-materialized frames. The causal admission test
+fails old code and passes with unchanged ciphertext, IDs and deadlines. Ten full
+native TLS/restart suites pass. [Evidence](docs/evidence/durable-host-20261015/materialized-dispatch.json).
+
 F5 queued POST recovery, 2026-10-15: a finite POST waits out a known pre-TLS
 dial cooldown within its original request deadline. Authentication preparation,
 connection credit and actual dialing still wait for admission. The causal real-TLS
@@ -12,8 +19,9 @@ changing their authority. Application records and allocated ratchet frames remai
 intact, with the existing byte/item limits. An uncertain checkpoint pauses the
 owner until reopen. See [transaction semantics](docs/GC2_SCHEDULER.md#deferred-routing-control-supersession)
 and [source evidence](docs/evidence/durable-host-20261015/deferred-route-controls.json).
-The full node suite passes; retained-input rehearsal and an intermittent native
-restart ACK failure remain under investigation before signed qualification.
+The original coalescer node suite and isolated retained-input rehearsal pass.
+The subsequent cooldown/dispatch repairs address the reproduced native failures;
+the final combined node suite and signed qualification remain required.
 
 F5 fleet status dispatch, 2026-10-15: a registered `IdentityRead` component can
 request the existing read-only runtime connection/relay status. The machine

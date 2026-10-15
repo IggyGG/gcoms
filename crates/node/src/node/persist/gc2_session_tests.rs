@@ -219,6 +219,63 @@ async fn gc2_deferred_predecessors_keep_peer_class_and_expiry_isolation() {
 }
 
 #[tokio::test]
+async fn gc2_fresh_durable_completion_cannot_bypass_materialized_predecessors() {
+    let alice = Arc::new(Mutex::new(gc2_node(101)));
+    let mut bob = gc2_node(102);
+    let scheduler = alice.lock().unwrap().scheduler.clone();
+    scheduler.enable_diagnostics();
+    let first = super::super::direct::prepare_durable_1to1(
+        &alice, &bob.info, b"first", None,
+    ).unwrap().message_id;
+    let older = super::super::direct::prepare_durable_1to1(
+        &alice, &bob.info, b"older deferred", None,
+    ).unwrap().message_id;
+    let (events, _) = broadcast::channel(32);
+    let cells = alice.lock().unwrap().pending_1to1[&first].delivery.cells.clone();
+    for cell in cells {
+        gc2_direct::incoming(&mut bob, &cell.payload, &events).unwrap();
+    }
+    let (old_wire, old_sequence, old_deadline) = {
+        let mut a = alice.lock().unwrap();
+        for ack in &bob.direct_ack_outbox {
+            for cell in &ack.cells {
+                gc2_direct::incoming(&mut a, &cell.payload, &events).unwrap();
+            }
+        }
+        materialize_deferred(&mut a).unwrap();
+        let pending = &a.pending_1to1[&older];
+        assert!(!pending.delivery.cells.is_empty());
+        (pending.delivery.cells.clone(), pending.sequence, pending.expires)
+    };
+    // Maintenance allocated the older record but has not polled its network
+    // future. A fresh caller must not independently enqueue ahead of it.
+    let fresh = super::super::direct::prepare_durable_1to1(
+        &alice, &bob.info, b"fresh", None,
+    ).unwrap();
+    let fresh_id = fresh.message_id;
+    let accepted = scheduler.diagnostics_snapshot().accepted;
+    super::super::direct::complete_direct_record(&scheduler, fresh).await.unwrap();
+    assert_eq!(scheduler.diagnostics_snapshot().accepted, accepted,
+        "fresh completion bypassed the maintenance dispatch owner");
+    let mut a = alice.lock().unwrap();
+    let pending = &a.pending_1to1[&older];
+    assert_eq!((&pending.delivery.cells, pending.sequence, pending.expires),
+        (&old_wire, old_sequence, old_deadline));
+    assert!(a.pending_1to1[&fresh_id].sequence > old_sequence);
+    materialize_deferred(&mut a).unwrap();
+    for id in [older, fresh_id] {
+        assert!(!a.pending_1to1[&id].delivery.cells.is_empty(), "counter window still pipelines both records");
+        for cell in &a.pending_1to1[&id].delivery.cells {
+            gc2_direct::incoming(&mut bob, &cell.payload, &events).unwrap();
+        }
+    }
+    assert_eq!(bob.application_inbox.entries.iter().map(|m| m.body.as_slice()).collect::<Vec<_>>(),
+        vec![b"first".as_slice(), b"older deferred".as_slice(), b"fresh".as_slice()]);
+    scheduler.shutdown();
+    bob.scheduler.shutdown();
+}
+
+#[tokio::test]
 async fn gc2_runtime_durable_delivery_credit_and_ack_survive_restart() {
     let alice=Arc::new(Mutex::new(gc2_node(21)));
     let mut bob=gc2_node(22);

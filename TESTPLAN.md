@@ -1,3 +1,15 @@
+F5 materialized dispatch order, 2026-10-15: require
+`gc2_fresh_durable_completion_cannot_bypass_materialized_predecessors` to fail
+old source at the actual scheduler-admission counter. After materializing an older
+deferred frame, fresh completion must leave network dispatch to the same owner,
+retain both prepared ciphertexts and preserve ID/sequence/deadline. Authenticate
+the receiver's exact ordered bodies afterward. Keep existing peer/class/expiry
+isolation and counter-allocation checks. Repeat the unchanged four-case native
+TLS suite; all ten repetitions pass. Its restart checkpoint is captured only after
+orderly shutdown and its original30s ACK bound now reports phase and observed IDs.
+Opt-in fixture metrics aid diagnosis without changing normal production behavior.
+[Evidence](docs/evidence/durable-host-20261015/materialized-dispatch.json).
+
 F5 queued POST recovery, 2026-10-15: run the actual TLS/H2
 `queued_posts_wait_out_a_known_dial_cooldown_without_resubmission` old-fail/new-pass
 control. Eight concurrently submitted posts must prepare zero bodies during the
@@ -21,8 +33,10 @@ Reopen the actually written uncertain candidate and advance the next sequence.
 Admission pressure retries in place; an uncertain write cannot be retried merely
 by replacing the sink. Run all-feature node library tests, all-target strict
 Clippy, legacy `client-persist` compile and actual `gc2_sessions` TLS/restart tests.
-Preserve the repeated native ACK failure; do not qualify from a single passing
-run while that failure remains unexplained. [Evidence](docs/evidence/durable-host-20261015/deferred-route-controls.json).
+Preserve the original repeated ACK/order failures and require the combined repaired
+native suite. The retained-input rehearsal uses the normal optimized constructor
+inside a network-isolated namespace and never mutates the retained encrypted input.
+[Evidence](docs/evidence/durable-host-20261015/deferred-route-controls.json).
 
 F5 fleet status dispatch, 2026-10-15: require the real GChat retained fleet test
 to fail on the former machine allowlist, then permit `RuntimeStatus` only through

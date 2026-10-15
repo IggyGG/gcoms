@@ -34,6 +34,7 @@ async fn endpoint_with_profile(
     )
     .await
     .unwrap();
+    node.enable_diagnostics();
     node.enable_durable_applications().await.unwrap();
     node
 }
@@ -55,16 +56,27 @@ async fn receive(node: &NodeHandle, expected: usize) -> Vec<gcoms_node::node::Ap
     .await
     .expect("GC2 application delivery timeout")
 }
-async fn receipt(node: &NodeHandle, id: [u8; 16]) {
+async fn receipt(node: &NodeHandle, id: [u8; 16], phase: &str) {
+    let mut observed = Vec::new();
     tokio::time::timeout(Duration::from_secs(30), async {
         loop {
-            if matches!(node.next_event().await,Some(Ev::DirectDelivery{msg_id,..}) if msg_id==id) {
-                return;
+            if let Some(Ev::DirectDelivery { msg_id, .. }) = node.next_event().await {
+                if msg_id == id {
+                    return;
+                }
+                if observed.len() < 256 {
+                    observed.push(msg_id);
+                }
             }
         }
     })
     .await
-    .expect("GC2 application ACK timeout");
+    .unwrap_or_else(|_| {
+        panic!(
+            "GC2 application ACK timeout in {phase}: expected {id:?}, observed {observed:?}, transport {:?}",
+            node.transport_status()
+        )
+    });
 }
 
 async fn media(node: &NodeHandle, expected: &[u8]) {
@@ -82,6 +94,9 @@ async fn media(node: &NodeHandle, expected: &[u8]) {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn gc2_sessions_carry_durable_applications_over_tls_and_resume_after_restart() {
+    if let Some(path) = std::env::var_os("GCOMS_TEST_METRICS") {
+        gcoms_node::metrics::init(std::path::Path::new(&path)).unwrap();
+    }
     let aa = Archive::default();
     let ba = Archive::default();
     let a = endpoint(61, aa.clone(), None).await;
@@ -97,18 +112,21 @@ async fn gc2_sessions_carry_durable_applications_over_tls_and_resume_after_resta
         delivered.iter().map(|m| m.body[0]).collect::<Vec<_>>(),
         (0..8u8).collect::<Vec<_>>()
     );
-    receipt(&a, delivered.last().unwrap().message_id).await;
+    receipt(&a, delivered.last().unwrap().message_id, "initial eight").await;
     let transient = vec![0xa7; 1024];
     a.send_volatile_application(&original, &transient)
         .await
         .unwrap();
     media(&b, &transient).await;
     assert_eq!(b.application_inbox(0, 32).await.unwrap().len(), 8);
+    // Stop all subscription/maintenance writers before taking the checkpoint.
+    // Capturing it while they still run can rewind a ratchet state already seen
+    // by the peer during shutdown, which is not a restart of the saved profile.
+    b.shutdown().await;
     let saved = ba.lock().unwrap().clone();
     // A receiver retains the authenticated setup replay guard in the current
     // archive extension. The initiating-only archive below still uses GCNSTL.
     assert_eq!(&saved[..6], b"GCNSTO");
-    b.shutdown().await;
     b = endpoint(62, ba, Some(&saved)).await;
     assert_eq!(b.info.identity_pk, original.identity_pk);
     let restored = receive(&b, 8).await;
@@ -122,7 +140,7 @@ async fn gc2_sessions_carry_durable_applications_over_tls_and_resume_after_resta
         .unwrap();
     let reverse = receive(&a, 1).await;
     assert_eq!(reverse[0].body, b"resumed GC2");
-    receipt(&b, reverse[0].message_id).await;
+    receipt(&b, reverse[0].message_id, "reverse after restart").await;
     a.send_durable_1to1(&original, b"old caller contact, current session", None)
         .await
         .unwrap();
@@ -131,7 +149,12 @@ async fn gc2_sessions_carry_durable_applications_over_tls_and_resume_after_resta
         final_delivery[8].body,
         b"old caller contact, current session"
     );
-    receipt(&a, final_delivery[8].message_id).await;
+    receipt(
+        &a,
+        final_delivery[8].message_id,
+        "old caller route after restart",
+    )
+    .await;
     b.send_volatile_application(&a.info, b"volatile after restart")
         .await
         .unwrap();
@@ -156,13 +179,13 @@ async fn gc2_natural_carrier_delivers_durable_applications_both_ways() {
         .unwrap();
     let delivered = receive(&b, 1).await;
     assert_eq!(delivered[0].body, b"natural carrier delivery");
-    receipt(&a, delivered[0].message_id).await;
+    receipt(&a, delivered[0].message_id, "natural forward").await;
     b.send_durable_1to1(&a.info, b"natural reverse", None)
         .await
         .unwrap();
     let reverse = receive(&a, 1).await;
     assert_eq!(reverse[0].body, b"natural reverse");
-    receipt(&b, reverse[0].message_id).await;
+    receipt(&b, reverse[0].message_id, "natural reverse").await;
     a.shutdown().await;
     b.shutdown().await;
 }
