@@ -1,0 +1,68 @@
+{
+  "schema": 1,
+  "status": "focused_native_qualified_test_only_correction",
+  "source": "e23d8921868fdabe05efe079e5f4f4ef14099d7b",
+  "runtime_changed": false,
+  "original_windows_failure": {
+    "run": 38768534876,
+    "job": 116537998797,
+    "gcoms": "e4288d3c20e34f45fa44fed1b2caa9d44e56ed4f",
+    "log_sha256": "dfe00b312e92896cbf6983f02ac5e94d9c11385cb40286d132b35d51f2394daa",
+    "actual": "channel send failed for 2 target(s)",
+    "assertion_expected": "channel send failed for 1 target(s)",
+    "recipient_check_reached": false
+  },
+  "preserved_invalid_diagnostic": {
+    "after_source_binding_verified": false,
+    "cause": "Both worktrees existed before compiling baseline into their shared target. Cargo then reused the baseline test executable for the changed checkout.",
+    "old_executable_sha256": "a1243500d0608b395ccef5223c3fa721fe79c6a0c93ef61d2aca23790bfa87c1",
+    "after_source_contains_new_branch_marker": true,
+    "old_executable_contains_new_branch_marker": false,
+    "audit_sha256": "11d96a03a10444d5148ffde7a7bb964865144332cabdce4243ae77efdfbc4f56",
+    "disposition": "Original result retained; it does not qualify the modified test. Fresh per-source targets and verified direct executable invocation were required."
+  },
+  "corrected_native_windows": {
+    "passed": true,
+    "host": "physical Windows11 x86_64 MSVC",
+    "rustc": "1.98.0 (88d9e12ae 2026-08-18)",
+    "fresh_compile_source_path_verified": true,
+    "pe_machine": "x86_64",
+    "executable_sha256": "095619b50f837e4f9d78404ba3cd3e54511ca605a1f33b7d19bdbd5e885985a5",
+    "new_test_branch_marker_verified": true,
+    "survivor_passes": 2,
+    "first_run_initial_refusals": 2,
+    "second_run_initial_refusals": 1,
+    "both_runs_verified_real_channel_and_fresh_direct_receive": true,
+    "retained_runtime_cases_passed": 3,
+    "runtime_executable_sha256": "79a194c72e6f7f8c8dd686937e32d49899571ed7c65d0d45f269136e4dcaee8c",
+    "source_unchanged": true,
+    "seconds": 510.54111049999483,
+    "receipt_sha256": "4946ff93fdba76a4ca91d17ff5233807c874f0f3067208f2193913e27057e55f"
+  },
+  "linux_source": {
+    "passed": true,
+    "survivor_case": 1,
+    "strict_test_target_clippy": true,
+    "formatting": true,
+    "source_unchanged": true,
+    "seconds": 720.0892881840118,
+    "receipt_sha256": "6f1695d834b8340a363e29d96df40671ba01ac08156bfe4d5f54dd0309695bb4",
+    "log_sha256": "ec2c2d836aeaa305842f2432b882d0f3fcdbf41f565b529086f73e3320acdad4"
+  },
+  "preserved_guards": ["exact surviving channel body within original90seconds", "fresh direct body within60seconds", "500ms responsiveness", "no unexpected error types accepted", "no runtime/queue/retry/deadline change"],
+  "cleanup": {
+    "passed": true,
+    "owned_worktrees_removed": 2,
+    "owned_scratch_roots_removed": 2,
+    "canonical_mirror_unchanged": true,
+    "all_logs_and_test_executables_retained": true,
+    "binary_archive_sha256": "95625eede4f5ef8f02b2cd4c7f4d18acbdb14206cd4431cad01cd459623bbcc8",
+    "cleanup_receipt_sha256": "d78dcb307cc2c044d49e02c1ab5f4382a22eb1b3607cf53ebb5f3daff22111bb"
+  },
+  "comparison": {
+    "before": {"path": "hunjixin/rust-exercise:examples/tokio_channel/src/main.rs", "cosine": 0.6996, "rerank": 0.0482902320790799, "fetched": true},
+    "after": {"path": "Blonskr/forkstar-core-rust:src/tests/aeap.rs", "cosine": 0.7151, "rerank": 0.5209922390229381, "fetched": true},
+    "finding": "Compare independently observed recipient contents/membership after transitions rather than equating immediate transport replies with delivery."
+  },
+  "scope": "Focused source/native diagnostics only; not a signed package, GUI or complete Windows release qualification. Frozen230 is unchanged."
+}

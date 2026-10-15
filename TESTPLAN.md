@@ -4,7 +4,13 @@ accept only the possible one- or two-target refusal, then still require the exac
 channel body at the surviving member within the original90seconds and a fresh
 direct body within60seconds. Keep the500ms responsiveness assertion and original
 failed Windows receipt. No runtime, queue, retry or deadline change is part of
-this fixture correction. Qualify natively before integration.
+this fixture correction. Native Windows now passes both one- and two-target refusal
+paths with actual recipient verification, plus three retained-send cases. Use
+distinct Cargo targets for pre-created source variants, require a fresh compiler
+artifact/source path and verify the actual PE before execution. The first diagnostic
+reused the baseline executable and is explicitly invalid as after-source proof.
+Linux focused/strict/fmt checks pass. Exact receipts and preserved artifacts are in
+`docs/evidence/durable-host-20261015/native-survivor.json`.
 
 F5 simultaneous channel-route recovery, 2026-10-15: require the causal
 `simultaneous_route_replacements_converge_through_authenticated_bridge_pex` to

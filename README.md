@@ -2,8 +2,11 @@ F5 native survivor check, 2026-10-15: a retained Windows run failed an assumptio
 that exactly one initial hop must be refused, before checking the surviving peer.
 The diagnostic keeps both original recipient-delivery deadlines and the independent
 fresh direct message; it accepts only the two possible initial target-refusal counts.
-Runtime code is unchanged. Native confirmation is in progress; original failure
-and the already-running release230 qualification remain separate evidence.
+Runtime code is unchanged. Fresh verified native Windows executables pass both
+refusal paths and all three retained-send cases; Linux and strict checks pass.
+An initial cached-executable diagnostic was independently rejected and retained.
+See [native proof](docs/evidence/durable-host-20261015/native-survivor.json).
+The already-running release230 qualification remains separate evidence.
 
 F5 simultaneous channel-route recovery, 2026-10-15: authenticated self-directory
 announcements enter the existing bounded gossip/PEX cache after durable receive.
