@@ -1,3 +1,11 @@
+F5 queued POST recovery, 2026-10-15 (OC): native restart diagnostics exposed
+discarded queued controls during the transport's known five-second dial cooldown.
+A typed wait condition preserves admitted finite POSTs within the original request
+deadline; arbitrary I/O, TLS and HTTP failures keep their existing outcomes.
+Eight concurrent actual-server posts, cancellation/deadline guards, all79transport
+tests and strict Clippy pass. The source checkpoint still requires normal signed
+qualification. [Evidence](docs/evidence/durable-host-20261015/dial-cooldown.json).
+
 F5 deferred routing-control recovery, 2026-10-15 (OC): the retained228 profile
 contained323 deferred contact updates and332 deferred forward grants. Repeated
 announcements fill the control reserve while old states remain unmaterialized.

@@ -35,6 +35,18 @@ const MAX_LONG_LIVED_STREAMS: usize = 16;
 // of pre-TLS I/O failures, scoped exactly like authenticated connections.
 const CONNECT_FAILURE_COOLDOWN: std::time::Duration = std::time::Duration::from_secs(5);
 const MAX_FAILED_ROUTES: usize = 64;
+
+#[derive(Debug)]
+struct DialCooldown(tokio::time::Instant);
+
+impl std::fmt::Display for DialCooldown {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str("connection cooling down after failed dial")
+    }
+}
+
+impl Error for DialCooldown {}
+
 const SMALL_WIRE_CELL: usize = 4096;
 const LARGE_WIRE_CELL: usize = 16384;
 const MAX_STREAM_BUFFER: usize = LARGE_WIRE_CELL * 2;
@@ -258,10 +270,10 @@ struct Pool {
 }
 
 impl Pool {
-    fn cooling_down(&mut self, key: PoolKey) -> bool {
+    fn cooling_down(&mut self, key: PoolKey) -> Option<tokio::time::Instant> {
         let now = tokio::time::Instant::now();
         self.failed.retain(|_, until| *until > now);
-        self.failed.contains_key(&key)
+        self.failed.get(&key).copied()
     }
 
     fn dial_failed(&mut self, key: PoolKey) {
@@ -667,7 +679,26 @@ impl Tp1Client {
         for attempt in 0..2 {
             progress.set(0);
             let lease = if progress.finite {
-                let connection = self.connection(route, class).await?;
+                let connection = loop {
+                    match self.connection(route, class).await {
+                        Ok(connection) => break connection,
+                        Err(error) => {
+                            // Warming may have observed a short relay restart.
+                            // Retain an admitted POST until that known cooldown
+                            // expires, within this request's original deadline.
+                            // No dial slot or connection credit is held during
+                            // this wait, and deferred bodies stay unprepared.
+                            // Actual I/O/TLS/HTTP failures still return normally.
+                            if let Some(cooldown) = error.downcast_ref::<DialCooldown>() {
+                                if method == Method::POST {
+                                    tokio::time::sleep_until(cooldown.0).await;
+                                    continue;
+                                }
+                            }
+                            return Err(error);
+                        }
+                    }
+                };
                 progress.connection(&connection);
                 progress.set(1);
                 connection.lease(true, class).await?
@@ -846,8 +877,8 @@ impl Tp1Client {
             if let Some(connection) = pool.get(pool_key) {
                 return Ok(connection);
             }
-            if pool.cooling_down(pool_key) {
-                return Err("connection cooling down after failed dial".into());
+            if let Some(until) = pool.cooling_down(pool_key) {
+                return Err(DialCooldown(until).into());
             }
         }
         let lock = {
@@ -870,8 +901,8 @@ impl Tp1Client {
             if let Some(connection) = pool.get(pool_key) {
                 return Ok(connection);
             }
-            if pool.cooling_down(pool_key) {
-                return Err("connection cooling down after failed dial".into());
+            if let Some(until) = pool.cooling_down(pool_key) {
+                return Err(DialCooldown(until).into());
             }
         }
 
@@ -883,8 +914,8 @@ impl Tp1Client {
             .map_err(|_| "connection attempt limiter closed")?;
         {
             let mut pool = self.connections.lock().await;
-            if pool.cooling_down(pool_key) {
-                return Err("connection cooling down after failed dial".into());
+            if let Some(until) = pool.cooling_down(pool_key) {
+                return Err(DialCooldown(until).into());
             }
             pool.prune_idle();
         }

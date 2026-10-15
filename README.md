@@ -1,3 +1,10 @@
+F5 queued POST recovery, 2026-10-15: a finite POST waits out a known pre-TLS
+dial cooldown within its original request deadline. Authentication preparation,
+connection credit and actual dialing still wait for admission. The causal real-TLS
+test fails the old cached-refusal path; all79 transport tests and strict Clippy pass.
+[Evidence](docs/evidence/durable-host-20261015/dial-cooldown.json). Full signed
+qualification and installed acceptance remain required.
+
 F5 deferred routing-control recovery, 2026-10-15: renewed owner announcements
 atomically replace obsolete, still-unencrypted contact updates for the same peer.
 Equivalent deferred forward grants can be superseded only without shortening or

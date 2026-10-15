@@ -17,6 +17,16 @@ rule. Existing request deadlines still include the admission wait.
 
 ## Requests and connection ownership
 
+A finite POST encountering the existing negative dial cache waits until that
+exact cooldown expires inside the original60-second request deadline. The cache
+still lasts five seconds and remains scoped by address, TLS pin, route exclusions,
+traffic class and shard. Waiting holds no connection/dial permit and does not run
+deferred authorization. Actual I/O, TLS and HTTP errors retain their existing
+outcomes; warming, probes and subscriptions retain their existing cache behavior.
+The local typed wait condition prevents a briefly restarting relay from discarding
+already queued controls merely because warming saw a refused connection.
+See [causal and bounded tests](evidence/durable-host-20261015/dial-cooldown.json).
+
 A pooled terminal HTTP/2 connection admits at most four finite requests, including
 response bodies. Bulk can occupy at most three. Waiting for a bulk permit does
 not consume the reserved interactive capacity. All admission permits release on

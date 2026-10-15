@@ -1,3 +1,15 @@
+F5 queued POST recovery, 2026-10-15: run the actual TLS/H2
+`queued_posts_wait_out_a_known_dial_cooldown_without_resubmission` old-fail/new-pass
+control. Eight concurrently submitted posts must prepare zero bodies during the
+existing five-second cooldown, share one recovered pinned connection and deliver
+all exact cells after one real reconnect. Verify cancellation consumes no dial or
+connection permit and does not extend cache expiry; the original60s outer request
+deadline still terminates waiting before preparation. Existing2000-probe negative
+cache, route/pin/exclusion isolation and arbitrary-error cases remain required.
+All79 transport tests pass with four existing explicit live/performance exclusions,
+plus strict all-target Clippy and formatting.
+[Evidence](docs/evidence/durable-host-20261015/dial-cooldown.json).
+
 F5 deferred routing controls, 2026-10-15: require
 `gc2_blocked_window_owner_announcements_keep_only_latest_deferred_contact` to fail
 on old code, then preserve every application ID and allocated ciphertext across

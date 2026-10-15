@@ -1,0 +1,63 @@
+{
+  "schema": 1,
+  "base": "05a689a",
+  "scope": "retain admitted finite POSTs through known pre-TLS dial cooldown",
+  "source_sha256": {
+    "crates/transport/src/client.rs": "70b60d079a1c6aacf5ab4cae0444e41b156a523d137269140218b80c65f13dfa",
+    "crates/transport/src/client/connection_tests.rs": "c5af642ef844858876c903903b780a2192b67e5c468d368b2aceea528e15cf4a"
+  },
+  "causal_before": "Eight actual-server prepared POSTs are discarded immediately by the negative dial cache after a warming refusal.",
+  "checks": {
+    "transport_passed": 79,
+    "existing_ignored": 4,
+    "strict_all_target_clippy": "passed",
+    "formatting": "passed",
+    "negative_cache_probe_calls": 2000,
+    "concurrent_exact_posts": 8,
+    "prepared_bodies_during_cooldown": 0,
+    "recovered_connections": 1,
+    "original_request_timeout_seconds": 60,
+    "unchanged_cooldown_seconds": 5
+  },
+  "receipts": {
+    "dial-cooldown-before-1": {
+      "exit_code": 101,
+      "receipt_sha256": "6e5b87b5b25703441161274a9a676b42c37c3abf15898e66d6906144a698fcbd",
+      "log_sha256": "27f2fde14e5b57b8394399c389e7a01b5f28617d56ca7a845180d93756834b22",
+      "seconds": 43.81456171401078,
+      "source_unchanged": true
+    },
+    "dial-cooldown-after-1": {
+      "exit_code": 1,
+      "receipt_sha256": "08c8a7af4c443925b36a4bb1e5661320b4c89598f5431b2aebcd00d7d3ec1729",
+      "log_sha256": "9fdd2ce15ac0478b492b50dd5c01d2096ac72ff87ffb96769f01fd35f23cad8f",
+      "seconds": 86.10728795299656,
+      "source_unchanged": true
+    },
+    "dial-cooldown-transport-1": {
+      "exit_code": 0,
+      "receipt_sha256": "a4d340c445ea5115386d0876b42e9d4e607ba2da83f92320aac1fbe8e9c2a732",
+      "log_sha256": "ba5e76fec388f62c5443f196d7c5122648d3bde0615600fe4e53ce138027f30a",
+      "seconds": 112.56324244599091,
+      "source_unchanged": true
+    }
+  },
+  "native_follow_up": "The first three native four-test suites passed. The fourth exposed a separately reproduced materialized-predecessor dispatch race; that repair now passes ten complete native suites, tracked separately.",
+  "code_comparison": {
+    "before": {
+      "path": "ivakhnenkovitali/libsignal-main:rust/net/src/infra/connection_manager.rs",
+      "cosine": 0.7353,
+      "rerank": 0.3053833228223813
+    },
+    "after": {
+      "path": "ivakhnenkovitali/libsignal-main:rust/net/src/infra/connection_manager.rs",
+      "cosine": 0.6404,
+      "rerank": 0.9650066429012455
+    },
+    "fetched": true,
+    "assessment": "Same typed WaitUntil/caller-deadline guard idiom; local implementation uses the existing pool key, limits and preparation boundary. No copied code."
+  },
+  "private_evidence_root": "/run/media/user/SSD-2/retained/ghost/durable-host-20261012",
+  "signed_qualified": false,
+  "installed_acceptance_passed": false
+}
