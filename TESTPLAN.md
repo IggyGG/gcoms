@@ -1,3 +1,11 @@
+F5 native survivor check, 2026-10-15: run the actual `node_e2e` executable on the
+published source pair. A first-hop reply is not a recipient delivery receipt;
+accept only the possible one- or two-target refusal, then still require the exact
+channel body at the surviving member within the original90seconds and a fresh
+direct body within60seconds. Keep the500ms responsiveness assertion and original
+failed Windows receipt. No runtime, queue, retry or deadline change is part of
+this fixture correction. Qualify natively before integration.
+
 F5 simultaneous channel-route recovery, 2026-10-15: require the causal
 `simultaneous_route_replacements_converge_through_authenticated_bridge_pex` to
 fail old code. Two members replace their queues while a third receives both

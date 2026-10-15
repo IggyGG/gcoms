@@ -1,3 +1,11 @@
+F5 native survivor check, 2026-10-15 (OC): original Windows229 SDK qualification
+stopped at a two-target initial-hop refusal, before the actual survivor-delivery
+assertion. Keep the original90-second channel and60-second direct receive bounds
+and500ms responsiveness guard, while recognizing either bounded first-hop refusal
+count. Runtime unchanged; focused native qualification is pending. Mac229 also
+retains its SDK timeout and an incompletely reported runtime recovery-test failure;
+do not infer its cause or relabel it as a pass.
+
 F5 simultaneous channel-route recovery, 2026-10-15 (OC): the original229 campaign
 completed710/720 commands. Two members received every message but never learned
 one another's replacement route; a healthy peer learned both. A real three-role

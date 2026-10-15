@@ -1,3 +1,10 @@
+F5 native survivor check, 2026-10-15: a retained Windows run failed an assumption
+that exactly one initial hop must be refused, before checking the surviving peer.
+The diagnostic keeps both original recipient-delivery deadlines and the independent
+fresh direct message; it accepts only the two possible initial target-refusal counts.
+Runtime code is unchanged. Native confirmation is in progress; original failure
+and the already-running release230 qualification remain separate evidence.
+
 F5 simultaneous channel-route recovery, 2026-10-15: authenticated self-directory
 announcements enter the existing bounded gossip/PEX cache after durable receive.
 This lets a healthy third member bridge two peers whose old queues disappeared

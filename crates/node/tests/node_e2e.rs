@@ -143,11 +143,15 @@ async fn survivors_stay_live_and_deliver_after_a_node_is_killed() {
     // A broadcast after the kill still reaches the surviving member. (The dead
     // member simply never acks; delivery to the live member must not block on
     // it.)
-    // The existing API reports a partial transport refusal for the departed
-    // target. The liveness contract is delivery to Alice, which is checked
-    // independently below, not complete success for all roster members.
+    // Initial hop attempts may fail for either or both targets while the queued
+    // exact wire is retried independently. The liveness contract is actual
+    // delivery to Alice below, not the count of successful initial hop replies.
     if let Err(error) = owner.send_channel_text("ops", b"after kill").await {
-        assert_eq!(error, "channel send failed for 1 target(s)");
+        assert!(matches!(
+            error.as_str(),
+            "channel send failed for 1 target(s)" | "channel send failed for 2 target(s)"
+        ));
+        eprintln!("Initial transport result before recipient verification: {error}");
     }
     await_chan(&alice, "ops", b"after kill").await;
 
