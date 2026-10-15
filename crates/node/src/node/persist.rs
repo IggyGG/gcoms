@@ -4957,8 +4957,17 @@ pub(in crate::node) mod tests {
                     text.clone()
                 )
             );
-            assert_eq!(cs.pending[0].wire, text);
-            assert_eq!(cs.pending[0].attempts, 3);
+            // Authenticated self-Dir forwarding can precede this retained
+            // application wire. Preserve its exact identity, bytes and retry
+            // count rather than assuming it is the first transient entry.
+            let pending = cs
+                .pending
+                .iter()
+                .filter(|entry| entry.id == message_id)
+                .collect::<Vec<_>>();
+            assert_eq!(pending.len(), 1);
+            assert_eq!(pending[0].wire, text);
+            assert_eq!(pending[0].attempts, 3);
             assert_eq!(cs.cell_cache[&message_id], text);
             assert_eq!(cs.role.epoch(), epoch);
 

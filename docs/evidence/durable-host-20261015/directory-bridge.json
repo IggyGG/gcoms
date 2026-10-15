@@ -1,6 +1,14 @@
 {
   "schema": 1,
   "status": "focused_passed_full_qualification_pending",
+  "preserved_first_full_failure": {
+    "passed": 475,
+    "failed": 1,
+    "existing_ignored": 2,
+    "test": "authenticated_channel_replacement_preserves_retry_wires_and_acknowledgements",
+    "cause": "The fixture indexed pending[0] as the application wire; authenticated self-directory forwarding now legitimately precedes it.",
+    "correction": "Locate exactly one original message_id and retain exact ciphertext and attempts==3 assertions; all route/recipient/ACK/reopen guards remain."
+  },
   "baseline_gcoms": "e4288d3c20e34f45fa44fed1b2caa9d44e56ed4f",
   "original_native_failure": {
     "gchat": "708f3317ea00b17234ca3bcbb44857ae4569c8f4",
