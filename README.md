@@ -1,3 +1,11 @@
+F5 fleet status dispatch, 2026-10-15: a registered `IdentityRead` component can
+request the existing read-only runtime connection/relay status. The machine
+allowlist had omitted this operation after the normal IPC capability check.
+Unregistered clients, shell access and profile administration remain refused.
+The real retained GChat fleet regression fails before the fix and passes after
+rotation and endpoint recovery; all86 SDK tests and strict checks pass.
+[Evidence](docs/evidence/durable-host-20261015/fleet-runtime-status.json).
+
 F5 recovery-batch qualification, 2026-10-15: the original227 native gate exposed
 an intermittent fixture assertion that every recovery pass must encounter a full
 control queue. A sorted batch can contain only healthy channels. The fixture now

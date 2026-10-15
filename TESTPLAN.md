@@ -1,3 +1,11 @@
+F5 fleet status dispatch, 2026-10-15: require the real GChat retained fleet test
+to fail on the former machine allowlist, then permit `RuntimeStatus` only through
+the existing authenticated `IdentityRead` gate. Verify it after credential rotation
+and stale endpoint recovery; require exact `PermissionDenied` for ungranted Health
+and profile persistence. All86 SDK cases, strict SDK all-target Clippy, the paired
+4fleet/3ownership/3daemon cases and strict core/Tui Clippy pass. No protocol version
+or registry grant changes. [Evidence](docs/evidence/durable-host-20261015/fleet-runtime-status.json).
+
 F5 recovery-batch fixture, 2026-10-15: run all seven
 `node::routing::channel_recovery_tests` with locked/offline all-feature node tests.
 The explicit healthy-first fixture must fail the former unconditional error

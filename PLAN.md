@@ -1,3 +1,12 @@
+F5 fleet status dispatch, 2026-10-15 (OC): signed228 recovered its fleet endpoint
+and authenticated the intended component, but denied the existing `IdentityRead`
+runtime-status operation. The missing machine allowlist arm is corrected without
+adding capabilities. The causal paired test, four fleet integration cases, three
+endpoint ownership cases, three real daemon cases,86 SDK tests and strict checks
+pass. Source-bound evidence is in
+[the receipt](docs/evidence/durable-host-20261015/fleet-runtime-status.json).
+Signed deployment and installed acceptance remain required.
+
 F5 recovery-batch fixture, 2026-10-15 (OC): original227 Linux qualification retains
 its465-pass/one-failure node result. The fixture's unconditional `unwrap_err()`
 fails deterministically when all four healthy channels occupy the first sorted

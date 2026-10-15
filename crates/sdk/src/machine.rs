@@ -544,6 +544,7 @@ pub(crate) async fn dispatch<C: GcClient>(
             crate::ipc::dispatch(client, request).await
         }
         request @ (Request::Identity
+        | Request::RuntimeStatus
         | Request::FileRoute
         | Request::ContactIdentity { .. }
         | Request::SignIdentityDigest { .. }

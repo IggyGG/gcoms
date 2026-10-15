@@ -1,0 +1,43 @@
+{
+  "schema": 1,
+  "scope": "Registered component IdentityRead runtime status dispatch",
+  "base": "84699a1718fb3952ce8c5e05dc70b92bf0a53554",
+  "source": "crates/sdk/src/machine.rs",
+  "source_sha256": "df1be251849fa5403b39ef9908011e7d6bac4a9ba2a39b6df3514f347526fec2",
+  "companion_test": "gchat:crates/core/tests/fleet_host.rs",
+  "companion_test_sha256": "c923ec75dc69e729ef7d3172638164286d336fe69b34da8e6a5e3ceaa95efcd3",
+  "installed_failure": "Signed228 fleet socket accepts component authentication and identity refresh, then RuntimeStatus is PermissionDenied by the machine dispatch allowlist.",
+  "causal_before": {
+    "passed": false,
+    "expected_failure": "registered identity-read component can inspect runtime status: PermissionDenied",
+    "receipt_sha256": "021864b21c3ecf9f9bf8d9e8737c0c3c877cfc47e1550d74e08f223fad418b0b"
+  },
+  "scope_preservation": [
+    "Existing IPC version and IdentityRead capability checks remain before machine dispatch.",
+    "The response contains only connection and relay state; no other component data or credentials.",
+    "Unregistered authentication remains refused.",
+    "Identity-only clients still receive PermissionDenied for HostShell Health and ProfileAdmin persistence.",
+    "Credential rotation drains the old connection; status works for the new credential and after stale-socket recovery."
+  ],
+  "qualification": {
+    "passed": true,
+    "sdk_tests": 86,
+    "sdk_ignored": 0,
+    "sdk_all_target_clippy": "passed",
+    "sdk_receipt_sha256": "20a04ca04f8269d755c06a8819816fa36f84a65d2bba06d360d1083d41c49f45",
+    "paired_fleet_integration": 4,
+    "paired_endpoint_ownership": 3,
+    "paired_actual_daemon_lifecycle": 3,
+    "paired_core_tui_all_target_clippy": "passed",
+    "paired_receipt_sha256": "7314fab4dc55dc318372a403cd4ad4bbc4fbd34ab32d8cf6cd8dd4515b056a76",
+    "sources_unchanged_during_checks": true
+  },
+  "code_comparison": {
+    "before": {"path": "nebius/pysdk:src/nebius/aio/request.py", "cosine": 0.549, "rerank": 0.05527998218272703},
+    "after": {"path": "Cargill/splinter:libsplinter/src/rest_api/actix_web_1/guard.rs", "cosine": 0.6249, "rerank": 0},
+    "conclusion": "No close implementation; the existing capability gate and real credential-scoped IPC regression establish the boundary. No code copied."
+  },
+  "private_evidence_root": "/run/media/user/SSD-2/retained/ghost/durable-host-20261012",
+  "signed_release_qualified": false,
+  "installed_acceptance_passed": false
+}
