@@ -1,3 +1,12 @@
+F5 recovery-batch fixture, 2026-10-15 (OC): original227 Linux qualification retains
+its465-pass/one-failure node result. The fixture's unconditional `unwrap_err()`
+fails deterministically when all four healthy channels occupy the first sorted
+batch, even though recovery correctly succeeds. Preserve the original blocked
+HashMap-first starvation reproduction, verify the healthy-only success separately,
+and still require deferrals and exact retained state across the bounded three
+passes. Source proof is in [the receipt](docs/evidence/durable-host-20261015/recovery-batches.json).
+Normal signed successor and installed delivery remain required.
+
 F5 retained GChat transport recovery, 2026-10-15 (OC): signed223's designated-peer
 trial retained its original authenticated-delivery failure. A causal real TLS/H2
 control demonstrates subscriptions consuming every stream on the sole pooled

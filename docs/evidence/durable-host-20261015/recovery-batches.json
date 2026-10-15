@@ -1,0 +1,60 @@
+{
+  "schema": 1,
+  "date": "2026-10-15",
+  "scope": "Recovery-batch fixture contract correction; production scheduling unchanged",
+  "base": "acbe008ce1f49441d69d91a154bc249c97a535f7",
+  "source_file": "crates/node/src/node/routing_channel_recovery_tests.rs",
+  "source_sha256": "f6cb1cd2932b978dfc7b24cff41c9e5fde1719cc25bf676523eff8d1b4074106",
+  "original_failure": {
+    "release": "b8638e50347a034bcd9fed397335eaaa466d8742b79a1b45826f279890bcf289",
+    "version": "0.1.227",
+    "provider_run": 38663062473,
+    "attempt": 1,
+    "job": 116188597483,
+    "node_passed": 465,
+    "node_failed": 1,
+    "node_ignored": 2,
+    "log_sha256": "25a80ef690015b9818e8253e6f7d6d53ec942285d6045dc93ac53afc9433be0f",
+    "error": "full_channel_controls_do_not_starve_other_retained_channels expected an error on a successfully recovered healthy-only batch"
+  },
+  "causal_before": {
+    "test": "healthy_first_recovery_batch_does_not_report_unattempted_channel_deferrals",
+    "old_assertion_retained": true,
+    "failed_exactly": "Result::unwrap_err() on Ok(())",
+    "receipt_sha256": "9d6ea1a758931a5901c97f8ad46c1a1b953a634a7b9fd12fb24b7d6a5f6bcbbb",
+    "log_sha256": "d9d7f4356c2ff2407109ef920fe6cbb3e45f263463d32ce9db926088adbfa389"
+  },
+  "qualification": {
+    "passed": true,
+    "recovery_cases": 7,
+    "additional_independent_seed_runs_per_layout": 12,
+    "additional_cases_passed": 24,
+    "ignored": 0,
+    "strict_node_library_and_tests_clippy": "passed",
+    "workspace_format": "passed",
+    "source_unchanged": true,
+    "seconds": 264.83353920800437,
+    "input_inventory_sha256": "b1334eeacac14cfd4ef98ab4be2a90f0e19418505b53335e7fb935a9a09422da",
+    "receipt_sha256": "e767aa2364ebf949036a44f228db5f03b899cfd9b9b7cc8166dc5493ba6ecaf5",
+    "log_sha256": "d5a27367b39a4b159742788ba044a4e36b1602902123d0c0e1ee5c85fd762b44"
+  },
+  "invariants": [
+    "The original HashMap-first blocked batch remains, preserving the prior starvation regression.",
+    "An explicit sorted healthy-first batch succeeds without reporting errors from unattempted channels.",
+    "Both layouts must actually attempt full channels and report the exact control-outbox error across three bounded passes.",
+    "Every healthy channel recovers; blocked announcements remain incomplete.",
+    "All original queued control bytes and membership epochs remain unchanged; recovered routes cross the durable checkpoint barrier.",
+    "No queue bound, request deadline, production scheduler or recovery implementation changed."
+  ],
+  "code_comparison": {
+    "path": "hyperledger/iroha:crates/iroha_p2p/src/network.rs",
+    "before_cosine": 0.734,
+    "before_rerank": 0.05903521582646252,
+    "after_rerank": 0.6792,
+    "content_fetched_and_reviewed": true,
+    "conclusion": "Generic replay/refusal checks and bounded-queue accounting; no close deterministic batch fixture. No code copied."
+  },
+  "private_evidence_root": "/run/media/user/SSD-2/retained/ghost/durable-host-20261012",
+  "release_qualified": false,
+  "installed_acceptance_passed": false
+}

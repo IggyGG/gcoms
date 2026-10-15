@@ -205,6 +205,15 @@ async fn expired_prepared_routes_do_not_starve_other_retained_preparations() {
 
 #[tokio::test]
 async fn full_channel_controls_do_not_starve_other_retained_channels() {
+    channel_recovery_batches(false).await;
+}
+
+#[tokio::test]
+async fn healthy_first_recovery_batch_does_not_report_unattempted_channel_deferrals() {
+    channel_recovery_batches(true).await;
+}
+
+async fn channel_recovery_batches(healthy_first: bool) {
     let (target, transport) = accepting_owned_queue_transport().await;
     let mut node = state();
     node.scheduler.shutdown();
@@ -247,9 +256,16 @@ async fn full_channel_controls_do_not_starve_other_retained_channels() {
             .insert("member".into(), member.public.clone());
         node.channels.insert(name, channel);
     }
-    // Select exactly the old implementation's first batch, irrespective of the
-    // HashMap seed. Every member of that batch remains blocked throughout.
-    let blocked: HashSet<_> = node.channels.keys().take(4).cloned().collect();
+    // Preserve the original starvation reproduction against HashMap-first
+    // batching. Also cover the seed-independent layout where the new sorted
+    // first batch contains only healthy channels and correctly returns success.
+    let blocked: HashSet<_> = if healthy_first {
+        let mut names: Vec<_> = node.channels.keys().cloned().collect();
+        names.sort();
+        names.into_iter().skip(4).collect()
+    } else {
+        node.channels.keys().take(4).cloned().collect()
+    };
     let healthy: HashSet<_> = node
         .channels
         .keys()
@@ -279,15 +295,29 @@ async fn full_channel_controls_do_not_starve_other_retained_channels() {
         Ok(())
     }));
     let node = Arc::new(Mutex::new(node));
-    for _ in 0..3 {
+    let mut saw_deferred = false;
+    for pass in 0..3 {
         let result = tokio::time::timeout(
             Duration::from_secs(10),
             recover_channels(&node, &transport.scheduler, &runtime),
         )
         .await
         .expect("bounded recovery pass");
-        assert_eq!(result.unwrap_err(), "channel control outbox is full");
+        if healthy_first && pass == 0 {
+            assert!(
+                result.is_ok(),
+                "unattempted channels cannot defer a healthy batch"
+            );
+        }
+        if let Err(error) = result {
+            assert_eq!(error, "channel control outbox is full");
+            saw_deferred = true;
+        }
     }
+    assert!(
+        saw_deferred,
+        "full channels must be attempted and report deferral"
+    );
     let ready = runtime.channel_ready.lock().unwrap().clone();
     assert!(
         healthy.is_subset(&ready),

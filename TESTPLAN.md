@@ -1,3 +1,14 @@
+F5 recovery-batch fixture, 2026-10-15: run all seven
+`node::routing::channel_recovery_tests` with locked/offline all-feature node tests.
+The explicit healthy-first fixture must fail the former unconditional error
+assertion, then pass with a successful first batch. Both layouts must encounter
+the exact full-control-queue error across three ten-second-bounded passes, recover
+every healthy channel, leave blocked announcements incomplete, preserve all queued
+control bytes and membership epochs, and cross the durable checkpoint barrier.
+Run additional independent HashMap seeds for both layouts and strict node
+library/test Clippy. Preserve the original227 failure and its native request.
+[Evidence](docs/evidence/durable-host-20261015/recovery-batches.json).
+
 F5 retained subscription admission, 2026-10-15: run `cargo test --offline --locked
 -p gcoms-transport --all-features -- --test-threads=1`, strict all-target transport
 Clippy, and `cargo test --offline --locked -p gcoms-node --all-features --test

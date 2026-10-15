@@ -1,3 +1,11 @@
+F5 recovery-batch qualification, 2026-10-15: the original227 native gate exposed
+an intermittent fixture assertion that every recovery pass must encounter a full
+control queue. A sorted batch can contain only healthy channels. The fixture now
+covers both the original HashMap-first blocked layout and an explicit healthy-first
+layout, preserving bounded progress, reported deferrals, exact queued controls,
+membership epochs and durable checkpoints. Runtime scheduling and limits are
+unchanged. See [qualification evidence](docs/evidence/durable-host-20261015/recovery-batches.json).
+
 F5 retained subscription capacity, 2026-10-15: terminal connection pools reserve
 finite recovery-control credit and admit additional long-lived subscriptions on
 bounded shards of the same pinned route and traffic class. Admission uses the
