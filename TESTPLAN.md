@@ -1,3 +1,15 @@
+F5 simultaneous channel-route recovery, 2026-10-15: require the causal
+`simultaneous_route_replacements_converge_through_authenticated_bridge_pex` to
+fail old code. Two members replace their queues while a third receives both
+original self-directory messages. Actual authenticated PEX must bridge the exact
+encrypted messages within its existing two-response bound; queued bidirectional
+messages retain their IDs/ciphertexts and complete only on both original member
+ACKs. Require no extra visible messages, no forwarding of tampered, non-self,
+obsolete or uncommitted directory wires, exact retry after a failed save and
+bounded duplicate handling. Run the full node library, strict all-target Clippy,
+legacy feature compilation and the unchanged full64-client/1800-second relay gate.
+Original229 failure and all shorter diagnostic failures remain retained.
+
 F5 materialized dispatch order, 2026-10-15: require
 `gc2_fresh_durable_completion_cannot_bypass_materialized_predecessors` to fail
 old source at the actual scheduler-admission counter. After materializing an older

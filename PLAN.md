@@ -1,3 +1,11 @@
+F5 simultaneous channel-route recovery, 2026-10-15 (OC): the original229 campaign
+completed710/720 commands. Two members received every message but never learned
+one another's replacement route; a healthy peer learned both. A real three-role
+MLS/authenticated-PEX regression fails old source. Permit bounded bridging only
+for a committed, current, original-sender self-directory wire. Route authorization,
+direct journals, message IDs, ACK requirements and queue bounds remain intact.
+Focused controls pass; full native checks and a fresh full relay campaign are pending.
+
 F5 materialized dispatch order, 2026-10-15 (OC): the repeated native suite exposed
 `0,7,1,2,3,4,5,6` after the original unmaterialized-predecessor guard. Maintenance
 had already allocated older counters, but its network futures had not run; a new

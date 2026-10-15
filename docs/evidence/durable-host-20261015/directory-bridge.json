@@ -1,0 +1,70 @@
+{
+  "schema": 1,
+  "status": "focused_passed_full_qualification_pending",
+  "baseline_gcoms": "e4288d3c20e34f45fa44fed1b2caa9d44e56ed4f",
+  "original_native_failure": {
+    "gchat": "708f3317ea00b17234ca3bcbb44857ae4569c8f4",
+    "run": 38768527832,
+    "job": 116543999554,
+    "attempt": 1,
+    "clients": 64,
+    "seconds": 1800,
+    "submitted": 720,
+    "authenticated_completed": 710,
+    "artifact_sha256": "8f0388a07e7ec1bac1a5f4d7eca8de18545d97edbe51340b50943758587f5f61",
+    "observation": "Clients46 and58 each missed five post-restart ACK completions and never learned each other's replacement route; healthy client34 learned both. Both affected clients received all170 other channel messages."
+  },
+  "causal_before": {
+    "test": "simultaneous_route_replacements_converge_through_authenticated_bridge_pex",
+    "result": "failed_obsolete_peer_route_after_authenticated_bridge_exchange",
+    "source_snapshot_unchanged": true,
+    "result_sha256": "f5eef77ed8907221802a4bcdbbcec7bc41a129bcd0f7f99dd5c0cd581154c23d",
+    "inputs_sha256": "16a2e60691a2f06bd1341ea1554d09c9cb8af69b21fe5d110df9118d4eb7adbb",
+    "log_sha256": "e6a2ba07cb8219170e40ed58b6fcc4d3eb9c1684f64e9059657e39592e4a26d6"
+  },
+  "focused_after": {
+    "command": "cargo test -p gcoms-node --all-features --locked --offline --lib node::channel_recovery::tests -- --nocapture --test-threads=1",
+    "passed": 22,
+    "failed": 0,
+    "ignored": 0,
+    "seconds_including_build": 88.3028491360019,
+    "source_snapshot_unchanged": true,
+    "result_sha256": "b7199cdc52cf0174e1b37f74aa31dc93e9cba0caa6b6892537edae3b651260cf",
+    "inputs_sha256": "3b86f971a03f0979960465d12b83e957b6f2a695fa52447f9ca230624dd5231c",
+    "log_sha256": "ba95d31c97a7f4412f972d7eec94242807dcf5e30cdd419032cdf88395854712",
+    "coverage": [
+      "three actual MLS roles and pairwise-authenticated PEX envelopes",
+      "two simultaneous replacements with a healthy bridge",
+      "original queued message IDs/ciphertexts and real all-member ACK settlement",
+      "no extra application messages from directory bridging",
+      "tampered, non-self, obsolete and uncommitted wires not forwarded",
+      "exact retry after save failure and bounded duplicate handling",
+      "existing direct all-member recovery, partial progress, persistence and reconnect controls"
+    ]
+  },
+  "comparison": {
+    "before": {
+      "source": "agntcy/slim:data-plane/core/service/src/session/channel_endpoint.rs",
+      "cosine": 0.5881,
+      "rerank": 0,
+      "fetched": true,
+      "finding": "MLS join/route handshake test, no equivalent recovery implementation"
+    },
+    "after": {
+      "source": "moschramm/rust-lightning:lightning/src/ln/peer_handler.rs",
+      "cosine": 0.5999,
+      "rerank": 0.04658578380461054,
+      "fetched": true,
+      "finding": "Routing handler accepts announcement before bounded gossip forwarding; comparable guard shape, not equivalent MLS recovery"
+    }
+  },
+  "preserved": [
+    "MLS sender and current-roster authentication",
+    "durable route/receive transaction before forwarding",
+    "exact encrypted self-directory wire; no new authority or membership",
+    "existing transient cache, forwarding and two-response PEX limits",
+    "durable direct announcement to every current member",
+    "all product delivery, file and full relay qualification thresholds"
+  ],
+  "remaining": "Full node/strict/legacy and normal signed native qualification, complete64-client1800-second campaign, final installed acceptance"
+}

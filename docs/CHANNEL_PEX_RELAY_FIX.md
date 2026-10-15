@@ -29,3 +29,27 @@ routes, scope mismatch, unknown descriptors, replay and lack of chat events.
 Preparing 2,001 PEX messages and then decrypting a group message at a member that
 saw none verifies that PEX does not consume its shared ratchet window. These
 fixtures do not establish fleet-scale performance.
+
+## Simultaneous route replacement
+
+When two members lose their queues together, each can announce its replacement
+to healthy peers while its direct announcement to the other member still targets
+an obsolete queue. Healthy peers now retain and gossip the **original authenticated
+MLS self-directory ciphertext**, using the same bounded cache, forwarding queue
+and two-response PEX path as other eligible channel messages. This supplements
+the existing durable direct announcement to every current member; it does not
+replace that journal with probabilistic forwarding.
+
+The receive must first pass the existing MLS sender/current-roster/pseudonym
+checks, commit the directory and receive ratchet, and still equal the installed
+route. Only a sender's own directory is eligible; owner-for-another-member batches,
+rejected/obsolete routes and failed checkpoints are not forwarded. Every downstream
+receiver verifies that same original MLS message. PEX route descriptors alone
+cannot install authority, and forwarding cannot acknowledge an application message.
+The transient cache is not a new persisted directory or a global rendezvous system.
+
+The causal three-member test loses both mutual queue addresses, delivers both
+announcements to a healthy bridge, and exercises actual pairwise-authenticated PEX.
+It preserves pending message IDs/ciphertexts and requires each original recipient's
+authenticated ACK. Original229 native delivery failed710/720 after restart; the
+repaired source still requires the complete64-client/1800-second qualification.

@@ -1053,7 +1053,7 @@ async fn recover_channels(
         // Reannounce even an exact restore: a crash may follow the durable
         // route checkpoint but precede its announcement. Keep this channel
         // pending until every peer has its own durable control destination;
-        // the bounded overlay does not forward directory messages onward.
+        // bounded overlay forwarding supplements, not replaces, this journal.
         if let Err(error) = stage_recovered_route_announcements(&mut st, &name) {
             // This channel keeps its exact pending controls and partial fanout.
             // Other channels still need their own recovery/receive progress.

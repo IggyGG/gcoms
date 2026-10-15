@@ -15,9 +15,9 @@ pub(crate) fn stage_own_route_announcement(
     stage_route_announcement(st, channel, recipient, None)
 }
 
-/// A recovered route must reach every current authenticated peer. Directory
-/// messages are not forwarded by their recipients, so bounded overlay gossip
-/// cannot announce a replacement to a channel larger than its fanout.
+/// A recovered route must target every current authenticated peer. Bounded
+/// gossip/PEX can bridge concurrent replacement, but cannot replace the durable
+/// direct announcement to every member in a channel larger than its fanout.
 pub(crate) fn stage_recovered_route_announcements(
     st: &mut NodeState,
     channel: &str,

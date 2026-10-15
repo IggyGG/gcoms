@@ -275,8 +275,8 @@ pub(crate) fn process_chan_cell(
             return;
         }
     }
-    let was_text = deliver_mls(st, chan, &wire, _received, events);
-    if was_text {
+    let forward = deliver_mls(st, chan, &wire, _received, events);
+    if forward {
         if let Some(cs) = st.channels.get_mut(chan) {
             cs.note(id, wire.clone());
             cs.enqueue_forward(id, wire);
@@ -322,7 +322,7 @@ pub(crate) fn deliver_mls(
 ) -> bool {
     let node_tag = short_addr_tag(&info_addr(&st.info));
     let id = crate::channel::msg_id(chan, wire);
-    let mut was_text = false;
+    let mut forward = false;
     let archive_key = channel_archive_key(&st.identity_seed);
     let Some(cs) = st.channels.get_mut(chan) else {
         return false;
@@ -434,7 +434,7 @@ pub(crate) fn deliver_mls(
                     if !commit_channel_metadata(st, chan, id, &sender, &update, &role_checkpoint) {
                         return false;
                     }
-                    was_text = true;
+                    forward = true;
                     if let Some(cs) = st.channels.get(chan) {
                         if crate::channel::metadata::Metadata::read(&cs.role)
                             .is_ok_and(|m| m.closed())
@@ -531,7 +531,7 @@ pub(crate) fn deliver_mls(
                             ("emit_ok", sent_ok.is_ok().to_string()),
                         ],
                     );
-                    was_text = true;
+                    forward = true;
                 }
                 Some(crate::channel::ChannelInner::Dir(name, route)) => {
                     let route = *route;
@@ -568,6 +568,18 @@ pub(crate) fn deliver_mls(
                     ) {
                         return false;
                     }
+                    // Simultaneous queue replacement can strand two members'
+                    // direct announcements at one another's old routes. A
+                    // healthy member may bridge the original MLS self-Dir via
+                    // the existing bounded gossip/PEX cache, after the receive
+                    // and route are durable. Receivers still authenticate the
+                    // original sender; PEX descriptors never install a route.
+                    // Do not relay an obsolete or owner-for-another-member Dir.
+                    forward = sender == name
+                        && st
+                            .channels
+                            .get(chan)
+                            .is_some_and(|cs| cs.directory.get(&name) == Some(&response_route));
                     metrics::log_event(
                         "chan_dir_learned",
                         &[("channel", chan.to_string()), ("name", name)],
@@ -801,7 +813,7 @@ pub(crate) fn deliver_mls(
                             &[("channel", chan.to_string())],
                         );
                     }
-                    was_text = true;
+                    forward = true;
                 }
                 None => {}
             }
@@ -833,7 +845,7 @@ pub(crate) fn deliver_mls(
         }
         Ok(gcoms_mls::AuthenticatedReceiveOutcome::Other) => {}
     }
-    was_text
+    forward
 }
 
 fn restore_directory_receive(st: &mut NodeState, chan: &str, checkpoint: &[u8]) {

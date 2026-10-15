@@ -97,6 +97,354 @@ fn input(st: &Arc<Mutex<NodeState>>, wire: &[u8], events: &broadcast::Sender<Ev>
     }
 }
 
+fn bridge_fixture() -> [NodeState; 3] {
+    let (mut owner, mut member, _) = fixture();
+    let prepared = gcoms_mls::ChannelMember::prepare("bridge").unwrap();
+    let package = gcoms_mls::ChannelMember::key_package_bytes(&prepared).unwrap();
+    let pseudonym = gcoms_mls::ChannelMember::prepared_pseudonym(&prepared);
+    let mut owned = owned_channel_route(
+        63,
+        pseudonym,
+        channel_direct_secret(&owner.identity_seed, &pseudonym),
+    );
+    owned.public.data.expiry = now_unix() + 3600;
+    owned.public.control.expiry = now_unix() + 3600;
+    for alias in &mut owned.aliases {
+        alias.contact.expiry = owned.public.data.expiry;
+    }
+    let cs = owner.channels.get_mut("recovery").unwrap();
+    stage_recovery_admission_fixture(cs, "recovery", &owned.public, &package, "bridge").unwrap();
+    let commit = cs.membership_outbox.as_ref().unwrap().commit.clone();
+    let welcome = cs
+        .admission_cache
+        .values()
+        .find(|admission| admission.pseudonym == pseudonym)
+        .unwrap()
+        .welcome
+        .clone();
+    cs.directory.insert("bridge".into(), owned.public.clone());
+    let directory = cs.directory.clone();
+    let role = ChannelRole::Member(gcoms_mls::ChannelMember::join(prepared, &welcome).unwrap());
+    let mut bridge = state();
+    bridge.channels.insert(
+        "recovery".into(),
+        ChannelState::new(
+            role,
+            owned,
+            5,
+            "recovery".into(),
+            ChannelVisibility::Private,
+        ),
+    );
+    let (events, _) = broadcast::channel(32);
+    process_chan_cell(
+        &mut member,
+        "recovery",
+        commit,
+        std::time::Instant::now(),
+        &events,
+    );
+    for node in [&mut owner, &mut member, &mut bridge] {
+        let cs = node.channels.get_mut("recovery").unwrap();
+        cs.directory = directory.clone();
+        cs.membership_outbox = None;
+        cs.membership_journal.clear();
+        cs.pending_control.clear();
+        for route in directory.values() {
+            if route.pseudonym != cs.role.own_pseudonym() {
+                cs.learn(route);
+            }
+        }
+        node.durable_state_sink = Some(Arc::new(|_| Ok(())));
+    }
+    [owner, member, bridge]
+}
+
+#[tokio::test]
+async fn simultaneous_route_replacements_converge_through_authenticated_bridge_pex() {
+    let [mut owner, mut member, mut bridge] = bridge_fixture();
+    let (events, mut received) = broadcast::channel(32);
+    let mut messages = Vec::new();
+    for node in [&mut owner, &mut member] {
+        let cs = node.channels.get_mut("recovery").unwrap();
+        let wire = cs
+            .role
+            .send(&crate::channel::encode_text(b"queued once", false))
+            .unwrap();
+        let id = crate::channel::msg_id("recovery", &wire);
+        cs.message_outbox.insert(
+            id,
+            crate::channel::ChannelMessageOutbox {
+                wire: wire.clone(),
+                expected: cs
+                    .directory
+                    .values()
+                    .filter(|route| route.pseudonym != cs.role.own_pseudonym())
+                    .map(|route| (route.pseudonym, route.clone()))
+                    .collect(),
+                acknowledged: HashSet::new(),
+            },
+        );
+        cs.overlay.first_sighting(id);
+        cs.note(id, wire.clone());
+        messages.push((id, wire));
+    }
+    // Two members lose their old queues together. Both still reach the third
+    // member, but neither can deliver its self-Dir to the other's old route.
+    for (node, byte, name) in [(&mut owner, 81, "owner"), (&mut member, 82, "member")] {
+        let seed = node.identity_seed;
+        let cs = node.channels.get_mut("recovery").unwrap();
+        cs.own_route = current_owned(byte, &cs.role, &seed, "recovery");
+        cs.directory
+            .insert(name.into(), cs.own_route.public.clone());
+        stage_recovered_route_announcements(node, "recovery").unwrap();
+        let wire = node.channels["recovery"]
+            .route_announcement
+            .as_ref()
+            .unwrap()
+            .wire
+            .clone();
+        process_chan_cell(
+            &mut bridge,
+            "recovery",
+            wire,
+            std::time::Instant::now(),
+            &events,
+        );
+    }
+    let latest_owner = owner.channels["recovery"].own_route.public.clone();
+    let latest_member = member.channels["recovery"].own_route.public.clone();
+    assert_eq!(bridge.channels["recovery"].directory["owner"], latest_owner);
+    assert_eq!(
+        bridge.channels["recovery"].directory["member"],
+        latest_member
+    );
+    assert_ne!(
+        owner.channels["recovery"].directory["member"],
+        latest_member
+    );
+    assert_ne!(member.channels["recovery"].directory["owner"], latest_owner);
+    // Data gossip already reaches both members, matching the failed native
+    // campaign. Their exact ACKs still target one another's obsolete queues.
+    process_chan_cell(
+        &mut member,
+        "recovery",
+        messages[0].1.clone(),
+        std::time::Instant::now(),
+        &events,
+    );
+    process_chan_cell(
+        &mut bridge,
+        "recovery",
+        messages[0].1.clone(),
+        std::time::Instant::now(),
+        &events,
+    );
+    process_chan_cell(
+        &mut owner,
+        "recovery",
+        messages[1].1.clone(),
+        std::time::Instant::now(),
+        &events,
+    );
+    process_chan_cell(
+        &mut bridge,
+        "recovery",
+        messages[1].1.clone(),
+        std::time::Instant::now(),
+        &events,
+    );
+    let ack_for_owner = member.channels["recovery"].commit_ack_cache[&messages[0].0]
+        .1
+        .clone();
+    let ack_for_member = owner.channels["recovery"].commit_ack_cache[&messages[1].0]
+        .1
+        .clone();
+    assert_ne!(
+        member.channels["recovery"].commit_ack_cache[&messages[0].0].0,
+        latest_owner
+    );
+    assert_ne!(
+        owner.channels["recovery"].commit_ack_cache[&messages[1].0].0,
+        latest_member
+    );
+    assert_eq!(
+        received.len(),
+        4,
+        "only the four real message receives emit application events"
+    );
+    while received.try_recv().is_ok() {}
+    let bridge = Arc::new(Mutex::new(bridge));
+    for (node, missing, current) in [
+        (&mut owner, "member", &latest_member),
+        (&mut member, "owner", &latest_owner),
+    ] {
+        for _ in 0..4 {
+            let cs = &node.channels["recovery"];
+            let bridge_route = &cs.directory["bridge"];
+            // Use the real pairwise-authenticated PEX envelope and normal
+            // handler, with the unchanged two-response limit per exchange.
+            let (_, cell) = stage_channel_pex(
+                "recovery",
+                cs,
+                bridge_route.pseudonym,
+                &[crate::channel::PeerRef::from_route(&cs.own_route.public)],
+                &cs.have_list(),
+            )
+            .unwrap();
+            handle_incoming(&bridge, cell, &events);
+            let replies = bridge
+                .lock()
+                .unwrap()
+                .channels
+                .get_mut("recovery")
+                .unwrap()
+                .pull_outbox
+                .drain(..)
+                .collect::<Vec<_>>();
+            assert!(replies.len() <= 2);
+            for (target, _, wire) in replies {
+                assert_eq!(
+                    target.pseudonym,
+                    node.channels["recovery"].role.own_pseudonym()
+                );
+                process_chan_cell(node, "recovery", wire, std::time::Instant::now(), &events);
+            }
+            if &node.channels["recovery"].directory[missing] == current {
+                break;
+            }
+        }
+        assert_eq!(
+            &node.channels["recovery"].directory[missing], current,
+            "a healthy member must relay the original authenticated self-Dir, not just its own route"
+        );
+    }
+    // Recovery retargets the retained ciphertexts, without resubmission or a
+    // synthetic receipt. Only each recipient's actual authenticated ACK settles
+    // the original all-member delivery obligation.
+    assert_eq!(
+        member.channels["recovery"].commit_ack_cache[&messages[0].0],
+        (latest_owner, ack_for_owner.clone())
+    );
+    assert_eq!(
+        owner.channels["recovery"].commit_ack_cache[&messages[1].0],
+        (latest_member, ack_for_member.clone())
+    );
+    for (node, (id, wire), ack) in [
+        (&mut owner, &messages[0], ack_for_owner),
+        (&mut member, &messages[1], ack_for_member),
+    ] {
+        assert_eq!(node.channels["recovery"].message_outbox[id].wire, *wire);
+        process_chan_cell(node, "recovery", ack, std::time::Instant::now(), &events);
+        assert!(node.channels["recovery"].message_outbox.contains_key(id));
+        let bridge_ack = bridge.lock().unwrap().channels["recovery"].commit_ack_cache[id]
+            .1
+            .clone();
+        process_chan_cell(
+            node,
+            "recovery",
+            bridge_ack,
+            std::time::Instant::now(),
+            &events,
+        );
+        assert!(!node.channels["recovery"].message_outbox.contains_key(id));
+    }
+    assert_eq!(
+        received.len(),
+        2,
+        "only the two authenticated delivery completions are new events"
+    );
+}
+
+#[tokio::test]
+async fn self_directory_bridge_cache_requires_committed_authenticated_current_route() {
+    for case in ["tampered", "other_member", "obsolete", "save_failure"] {
+        let [mut owner, mut member, mut bridge] = bridge_fixture();
+        let (events, _) = broadcast::channel(32);
+        let before = bridge.channels["recovery"].directory.clone();
+        let seed = member.identity_seed;
+        let cs = member.channels.get_mut("recovery").unwrap();
+        cs.own_route = current_owned(84, &cs.role, &seed, "recovery");
+        let mut route = cs.own_route.public.clone();
+        let name = if case == "other_member" {
+            route = owner.channels["recovery"].own_route.public.clone();
+            "owner"
+        } else {
+            "member"
+        };
+        if case == "obsolete" {
+            route.data.expiry = before["member"].data.expiry - 1;
+            route.control.expiry = before["member"].control.expiry - 1;
+        }
+        let mut wire = cs
+            .role
+            .send(&crate::channel::encode_dir(name, &route))
+            .unwrap();
+        if case == "tampered" {
+            *wire.last_mut().unwrap() ^= 1;
+        }
+        if case == "save_failure" {
+            bridge.durable_state_sink = Some(Arc::new(|_| Err("bridge save refused".into())));
+        }
+        let id = crate::channel::msg_id("recovery", &wire);
+        process_chan_cell(
+            &mut bridge,
+            "recovery",
+            wire.clone(),
+            std::time::Instant::now(),
+            &events,
+        );
+        let cs = &bridge.channels["recovery"];
+        assert_eq!(cs.directory, before, "{case}");
+        assert!(!cs.cell_cache.contains_key(&id), "{case}");
+        assert!(!cs.pending.iter().any(|entry| entry.id == id), "{case}");
+        if case == "save_failure" {
+            bridge.durable_state_sink = Some(Arc::new(|_| Ok(())));
+            process_chan_cell(
+                &mut bridge,
+                "recovery",
+                wire.clone(),
+                std::time::Instant::now(),
+                &events,
+            );
+            let cs = &bridge.channels["recovery"];
+            assert_eq!(cs.directory["member"], route);
+            assert_eq!(cs.cell_cache[&id], wire);
+            assert_eq!(cs.pending.iter().filter(|entry| entry.id == id).count(), 1);
+            // A duplicate cannot amplify transient forward work or recreate a
+            // different announcement. It only requeues the retained exact reply.
+            process_chan_cell(
+                &mut bridge,
+                "recovery",
+                wire.clone(),
+                std::time::Instant::now(),
+                &events,
+            );
+            let cs = &bridge.channels["recovery"];
+            assert_eq!(cs.pending.iter().filter(|entry| entry.id == id).count(), 1);
+            assert_eq!(cs.cell_cache[&id], wire);
+        }
+        // Ordinary owner-authenticated third-party directories remain accepted
+        // without becoming automatically bridged self announcements.
+        let cs = owner.channels.get_mut("recovery").unwrap();
+        let owner_wire = cs
+            .role
+            .send(&crate::channel::encode_dir("member", &before["member"]))
+            .unwrap();
+        let owner_id = crate::channel::msg_id("recovery", &owner_wire);
+        process_chan_cell(
+            &mut bridge,
+            "recovery",
+            owner_wire,
+            std::time::Instant::now(),
+            &events,
+        );
+        assert!(!bridge.channels["recovery"]
+            .cell_cache
+            .contains_key(&owner_id));
+    }
+}
+
 #[tokio::test]
 async fn delayed_authenticated_receipt_survives_the_channel_control_window() {
     let (mut sender, recipient, _) = fixture();
