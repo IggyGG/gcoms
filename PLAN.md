@@ -4,7 +4,10 @@ one another's replacement route; a healthy peer learned both. A real three-role
 MLS/authenticated-PEX regression fails old source. Permit bounded bridging only
 for a committed, current, original-sender self-directory wire. Route authorization,
 direct journals, message IDs, ACK requirements and queue bounds remain intact.
-Focused controls pass; full native checks and a fresh full relay campaign are pending.
+All 22 focused and 476 node tests, strict Clippy, legacy compilation and formatting
+pass. Source inventory passes on the exact committed checkout; its original
+metadata-free snapshot invocation remains a retained harness failure. Paired checks
+and a fresh full relay campaign are pending.
 
 F5 materialized dispatch order, 2026-10-15 (OC): the repeated native suite exposed
 `0,7,1,2,3,4,5,6` after the original unmaterialized-predecessor guard. Maintenance

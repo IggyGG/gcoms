@@ -9,6 +9,11 @@ obsolete or uncommitted directory wires, exact retry after a failed save and
 bounded duplicate handling. Run the full node library, strict all-target Clippy,
 legacy feature compilation and the unchanged full64-client/1800-second relay gate.
 Original229 failure and all shorter diagnostic failures remain retained.
+The full node suite passes 476 cases with two existing explicit exclusions;
+strict all-target Clippy, legacy compilation, formatting and source inventory pass.
+Retained forward-wire checks select the exact original message ID, since a newly
+eligible self-directory may precede it in the transient queue. Exact ciphertext,
+retry count, original recipient/ACK sets and archive reopen assertions remain.
 
 F5 materialized dispatch order, 2026-10-15: require
 `gc2_fresh_durable_completion_cannot_bypass_materialized_predecessors` to fail

@@ -1,6 +1,22 @@
 {
   "schema": 1,
-  "status": "focused_passed_full_qualification_pending",
+  "status": "node_source_qualified_paired_and_full_relay_pending",
+  "full_node_source": {
+    "source": "8ae7cb58a560709d4882c00a46f3064b6d5faef6",
+    "passed": 476,
+    "existing_ignored": 2,
+    "strict_all_target_clippy": true,
+    "legacy_client_persist_compile": true,
+    "formatting": true,
+    "source_inventory": 1205,
+    "source_snapshot_unchanged": true,
+    "original_aggregate_exit_code": 1,
+    "original_aggregate_failure": "Final source inventory requires Git metadata, absent from immutable filesystem snapshot. Rerun on exact matching committed checkout passed; earlier node/strict/legacy/fmt steps all passed.",
+    "inputs_sha256": "535e89fdd8c75a7f60322ad51065a16c026cf462ed4b5bef3763791582ab005f",
+    "receipt_sha256": "b9f23468869885cf1082b491ab03ba15c53c4a81ca6ac6703642a119a7d1accd",
+    "log_sha256": "c09545c4a71f07d052b0b80b6213a1f2fd7372bf478d3606af19ce7c47f094b0",
+    "inventory_receipt_sha256": "57f8855f5fa2721f45e61d7e8dffb18b5a4823c7ccdbde43ce11346f9746cb29"
+  },
   "preserved_first_full_failure": {
     "passed": 475,
     "failed": 1,
@@ -74,5 +90,5 @@
     "durable direct announcement to every current member",
     "all product delivery, file and full relay qualification thresholds"
   ],
-  "remaining": "Full node/strict/legacy and normal signed native qualification, complete64-client1800-second campaign, final installed acceptance"
+  "remaining": "Final paired source and normal signed native qualification, complete64-client1800-second campaign, final installed acceptance"
 }
